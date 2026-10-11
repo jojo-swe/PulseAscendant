@@ -1,0 +1,48 @@
+{
+  "observed_at_utc": "2026-10-11T23:03:58.685629+00:00",
+  "main_video": {
+    "url": "https://youtu.be/b5ShsKNC7KM",
+    "title": "What Happens When Code Reacts to Music? | PULSE ASCENDANT [4K60]",
+    "visibility": "public",
+    "processing": "YouTube Studio explicitly shows SD, HD and 4K complete",
+    "studio_publication_date": "2026-10-12",
+    "end_screen": "Final five seconds: final Short and channel subscription",
+    "ai_disclosure": true,
+    "paid_promotion": false,
+    "made_for_children": false
+  },
+  "final_short": {
+    "url": "https://youtube.com/shorts/TYgXs76yKls",
+    "visibility": "public",
+    "revision": 2
+  },
+  "old_main": {
+    "url": "https://youtu.be/XBYvwAEoc3k",
+    "visibility": "unlisted"
+  },
+  "superseded_short": {
+    "url": "https://youtube.com/shorts/reO_CxwJRDQ",
+    "visibility": "unlisted"
+  },
+  "github_release": "https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.3.0",
+  "native_release_commit": "c7b09ab6d6996f3557358e461b2a0c119dec5e34",
+  "music_claim": {
+    "title": "Watching the Waves (Cedric Paul Remix)",
+    "claimant": "TEOSTO_TONO_STEF_CS",
+    "type": "Melody or lyrics",
+    "interval": "3:56-4:30",
+    "studio_effect": "No effect on video reach or channel; not a copyright strike; potential limitation of future monetization",
+    "action": "Kept the supplied soundtrack; no dispute or editing performed"
+  },
+  "verification_scope": "Visible YouTube Studio publication confirmation and explicit 4K completion. Local complete decode/audio QC is recorded separately in full-video.json. No claim of guaranteed audience growth or continuous subjective acceptance.",
+  "crosslinks": {
+    "main_description": [
+      "GitHub release",
+      "GitHub source",
+      "final Short"
+    ],
+    "short_description": "Full-video link prepended, saved and verified",
+    "old_main_description": "New-video redirect prepended; previous description and unlisted visibility preserved, saved and verified"
+  },
+  "short_related_video": "Not configured: YouTube requires advanced channel verification for this feature; main link is present in the description."
+}

@@ -4,7 +4,7 @@
 
 A standalone, music-driven 3D demo for **Windows and Linux**: **three playable acts, 16 worlds, 76 chapters and 14:48.68 of music**. The first act transforms a selection of classic demoscene ideas; the next two introduce new worlds with Vulkan hardware ray tracing on supported GPUs.
 
-[Releases](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [32-second trailer](https://youtube.com/shorts/TYgXs76yKls) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
+[Full demo in 4K60](https://youtu.be/b5ShsKNC7KM) · [Releases](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [32-second trailer](https://youtube.com/shorts/TYgXs76yKls) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
 
 The three-act v0.3 implementation and Windows/Linux packages passed independent review at **7.3/10**. See the [review](docs/QUALITY_REVIEW.md) and verification document for measured results and acceptance limits; older releases and videos describe earlier versions.
 

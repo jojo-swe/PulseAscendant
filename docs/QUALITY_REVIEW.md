@@ -57,3 +57,14 @@ Fullvideons 4K60-påstående förutsätter godkänd slutex­port. Jag har inte b
 Bilden vid 10 s visar Prism Chamber med läsbar RT-text. Manifestet använder `354.95`; Rain District är borttaget. RT-textens intervall **9,45–18,15 s** täcker Prism+Dune korrekt.
 
 Det tidigare hindret är åtgärdat. Övriga passerade kontroller gäller fortsatt. Godkännandet omfattar metadata och inspekterade bilder; ljudupplevelse och fullängdsvideo har inte bedömts. Inga GPU-jobb kördes.
+
+### Fullängdsexport: oberoende slutkontroll 2026-10-12
+
+Godkänd för publicering inom den granskade omfattningen. Inga blockerande fynd.
+
+- Exportunderlaget och renderloggen stämmer: **3840×2160, 60 fps, 53 321 bildrutor, 14:48,683**. Akt II–III omfattar 35 321 RT-bildrutor.
+- Ljudrapportens 178 sammanhängande kontrollfönster täcker hela låten; lägsta korrelation är **0,99925**. Slutskillnaden på cirka 3 ms är förenlig med bildruteavrundning.
+- Kontaktkartans tolv stickprov visar alla tre akter utan uppenbart exportfel.
+- Titel och beskrivning är sakliga. Texten skiljer korrekt offlineexport från interaktiv prestanda; kapitelmarkeringen **9:50** är korrekt avrundad.
+
+Detta är granskning av lokala mätunderlag och stillbilder, inte kontinuerlig lyssning eller fullständig audiovisuell acceptans. YouTubes bearbetning och kontroller har inte verifierats här. Kod- och paketbetyget kvarstår på **7,3/10**.
