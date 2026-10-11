@@ -1,55 +1,65 @@
-# Second Reality / Full Throttle
+# Pulse Ascendant
 
-A standalone, music-driven realtime 3D demo for **Windows and Linux**. Eight procedural worlds, 31 chapters and the complete **7:52.36** soundtrack, *Luminous Flow*.
+![Pulse Ascendant: three ascending facets and a pulse line](assets/branding/pulse-ascendant.svg)
 
-[4K60 full video](https://github.com/jojo-swe/SecondRealityRemix/releases/download/v0.2.0/SecondRealityRemix-4K60.mp4) · [Download v0.2.0](https://github.com/jojo-swe/SecondRealityRemix/releases/tag/v0.2.0) · [Swedish instructions](docs/README.sv.md) · [Verification](docs/VERIFICATION.md)
+A standalone, music-driven 3D demo for **Windows and Linux**: **three playable acts, 16 worlds, 76 chapters and 14:48.68 of music**. The first act transforms a selection of classic demoscene ideas; the next two introduce new worlds with Vulkan hardware ray tracing on supported GPUs.
 
-![Cosmic Reactor with orbital particles and a radial 3D spectrum](docs/images/cosmic-reactor.png)
+[Releases](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
+
+The three-act v0.3 implementation and Windows/Linux packages passed independent review at **7.3/10**. See the [review](docs/QUALITY_REVIEW.md) and verification document for measured results and acceptance limits; older releases and videos describe earlier versions.
 
 ## Run
 
-- **Windows:** download `SecondRealityRemix-Windows-x64.zip`, extract the entire archive and run `SecondRealityRemix.exe`. Keep `assets/` beside the executable. Windows 10/11 x64 and an OpenGL 3.3 driver are required; SDL and the MSVC runtime are statically linked.
-- **Linux:** download `SecondRealityRemix-Linux-x64.tar.gz`, extract it and run `./SecondRealityRemix`. Built on Ubuntu 24.04 x64 with GCC 13 and glibc 2.39. Requires a working OpenGL driver and X11/Wayland. See [system dependencies and test limits](docs/VERIFICATION.md).
+- **Windows:** extract `PulseAscendant-Windows-x64.zip` and run `PulseAscendant.exe`. Keep the complete `assets/` directory beside it. Windows 10/11 x64 and an OpenGL 3.3 driver are required. SDL and the MSVC runtime are statically linked.
+- **Linux:** extract `PulseAscendant-Linux-x64.tar.gz` and run `./PulseAscendant`. The build targets Ubuntu 24.04 x64, GCC 13 and glibc 2.39, with a working X11/Wayland display and OpenGL driver.
 
-The demo starts at 1280×720 and loops the entire song. No account, network connection or development tools are needed to run it.
+The demo starts at 1280×720 and loops the complete show. No account or network connection is required. Hardware tracing additionally needs a compatible Vulkan driver; unsupported devices use the separately implemented OpenGL fallback. An on-screen backend badge identifies the selected path.
 
 | Key | Action |
-|---|---|
-| F11 | Fullscreen / window |
-| 1–8 | Jump to a world's first chapter, including its music position |
+| --- | --- |
+| F1 / F2 / F3 | Jump to Act I / II / III, including its music |
+| 1–8 | Act I worlds |
+| 9 / 0 / - / = | Act II worlds |
+| Q / W / E / R | Act III worlds |
 | Left / right arrow | Previous / next chapter |
 | Tab | Modern / 320×200 retro rendering |
-| M | Mute; animation and music clocks keep advancing |
+| M | Mute; the music and animation clocks keep advancing |
+| F11 | Fullscreen / window |
 | Esc | Exit |
 
-## Music drives the animation
+## Three acts
 
-24 logarithmic FFT bands from **35 Hz to 18 kHz** independently animate geometry, material zones, lights and particle groups. Bass drives larger forms; midrange changes surface detail and ring structures; treble changes luminous trails. Four radial crowns of 24 wireframe spectrum columns surround the orbital scenes.
+| Act | Music | Start | Length | Chapters |
+| --- | --- | --- | --- | --- |
+| I: Full Throttle | Luminous Flow, five-minute edit | 0:00 | 5:00 | 31 |
+| II: Adventurous Uplift | Complete supplied song | 5:00 | 4:49.92 | 21 |
+| III: Reality Ascendant | Rigid Arpeggios, complete supplied song | 9:49.92 | 4:58.76 | 24 |
 
-Analysis is precomputed from the included soundtrack at 20 Hz, smoothed with attack/release and interpolated using the audio playback clock. Seeking and muting preserve the animation position. No microphone or system audio is captured, and no fixed BPM is assumed. Chapter cuts are adjusted toward nearby measured transients.
+All music plays at normal speed. Act I preserves the first 299 seconds of the decoded source sample for sample, followed by a one-second fade to its exact 300-second boundary. Acts II and III retain every decoded sample of their songs. A combined stereo 48 kHz PCM16 WAV supplies one continuous audio clock; both joins follow exact integer frame offsets.
 
-## Eight worlds
+| Act | Worlds |
+| --- | --- |
+| I | Photon Corridor · Plasma / Gyroid · Crystal Engine · Neon City · Fracture Machine · Cosmic Reactor · Quantum Ocean · Orbital Armada |
+| II | Chrome Cathedral · Rain District · Orbital Foundry · Prism Chamber |
+| III | Dune Colossus · Verdant Singularity · Gravity Rebellion · Reality Ascendant |
 
-| World | Main layers |
-|---|---|
-| Photon Corridor | Curved raymarched tunnel, 15,360 ring particles, neon ribs and velocity trails |
-| Plasma / Gyroid | Perforated 3D sculpture, frequency-reactive veins, shadows, AO and floor reflections |
-| Crystal Engine | Refractive faceted crystal, three GGX-lit metal gyroscopes, orbital trails and 3D spectrum |
-| Neon City | Fast flights through repeated 3D buildings, reactive windows and neon tracks |
-| Fracture Machine | Folded SDF architecture, pulsing gates and banking camera |
-| Cosmic Reactor | Volumetric accretion disk, corona, nebula and 24,000 orbital trails |
-| Quantum Ocean | Reactive waves, reflected sky, hovering spheres and aurora |
-| Orbital Armada | Repeated 3D ships, wings, cockpits, engine light and flights through the fleet |
+The first act combines tunnels, refractive facets, folded architecture, fleets, an ocean and orbital effects. Act II adds polished architecture, a wet city, articulated machinery and glass prisms. Act III introduces ceramic walkers in a desert, luminous vegetation, floating stone and a crystal-wing finale. [Act II](docs/ACT_II.md) and [Act III](docs/ACT_III.md) describe their implementations.
 
-HDR buffers, bloom, bounded radial motion blur and subtle chromatic separation combine the layers. This uses OpenGL 3.3 rasterization, analytic ray intersections and SDF raymarching; it does not require hardware ray tracing. [Rendering details and approximations](docs/SOURCE_MAP.md).
+## Music and rendering
 
-![Crystal Engine with refractive glass and a 3D spectrum](docs/images/crystal-engine.png)
+Each song has independent precomputed analysis: 24 logarithmic FFT bands from **35 Hz to 18 kHz**, bass, energy and onset curves, sampled at 20 Hz and interpolated against the audio transport. Different bands drive geometry, lighting, surfaces and particle groups. Chapter direction considers measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds and no assumed BPM. This improves cut placement; subjective musical synchronization still needs listening.
+
+Acts II and III can use **Vulkan KHR ray queries against triangle BLAS/TLAS**. Five reusable meshes form animated scenes within a 2,048-instance budget. Shadows, reflections and refraction use bounded ray traversal with up to five surface encounters. Modern RT rendering uses two deterministic subpixel samples plus an adaptive edge filter; retro uses one sample per pixel. OpenGL presents the HDR image and composes bloom, effects and captions.
+
+The RT output passes from a Vulkan device-local buffer through host readback to an OpenGL HDR texture each frame. This is not zero-copy interoperability. The renderer is not a full path tracer and does not provide general global illumination or temporal denoising. Resolution and scene complexity affect performance; **a 4K60 export is not an interactive 4K60 guarantee**.
+
+OpenGL 3.3 also provides a separate SDF/analytic fallback for all 16 worlds. Use `--no-rt` to select it deliberately, `--require-rt` to fail if the RT backend cannot initialize, and `--rt-validation` for Vulkan diagnostics where validation layers are installed. Act I uses its OpenGL renderer in either configuration.
 
 ## Build from source
 
-The **release source bundle** `SecondRealityRemix-source.zip` includes the runtime WAV, original MP3 and generated analysis data. A Git checkout intentionally omits the large audio files: copy `assets/music/luminous-flow.wav` from a release package before running or testing it. Generated `src/music_data.hpp` is tracked.
+The release source bundle, `PulseAscendant-source.zip`, includes all three original MP3s, three per-act runtime WAVs, the combined WAV and generated analysis. A Git checkout intentionally omits audio. Restore **all four WAVs** before running the full checks: CTest reads Act I and the combined show, while the standalone audio checks also compare Acts II and III. Runtime binary packages include only `assets/music/second-reality-three-acts.wav`; copying that file alone is insufficient for full source validation.
 
-SDL 3.4.18 is fetched from a pinned commit with a verified SHA-256. The first build needs network access, or set `FETCHCONTENT_SOURCE_DIR_SDL3` to an existing SDL source directory.
+SDL 3.4.18 is fetched from a pinned commit with a verified SHA-256. Vulkan headers are located from the SDK or fetched from a pinned release. The normal executable loads Vulkan dynamically and can start in fallback mode without a Vulkan loader. A runtime shader compiler is not required because compiled SPIR-V ships with the assets.
 
 Windows, Visual Studio 2026 and CMake 3.25+:
 
@@ -57,7 +67,6 @@ Windows, Visual Studio 2026 and CMake 3.25+:
 cmake --preset windows
 cmake --build --preset windows
 ctest --preset windows
-./tools/smoke-test.ps1
 ./tools/package.ps1
 ```
 
@@ -68,31 +77,57 @@ sudo apt install build-essential cmake pkg-config libx11-dev libxext-dev libxran
 cmake --preset linux
 cmake --build --preset linux
 ctest --preset linux
-build/linux/SecondRealityRemix --smoke-test --no-audio --capture-dir build/captures
 bash tools/package.sh build/linux
 ```
 
-Recreating audio and analysis with `tools/prepare_music.ps1` additionally needs ffmpeg and Python + numpy. Those tools are not runtime dependencies. Pass `-DREMIX_RUNTIME_TESTS=ON` when configuring to include the display-dependent control tests.
+For offline dependency reuse, configure with `-DFETCHCONTENT_SOURCE_DIR_SDL3=/path/to/SDL` and a local Vulkan header include path via `REMIX_VULKAN_INCLUDE_DIR`. Add `-DREMIX_RUNTIME_TESTS=ON` to register tests that require a working display. For shader-only edits, copy the updated assets beside the executable or install to staging; the executable's POST_BUILD step may not run after an asset-only change.
 
-## Render a 4K video
+To recreate audio, FFT data and directed cues, install ffmpeg, Python and numpy, then run:
 
-The included Python tool renders the complete show at 3840x2160 and 60 fps with deterministic timestamps. It pipes RGB frames to ffmpeg, encodes H.264 using NVIDIA NVENC and muxes the soundtrack as 48 kHz AAC. This optional export tool needs Python, ffmpeg/ffprobe and a supported NVIDIA GPU. No intermediate image sequence is stored.
+```sh
+python tools/prepare_show.py "Luminous Flow.mp3" "Adventurous Uplift.mp3" "Rigid Arpeggios.mp3"
+```
 
-Run `python tools/render_video.py --app build/windows/Release/SecondRealityRemix.exe --output dist/SecondRealityRemix-4K60.mp4`. Short previews can use `--start 104 --duration 2`. The tool verifies resolution, frame count, frame rate and audio duration before finalizing the MP4.
+The script checks source hashes, prepares the three runtime tracks, combines them without gaps and regenerates per-act analysis and cue direction. With the original files already under `music/source/`, it also works without arguments. The PowerShell entry point is `tools/prepare_music.ps1`.
 
-The native `--render-stream --fps N` option writes bottom-up RGB24 to stdout with diagnostics on stderr. In this mode, `--duration` is timeline length rather than wall-clock runtime.
+After editing the Vulkan compute shader, rebuild and validate its shipped SPIR-V with Vulkan SDK tools:
 
-## Verification
+```sh
+glslangValidator -V -Os --target-env vulkan1.2 assets/shaders/rt_scene.comp -o assets/shaders/rt_scene.comp.spv
+spirv-val --target-env vulkan1.2 assets/shaders/rt_scene.comp.spv
+```
 
-The development build passed **4/4 CTest tests on Windows and on an isolated Linux Xvfb/Openbox display**. All eight worlds in both styles rendered without GL errors. Exact-time captures cover all 31 chapters; motion checks passed 31/31 on Windows NVIDIA/OpenGL and Linux WSLg NVIDIA/D3D12. Synthetic-tone tests check FFT frequency isolation.
+## Capture and export
 
-Linux WSLg did not confirm the strict minimize lifecycle; its GPU rendering and the isolated display's lifecycle results are separate. A physical Linux desktop, subjective audiovisual synchronization, artistic quality and the musical loop seam still need human assessment. [Detailed evidence](docs/VERIFICATION.md).
+`PulseAscendant --show-info` prints the three acts, measured durations, audio asset and all 76 directed chapter starts as JSON without initializing a display.
 
-For shader-only edits, manually copy `assets/` beside the built executable or install to a staging directory: the current POST_BUILD copy is not guaranteed to run after an asset-only change.
+```powershell
+build/windows/Release/PulseAscendant.exe --smoke-test --no-audio --capture-dir build/captures
+build/windows/Release/PulseAscendant.exe --tour-test --no-audio --capture-dir build/tour
+python tools/verify-motion.py build/tour build/motion.json
+python tools/render_video.py --app build/windows/Release/PulseAscendant.exe --require-rt --output dist/three-acts/PulseAscendant-4K60.mp4
+```
+
+Smoke mode requests all 16 worlds in both styles; tour mode requests two exact-time captures per chapter. Capture success and image motion are separate from artistic acceptance. See [current evidence](docs/VERIFICATION.md).
+
+Additional audio and music-direction checks need the complete source audio plus Python and numpy:
+
+```powershell
+python tests/test_show.py --app build/windows/Release/PulseAscendant.exe
+python tests/test_music_analysis.py
+python tests/test_music_direction.py
+```
+
+The exporter reads `--show-info`, checks the combined music's format and sample count, rejects ranges outside 888.68 seconds, and validates the encoded resolution, frame count, frame rate and audio duration. It needs Python, ffmpeg/ffprobe and NVIDIA H.264 NVENC. A short preview can add `--start 589.92 --duration 5`. Existing outputs are protected; choose a new filename for another render. Packages are written under `dist/three-acts/`.
+
+The native `--render-stream --fps N` option writes bottom-up RGB24 to stdout and diagnostics to stderr. In this mode, `--duration` is timeline length, not wall-clock runtime.
+
+`tools/render_short.py --app <executable> --font <bold.ttf> --output <new.mp4>` creates a 32-second 1080×1920/60 trailer from eight native camera excerpts. It places montage cuts on measured Act III music attacks and identifies cached renders by SHA-256 of the executable and its assets. The trailer uses a 70–102 s excerpt of Rigid Arpeggios; the full demo retains the complete three-act audio.
 
 ## Credits and licensing
 
-- **Future Crew:** original *Second Reality* (1993), selected effect ideas and the 14-vertex / 24-triangle glenz geometry. [Original source](https://github.com/mtuomi/SecondReality), reference commit `071a82eddb7a7390dbaa491a8a473e0e923a55c2`, Unlicense/public domain. This is a selective reimagining, not a complete original-demo port or an official Future Crew release.
-- **SDL:** zlib license, plus bundled dependency notices in `licenses/`.
-- **New remix code:** [MIT](LICENSE).
-- **Music:** *Luminous Flow*, artist metadata **joyolo**, generated with **Suno**, supplied by the project owner. Included in this free, non-commercial demo release at the owner's request. The music is **not MIT-licensed**; no commercial or additional redistribution rights are granted by this repository. See [music notice](licenses/MUSIC-NOTICE.txt), [provenance](music/asset-receipt.json) and [Suno's applicable terms](https://suno.com/terms-of-service).
+**Pulse Ascendant** has its own identity and new choreography. Its history includes a selective reimagining of Future Crew's *Second Reality* (1993). Future Crew receives credit for the original demo, selected effect ideas and the 14-vertex / 24-triangle glenz geometry. [Original source](https://github.com/mtuomi/SecondReality), reference commit `071a82eddb7a7390dbaa491a8a473e0e923a55c2`, Unlicense/public domain. This is not an official Future Crew release or a complete port. The original source and prior releases remain preserved.
+
+Khronos Vulkan headers carry Apache-2.0 and MIT notices; the applicable notices and Apache license text are bundled under `licenses/`.
+
+New code uses the [MIT license](LICENSE); SDL uses its zlib license and bundled notices. **Music is not MIT-licensed.** Luminous Flow, Adventurous Uplift and Rigid Arpeggios were generated with Suno, carry artist metadata **joyolo**, and were supplied and requested for publication by the project owner. Their applicable rights remain separate. See [music credits and source hashes](licenses/MUSIC-NOTICE.txt), the receipts in `music/`, and [Suno's terms](https://suno.com/terms-of-service).

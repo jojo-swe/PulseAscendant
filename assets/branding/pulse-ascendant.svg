@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="480" viewBox="0 0 1440 480">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#061321"/><stop offset="1" stop-color="#15152e"/></linearGradient><linearGradient id="glow" x2="1" y2="0"><stop stop-color="#25d9ff"/><stop offset="1" stop-color="#f7b84e"/></linearGradient></defs>
+<rect width="1440" height="480" rx="24" fill="url(#bg)"/>
+<g stroke="#20415b" fill="none" opacity=".6"><ellipse cx="1200" cy="210" rx="220" ry="320" transform="rotate(35 1200 210)"/><ellipse cx="1200" cy="210" rx="220" ry="320" transform="rotate(-35 1200 210)"/><circle cx="1200" cy="210" r="200"/></g>
+<g transform="translate(100 130)"><path d="M0 180 55 30V150L23 204Z" fill="#25d9ff"/><path d="M70 132 125 -18V102L93 156Z" fill="#86ebff"/><path d="M140 84 195 -66V54L163 108Z" fill="#f7b84e"/></g>
+<text x="340" y="210" font-family="Segoe UI,DejaVu Sans,sans-serif" font-size="82" font-weight="800" letter-spacing="11" fill="#e7f7ff">PULSE</text>
+<text x="342" y="285" font-family="Segoe UI,DejaVu Sans,sans-serif" font-size="62" font-weight="300" letter-spacing="12" fill="#85eaff">ASCENDANT</text>
+<path d="M340 325H440L451 308 464 342 477 325H1070" fill="none" stroke="url(#glow)" stroke-width="3"/>
+<text x="343" y="385" font-family="Segoe UI,DejaVu Sans,sans-serif" font-size="18" letter-spacing="5" fill="#7b91a6">THREE ACTS / SIXTEEN WORLDS / ONE PULSE</text>
+</svg>

@@ -1,0 +1,461 @@
+{
+  "passed": 76,
+  "chapters": [
+    {
+      "chapter": 1,
+      "mean_change": 0.1016,
+      "changed_fraction": 0.6144,
+      "mean_brightness": 0.2191
+    },
+    {
+      "chapter": 2,
+      "mean_change": 0.0636,
+      "changed_fraction": 0.4143,
+      "mean_brightness": 0.368
+    },
+    {
+      "chapter": 3,
+      "mean_change": 0.1782,
+      "changed_fraction": 0.78,
+      "mean_brightness": 0.5066
+    },
+    {
+      "chapter": 4,
+      "mean_change": 0.0747,
+      "changed_fraction": 0.3988,
+      "mean_brightness": 0.3104
+    },
+    {
+      "chapter": 5,
+      "mean_change": 0.1126,
+      "changed_fraction": 0.2818,
+      "mean_brightness": 0.1322
+    },
+    {
+      "chapter": 6,
+      "mean_change": 0.0644,
+      "changed_fraction": 0.4293,
+      "mean_brightness": 0.365
+    },
+    {
+      "chapter": 7,
+      "mean_change": 0.1966,
+      "changed_fraction": 0.7976,
+      "mean_brightness": 0.506
+    },
+    {
+      "chapter": 8,
+      "mean_change": 0.1103,
+      "changed_fraction": 0.5313,
+      "mean_brightness": 0.1971
+    },
+    {
+      "chapter": 9,
+      "mean_change": 0.1254,
+      "changed_fraction": 0.773,
+      "mean_brightness": 0.325
+    },
+    {
+      "chapter": 10,
+      "mean_change": 0.2821,
+      "changed_fraction": 0.7162,
+      "mean_brightness": 0.2376
+    },
+    {
+      "chapter": 11,
+      "mean_change": 0.0971,
+      "changed_fraction": 0.3793,
+      "mean_brightness": 0.2152
+    },
+    {
+      "chapter": 12,
+      "mean_change": 0.1439,
+      "changed_fraction": 0.5821,
+      "mean_brightness": 0.2281
+    },
+    {
+      "chapter": 13,
+      "mean_change": 0.0827,
+      "changed_fraction": 0.4667,
+      "mean_brightness": 0.3789
+    },
+    {
+      "chapter": 14,
+      "mean_change": 0.1846,
+      "changed_fraction": 0.8194,
+      "mean_brightness": 0.2921
+    },
+    {
+      "chapter": 15,
+      "mean_change": 0.1915,
+      "changed_fraction": 0.6266,
+      "mean_brightness": 0.2772
+    },
+    {
+      "chapter": 16,
+      "mean_change": 0.1232,
+      "changed_fraction": 0.7502,
+      "mean_brightness": 0.2436
+    },
+    {
+      "chapter": 17,
+      "mean_change": 0.2042,
+      "changed_fraction": 0.8367,
+      "mean_brightness": 0.4303
+    },
+    {
+      "chapter": 18,
+      "mean_change": 0.1706,
+      "changed_fraction": 0.5878,
+      "mean_brightness": 0.249
+    },
+    {
+      "chapter": 19,
+      "mean_change": 0.1502,
+      "changed_fraction": 0.5523,
+      "mean_brightness": 0.305
+    },
+    {
+      "chapter": 20,
+      "mean_change": 0.0895,
+      "changed_fraction": 0.4039,
+      "mean_brightness": 0.3181
+    },
+    {
+      "chapter": 21,
+      "mean_change": 0.1267,
+      "changed_fraction": 0.6338,
+      "mean_brightness": 0.2435
+    },
+    {
+      "chapter": 22,
+      "mean_change": 0.1986,
+      "changed_fraction": 0.6093,
+      "mean_brightness": 0.2636
+    },
+    {
+      "chapter": 23,
+      "mean_change": 0.078,
+      "changed_fraction": 0.367,
+      "mean_brightness": 0.3193
+    },
+    {
+      "chapter": 24,
+      "mean_change": 0.1374,
+      "changed_fraction": 0.4553,
+      "mean_brightness": 0.4762
+    },
+    {
+      "chapter": 25,
+      "mean_change": 0.1007,
+      "changed_fraction": 0.5482,
+      "mean_brightness": 0.3909
+    },
+    {
+      "chapter": 26,
+      "mean_change": 0.2532,
+      "changed_fraction": 0.6859,
+      "mean_brightness": 0.2989
+    },
+    {
+      "chapter": 27,
+      "mean_change": 0.1477,
+      "changed_fraction": 0.799,
+      "mean_brightness": 0.3261
+    },
+    {
+      "chapter": 28,
+      "mean_change": 0.1451,
+      "changed_fraction": 0.6761,
+      "mean_brightness": 0.2604
+    },
+    {
+      "chapter": 29,
+      "mean_change": 0.1695,
+      "changed_fraction": 0.5686,
+      "mean_brightness": 0.2489
+    },
+    {
+      "chapter": 30,
+      "mean_change": 0.1185,
+      "changed_fraction": 0.7258,
+      "mean_brightness": 0.2828
+    },
+    {
+      "chapter": 31,
+      "mean_change": 0.1063,
+      "changed_fraction": 0.5156,
+      "mean_brightness": 0.1999
+    },
+    {
+      "chapter": 32,
+      "mean_change": 0.164,
+      "changed_fraction": 0.6525,
+      "mean_brightness": 0.4825
+    },
+    {
+      "chapter": 33,
+      "mean_change": 0.1357,
+      "changed_fraction": 0.5177,
+      "mean_brightness": 0.4906
+    },
+    {
+      "chapter": 34,
+      "mean_change": 0.0485,
+      "changed_fraction": 0.1936,
+      "mean_brightness": 0.1358
+    },
+    {
+      "chapter": 35,
+      "mean_change": 0.1158,
+      "changed_fraction": 0.6882,
+      "mean_brightness": 0.2409
+    },
+    {
+      "chapter": 36,
+      "mean_change": 0.1282,
+      "changed_fraction": 0.738,
+      "mean_brightness": 0.412
+    },
+    {
+      "chapter": 37,
+      "mean_change": 0.0543,
+      "changed_fraction": 0.1981,
+      "mean_brightness": 0.1361
+    },
+    {
+      "chapter": 38,
+      "mean_change": 0.1655,
+      "changed_fraction": 0.5811,
+      "mean_brightness": 0.5245
+    },
+    {
+      "chapter": 39,
+      "mean_change": 0.1139,
+      "changed_fraction": 0.764,
+      "mean_brightness": 0.2707
+    },
+    {
+      "chapter": 40,
+      "mean_change": 0.149,
+      "changed_fraction": 0.8077,
+      "mean_brightness": 0.403
+    },
+    {
+      "chapter": 41,
+      "mean_change": 0.0623,
+      "changed_fraction": 0.2535,
+      "mean_brightness": 0.1589
+    },
+    {
+      "chapter": 42,
+      "mean_change": 0.1298,
+      "changed_fraction": 0.7259,
+      "mean_brightness": 0.2754
+    },
+    {
+      "chapter": 43,
+      "mean_change": 0.1408,
+      "changed_fraction": 0.5309,
+      "mean_brightness": 0.4926
+    },
+    {
+      "chapter": 44,
+      "mean_change": 0.1057,
+      "changed_fraction": 0.6018,
+      "mean_brightness": 0.3798
+    },
+    {
+      "chapter": 45,
+      "mean_change": 0.0554,
+      "changed_fraction": 0.2467,
+      "mean_brightness": 0.1323
+    },
+    {
+      "chapter": 46,
+      "mean_change": 0.1219,
+      "changed_fraction": 0.7585,
+      "mean_brightness": 0.2764
+    },
+    {
+      "chapter": 47,
+      "mean_change": 0.1792,
+      "changed_fraction": 0.7056,
+      "mean_brightness": 0.5439
+    },
+    {
+      "chapter": 48,
+      "mean_change": 0.1387,
+      "changed_fraction": 0.7941,
+      "mean_brightness": 0.3785
+    },
+    {
+      "chapter": 49,
+      "mean_change": 0.0971,
+      "changed_fraction": 0.4249,
+      "mean_brightness": 0.1746
+    },
+    {
+      "chapter": 50,
+      "mean_change": 0.1176,
+      "changed_fraction": 0.7632,
+      "mean_brightness": 0.2507
+    },
+    {
+      "chapter": 51,
+      "mean_change": 0.1415,
+      "changed_fraction": 0.6352,
+      "mean_brightness": 0.5097
+    },
+    {
+      "chapter": 52,
+      "mean_change": 0.1219,
+      "changed_fraction": 0.7106,
+      "mean_brightness": 0.3692
+    },
+    {
+      "chapter": 53,
+      "mean_change": 0.0215,
+      "changed_fraction": 0.1424,
+      "mean_brightness": 0.7042
+    },
+    {
+      "chapter": 54,
+      "mean_change": 0.0365,
+      "changed_fraction": 0.217,
+      "mean_brightness": 0.7081
+    },
+    {
+      "chapter": 55,
+      "mean_change": 0.0468,
+      "changed_fraction": 0.2244,
+      "mean_brightness": 0.2666
+    },
+    {
+      "chapter": 56,
+      "mean_change": 0.0999,
+      "changed_fraction": 0.6138,
+      "mean_brightness": 0.3207
+    },
+    {
+      "chapter": 57,
+      "mean_change": 0.0509,
+      "changed_fraction": 0.3589,
+      "mean_brightness": 0.4739
+    },
+    {
+      "chapter": 58,
+      "mean_change": 0.0197,
+      "changed_fraction": 0.1404,
+      "mean_brightness": 0.7181
+    },
+    {
+      "chapter": 59,
+      "mean_change": 0.1225,
+      "changed_fraction": 0.6413,
+      "mean_brightness": 0.2959
+    },
+    {
+      "chapter": 60,
+      "mean_change": 0.0886,
+      "changed_fraction": 0.4527,
+      "mean_brightness": 0.2726
+    },
+    {
+      "chapter": 61,
+      "mean_change": 0.0459,
+      "changed_fraction": 0.3301,
+      "mean_brightness": 0.4844
+    },
+    {
+      "chapter": 62,
+      "mean_change": 0.0361,
+      "changed_fraction": 0.2113,
+      "mean_brightness": 0.7425
+    },
+    {
+      "chapter": 63,
+      "mean_change": 0.0844,
+      "changed_fraction": 0.4144,
+      "mean_brightness": 0.2706
+    },
+    {
+      "chapter": 64,
+      "mean_change": 0.1069,
+      "changed_fraction": 0.614,
+      "mean_brightness": 0.2836
+    },
+    {
+      "chapter": 65,
+      "mean_change": 0.065,
+      "changed_fraction": 0.4253,
+      "mean_brightness": 0.4722
+    },
+    {
+      "chapter": 66,
+      "mean_change": 0.1157,
+      "changed_fraction": 0.8416,
+      "mean_brightness": 0.3361
+    },
+    {
+      "chapter": 67,
+      "mean_change": 0.0213,
+      "changed_fraction": 0.1518,
+      "mean_brightness": 0.7062
+    },
+    {
+      "chapter": 68,
+      "mean_change": 0.0765,
+      "changed_fraction": 0.3899,
+      "mean_brightness": 0.2781
+    },
+    {
+      "chapter": 69,
+      "mean_change": 0.0838,
+      "changed_fraction": 0.3981,
+      "mean_brightness": 0.2592
+    },
+    {
+      "chapter": 70,
+      "mean_change": 0.0601,
+      "changed_fraction": 0.4192,
+      "mean_brightness": 0.482
+    },
+    {
+      "chapter": 71,
+      "mean_change": 0.0269,
+      "changed_fraction": 0.1724,
+      "mean_brightness": 0.7082
+    },
+    {
+      "chapter": 72,
+      "mean_change": 0.0751,
+      "changed_fraction": 0.3854,
+      "mean_brightness": 0.2719
+    },
+    {
+      "chapter": 73,
+      "mean_change": 0.1108,
+      "changed_fraction": 0.7381,
+      "mean_brightness": 0.4067
+    },
+    {
+      "chapter": 74,
+      "mean_change": 0.0594,
+      "changed_fraction": 0.4131,
+      "mean_brightness": 0.4738
+    },
+    {
+      "chapter": 75,
+      "mean_change": 0.0566,
+      "changed_fraction": 0.4017,
+      "mean_brightness": 0.481
+    },
+    {
+      "chapter": 76,
+      "mean_change": 0.0542,
+      "changed_fraction": 0.3354,
+      "mean_brightness": 0.4835
+    }
+  ]
+}

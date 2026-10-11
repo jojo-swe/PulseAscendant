@@ -1,10 +1,10 @@
 {
-  "frames": 22673280,
-  "duration": 472.36,
+  "frames": 14400000,
+  "duration": 300.0,
   "envelope_rate": 20,
-  "envelope_samples": 9448,
-  "transient_peaks": 1079,
-  "runtime_sha256": "fe82b791b2d4a947de483dbdd4c567d4bd6636f38a3a62e53592914b1f286ce9",
+  "envelope_samples": 6000,
+  "transient_peaks": 819,
+  "runtime_sha256": "1dffe4f4d7d9b82f5fd94244ba87ee3b7bed5f53c6968ca9521b90aaa5949456",
   "spectrum_bands": 24,
   "spectrum_edges_hz": [
     35.0,

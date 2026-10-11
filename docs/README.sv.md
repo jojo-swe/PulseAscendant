@@ -1,56 +1,60 @@
-# Second Reality / Full Throttle — v0.2
+# Pulse Ascendant
 
-Ett fristående C++17/SDL3/OpenGL-demo för Windows och Linux. Åtta procedurala 3D-världar, 31 kapitel och hela **Luminous Flow: 7 minuter 52,36 sekunder**. Future Crews Second Reality (1993) är utgångspunkten för tunneln, plasmatekniken och kristallgeometrin. Övriga världar och den nya koreografin är nyskrivna.
+Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara akter, 16 världar, 76 kapitel och 14:48,68 musik**. Akt II och III använder Vulkan-hårdvaruraytracing på kompatibla grafikkort. En separat OpenGL-renderare finns för alla världar.
+
+[Releaser](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
+
+Treaktsversionen v0.3 och Windows/Linux-paketen är oberoende granskade och godkända med **7,3/10**. Se [granskningsrapporten](QUALITY_REVIEW.md) och aktuell verifiering. Tidigare publicerade videor och releaser avser äldre versioner.
 
 ## Kör
 
-**Windows:** packa upp hela zipfilen och starta `SecondRealityRemix.exe`. Behåll `assets/` bredvid programmet. Windows 10/11 x64 och OpenGL 3.3 krävs. SDL och MSVC-runtime är statiskt länkade.
+**Windows:** packa upp hela `PulseAscendant-Windows-x64.zip` och starta `PulseAscendant.exe`. Behåll `assets/` bredvid programmet. Windows 10/11 x64 och en OpenGL 3.3-drivrutin krävs. SDL och MSVC-runtime är statiskt länkade.
 
-**Linux:** packa upp tarballen och kör `./SecondRealityRemix`. Byggt för Ubuntu 24.04 x64, glibc 2.39 och GCC 13:s libstdc++. Kräver X11/Wayland, grafikdrivrutin och systembiblioteken i `VERIFICATION.md`.
+**Linux:** packa upp `PulseAscendant-Linux-x64.tar.gz` och kör `./PulseAscendant`. Bygget riktar sig till Ubuntu 24.04 x64, glibc 2.39 och GCC 13:s libstdc++, med X11/Wayland och OpenGL-drivrutin.
 
-Demot startar i 1280x720 och loopar hela låten. Musiken har ingen 90-sekundersgräns, klippning eller tillagda toningar. Programmet behöver inget nätverk eller konto.
+Programmet startar i 1280×720 och loopar hela demot. Konto och nätverk behövs inte. Vulkan-RT kräver dessutom en kompatibel drivrutin; annars väljs OpenGL-reserven. En synlig märkning visar renderingsvägen.
 
 | Tangent | Funktion |
-|---|---|
-| F11 | Helskärm / fönster |
-| 1–8 | Hoppa med grafik och musik till respektive världs första kapitel |
+| --- | --- |
+| F1 / F2 / F3 | Hoppa till akt I / II / III med motsvarande musik |
+| 1–8 | Akt I:s åtta världar |
+| 9 / 0 / - / = | Akt II:s fyra världar |
+| Q / W / E / R | Akt III:s fyra världar |
 | Vänster / höger pil | Föregående / nästa kapitel |
-| Tab | Modern / retrostil i 320x200 |
+| Tab | Modern / retro i 320×200 |
 | M | Ljud av/på; tidslinjen fortsätter |
+| F11 | Helskärm / fönster |
 | Esc | Avsluta |
 
-## Musik som driver grafik
+## Musik och akter
 
-24 logaritmiska frekvensband mellan **35 Hz och 18 kHz** kommer från FFT-analys av den faktiska musikfilen. Kurvorna förberäknas vid 20 Hz, jämnas med attack/release och interpoleras vid ljudtransportens uppspelningsposition. Bas, mellanregister och diskant kan därmed röra olika objekt samtidigt. Det är analys av den medföljande låten; inget mikrofonljud eller systemljud fångas.
+| Akt | Låt | Start | Längd | Kapitel |
+| --- | --- | --- | --- | --- |
+| I: Full Throttle | Luminous Flow, femminutersklipp | 0:00 | 5:00 | 31 |
+| II: Adventurous Uplift | Hela låten | 5:00 | 4:49,92 | 21 |
+| III: Reality Ascendant | Hela Rigid Arpeggios | 9:49,92 | 4:58,76 | 24 |
 
-- Bas och anslag påverkar puls, stora former och ljusstyrka.
-- Separata band styr ringar, fönster, gyroidens material och tjocklek, havsvågor, svävande klot och skeppens motorljus.
-- Partikelgrupper har egna band för radie, spårlängd och intensitet.
-- Tre världar har dessutom fyra roterande kransar med 24 tredimensionella spektrumstaplar vardera.
-- 31 redigerade kapitel med klipp flyttade till närliggande uppmätta transienter. Fyra kameravarianter växlar inom kapitlen; ingen fast BPM antas.
+Musiken spelas i normal hastighet. De första 299 sekunderna i akt I är sampleidentiska med den avkodade källan; sista sekunden tonas ut fram till exakt 300 sekunder. Akt II och III använder alla avkodade samplingar. Ett sammanfogat PCM16-ljudspår i stereo, 48 kHz, ger en gemensam uppspelningsklocka och sampleexakta aktgränser.
 
-Spektrumanimationen följer samma klocka även efter scenhopp och mute. Vid saknat ljud används en reservklocka och en synlig SILENT MODE-markering.
+Varje låt har egen FFT-analys med 24 logaritmiska frekvensband mellan 35 Hz och 18 kHz. Kurvorna analyseras vid 20 Hz och interpoleras vid aktuell ljudposition. Bas, mellanregister, diskant och anslag styr olika objekt, material, ljus och partiklar samtidigt. Inget mikrofon- eller systemljud spelas in.
 
-## Världar och samtidiga lager
+Scenbyten väljs med uppmätta anslag och bestående spektrala förändringar inom ±2,5 sekunder från redaktionella mål. Kapitlen begränsas till 5–18 sekunder; ingen fast BPM antas. Kameraklipp sker även inom kapitlen. Upplevd musikalisk synk behöver bedömas genom lyssning, separat från analysen.
 
-| Värld | Grafik |
-|---|---|
-| Photon Corridor | Böjd raymarchad tunnel, lysande ribbor, 15 360 ringpartiklar och 4 000 fartspår |
-| Plasma / Gyroid | Genombruten 3D-form, frekvensstyrda ådror, AO, mjuka skuggor, golvreflektion och 8 000 orbitala spår |
-| Crystal Engine | Originalets facettgeometri med brytning, Fresnelreflektion och färgspridning; tre GGX-belysta metallringar och 8 000 spår |
-| Neon City | Snabb flygning genom upprepade 3D-byggnader med frekvensstyrda fönster och höjder, spår och neonräls |
-| Fracture Machine | Vikta SDF-strukturer, pulserande portar, rollande kamera och fartspår |
-| Cosmic Reactor | Volymetrisk ackretionsskiva, korona, nebulosa, 24 000 orbitala spår och ett radiellt 3D-spektrum |
-| Quantum Ocean | Frekvensstyrda vågor, reflekterad himmel, svävande klot, aurora och låg flygning |
-| Orbital Armada | Upprepade 3D-skepp med kropp, vingar, cockpit och frekvensstyrda motorljus; kamera genom flottan |
+Akt I rymmer tunnlar, kristaller, stad, vikta maskiner, reaktor, hav och rymdflotta. Akt II tillför kromkatedral, regnstad, orbital fabrik och prismakammare. Akt III tillför ökenkolosser, lysande växtarkitektur, flytande sten och en kristallvingad final. Se [akt II](ACT_II.md) och [akt III](ACT_III.md).
 
-Alla världar kombinerar geometri och partikellager i samma bild. HDR, bloom, begränsad radiell rörelseoskärpa och färgseparation binder ihop uttrycket. Detaljer och approximationer finns i `SOURCE_MAP.md`.
+## Renderingsvägar
 
-## Bygg
+Vulkan-renderaren för akt II och III använder riktiga KHR-ray queries mot triangel-BLAS och en dynamisk TLAS. Fem grundmesh används inom en budget på 2 048 instanser. Strålar ger skuggor, reflektioner och brytning med högst fem ytträffar. Modern RT använder två deterministiska subpixelprover och ett adaptivt kantfilter; retro använder ett prov per pixel.
 
-Källarkivet innehåller WAV, hela käll-MP3:n och genererad analysdata. Git ignorerar de två ljudfilerna. För att återskapa dem och analysen: `tools/prepare_music.ps1 -SourcePath 'Luminous Flow.mp3'` med ffmpeg och Python + numpy. Dessa analysverktyg behövs inte för att köra programmet eller bygga ett komplett källarkiv.
+Resultatet kopieras från Vulkan-enhetsminne via värdminne till en OpenGL-HDR-textur varje bild. Det är inte zero-copy. Renderaren är ingen fullständig path tracer och ger ingen allmän global illumination eller temporal denoising. En exporterad 4K60-video innebär inte garanterade 60 interaktiva bilder per sekund i 4K.
 
-SDL 3.4.18 hämtas från en låst commit med verifierad SHA-256. En lokal kopia kan anges med `-DFETCHCONTENT_SOURCE_DIR_SDL3=/path/to/SDL`. Första hämtningen behöver nätverk.
+OpenGL 3.3-reserven använder separata SDF- och analytiska världar. Välj `--no-rt` för den vägen, `--require-rt` för att kräva tillgänglig Vulkan-RT och `--rt-validation` för Vulkan-diagnostik där valideringslagren finns. Akt I använder OpenGL i båda konfigurationerna.
+
+## Bygg och återskapa ljud
+
+Källarkivet `PulseAscendant-source.zip` innehåller alla tre original-MP3, tre akt-WAV, den sammanfogade WAV-filen och genererad analys. Git ignorerar ljudet. Ett Git-utcheck behöver **alla fyra WAV-filer** för hela testsviten; runtimepaketet innehåller endast `second-reality-three-acts.wav`.
+
+CTest läser akt I och den sammanfogade filen. De separata Python-kontrollerna jämför även akt II och III samt källornas hashar. Med Python och numpy kan de köras som `python tests/test_show.py --app build/windows/Release/PulseAscendant.exe`, `python tests/test_music_analysis.py` och `python tests/test_music_direction.py`.
 
 Windows med Visual Studio 2026 och CMake 3.25+:
 
@@ -58,11 +62,8 @@ Windows med Visual Studio 2026 och CMake 3.25+:
 cmake --preset windows
 cmake --build --preset windows
 ctest --preset windows
-./tools/smoke-test.ps1
 ./tools/package.ps1
 ```
-
-Visual Studio 2022 kan väljas manuellt med `-G 'Visual Studio 17 2022' -A x64`; det generatorvalet är inte testat här.
 
 Ubuntu 24.04:
 
@@ -71,34 +72,37 @@ sudo apt install build-essential cmake pkg-config libx11-dev libxext-dev libxran
 cmake --preset linux
 cmake --build --preset linux
 ctest --preset linux
-build/linux/SecondRealityRemix --smoke-test --no-audio --capture-dir build/captures-linux
 bash tools/package.sh build/linux
 ```
 
-## Diagnostik och verifiering
+SDL hämtas från en låst commit med verifierad hash. Vulkan-headerfiler hittas lokalt eller hämtas från en låst release. Vulkan laddas dynamiskt; reservvägen kan starta utan Vulkan-loader. Se [engelsk bygginformation](../README.md) för lokal återanvändning av beroenden och SPIR-V-kompilering.
+
+Ljud, analys och musikstyrda klipp återskapas med ffmpeg, Python och numpy:
 
 ```sh
-SecondRealityRemix --help
-SecondRealityRemix --time 400 --duration 5 --width 1920 --height 1080
-SecondRealityRemix --self-test --duration 15
-SecondRealityRemix --smoke-test --no-audio --capture-dir captures
-SecondRealityRemix --tour-test --no-audio --capture-dir tour
-python tools/verify-motion.py tour motion.json
-python tests/test_music_analysis.py
+python tools/prepare_show.py "Luminous Flow.mp3" "Adventurous Uplift.mp3" "Rigid Arpeggios.mp3"
 ```
 
-Smoke-testet fångar åtta världar i två stilar. Tour-testet fångar två tidpunkter i vart och ett av de 31 kapitlen. Bildjämförelsen kontrollerar rörelse och ljusnivå utanför textområdet. Den är inget mått på konstnärlig kvalitet. FFT-testet använder tystnad och rena bas-, mellanregister- och diskanttoner för att kontrollera frekvensseparationen.
+Utan argument används originalfilerna under `music/source/`. PowerShell-ingången är `tools/prepare_music.ps1`. Dessa verktyg behövs inte för att spela upp det färdiga demot.
 
-`--duration` stänger av begärd vsync. Loggade bildtider mäter renderanrop och bufferbyte med CPU-ur, inte rena GPU-tider. Kontrolltestet injicerar SDL-händelser och observerar verkliga fönstertillstånd; det visar ett fönster även med `--hidden`. Avbrutet test ger felkod. Aktivera `-DREMIX_RUNTIME_TESTS=ON` för fyra CTest-prov, inklusive fönsterlivscykel. De kräver en fungerande display.
+## Diagnostik och export
 
-På Linux kan `bash tools/test-linux-display.sh build/linux` använda en isolerad Xvfb/Openbox-display. WSLg-sessionen bekräftade inte minimering och räknas inte som godkänd för den strikta livscykeln. GPU-rendering och ljud har separata prov. Här valde WSLg llvmpipe som standard; NVIDIA kunde väljas per process med `GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA LD_LIBRARY_PATH=/usr/lib/wsl/lib`. Vanligt Linux-skrivbord återstår att prova.
+```powershell
+build/windows/Release/PulseAscendant.exe --show-info
+build/windows/Release/PulseAscendant.exe --smoke-test --no-audio --capture-dir build/captures
+build/windows/Release/PulseAscendant.exe --tour-test --no-audio --capture-dir build/tour
+python tools/verify-motion.py build/tour build/motion.json
+python tools/render_video.py --app build/windows/Release/PulseAscendant.exe --require-rt --output dist/three-acts/PulseAscendant-4K60.mp4
+```
 
-Känd utvecklingsbegränsning: enbart shaderändringar garanterar inte POST_BUILD-kopiering till exe-katalogen. Kopiera då `assets/` dit manuellt eller kör `cmake --install` till staging. Paketeringen installerar aktuella källresurser.
+Smoke-läget begär alla 16 världar i två stilar. Tour-läget begär två exakta tidpunkter i varje kapitel. Testerna för bildförändring är inte betyg på konstnärlig kvalitet. Lägg till `-DREMIX_RUNTIME_TESTS=ON` vid konfigurering för displayberoende kontrolltester.
 
-Uppmätta resultat och acceptansgränser: `VERIFICATION.md`. Visuell helhet, upplevd synk, musikalisk likhet och loopskarv behöver mänsklig bedömning. Ingen obruten mänsklig genomspelning av hela låten har verifierats.
+Exportören läser programmets `--show-info`, kontrollerar ljudets format och sampleantal samt tillåter endast intervall inom 888,68 sekunder. Den behöver ffmpeg/ffprobe och NVIDIA NVENC. För en kort akt III-förhandsvisning kan `--start 589.92 --duration 5` läggas till. Paket och ny export placeras under `dist/three-acts/`.
 
-## Krediter och licenser
+Enbart shaderändringar utlöser inte säkert kopiering av resurser till exe-katalogen. Kopiera då aktuella `assets/` dit eller installera till staging. Aktuell native-, Linux-, RT-, fallback- och kvalitetsacceptans dokumenteras i [VERIFICATION.md](VERIFICATION.md); historiska provresultat gäller inte automatiskt den nya versionen.
 
-Originaldemo, effektidéer och glenz-geometri: **Future Crew**. Källa: https://github.com/mtuomi/SecondReality, commit `071a82eddb7a7390dbaa491a8a473e0e923a55c2`, public domain/Unlicense. Originalträdet är separat och oförändrat.
+## Krediter
 
-SDL: https://libsdl.org, zlib-licens. Licenstexter i `licenses/`. Nyskriven remixkod: MIT. Musik: användarens Suno-export; metadata och hashar i `music/asset-receipt.json` och `music/analysis.json`. Musiken ingår i den kostnadsfria demoreleasen på projektägarens begäran, omfattas inte av MIT och behåller sina tillämpliga Suno-villkor. Se `licenses/MUSIC-NOTICE.txt`.
+Pulse Ascendant har en egen identitet och ny koreografi. Projektets historia omfattar en selektiv omarbetning av Future Crews **Second Reality** (1993). Originaldemo, utvalda effektidéer och glenz-geometri krediteras Future Crew. [Originalkälla](https://github.com/mtuomi/SecondReality), commit `071a82eddb7a7390dbaa491a8a473e0e923a55c2`, public domain/Unlicense. Originalträdet och tidigare releaser är bevarade.
+
+Ny kod: MIT. SDL: zlib och medföljande licenstexter. De tre Suno-låtarna, artistmetadata **joyolo**, levererades av projektägaren och ingår på dennes begäran. Musiken omfattas inte av MIT. [Musikkrediter, Suno-ID och källhashar](../licenses/MUSIC-NOTICE.txt).

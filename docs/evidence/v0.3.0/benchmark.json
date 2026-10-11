@@ -1,0 +1,168 @@
+{
+  "gpu": "NVIDIA GeForce RTX 4080",
+  "driver": "617.42",
+  "duration_per_case": 3,
+  "method": "CPU wall clock around render and swap; no GPU timestamps; vsync requested off; hidden; audio disabled; full resolution; two RT samples",
+  "cases": [
+    {
+      "world": "Chrome Cathedral",
+      "scene": 9,
+      "width": 1280,
+      "height": 720,
+      "frames": 146,
+      "fps": 48.4676,
+      "mean_ms": 20.613,
+      "max_ms": 30.1516
+    },
+    {
+      "world": "Rain District",
+      "scene": 10,
+      "width": 1280,
+      "height": 720,
+      "frames": 112,
+      "fps": 37.0079,
+      "mean_ms": 27.0011,
+      "max_ms": 43.5317
+    },
+    {
+      "world": "Orbital Foundry",
+      "scene": 11,
+      "width": 1280,
+      "height": 720,
+      "frames": 115,
+      "fps": 38.1834,
+      "mean_ms": 26.1707,
+      "max_ms": 41.4713
+    },
+    {
+      "world": "Prism Chamber",
+      "scene": 12,
+      "width": 1280,
+      "height": 720,
+      "frames": 132,
+      "fps": 43.8762,
+      "mean_ms": 22.7712,
+      "max_ms": 34.2465
+    },
+    {
+      "world": "Dune Colossus",
+      "scene": 13,
+      "width": 1280,
+      "height": 720,
+      "frames": 154,
+      "fps": 50.9711,
+      "mean_ms": 19.5977,
+      "max_ms": 36.6524
+    },
+    {
+      "world": "Verdant Singularity",
+      "scene": 14,
+      "width": 1280,
+      "height": 720,
+      "frames": 143,
+      "fps": 47.348,
+      "mean_ms": 21.1003,
+      "max_ms": 28.6966
+    },
+    {
+      "world": "Gravity Rebellion",
+      "scene": 15,
+      "width": 1280,
+      "height": 720,
+      "frames": 139,
+      "fps": 46.2955,
+      "mean_ms": 21.5773,
+      "max_ms": 32.2166
+    },
+    {
+      "world": "Reality Ascendant",
+      "scene": 16,
+      "width": 1280,
+      "height": 720,
+      "frames": 161,
+      "fps": 53.6317,
+      "mean_ms": 18.6242,
+      "max_ms": 28.9627
+    },
+    {
+      "world": "Chrome Cathedral",
+      "scene": 9,
+      "width": 1920,
+      "height": 1080,
+      "frames": 82,
+      "fps": 26.9922,
+      "mean_ms": 37.0269,
+      "max_ms": 43.1774
+    },
+    {
+      "world": "Rain District",
+      "scene": 10,
+      "width": 1920,
+      "height": 1080,
+      "frames": 58,
+      "fps": 19.1355,
+      "mean_ms": 52.2299,
+      "max_ms": 67.6042
+    },
+    {
+      "world": "Orbital Foundry",
+      "scene": 11,
+      "width": 1920,
+      "height": 1080,
+      "frames": 63,
+      "fps": 20.8147,
+      "mean_ms": 48.0271,
+      "max_ms": 61.8927
+    },
+    {
+      "world": "Prism Chamber",
+      "scene": 12,
+      "width": 1920,
+      "height": 1080,
+      "frames": 75,
+      "fps": 24.855,
+      "mean_ms": 40.2144,
+      "max_ms": 48.9482
+    },
+    {
+      "world": "Dune Colossus",
+      "scene": 13,
+      "width": 1920,
+      "height": 1080,
+      "frames": 90,
+      "fps": 29.6959,
+      "mean_ms": 33.656,
+      "max_ms": 41.4854
+    },
+    {
+      "world": "Verdant Singularity",
+      "scene": 14,
+      "width": 1920,
+      "height": 1080,
+      "frames": 84,
+      "fps": 27.9271,
+      "mean_ms": 35.7911,
+      "max_ms": 45.4956
+    },
+    {
+      "world": "Gravity Rebellion",
+      "scene": 15,
+      "width": 1920,
+      "height": 1080,
+      "frames": 68,
+      "fps": 22.4514,
+      "mean_ms": 44.5223,
+      "max_ms": 53.1543
+    },
+    {
+      "world": "Reality Ascendant",
+      "scene": 16,
+      "width": 1920,
+      "height": 1080,
+      "frames": 80,
+      "fps": 26.3488,
+      "mean_ms": 37.933,
+      "max_ms": 51.7354
+    }
+  ]
+}

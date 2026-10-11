@@ -24,7 +24,10 @@ def read_bmp(path):
 
 root = Path(sys.argv[1])
 report = []
-for chapter in range(1, 32):
+chapters=sorted(int(p.name.split('-')[1]) for p in root.glob('chapter-*-a.bmp'))
+if not chapters or chapters!=list(range(1,len(chapters)+1)):
+    raise ValueError('Capture chapters must be nonempty and contiguous')
+for chapter in chapters:
     a, b = (read_bmp(root/f'chapter-{chapter}-{sample}.bmp') for sample in ('a', 'b'))
     difference = np.abs(a-b).mean(axis=2)
     motion = float(difference.mean())
@@ -36,6 +39,6 @@ for chapter in range(1, 32):
 result = json.dumps(dict(passed=len(report), chapters=report), indent=2) + '\n'
 if len(sys.argv) > 2:
     Path(sys.argv[2]).write_text(result, encoding='utf-8')
-    print(f'{len(report)}/31 chapters passed; report: {sys.argv[2]}')
+    print(f'{len(report)}/{len(chapters)} chapters passed; report: {sys.argv[2]}')
 else:
     print(result, end='')

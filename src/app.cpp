@@ -20,7 +20,7 @@ int runApp(const AppOptions& o) {
  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,3);
  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);
  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
- SDL_Window* raw=SDL_CreateWindow("Second Reality / Full Throttle",o.width,o.height,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|(o.smoke||o.tour||o.renderStream||(o.hidden&&!o.selfTest)?SDL_WINDOW_HIDDEN:0));
+ SDL_Window* raw=SDL_CreateWindow("PULSE ASCENDANT",o.width,o.height,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|(o.smoke||o.tour||o.renderStream||(o.hidden&&!o.selfTest)?SDL_WINDOW_HIDDEN:0));
  if(!raw)throw std::runtime_error(std::string("Window: ")+SDL_GetError());
  std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)> window(raw,SDL_DestroyWindow);
  SDL_GLContext context=SDL_GL_CreateContext(raw);
@@ -28,13 +28,15 @@ int runApp(const AppOptions& o) {
  struct Context {SDL_GLContext c;~Context(){SDL_GL_DestroyContext(c);}} owned{context};
  bool vsync=SDL_GL_SetSwapInterval(o.duration>0||o.smoke||o.tour||o.renderStream?0:1);
  auto assets=o.assets.empty()?findAssets(SDL_GetBasePath()):o.assets;
- Renderer renderer(assets);renderer.initialize();renderer.resize(o.width,o.height);
+ if(auto* icon=SDL_LoadBMP((assets/"branding"/"pulse-ascendant.bmp").string().c_str())){SDL_SetWindowIcon(raw,icon);SDL_DestroySurface(icon);}
+ Renderer renderer(assets);renderer.initialize(!o.noRT,o.requireRT,o.rtValidation);renderer.resize(o.width,o.height);
  (o.renderStream?std::cerr:std::cout)<<"Video: "<<SDL_GetCurrentVideoDriver()<<" | GPU: "<<renderer.diagnostics()<<'\n';
  if(o.renderStream) {
 #ifdef _WIN32
   if(_setmode(_fileno(stdout),_O_BINARY)==-1)throw std::runtime_error("Cannot open binary video stream");
 #endif
-  double initial=o.scene>=0?sceneStart(o.scene):o.time,length=o.duration>0?o.duration:showDuration();
+  double initial=o.scene>=0?sceneStart(o.scene):o.time,length=o.duration>0?o.duration:showDuration()-initial;
+  if(length<=0||initial+length>showDuration()+1e-9)throw std::runtime_error("Export must stay inside the playable show");
   auto frames=static_cast<unsigned long long>(std::ceil(length*o.fps-1e-9));
   std::vector<unsigned char> pixels;
   for(unsigned long long i=0;i<frames;++i) {
@@ -46,6 +48,7 @@ int runApp(const AppOptions& o) {
   }
   if(std::fflush(stdout)!=0)throw std::runtime_error("Video stream flush failed");
   std::cerr<<"RENDER PASS: "<<frames<<" RGB24 frames, "<<o.width<<"x"<<o.height<<" at "<<o.fps<<" fps\n";
+  std::cerr<<"Render backend: "<<renderer.diagnostics()<<'\n';
   return 0;
  }
  if(o.smoke||o.tour) {
@@ -55,17 +58,19 @@ int runApp(const AppOptions& o) {
     double t=chapterStart(chapter)+2.+sample*.6;renderer.render(sampleTimeline(t),t,o.retro);
     renderer.capture(dir/("chapter-"+std::to_string(chapter+1)+(sample?"-b.bmp":"-a.bmp")));SDL_GL_SwapWindow(raw);
    }
-   std::cout<<"TOUR PASS: "<<chapterCount()*2<<" exact-time chapter captures rendered without GL errors\n";return 0;
+   std::cout<<"TOUR PASS: "<<chapterCount()*2<<" exact-time chapter captures rendered without GL errors\n";
+   std::cout<<"Render backend: "<<renderer.diagnostics()<<'\n';return 0;
   }
-  for(int scene=0;scene<8;++scene)for(bool retro:{false,true}) {
+  for(int scene=0;scene<16;++scene)for(bool retro:{false,true}) {
    double t=sceneStart(scene)+2.;renderer.render(sampleTimeline(t),t,retro);
    renderer.capture(dir/("scene-"+std::to_string(scene+1)+(retro?"-retro.bmp":"-modern.bmp")));
    SDL_GL_SwapWindow(raw);
   }
-  std::cout<<"SMOKE PASS: sixteen scenes/styles rendered without GL errors\n";return 0;
+  std::cout<<"SMOKE PASS: thirty-two scenes/styles rendered without GL errors\n";
+  std::cout<<"Render backend: "<<renderer.diagnostics()<<'\n';return 0;
  }
  AudioPlayer audio;
- if(!o.noAudio&&SDL_InitSubSystem(SDL_INIT_AUDIO))audio.start(assets/"music"/"luminous-flow.wav");
+ if(!o.noAudio&&SDL_InitSubSystem(SDL_INIT_AUDIO))audio.start(assets/showMusic(),showDuration());
  std::cout<<"Audio: "<<audio.status()<<'\n';
  double initial=o.scene>=0?sceneStart(o.scene):o.time;
  audio.seek(initial);
@@ -82,6 +87,9 @@ int runApp(const AppOptions& o) {
  auto key=[&](SDL_Keycode k) {
   if(k==SDLK_ESCAPE)running=false;
   else if(k>=SDLK_1&&k<=SDLK_8)seek(int(k-SDLK_1));
+  else if(k==SDLK_9)seek(8);else if(k==SDLK_0)seek(9);else if(k==SDLK_MINUS)seek(10);else if(k==SDLK_EQUALS)seek(11);
+  else if(k==SDLK_Q)seek(12);else if(k==SDLK_W)seek(13);else if(k==SDLK_E)seek(14);else if(k==SDLK_R)seek(15);
+  else if(k==SDLK_F1||k==SDLK_F2||k==SDLK_F3){double t=actStart(k==SDLK_F3?3:(k==SDLK_F2?2:1));audio.seek(t);fallbackTime=t;fallbackBegin=now();lastTime=t;}
   else if(k==SDLK_RIGHT||k==SDLK_LEFT){int chapter=sampleTimeline(lastTime).chapter+(k==SDLK_RIGHT?1:-1);double t=chapterStart(chapter);audio.seek(t);fallbackTime=t;fallbackBegin=now();lastTime=t;}
   else if(k==SDLK_TAB)retro=!retro;
   else if(k==SDLK_M){muted=!muted;audio.setMuted(muted);}
@@ -108,7 +116,7 @@ int runApp(const AppOptions& o) {
    }
    if(ev.type==SDL_EVENT_AUDIO_DEVICE_ADDED&&!ev.adevice.recording&&!usingAudio&&audio.outputLost()&&!o.noAudio) {
     double resume=wrapShowTime(fallbackTime+now()-fallbackBegin);
-    if(audio.start(assets/"music"/"luminous-flow.wav")){audio.seek(resume);audio.setMuted(muted);usingAudio=true;}
+    if(audio.start(assets/showMusic(),showDuration())){audio.seek(resume);audio.setMuted(muted);usingAudio=true;}
    }
   }
   if(!running)break;
@@ -153,6 +161,7 @@ int runApp(const AppOptions& o) {
   }
   if(o.selfTest&&frames==12&&controlStage==4){controlsComplete=true;key(SDLK_ESCAPE);}
  }
+ std::cout<<"Render backend: "<<renderer.diagnostics()<<'\n';
  std::cout<<"Frames: "<<frames<<" | FPS: "<<(frames/std::max(.000001,now()-begin))<<" | mean frame ms: "<<renderTotal*1000/std::max(1,frames)<<" | max ms: "<<maxRender*1000<<" | vsync request accepted: "<<vsync<<'\n';
  std::cout<<"Audio frames supplied: "<<audio.suppliedFrames()<<" | playback seconds: "<<lastTime<<'\n';
  std::cout<<"Maximum observed music RMS: "<<maxLevel<<'\n';

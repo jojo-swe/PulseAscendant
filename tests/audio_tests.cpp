@@ -7,6 +7,7 @@ int main() {
  try {
   remix::AudioPlayer p;
   if(p.start("does-not-exist.wav")||p.active()) throw std::runtime_error("Missing music must fail to silent mode");
+  if(p.start(REMIX_MUSIC,300)||p.active())throw std::runtime_error("Old Act I-only music must be rejected");
   if(!p.start(REMIX_MUSIC)) throw std::runtime_error(p.status());
   SDL_Delay(120);
   if(p.positionSeconds()<0.03||p.positionSeconds()>0.5||p.suppliedFrames()==0) throw std::runtime_error("Audio playback clock did not advance");
@@ -14,10 +15,14 @@ int main() {
   if(p.positionSeconds()<60||p.positionSeconds()>60.5) throw std::runtime_error("Seek retained stale audio");
   SDL_Delay(80);
   if(p.level()<=0.f||p.level()>1.f) throw std::runtime_error("Music RMS meter invalid");
-  p.seek(400);SDL_Delay(30);
-  if(p.positionSeconds()<400||p.positionSeconds()>400.5)throw std::runtime_error("Full-song clock wrapped at the old 90 second boundary");
+  p.seek(294);SDL_Delay(30);
+  if(p.positionSeconds()<294||p.positionSeconds()>294.5)throw std::runtime_error("Act I finale clock is incorrect");
+  p.seek(299.95);SDL_Delay(120);
+  if(p.positionSeconds()<300||p.positionSeconds()>300.5||remix::sampleTimeline(p.positionSeconds()).act!=2)throw std::runtime_error("Act I did not enter Act II at the sample-exact join");
+  p.seek(remix::actStart(3)-.05);SDL_Delay(120);
+  if(remix::sampleTimeline(p.positionSeconds()).act!=3)throw std::runtime_error("Act II did not enter Act III at the decoded join");
   p.seek(remix::showDuration()-.05);SDL_Delay(120);
-  if(p.positionSeconds()>.4)throw std::runtime_error("Full-song end did not loop at the decoded sample count");
+  if(p.positionSeconds()>.4)throw std::runtime_error("Three-act show did not loop at the final decoded sample");
   for(int chapter=1;chapter<remix::chapterCount();++chapter){
    p.seek(remix::chapterStart(chapter));
    if(remix::sampleTimeline(p.positionSeconds()).chapter!=chapter)throw std::runtime_error("Seek clock selected the previous chapter");

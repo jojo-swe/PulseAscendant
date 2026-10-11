@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <stdexcept>
 namespace remix {
 AudioPlayer::~AudioPlayer() {stop();}
 void AudioPlayer::stop() {
@@ -9,15 +10,19 @@ void AudioPlayer::stop() {
  transport_.reset();
  level_=0;
 }
-bool AudioPlayer::start(const std::filesystem::path& path) {
+bool AudioPlayer::start(const std::filesystem::path& path,double expectedDuration) {
  stop(); failed_=false; supplied_=0;outputLost_=false;
- try {transport_=std::make_unique<AudioTransport>(readWav(path));}
- catch(const std::exception& e) {status_=std::string("SILENT MODE: ")+e.what();return false;}
+ try {
+  transport_=std::make_unique<AudioTransport>(readWav(path));
+  if(expectedDuration>0&&std::abs(transport_->durationSeconds()-expectedDuration)>.5/48000.)
+   throw std::runtime_error("Music length differs from the playable show");
+ }
+ catch(const std::exception& e) {transport_.reset();status_=std::string("SILENT MODE: ")+e.what();return false;}
  SDL_AudioSpec spec{SDL_AUDIO_F32,2,48000};
  stream_=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&spec,callback,this);
  if(!stream_) {status_=std::string("SILENT MODE: ")+SDL_GetError();transport_.reset();return false;}
  if(!SDL_ResumeAudioStreamDevice(stream_)) {status_=SDL_GetError();stop();return false;}
- status_="LUMINOUS FLOW / SUNO";return true;
+ status_="PULSE ASCENDANT / THREE TRACKS / SUNO";return true;
 }
 void SDLCALL AudioPlayer::callback(void* userdata,SDL_AudioStream* stream,int additional,int) {
  auto& p=*static_cast<AudioPlayer*>(userdata);

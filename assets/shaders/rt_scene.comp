@@ -1,0 +1,109 @@
+#version 460
+#extension GL_EXT_ray_query : require
+layout(local_size_x=8,local_size_y=8) in;
+layout(set=0,binding=0) uniform accelerationStructureEXT scene;
+layout(set=0,binding=1,std430) writeonly buffer Pixels {vec4 pixels[];};
+struct Object {vec4 base;vec4 emission;vec4 material;};
+layout(set=0,binding=2,std430) readonly buffer Objects {Object objects[];};
+layout(set=0,binding=3,std140) uniform Parameters {vec4 eye,forward,right,up,clock,music;vec4 bands[6];} u;
+const float PI=3.14159265359;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float band(int n){return u.bands[n/4][n%4];}
+struct Hit {float t;vec3 p,n;uint id;bool front;};
+bool trace(vec3 origin,vec3 direction,out Hit hit){
+ rayQueryEXT q;rayQueryInitializeEXT(q,scene,gl_RayFlagsOpaqueEXT,255,origin,.002,direction,350.);
+ while(rayQueryProceedEXT(q)){}
+ if(rayQueryGetIntersectionTypeEXT(q,true)==gl_RayQueryCommittedIntersectionNoneEXT)return false;
+ hit.t=rayQueryGetIntersectionTEXT(q,true);hit.p=origin+direction*hit.t;hit.id=rayQueryGetIntersectionInstanceCustomIndexEXT(q,true);
+ vec3 local=rayQueryGetIntersectionObjectRayOriginEXT(q,true)+rayQueryGetIntersectionObjectRayDirectionEXT(q,true)*hit.t;
+ int kind=int(objects[hit.id].material.y);vec3 normal;
+ if(kind==1)normal=normalize(local);
+ else if(kind==2)normal=normalize(sign(local));
+ else if(kind==3)normal=normalize(vec3(local.xy*(1.-1./max(.001,length(local.xy))),local.z));
+ else if(kind==4){float a=local.x*.13+local.z*.035,b=local.z*.19-local.x*.04;normal=normalize(vec3(-.0416*cos(a)+.0088*cos(b),1.,-.0112*cos(a)-.0418*cos(b)));}
+ else{vec3 a=abs(local);normal=a.x>a.y&&a.x>a.z?vec3(sign(local.x),0,0):(a.y>a.z?vec3(0,sign(local.y),0):vec3(0,0,sign(local.z)));}
+ mat3 transform=mat3(rayQueryGetIntersectionObjectToWorldEXT(q,true));
+ normal=normalize(transpose(inverse(transform))*normal);hit.front=dot(direction,normal)<0;hit.n=hit.front?normal:-normal;return true;
+}
+float visibility(vec3 origin,vec3 direction,float distance){
+ rayQueryEXT q;rayQueryInitializeEXT(q,scene,gl_RayFlagsOpaqueEXT|gl_RayFlagsTerminateOnFirstHitEXT,1,origin,.008,direction,max(.01,distance-.03));
+ while(rayQueryProceedEXT(q)){}
+ return rayQueryGetIntersectionTypeEXT(q,true)==gl_RayQueryCommittedIntersectionNoneEXT?1.:0.;
+}
+vec3 sky(vec3 ray){
+ int world=int(u.clock.w);float h=clamp(ray.y*.5+.5,0.,1.);
+ vec3 top=world==0?vec3(.12,.23,.4):(world==1?vec3(.018,.04,.09):(world==2?vec3(.15,.035,.22):vec3(.22,.28,.4)));
+ vec3 c=mix(vec3(.015,.018,.03),top,h);
+ if(world==4)c=mix(vec3(.55,.25,.075),vec3(.18,.4,.7),pow(h,.6));
+ if(world==5)c=mix(vec3(.008,.025,.035),vec3(.035,.2,.18),h);
+ if(world==6)c=mix(vec3(.015,.008,.035),vec3(.09,.03,.18),h);
+ if(world==7)c=mix(vec3(.03,.07,.13),vec3(.18,.34,.55),h);
+ vec3 sun=normalize(vec3(-.5,.4,.7));float d=max(dot(ray,sun),0.);
+ c+=vec3(1.3,.5,.13)*pow(d,160.)+vec3(.15,.25,.45)*pow(max(dot(ray,normalize(vec3(.6,.15,-.3))),0.),14.);
+ // Analytic studio environment bands make polished surfaces readable in motion.
+ c+=vec3(.35,.65,1.1)*pow(max(0.,1.-abs(ray.y-.35)*5.),10.)*pow(abs(ray.x),3.);
+ c+=vec3(.65,.38,.14)*pow(max(dot(ray,normalize(vec3(.2,.8,-.4))),0.),22.);
+ if(world==2||world==6||world==7){vec2 cell=floor(ray.xz/max(.02,abs(ray.y))*650.);c+=vec3(.4,.7,1.)*step(.9985,hash(cell))*pow(h,4.);}
+ return c;
+}
+vec3 brdf(vec3 n,vec3 view,vec3 light,vec3 base,float metal,float rough){
+ vec3 halfVector=normalize(view+light);float nl=max(dot(n,light),0.),nv=max(dot(n,view),.001),nh=max(dot(n,halfVector),0.),vh=max(dot(view,halfVector),0.);
+ float a=max(.025,rough*rough),a2=a*a,den=nh*nh*(a2-1.)+1.;float D=a2/max(.0001,PI*den*den);
+ float k=(rough+1.)*(rough+1.)/8.,G=nv/(nv*(1.-k)+k)*nl/(nl*(1.-k)+k);
+ vec3 F=mix(vec3(.04),base,metal)+(1.-mix(vec3(.04),base,metal))*pow(1.-vh,5.);
+ return ((1.-F)*(1.-metal)*base/PI+F*D*G/max(.005,4.*nv*max(nl,.001)))*nl;
+}
+vec3 shade(Hit hit,vec3 ray,Object material,vec2 pixel){
+ vec3 base=material.base.rgb;float metal=material.base.a,rough=material.material.x;
+ // Fine grooves and rain stipple modulate material, not intersection geometry.
+ if(int(u.clock.w)==1&&hit.n.y>.8)rough=mix(.035,.15,.5+.5*sin(hit.p.x*18.+sin(hit.p.z*12.)));
+ vec3 color=base*(.12+.08*u.music.z)*(1.-metal)+sky(hit.n)*base*(1.-metal)*.7+material.emission.rgb;
+ if(int(u.clock.w)==4){vec3 sun=normalize(vec3(-.5,.65,.7));color+=base*max(dot(hit.n,sun),0.)*1.3*visibility(hit.p+hit.n*.02,sun,200.);}
+ color+=sky(reflect(ray,hit.n))*base*metal*rough*.6;
+ for(int i=0;i<3;i++){
+  vec3 position=u.eye.xyz+(i==0?vec3(4,6,7):(i==1?vec3(-7,2,-3):vec3(1,6,-12)));
+  vec3 lightColor=i==0?vec3(1.4,.72,.3):(i==1?vec3(.05,.6,1.4):vec3(1.4,.035,.2));
+  vec3 delta=position-hit.p;float distance=length(delta);vec3 light=delta/distance;
+  float shadow=1.;if(i==0&&dot(hit.n,light)>.0){
+   vec2 jitter=vec2(hash(pixel),hash(pixel.yx+17.))-.5;
+   vec3 soft=normalize(delta+u.right.xyz*jitter.x*.35+u.up.xyz*jitter.y*.35);
+   shadow=visibility(hit.p+hit.n*.015,soft,distance);
+  }
+  color+=brdf(hit.n,-ray,light,base,metal,rough)*lightColor*(220./(3.+distance*distance))*(.6+u.music.x*.7)*shadow;
+ }
+ return color;
+}
+vec3 samplePixel(vec2 pixel,vec2 extent){
+ vec2 uv=(pixel-extent*.5)/extent.y;
+ vec3 ray=normalize(u.forward.xyz*1.55+u.right.xyz*uv.x+u.up.xyz*uv.y),origin=u.eye.xyz;
+ vec3 color=vec3(0),throughput=vec3(1);
+ for(int bounce=0;bounce<5;bounce++){
+  Hit hit;if(!trace(origin,ray,hit)){color+=throughput*sky(ray);throughput=vec3(0);break;}
+  Object material=objects[hit.id];float fresnel=pow(1.-max(dot(-ray,hit.n),0.),5.);
+  float fog=exp(-hit.t*(int(u.clock.w)==1?.025:.007));color+=throughput*sky(ray)*(1.-fog)*.45;throughput*=fog;
+  if(material.material.z>.5){
+   float eta=hit.front?1./material.material.w:material.material.w;vec3 transmitted=refract(ray,hit.n,eta);
+   color+=throughput*sky(reflect(ray,hit.n))*(.04+.3*fresnel);
+   if(dot(transmitted,transmitted)<.001)transmitted=reflect(ray,hit.n);
+   throughput*=mix(vec3(.96),material.base.rgb,.055);ray=normalize(transmitted);origin=hit.p+ray*.018;
+  }else{
+   vec3 F=mix(vec3(.04),material.base.rgb,material.base.a);F+=(1.-F)*fresnel;
+   float reflection=(1.-material.material.x*.7);vec3 reflectWeight=F*reflection;
+   color+=throughput*shade(hit,ray,material,pixel)*(1.-reflectWeight);
+   throughput*=reflectWeight;
+   if(max(throughput.x,max(throughput.y,throughput.z))<.015){throughput=vec3(0);break;}
+   ray=reflect(ray,hit.n);origin=hit.p+hit.n*.016;
+  }
+ }
+ // Bounded residual environment at the bounce limit, not an unbiased path tracer.
+ color+=throughput*sky(ray)*.65;
+ return clamp(color,vec3(0),vec3(32));
+}
+void main(){
+ uvec2 pixel=gl_GlobalInvocationID.xy;uint width=uint(u.clock.x),height=uint(u.clock.y);if(pixel.x>=width||pixel.y>=height)return;
+ // Fixed subpixel samples are deterministic and require no temporal history at cuts.
+ vec2 extent=vec2(width,height);vec3 color;
+ if(width<=320&&height<=200)color=samplePixel(vec2(pixel)+.5,extent);
+ else color=(samplePixel(vec2(pixel)+vec2(.25,.25),extent)+samplePixel(vec2(pixel)+vec2(.75,.75),extent))*.5;
+ pixels[pixel.y*width+pixel.x]=vec4(color,1);
+}

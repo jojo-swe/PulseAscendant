@@ -2,6 +2,7 @@
 #include "audio.hpp"
 #include "scene_math.hpp"
 #include "app.hpp"
+#include "hardware_rt.hpp"
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -12,8 +13,20 @@ int main() {
  int checks=0;
  try {
   using namespace remix;
-  CHECK(showDuration()>470 && showDuration()<473);
-  CHECK(chapterCount()>=30);
+  CHECK(rtViewportFits(3840,2160,128*1024*1024));
+  CHECK(!rtViewportFits(5120,2160,128*1024*1024));
+  CHECK(!rtViewportFits(0,2160,128*1024*1024));
+  CHECK(showDuration()==888.68);
+  CHECK(actDuration(1)==300&&actStart(2)==300&&actDuration(2)==289.92);
+  CHECK(chapterCount()==76);
+  CHECK(std::string(showMusic())=="music/second-reality-three-acts.wav");
+  CHECK(showInfoJson().find("\"act3_available\":true")!=std::string::npos);
+  CHECK(sampleTimeline(299.99999).act==1&&sampleTimeline(300).act==2);
+  CHECK(sampleTimeline(300).chapter==31&&sampleTimeline(300).actSeconds==0);
+  CHECK(actStart(3)==589.92&&actDuration(3)==298.76);
+  CHECK(sampleTimeline(actStart(3)-1./48000).act==2);
+  CHECK(sampleTimeline(actStart(3)).act==3&&sampleTimeline(actStart(3)).chapter==52);
+  CHECK(parseOptions({"--show-info"}).showInfo);
   CHECK(sampleTimeline(0).scene==5);
   CHECK(sampleTimeline(-1).chapter==0);
   CHECK(sampleTimeline(std::numeric_limits<double>::infinity()).chapter==0);
@@ -35,19 +48,21 @@ int main() {
   CHECK(spectrumChange>100&&spectrumSeparation>100);
   auto bandsBefore=sampleTimeline(100).spectrum,bandsAfter=sampleTimeline(100.05).spectrum,bandsMiddle=sampleTimeline(100.025).spectrum;
   for(size_t i=0;i<24;++i)CHECK(std::abs(bandsMiddle[i]-(bandsBefore[i]+bandsAfter[i])*.5f)<.0001f);
-  for(int scene=0;scene<8;++scene)CHECK(sampleTimeline(sceneStart(scene)+.001).scene==scene);
+  for(int scene=0;scene<16;++scene)CHECK(sampleTimeline(sceneStart(scene)+.001).scene==scene);
   for(int chapter=0;chapter<chapterCount();++chapter) {
    double start=chapterStart(chapter),end=chapter+1<chapterCount()?chapterStart(chapter+1):showDuration();
-   CHECK(end-start>=5 && end-start<=21);
+   CHECK(end-start>=5-1e-8 && end-start<=18+1e-8);
    CHECK(sampleTimeline(start+.001).chapter==chapter);
    CHECK(sampleTimeline(end-.001).chapter==chapter);
+   bool seen[4]{};for(int shot=0;shot<4;++shot)seen[sampleTimeline(start+(shot+.5)*(end-start)/4).shot]=true;
+   for(bool camera:seen)CHECK(camera);
   }
   for(double t=0;t<showDuration();t+=.05) {
    auto f=sampleTimeline(t);
-   CHECK(f.scene>=0&&f.scene<8&&f.shot>=0&&f.shot<4);
+   CHECK(f.scene>=0&&f.scene<16&&f.shot>=0&&f.shot<4);
    CHECK(f.drive>=0&&f.drive<=1&&f.hit>=0&&f.hit<=1&&f.bass>=0&&f.bass<=1);
    CHECK(std::isfinite(f.motionSeconds)&&f.progress>=0&&f.progress<=1);
-   if(t>2 && t<showDuration()-2)CHECK(f.transition>.99f);
+   if(f.actSeconds>2 && f.actSeconds<actDuration(f.act)-2)CHECK(f.transition>.99f);
   }
   AudioTransport transport({1,2,3,4,5,6},1);
   float out[8]{};
@@ -67,7 +82,12 @@ int main() {
   bool rejected=false; try { readWav(bad); } catch(const std::exception&) { rejected=true; }
   std::filesystem::remove(bad); CHECK(rejected);
   auto wav=readWav(REMIX_MUSIC);
-  CHECK(double(wav.size())/2/48000>470); // The complete user-provided song must be present.
+  CHECK(wav.size()==14400000*2); // Act I cannot play any sample after 5:00.
+  AudioTransport actAudio(std::move(wav));
+  actAudio.seek(299.9999791667);actAudio.render(out,2);
+  CHECK(std::abs(out[0])<.001f&&std::abs(out[1])<.001f);
+  CHECK(actAudio.positionSeconds()<.001);
+  wav=readWav(REMIX_MUSIC);
   float peak=0; for(float v:wav) { CHECK(std::isfinite(v)); peak=std::max(peak,std::abs(v)); }
   CHECK(peak>0.01f && peak<=1.f);
   for(double t:{0.,30.,90.}) {

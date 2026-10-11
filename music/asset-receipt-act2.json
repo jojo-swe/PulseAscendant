@@ -1,0 +1,20 @@
+{
+  "title": "Adventurous Uplift",
+  "act": 2,
+  "source_sha256": "f82793aa129acfd5d9d8efbf15e67b08647666c09b615a38b99d4063855028d0",
+  "source_file": "music/source/Adventurous Uplift.mp3",
+  "source_duration": 289.92,
+  "suno_id": "29b80971-2988-41e1-b658-00291a06b4ae",
+  "runtime_file": "assets/music/adventurous-uplift.wav",
+  "excerpt_start": 0,
+  "excerpt_duration": 289.92,
+  "runtime_frames": 13916160,
+  "sample_rate": 48000,
+  "channels": 2,
+  "encoding": "PCM signed 16 bit",
+  "fades": "none; complete supplied song",
+  "runtime_sha256": "7c78d4c588456ac470b9eed0eb05928be40a65d1278f425b11bb45096fff0444",
+  "listening_acceptance": "pending",
+  "publication_requested_by_project_owner": true,
+  "public_release_policy": "Free non-commercial demo; Suno attribution retained; music excluded from MIT"
+}

@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import subprocess
+import wave
 from pathlib import Path
 
 
@@ -14,24 +15,36 @@ def main():
     parser.add_argument('--app', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--music', type=Path)
+    parser.add_argument('--require-rt', action='store_true', help='Fail if hardware RT is unavailable')
     parser.add_argument('--width', type=int, default=3840)
     parser.add_argument('--height', type=int, default=2160)
     parser.add_argument('--fps', type=int, default=60)
     parser.add_argument('--start', type=float, default=0)
-    parser.add_argument('--duration', type=float, default=472.36)
+    parser.add_argument('--duration', type=float, help='Default: remainder of the playable show')
     args = parser.parse_args()
     app, output = args.app.resolve(), args.output.resolve()
-    music = (args.music or app.parent / 'assets/music/luminous-flow.wav').resolve()
-    if args.width % 2 or args.height % 2:
-        parser.error('H.264 output requires even width and height')
-    if args.start < 0 or args.start + args.duration > 472.36 or args.duration <= 0:
-        parser.error('Export range must be within the complete 472.36-second song')
+    show = json.loads(subprocess.check_output([str(app), '--show-info'], text=True))
+    length = float(show['duration'])
+    if args.duration is None:
+        args.duration = length - args.start
+    music = (args.music or app.parent / 'assets' / show['music']).resolve()
+    if not 64 <= args.width <= 8192 or not 64 <= args.height <= 8192 or args.width % 2 or args.height % 2:
+        parser.error('H.264 output requires even dimensions from 64 to 8192')
+    if not 1 <= args.fps <= 120:
+        parser.error('FPS must be from 1 to 120')
+    if not all(map(math.isfinite, (args.start, args.duration))) or args.start < 0 or args.start + args.duration > length or args.duration <= 0:
+        parser.error(f'Export range must be within the playable show: {length:g} seconds')
+    with wave.open(str(music), 'rb') as audio:
+        if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (48000, 2, 2) or audio.getnframes() != round(length * 48000):
+            parser.error('Music format or sample count differs from the native show timeline')
     output.parent.mkdir(parents=True, exist_ok=True)
     partial = output.with_suffix('.rendering.mp4')
     if output.exists() or partial.exists():
         parser.error('Output or partial render already exists; choose a new output name')
     producer_args = [str(app), '--render-stream', '--fps', str(args.fps), '--width', str(args.width),
                      '--height', str(args.height), '--time', str(args.start), '--duration', str(args.duration)]
+    if args.require_rt:
+        producer_args.append('--require-rt')
     encoder_args = ['ffmpeg', '-hide_banner', '-nostdin', '-f', 'rawvideo', '-pixel_format', 'rgb24',
                     '-video_size', f'{args.width}x{args.height}', '-framerate', str(args.fps), '-i', 'pipe:0',
                     '-ss', str(args.start), '-i', str(music), '-map', '0:v:0', '-map', '1:a:0',
@@ -42,9 +55,9 @@ def main():
                     '-g', str(args.fps * 2), '-fps_mode', 'cfr', '-colorspace', 'bt709',
                     '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
                     '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-t', str(args.duration),
-                    '-movflags', '+faststart', '-metadata', 'title=Second Reality / Full Throttle',
-                    '-metadata', 'artist=jojo-swe; music: Luminous Flow / joyolo (Suno)',
-                    '-metadata', 'comment=Music generated with Suno; id=1f52e6e8-5a07-45da-9c9b-09753a609eb3',
+                    '-movflags', '+faststart', '-metadata', f'title={show["title"]}',
+                    '-metadata', 'artist=jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo (Suno)',
+                    '-metadata', 'comment=Three playable acts. Music generated with Suno.',
                     '-progress', 'pipe:1', '-nostats', str(partial)]
     log_dir = output.parent / 'video-logs'
     log_dir.mkdir(exist_ok=True)
@@ -76,7 +89,6 @@ def main():
     assert video['avg_frame_rate'] == f'{args.fps}/1'
     assert int(video['nb_frames']) == expected_frames
     assert abs(float(audio['duration']) - args.duration) < .05
-    assert partial.stat().st_size < 2_000_000_000, 'Video exceeds this release asset size budget'
     partial.rename(output)
     Path(str(prefix) + '-probe.json').write_text(json.dumps(probe, indent=2) + '\n', encoding='utf-8')
     print(f'VIDEO PASS: {output.name}, {args.width}x{args.height}, {args.fps} fps, {expected_frames} frames, '

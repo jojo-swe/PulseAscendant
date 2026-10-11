@@ -1,6 +1,7 @@
 #pragma once
 #include "timeline.hpp"
 #include "gl_api.hpp"
+#include "hardware_rt.hpp"
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -9,7 +10,7 @@ class Renderer {
 public:
  explicit Renderer(std::filesystem::path assets):assets_(std::move(assets)){}
  ~Renderer();
- void initialize();
+ void initialize(bool rtEnabled=true,bool rtRequired=false,bool rtValidation=false);
  void resize(int width,int height);
  void render(const TimelineFrame&,double seconds,bool retro);
  void capture(const std::filesystem::path&);
@@ -24,6 +25,10 @@ private:
  GLuint background_=0,engine_=0,plasma_=0,particle_=0,glenz_=0,blurProgram_=0,composite_=0,text_=0;
  GLuint city_=0,structure_=0,cosmic_=0,ocean_=0,armada_=0,swarm_=0,flight_=0;
  GLuint spectrum_=0;
+ GLuint act2_=0,act3_=0;
+ std::unique_ptr<HardwareRT> rt_;
+ std::string rtStatus_;
+ bool rtRequired_=false;
  TimelineFrame frame_;
  int width_=1280,height_=720,meshCount_=0;
  bool silent_=false;
@@ -36,5 +41,6 @@ private:
  void uniforms(GLuint p,double seconds,int scene,bool retro);
  void quad(GLuint p);
  void label(const std::string&,float x,float y,float scale,float r,float g,float b,float opacity=1);
+ void emblem(float x,float y,float size,float opacity);
 };
 }

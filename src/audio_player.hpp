@@ -8,7 +8,7 @@ namespace remix {
 class AudioPlayer {
 public:
  ~AudioPlayer();
- bool start(const std::filesystem::path& path);
+ bool start(const std::filesystem::path& path,double expectedDuration=0);
  void stop();
  void seek(double seconds);
  void setMuted(bool muted);

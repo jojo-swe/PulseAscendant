@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <map>
+#include <iostream>
 namespace remix {
 std::string Renderer::source(const std::string& name) {
  std::ifstream f(assets_/"shaders"/name); if(!f) throw std::runtime_error("Shader unavailable: "+name);
@@ -31,7 +32,8 @@ GLuint Renderer::program(const std::string& vertex,const std::string& fragment) 
  } catch(...) {gl::DeleteShader(vs);if(fs)gl::DeleteShader(fs);if(p)gl::DeleteProgram(p);throw;}
  gl::DeleteShader(vs);gl::DeleteShader(fs);return p;
 }
-void Renderer::initialize() {
+void Renderer::initialize(bool rtEnabled,bool rtRequired,bool rtValidation) {
+ rtRequired_=rtRequired||rtValidation;
  gl::load();
  background_=program("fullscreen.vert","corridor.frag");
  engine_=program("fullscreen.vert","engine.frag");
@@ -39,6 +41,7 @@ void Renderer::initialize() {
  city_=program("fullscreen.vert","city.frag");structure_=program("fullscreen.vert","structure.frag");
  cosmic_=program("fullscreen.vert","cosmic.frag");ocean_=program("fullscreen.vert","ocean.frag");
  armada_=program("fullscreen.vert","armada.frag");
+ act2_=program("fullscreen.vert","act2.frag");act3_=program("fullscreen.vert","act3.frag");
  swarm_=program("swarm.vert","swarm.frag");flight_=program("flight.vert","swarm.frag");
  spectrum_=program("spectrum.vert","swarm.frag");
  particle_=program("tunnel.vert","tunnel.frag");
@@ -63,6 +66,10 @@ void Renderer::initialize() {
  gl::BufferData(GL_ARRAY_BUFFER,vertices.size()*sizeof(float),vertices.data(),GL_STATIC_DRAW);
  for(int i=0;i<3;++i) {gl::EnableVertexAttribArray(i);gl::VertexAttribPointer(i,3,GL_FLOAT,GL_FALSE,9*sizeof(float),reinterpret_cast<void*>(size_t(i)*3*sizeof(float)));}
  glEnable(GL_PROGRAM_POINT_SIZE);
+ if(rtEnabled){rt_=std::make_unique<HardwareRT>();if(!rt_->initialize(assets_/"shaders"/"rt_scene.comp.spv",rtValidation,rtStatus_))rt_.reset();}
+ else rtStatus_="disabled with --no-rt";
+ if(rtRequired_&&!rt_)throw std::runtime_error("Hardware RT required: "+rtStatus_);
+ std::cerr<<"Tracing renderer: "<<(rt_?rt_->diagnostics():"OPENGL FALLBACK / "+rtStatus_)<<'\n';
 }
 void Renderer::release(Target& t) {
  if(t.fbo)gl::DeleteFramebuffers(1,&t.fbo);if(t.texture)glDeleteTextures(1,&t.texture);t={};
@@ -70,7 +77,7 @@ void Renderer::release(Target& t) {
 Renderer::~Renderer() {
  if(!gl::DeleteFramebuffers) return;
  release(scene_);release(blur_[0]);release(blur_[1]);release(output_);
- for(GLuint p:{background_,engine_,plasma_,particle_,glenz_,blurProgram_,composite_,text_,city_,structure_,cosmic_,ocean_,armada_,swarm_,flight_,spectrum_}) if(p)gl::DeleteProgram(p);
+ for(GLuint p:{background_,engine_,plasma_,particle_,glenz_,blurProgram_,composite_,text_,city_,structure_,cosmic_,ocean_,armada_,swarm_,flight_,spectrum_,act2_,act3_}) if(p)gl::DeleteProgram(p);
  if(buffer_)gl::DeleteBuffers(1,&buffer_);if(meshBuffer_)gl::DeleteBuffers(1,&meshBuffer_);
  if(vao_)gl::DeleteVertexArrays(1,&vao_);if(meshVao_)gl::DeleteVertexArrays(1,&meshVao_);
 }
@@ -109,7 +116,11 @@ void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
  if(!retro) {target(blur_[0],std::max(1,width_/2),std::max(1,height_/2),false);target(blur_[1],std::max(1,width_/2),std::max(1,height_/2),false);}
  gl::BindFramebuffer(GL_FRAMEBUFFER,scene_.fbo);glViewport(0,0,scene_.w,scene_.h);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
  const GLuint worlds[]={background_,plasma_,engine_,city_,structure_,cosmic_,ocean_,armada_};
- GLuint p=worlds[std::clamp(frame.scene,0,7)];uniforms(p,seconds,frame.scene,retro);quad(p);
+ GLuint p=frame.scene>=12?act3_:(frame.scene>=8?act2_:worlds[std::clamp(frame.scene,0,7)]);
+ if(frame.scene>=8&&rt_){
+  try{const float* hdr=rt_->render(frame,scene_.w,scene_.h);glBindTexture(GL_TEXTURE_2D,scene_.texture);glTexSubImage2D(GL_TEXTURE_2D,0,0,0,scene_.w,scene_.h,GL_RGBA,GL_FLOAT,hdr);}
+  catch(const std::exception& e){if(rtRequired_)throw;rtStatus_=e.what();std::cerr<<"RT stopped; OpenGL fallback: "<<rtStatus_<<'\n';rt_.reset();uniforms(p,seconds,frame.scene,retro);quad(p);}
+ }else{uniforms(p,seconds,frame.scene,retro);quad(p);}
  if(frame.scene==0) {
   auto dots=makeTunnel(frame.motionSeconds);uniforms(particle_,seconds,0,retro);
   gl::BindVertexArray(vao_);gl::BindBuffer(GL_ARRAY_BUFFER,buffer_);
@@ -123,6 +134,7 @@ void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
   glDisable(GL_CULL_FACE);glDisable(GL_BLEND);
  }
  // Simultaneous 3D trails and the scene's primary geometry, with independent colour/beat layers.
+ if(frame.scene<8){
  GLuint overlay=(frame.scene==1||frame.scene==2||frame.scene==5)?swarm_:flight_;
  uniforms(overlay,seconds,frame.scene,retro);gl::BindVertexArray(vao_);
  glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);
@@ -131,6 +143,7 @@ void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
   uniforms(spectrum_,seconds,frame.scene,retro);glDrawArrays(GL_LINES,0,24*4*24);
  }
  glDisable(GL_BLEND);
+ }
  if(!retro) {
   for(int i=0;i<6;++i) {
    Target& dst=blur_[i%2];gl::BindFramebuffer(GL_FRAMEBUFFER,dst.fbo);glViewport(0,0,dst.w,dst.h);
@@ -145,17 +158,21 @@ void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
  gl::Uniform1i(gl::GetUniformLocation(composite_,"uImage"),0);gl::Uniform1i(gl::GetUniformLocation(composite_,"uBloom"),1);
  gl::Uniform1f(gl::GetUniformLocation(composite_,"uFade"),frame.transition);quad(composite_);
  float scale=std::max(1.f,width_/640.f);
- double clock=wrapShowTime(seconds);
- float titleAlpha=float(std::clamp(std::min((9.-clock)/2.,(showDuration()-clock)/.8),0.,1.))*frame.transition;
- if(clock>showDuration()-6.)titleAlpha=frame.transition;
+ double clock=frame.actSeconds,duration=actDuration(frame.act);
+ float titleAlpha=float(std::clamp(std::min((9.-clock)/2.,(duration-clock)/.8),0.,1.))*frame.transition;
+ if(clock>duration-6.)titleAlpha=frame.transition;
  if(titleAlpha>0){
-  label("SECOND REALITY",width_*.045f,height_*.065f,scale*2.f,.82f,.94f,1.f,titleAlpha);
-  label("FULL THROTTLE / LUMINOUS FLOW",width_*.045f,height_*.065f+scale*19,scale*.8f,.3f,.62f,.72f,titleAlpha);
+  emblem(width_*.045f,height_*.065f,scale*21.f,titleAlpha);
+  label("PULSE ASCENDANT",width_*.045f+scale*25.f,height_*.065f,scale*2.f,.82f,.94f,1.f,titleAlpha);
+  const char* subtitle=frame.act==1?(clock>duration-6.?"ACT I COMPLETE / FULL THROTTLE":"ACT I / FULL THROTTLE / LUMINOUS FLOW"):(clock>duration-6.?"ACT II COMPLETE / ADVENTUROUS UPLIFT":"ACT II / ADVENTUROUS UPLIFT");
+  if(frame.act==3)subtitle=clock>duration-6.?"THE ASCENT COMPLETE / RIGID ARPEGGIOS":"ACT III / REALITY ASCENDANT / RIGID ARPEGGIOS";
+  label(subtitle,width_*.045f,height_*.065f+scale*19,scale*.8f,.3f,.62f,.72f,titleAlpha);
  }
  float caption=std::clamp(float(std::min(frame.localSeconds/.2,(3.2-frame.localSeconds)/.6)),0.f,1.f)*frame.transition;
  if(caption>0)label(std::to_string(frame.chapter+1)+" / "+frame.title,width_*.045f,height_*.86f,scale*1.1f,.65f,.9f,1.f,caption);
  if(retro)label("RETRO",width_*.86f,height_*.07f,scale,.7f,.9f,1.f);
- if(clock<8.||silent_)label(silent_?"SILENT MODE / AUDIO UNAVAILABLE":"1-8 WORLD   ARROWS CHAPTER   TAB RETRO   F11 FULLSCREEN   M SOUND   ESC EXIT",width_*.045f,height_*.94f,scale*.65f,.45f,.6f,.7f);
+ if(frame.act>=2)label(rt_?"VULKAN / HARDWARE RAY TRACING":"OPENGL / RAYMARCH FALLBACK",width_*.045f,height_*.91f,scale*.65f,.45f,.7f,.85f);
+ if(clock<8.||silent_)label(silent_?"SILENT MODE / AUDIO UNAVAILABLE":"F1 F2 F3 ACT   1-8 9 0 - = WORLD   ARROWS CHAPTER   TAB RETRO   F11 FULLSCREEN",width_*.045f,height_*.94f,scale*.65f,.45f,.6f,.7f);
  gl::BindFramebuffer(GL_READ_FRAMEBUFFER,output_.fbo);gl::BindFramebuffer(GL_DRAW_FRAMEBUFFER,0);
  gl::BlitFramebuffer(0,0,width_,height_,0,0,width_,height_,GL_COLOR_BUFFER_BIT,GL_NEAREST);
  gl::BindFramebuffer(GL_FRAMEBUFFER,0);
@@ -184,7 +201,19 @@ void Renderer::capture(const std::filesystem::path& path) {
  if(!ok)throw std::runtime_error(SDL_GetError());
 }
 std::string Renderer::diagnostics() const {
- return std::string(reinterpret_cast<const char*>(glGetString(GL_VENDOR)))+" / "+reinterpret_cast<const char*>(glGetString(GL_RENDERER))+" / "+reinterpret_cast<const char*>(glGetString(GL_VERSION));
+ return std::string(reinterpret_cast<const char*>(glGetString(GL_VENDOR)))+" / "+reinterpret_cast<const char*>(glGetString(GL_RENDERER))+" / "+reinterpret_cast<const char*>(glGetString(GL_VERSION))+std::string(" | ")+(rt_?rt_->diagnostics():"OpenGL fallback");
+}
+void Renderer::emblem(float x,float y,float size,float opacity){
+ for(int facet=0;facet<3;++facet){
+  const float l=x+facet*size*.29f,top=y+size*(.42f-facet*.2f),w=size*.23f,h=size*.63f;
+  const float points[]={l,top+h,l+w,top,l+w,top+h*.6f,l,top+h,l+w,top+h*.6f,l+w*.42f,top+h*1.12f};
+  std::vector<float> vertices;for(int i=0;i<12;i+=2){vertices.push_back(points[i]/width_*2-1);vertices.push_back(1-points[i+1]/height_*2);}
+  gl::UseProgram(text_);gl::Uniform3f(gl::GetUniformLocation(text_,"uColor"),facet==2?.95f:.15f,facet==2?.68f:.8f,facet==2?.3f:1.f);
+  gl::Uniform1f(gl::GetUniformLocation(text_,"uOpacity"),opacity);
+  gl::BindVertexArray(vao_);gl::BindBuffer(GL_ARRAY_BUFFER,buffer_);gl::BufferData(GL_ARRAY_BUFFER,vertices.size()*sizeof(float),vertices.data(),GL_STREAM_DRAW);
+  gl::EnableVertexAttribArray(0);gl::VertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*sizeof(float),nullptr);
+  glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDrawArrays(GL_TRIANGLES,0,6);glDisable(GL_BLEND);
+ }
 }
 void Renderer::label(const std::string& text,float x,float y,float s,float r,float g,float b,float opacity) {
  static const std::map<char,std::array<unsigned char,7>> font={
@@ -200,7 +229,7 @@ void Renderer::label(const std::string& text,float x,float y,float s,float r,flo
  {'0',{14,17,19,21,25,17,14}},{'1',{4,12,4,4,4,4,14}},{'2',{14,17,1,2,4,8,31}},
  {'3',{30,1,1,14,1,1,30}},{'4',{2,6,10,18,31,2,2}},{'5',{31,16,16,30,1,1,30}},
  {'6',{14,16,16,30,17,17,14}},{'7',{31,1,2,4,8,8,8}},{'8',{14,17,17,14,17,17,14}},
- {'9',{14,17,17,15,1,1,14}},{'/',{1,1,2,4,8,16,16}},{'-',{0,0,0,31,0,0,0}}};
+ {'9',{14,17,17,15,1,1,14}},{'/',{1,1,2,4,8,16,16}},{'-',{0,0,0,31,0,0,0}},{'=',{0,0,31,0,31,0,0}}};
  std::vector<float> vertices;
  for(char ch:text) {
   auto it=font.find(ch);
