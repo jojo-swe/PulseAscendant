@@ -35,3 +35,25 @@ Tillägg till slutrapporten: Short-cachefelet är åtgärdat. Cachemappen identi
 RT-texten visas inom klippgränserna för Rain District och Prism Chamber, som exporteras med strikt RT-krav. Python-syntaxkontrollen passerade, och ett ljudprov med ffmpeg accepterade den korrigerade toningen `d=0.35`.
 
 Inga nya blockerande fynd. **Slutbetyget står fast på 7,3/10.** Shortens färdiga bild-, ljud- och klippupplevelse återstår att granska. Inga filer ändrades och inga GPU-jobb kördes.
+
+## Publiceringsmaterial och trailerrevision 2
+
+Följande är samma granskares separata bild-/metadatagranskning. Det ändrar inte det tidigare kod-/paketbetygets omfattning.
+
+Publiceringstexten och thumbnailen är godkända inom granskad omfattning. Titeln är ärlig, sakpåståendena stämmer med dokumentationen och thumbnailens motiv överensstämmer visuellt med Chrome-fångsten. Huvudtexten och ”4K60” är läsbara vid 320×180.
+
+Shorten har korrekt metadata: **1080×1920, 60 fps, 1 920 bilder, 32 sekunder och stereo AAC**. Hela videoströmmen avkodades utan fel. Jag inspekterade åtta representativa stillbilder samt fyra extra från stadsklippet.
+
+Jag rekommenderar omklippning före fortsatt marknadsföring: **Rain District vid 8,15–12,25 s är klart svagast**, med mörka fasader som skymmer motivet. Använd helst sju befintliga klipp fördelade över 32 sekunder. RT-texten passar över Prism och Dune.
+
+Små korrigeringar: ange endast Rigid Arpeggios i Shortens musiktagg och använd 9:50 för huvudvideons akt III-kapitel.
+
+Fullvideons 4K60-påstående förutsätter godkänd slutex­port. Jag har inte bedömt ljudet genom lyssning eller kontinuerlig rörelseupplevelse. Inga webbplatser ändrades och inga GPU-jobb kördes.
+
+### Slutkontroll efter omklippning
+
+**Korrigerad V2 är godkänd inom granskad omfattning.**
+
+Bilden vid 10 s visar Prism Chamber med läsbar RT-text. Manifestet använder `354.95`; Rain District är borttaget. RT-textens intervall **9,45–18,15 s** täcker Prism+Dune korrekt.
+
+Det tidigare hindret är åtgärdat. Övriga passerade kontroller gäller fortsatt. Godkännandet omfattar metadata och inspekterade bilder; ljudupplevelse och fullängdsvideo har inte bedömts. Inga GPU-jobb kördes.

@@ -2,7 +2,7 @@
 
 Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara akter, 16 världar, 76 kapitel och 14:48,68 musik**. Akt II och III använder Vulkan-hårdvaruraytracing på kompatibla grafikkort. En separat OpenGL-renderare finns för alla världar.
 
-[Releaser](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
+[Releaser](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [32 sekunders trailer](https://youtube.com/shorts/TYgXs76yKls) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
 
 Treaktsversionen v0.3 och Windows/Linux-paketen är oberoende granskade och godkända med **7,3/10**. Se [granskningsrapporten](QUALITY_REVIEW.md) och aktuell verifiering. Tidigare publicerade videor och releaser avser äldre versioner.
 

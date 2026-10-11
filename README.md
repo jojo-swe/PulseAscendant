@@ -4,7 +4,7 @@
 
 A standalone, music-driven 3D demo for **Windows and Linux**: **three playable acts, 16 worlds, 76 chapters and 14:48.68 of music**. The first act transforms a selection of classic demoscene ideas; the next two introduce new worlds with Vulkan hardware ray tracing on supported GPUs.
 
-[Releases](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
+[Releases](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [32-second trailer](https://youtube.com/shorts/TYgXs76yKls) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
 
 The three-act v0.3 implementation and Windows/Linux packages passed independent review at **7.3/10**. See the [review](docs/QUALITY_REVIEW.md) and verification document for measured results and acceptance limits; older releases and videos describe earlier versions.
 
@@ -130,7 +130,7 @@ The exporter reads `--show-info`, checks the combined music's format and sample 
 
 The native `--render-stream --fps N` option writes bottom-up RGB24 to stdout and diagnostics to stderr. In this mode, `--duration` is timeline length, not wall-clock runtime.
 
-`tools/render_short.py --app <executable> --font <bold.ttf> --output <new.mp4>` creates a 32-second 1080×1920/60 trailer from eight native camera excerpts. It places montage cuts on measured Act III music attacks and identifies cached renders by SHA-256 of the executable and its assets. The trailer uses a 70–102 s excerpt of Rigid Arpeggios; the full demo retains the complete three-act audio.
+`tools/render_short.py --app <executable> --font <bold.ttf> --output <new.mp4>` creates a 32-second 1080×1920/60 trailer from seven native camera excerpts. It places montage cuts on measured Act III music attacks, constrains every segment to its five-second source, and identifies cached renders by SHA-256 of the executable and its assets. Trailer revision 2 removes a weak city-camera excerpt following visual review. It uses a 70–102 s excerpt of Rigid Arpeggios; the full demo retains the complete three-act audio. The original v0.3.0 source archive preserves trailer revision 1; current Git source and the separate trailer-v2 source supplement contain the updated generator.
 
 ## Credits and licensing
 
