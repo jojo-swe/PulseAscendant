@@ -1,0 +1,163 @@
+#include "app.hpp"
+#include "audio_player.hpp"
+#include "renderer.hpp"
+#include <SDL3/SDL.h>
+#include <iostream>
+#include <cmath>
+#include <fstream>
+#include <algorithm>
+#include <memory>
+#include <stdexcept>
+#include <cstdio>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+namespace remix {
+int runApp(const AppOptions& o) {
+ if(!SDL_Init(SDL_INIT_VIDEO))throw std::runtime_error(SDL_GetError());
+ struct Quit {~Quit(){SDL_Quit();}} quit;
+ SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,3);
+ SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);
+ SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
+ SDL_Window* raw=SDL_CreateWindow("Second Reality / Full Throttle",o.width,o.height,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|(o.smoke||o.tour||o.renderStream||(o.hidden&&!o.selfTest)?SDL_WINDOW_HIDDEN:0));
+ if(!raw)throw std::runtime_error(std::string("Window: ")+SDL_GetError());
+ std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)> window(raw,SDL_DestroyWindow);
+ SDL_GLContext context=SDL_GL_CreateContext(raw);
+ if(!context)throw std::runtime_error(std::string("OpenGL 3.3 required: ")+SDL_GetError());
+ struct Context {SDL_GLContext c;~Context(){SDL_GL_DestroyContext(c);}} owned{context};
+ bool vsync=SDL_GL_SetSwapInterval(o.duration>0||o.smoke||o.tour||o.renderStream?0:1);
+ auto assets=o.assets.empty()?findAssets(SDL_GetBasePath()):o.assets;
+ Renderer renderer(assets);renderer.initialize();renderer.resize(o.width,o.height);
+ (o.renderStream?std::cerr:std::cout)<<"Video: "<<SDL_GetCurrentVideoDriver()<<" | GPU: "<<renderer.diagnostics()<<'\n';
+ if(o.renderStream) {
+#ifdef _WIN32
+  if(_setmode(_fileno(stdout),_O_BINARY)==-1)throw std::runtime_error("Cannot open binary video stream");
+#endif
+  double initial=o.scene>=0?sceneStart(o.scene):o.time,length=o.duration>0?o.duration:showDuration();
+  auto frames=static_cast<unsigned long long>(std::ceil(length*o.fps-1e-9));
+  std::vector<unsigned char> pixels;
+  for(unsigned long long i=0;i<frames;++i) {
+   SDL_Event event;while(SDL_PollEvent(&event))if(event.type==SDL_EVENT_QUIT)throw std::runtime_error("Video export interrupted");
+   double t=initial+double(i)/o.fps;
+   renderer.render(sampleTimeline(t),t,o.retro);renderer.readPixelsRGB(pixels);
+   if(std::fwrite(pixels.data(),1,pixels.size(),stdout)!=pixels.size())throw std::runtime_error("Video encoder pipe closed");
+   if(i%(o.fps*5)==0)std::cerr<<"RENDER "<<i<<"/"<<frames<<" time="<<t<<'\n';
+  }
+  if(std::fflush(stdout)!=0)throw std::runtime_error("Video stream flush failed");
+  std::cerr<<"RENDER PASS: "<<frames<<" RGB24 frames, "<<o.width<<"x"<<o.height<<" at "<<o.fps<<" fps\n";
+  return 0;
+ }
+ if(o.smoke||o.tour) {
+  auto dir=o.captureDir.empty()?std::filesystem::path("captures"):o.captureDir;
+  if(o.tour){
+   for(int chapter=0;chapter<chapterCount();++chapter)for(int sample=0;sample<2;++sample){
+    double t=chapterStart(chapter)+2.+sample*.6;renderer.render(sampleTimeline(t),t,o.retro);
+    renderer.capture(dir/("chapter-"+std::to_string(chapter+1)+(sample?"-b.bmp":"-a.bmp")));SDL_GL_SwapWindow(raw);
+   }
+   std::cout<<"TOUR PASS: "<<chapterCount()*2<<" exact-time chapter captures rendered without GL errors\n";return 0;
+  }
+  for(int scene=0;scene<8;++scene)for(bool retro:{false,true}) {
+   double t=sceneStart(scene)+2.;renderer.render(sampleTimeline(t),t,retro);
+   renderer.capture(dir/("scene-"+std::to_string(scene+1)+(retro?"-retro.bmp":"-modern.bmp")));
+   SDL_GL_SwapWindow(raw);
+  }
+  std::cout<<"SMOKE PASS: sixteen scenes/styles rendered without GL errors\n";return 0;
+ }
+ AudioPlayer audio;
+ if(!o.noAudio&&SDL_InitSubSystem(SDL_INIT_AUDIO))audio.start(assets/"music"/"luminous-flow.wav");
+ std::cout<<"Audio: "<<audio.status()<<'\n';
+ double initial=o.scene>=0?sceneStart(o.scene):o.time;
+ audio.seek(initial);
+ auto now=[](){return SDL_GetTicksNS()/1e9;};
+ auto awaitWindow=[&](auto ready,const char* error) {
+  SDL_SyncWindow(raw);double deadline=now()+2.;
+  while(!ready()){SDL_PumpEvents();if(now()>=deadline)throw std::runtime_error(error);SDL_Delay(10);}
+ };
+ double begin=now(),fallbackBegin=begin,fallbackTime=initial,lastTime=initial;
+ bool retro=o.retro,muted=false,fullscreen=false,running=true,usingAudio=audio.active();
+ bool controlsComplete=false;int controlStage=0;double minimizeStart=0,minimizeClock=0;
+ int frames=0;double renderTotal=0,maxRender=0;float maxLevel=0;
+ auto seek=[&](int scene){double t=sceneStart(scene);audio.seek(t);fallbackTime=t;fallbackBegin=now();lastTime=t;};
+ auto key=[&](SDL_Keycode k) {
+  if(k==SDLK_ESCAPE)running=false;
+  else if(k>=SDLK_1&&k<=SDLK_8)seek(int(k-SDLK_1));
+  else if(k==SDLK_RIGHT||k==SDLK_LEFT){int chapter=sampleTimeline(lastTime).chapter+(k==SDLK_RIGHT?1:-1);double t=chapterStart(chapter);audio.seek(t);fallbackTime=t;fallbackBegin=now();lastTime=t;}
+  else if(k==SDLK_TAB)retro=!retro;
+  else if(k==SDLK_M){muted=!muted;audio.setMuted(muted);}
+  else if(k==SDLK_F11){
+   fullscreen=!fullscreen;if(!SDL_SetWindowFullscreen(raw,fullscreen))throw std::runtime_error(SDL_GetError());
+   if(o.selfTest)awaitWindow([&](){return bool(SDL_GetWindowFlags(raw)&SDL_WINDOW_FULLSCREEN)==fullscreen;},"Fullscreen state did not change");
+  }
+ };
+ if(o.selfTest) {
+  // Exercise the same event handler used by real SDL keyboard events.
+  for(SDL_Keycode k:{SDLK_3,SDLK_TAB,SDLK_M,SDLK_1}) {
+   SDL_Event ev{};ev.type=SDL_EVENT_KEY_DOWN;ev.key.key=k;SDL_PushEvent(&ev);
+  }
+ }
+ while(running) {
+  if(o.duration>0&&now()-begin>=o.duration)break;
+  SDL_Event ev;
+  while(SDL_PollEvent(&ev)) {
+   if(ev.type==SDL_EVENT_QUIT)running=false;
+   if(ev.type==SDL_EVENT_KEY_DOWN&&!ev.key.repeat)key(ev.key.key);
+   if(ev.type==SDL_EVENT_AUDIO_DEVICE_REMOVED&&!ev.adevice.recording&&usingAudio) {
+    audio.refreshOutputAvailability();
+    if(!audio.active()){fallbackTime=lastTime;fallbackBegin=now();usingAudio=false;}
+   }
+   if(ev.type==SDL_EVENT_AUDIO_DEVICE_ADDED&&!ev.adevice.recording&&!usingAudio&&audio.outputLost()&&!o.noAudio) {
+    double resume=wrapShowTime(fallbackTime+now()-fallbackBegin);
+    if(audio.start(assets/"music"/"luminous-flow.wav")){audio.seek(resume);audio.setMuted(muted);usingAudio=true;}
+   }
+  }
+  if(!running)break;
+  if(usingAudio&&!audio.active()){fallbackTime=lastTime;fallbackBegin=now();usingAudio=false;}
+  double t=usingAudio?audio.positionSeconds():wrapShowTime(fallbackTime+now()-fallbackBegin);lastTime=t;
+  if(o.duration>0&&now()-begin>=o.duration)break;
+  if(o.selfTest&&controlStage==1) {
+   // Fullscreen restoration may restore the previous window geometry asynchronously.
+   // Test resizing after both fullscreen transitions have completed.
+   if(!SDL_SetWindowSize(raw,960,540))throw std::runtime_error("Resize request failed");
+   awaitWindow([&](){int rw=0,rh=0;SDL_GetWindowSize(raw,&rw,&rh);return rw==960&&rh==540;},"Resize state not observed");
+   if(!SDL_MinimizeWindow(raw))throw std::runtime_error("Minimize request failed");
+   awaitWindow([&](){return bool(SDL_GetWindowFlags(raw)&SDL_WINDOW_MINIMIZED);},"Minimized state not observed");
+   minimizeStart=now();minimizeClock=t;controlStage=2;continue;
+  }
+  if(o.selfTest&&controlStage==2) {
+   if(!(SDL_GetWindowFlags(raw)&SDL_WINDOW_MINIMIZED))throw std::runtime_error("Minimized state not observed");
+   if(now()-minimizeStart<.09){SDL_Delay(10);continue;}
+   if(wrapShowTime(t-minimizeClock+showDuration())<.02)throw std::runtime_error("Clock stopped while minimized");
+   if(!SDL_RestoreWindow(raw))throw std::runtime_error("Restore request failed");
+   awaitWindow([&](){return !(SDL_GetWindowFlags(raw)&SDL_WINDOW_MINIMIZED);},"Restored state not observed");
+   controlStage=3;continue;
+  }
+  if(o.selfTest&&controlStage==3) {
+   int rw=0,rh=0;SDL_GetWindowSizeInPixels(raw,&rw,&rh);
+   if((SDL_GetWindowFlags(raw)&SDL_WINDOW_MINIMIZED)||rw<=0||rh<=0)throw std::runtime_error("Restored drawable not observed");
+   controlStage=4;
+  }
+  if(SDL_GetWindowFlags(raw)&SDL_WINDOW_MINIMIZED){SDL_Delay(30);continue;}
+  int w=0,h=0;SDL_GetWindowSizeInPixels(raw,&w,&h);if(w<=0||h<=0){SDL_Delay(30);continue;}
+  renderer.resize(w,h);renderer.setSilent(!usingAudio);
+  renderer.setEnergy(audio.level());
+  maxLevel=std::max(maxLevel,audio.level());
+  double start=now();renderer.render(sampleTimeline(t),t,retro);
+  if(!o.captureDir.empty()&&frames==5)renderer.capture(o.captureDir/"preview.bmp");
+  SDL_GL_SwapWindow(raw);double took=now()-start;renderTotal+=took;maxRender=std::max(maxRender,took);++frames;
+  if(o.selfTest&&frames==4) {
+   if(!retro||!muted||fullscreen||sampleTimeline(t).scene!=0)throw std::runtime_error("Control event test failed: retro="+std::to_string(retro)+" mute="+std::to_string(muted)+" fullscreen="+std::to_string(fullscreen)+" scene="+std::to_string(sampleTimeline(t).scene)+" clock="+std::to_string(t)+" seek="+std::to_string(sceneStart(0)));
+   // Present several frames before testing asynchronous desktop fullscreen transitions.
+   for(int i=0;i<2;++i){SDL_Event event{};event.type=SDL_EVENT_KEY_DOWN;event.key.key=SDLK_F11;SDL_PushEvent(&event);}
+   controlStage=1;
+  }
+  if(o.selfTest&&frames==12&&controlStage==4){controlsComplete=true;key(SDLK_ESCAPE);}
+ }
+ std::cout<<"Frames: "<<frames<<" | FPS: "<<(frames/std::max(.000001,now()-begin))<<" | mean frame ms: "<<renderTotal*1000/std::max(1,frames)<<" | max ms: "<<maxRender*1000<<" | vsync request accepted: "<<vsync<<'\n';
+ std::cout<<"Audio frames supplied: "<<audio.suppliedFrames()<<" | playback seconds: "<<lastTime<<'\n';
+ std::cout<<"Maximum observed music RMS: "<<maxLevel<<'\n';
+ if(o.selfTest&&!controlsComplete)throw std::runtime_error("SELF-TEST INCOMPLETE: duration or exit interrupted lifecycle checks");
+ if(o.selfTest)std::cout<<"CONTROLS PASS: SDL key events, seek, style, mute, observed fullscreen/resize/minimize/restore, advancing minimized clock and exit\n";
+ return 0;
+}
+}

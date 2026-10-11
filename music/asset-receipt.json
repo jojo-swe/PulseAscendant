@@ -1,0 +1,20 @@
+{
+  "title": "Luminous Flow",
+  "source_sha256": "fd8c915c3d7a52cb3175b3ce84bceadf99405e6ea2efa675651838161a5adff3",
+  "source_file": "music/source/Luminous Flow.mp3",
+  "source_duration": 472.36,
+  "suno_id": "1f52e6e8-5a07-45da-9c9b-09753a609eb3",
+  "excerpt_start": 0,
+  "excerpt_duration": 472.36,
+  "runtime_frames": 22673280,
+  "sample_rate": 48000,
+  "channels": 2,
+  "encoding": "PCM signed 16 bit",
+  "fades": "none; complete decoded source",
+  "runtime_sha256": "fe82b791b2d4a947de483dbdd4c567d4bd6636f38a3a62e53592914b1f286ce9",
+  "listening_acceptance": "pending",
+  "distribution_rights": "Account tier and ownership not independently verified",
+  "publication_requested_by_project_owner": true,
+  "public_release_policy": "Free non-commercial demo; Suno attribution retained; music excluded from MIT",
+  "terms_url": "https://suno.com/terms-of-service"
+}

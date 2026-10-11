@@ -1,0 +1,15 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {"name":"windows","displayName":"Windows x64 Release","generator":"Visual Studio 18 2026","architecture":"x64","binaryDir":"${sourceDir}/build/windows","cacheVariables":{"REMIX_BUILD_APP":"ON"}},
+    {"name":"linux","displayName":"Linux Release","generator":"Unix Makefiles","binaryDir":"${sourceDir}/build/linux","cacheVariables":{"CMAKE_BUILD_TYPE":"Release","REMIX_BUILD_APP":"ON"}}
+  ],
+  "buildPresets":[
+    {"name":"windows","configurePreset":"windows","configuration":"Release","jobs":8},
+    {"name":"linux","configurePreset":"linux","jobs":8}
+  ],
+  "testPresets":[
+    {"name":"windows","configurePreset":"windows","configuration":"Release","output":{"outputOnFailure":true}},
+    {"name":"linux","configurePreset":"linux","output":{"outputOnFailure":true}}
+  ]
+}

@@ -1,0 +1,8 @@
+if(NOT DEFINED APP)
+ message(FATAL_ERROR "APP required")
+endif()
+execute_process(COMMAND "${APP}" --self-test --duration 0.000001 --no-audio --hidden RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 30)
+if(result EQUAL 0 OR output MATCHES "CONTROLS PASS" OR NOT error MATCHES "SELF-TEST INCOMPLETE")
+ message(FATAL_ERROR "Premature self-test success: exit=${result}\n${output}\n${error}")
+endif()
+message(STATUS "Premature control-test regression PASS")

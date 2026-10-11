@@ -1,0 +1,7 @@
+build/
+dist/
+.superpowers/
+music/source/
+assets/music/*.wav
+*.user
+__pycache__/

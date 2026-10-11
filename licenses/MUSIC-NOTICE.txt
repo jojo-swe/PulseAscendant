@@ -1,0 +1,15 @@
+Luminous Flow — artist metadata: joyolo
+Generated with Suno. Suno ID: 1f52e6e8-5a07-45da-9c9b-09753a609eb3.
+
+The source MP3 was supplied by the project owner. The complete decoded track is
+included in this free, non-commercial demo release at the owner's request.
+The music is not covered by the remix code's MIT license and is not relicensed
+by this repository. No commercial or additional redistribution rights are
+granted here. Account tier and ownership have not been independently verified.
+Applicable creator rights and Suno terms remain in effect:
+https://suno.com/terms-of-service
+
+Keep the original Suno provenance and credits. The original MP3 is preserved
+unchanged in the full source bundle; SHA-256 and format details are recorded
+in music/asset-receipt.json. Runtime WAV is a full PCM format conversion,
+without truncation or added fades.

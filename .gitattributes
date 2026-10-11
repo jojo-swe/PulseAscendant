@@ -1,0 +1,4 @@
+*.sh text eol=lf
+*.glsl text eol=lf
+*.frag text eol=lf
+*.vert text eol=lf
