@@ -21,6 +21,8 @@ if(REMIX_BUILD_APP)
  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
  FetchContent_Declare(SDL3 URL https://codeload.github.com/libsdl-org/SDL/tar.gz/829a65d769d935c4852f8159e964312c0957260a URL_HASH SHA256=48e15cf1a6928453d77afa955d1fdfbbca9169e2bc3d76d111acb9b8bb076d66 DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
  FetchContent_MakeAvailable(SDL3)
+ # SDL documents this override for keeping workstation paths out of assertion strings.
+ target_compile_definitions(SDL3-static PRIVATE "$<$<CONFIG:Release>:SDL_ASSERT_FILE=\"SDL3\">")
  add_library(remix_audio src/audio.cpp)
  target_link_libraries(remix_audio PUBLIC remix_core SDL3::SDL3-static)
  add_executable(audio_tests tests/audio_tests.cpp)

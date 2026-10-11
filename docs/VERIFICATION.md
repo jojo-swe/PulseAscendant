@@ -70,3 +70,5 @@ Offentliga paket, filhashar och versionsuppgifter publiceras på GitHub Releases
 ## Videoexport
 
 Ett deterministiskt 4K60-prov gav exakt 120 bilder för 2,0 s vid 3840x2160, H.264 NVENC och stereo AAC i 48 kHz. Bildorientering och kristallbild kontrollerades. Efter videoexportändringen gav CTest Windows 4/4 (5,56 s), Linux isolerad Xvfb/Openbox 4/4 (9,84 s). Full video renderas separat; slutliga metadata och hash följer GitHub-releasen.
+
+Public Windows release rebuilt with SDL_ASSERT_FILE override to avoid local workstation paths in SDL assertion strings. Its core/audio/incomplete_control/lifecycle suite passed 4/4 (11.76 s). Native Linux RGB24 stream also produced exactly six 64x64 frames at 60 fps for a 0.1 s export.
