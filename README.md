@@ -45,6 +45,14 @@ All music plays at normal speed. Act I preserves the first 299 seconds of the de
 
 The first act combines tunnels, refractive facets, folded architecture, fleets, an ocean and orbital effects. Act II adds polished architecture, a wet city, articulated machinery and glass prisms. Act III introduces ceramic walkers in a desert, luminous vegetation, floating stone and a crystal-wing finale. [Act II](docs/ACT_II.md) and [Act III](docs/ACT_III.md) describe their implementations.
 
+Actual native RT captures from the current build:
+
+| Chrome Cathedral | Dune Colossus |
+| --- | --- |
+| ![Chrome Cathedral](docs/images/act2-chrome.png) | ![Dune Colossus](docs/images/act3-dune.png) |
+| Verdant Singularity | Reality Ascendant |
+| ![Verdant Singularity](docs/images/act3-verdant.png) | ![Reality Ascendant](docs/images/act3-finale.png) |
+
 ## Music and rendering
 
 Each song has independent precomputed analysis: 24 logarithmic FFT bands from **35 Hz to 18 kHz**, bass, energy and onset curves, sampled at 20 Hz and interpolated against the audio transport. Different bands drive geometry, lighting, surfaces and particle groups. Chapter direction considers measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds and no assumed BPM. This improves cut placement; subjective musical synchronization still needs listening.
