@@ -1,67 +1,151 @@
-# Pulse Ascendant
+<div align="center">
 
-![Pulse Ascendant: three ascending facets and a pulse line](assets/branding/pulse-ascendant.svg)
+<img src="assets/branding/pulse-ascendant.svg" alt="Pulse Ascendant — three acts, sixteen worlds, one pulse" width="100%">
 
-A standalone, music-driven 3D demo for **Windows and Linux**: **three playable acts, 16 worlds, 76 chapters and 14:48.68 of music**. Each return to a world now has its own staging and transformation. Act II uses Vulkan hardware ray tracing on supported GPUs; Acts I and III use procedural OpenGL worlds.
+### Follow the pulse. Fly through sixteen worlds.
 
-[Watch the 1080p60 preview](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4) · [Download v0.5](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0) · [Previous v0.4 trailer](https://youtube.com/shorts/uOhjmoLY6DI) · [Previous full video (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
+A standalone music-driven 3D demo for **Windows & Linux**.<br>
+Procedural worlds. Moving machinery. Stellar storms. Hardware ray tracing.
 
-**v0.5 adds momentum and visible musical attacks:** faster authored camera paths, a deterministic 100 Hz low/mid/high transient layer, working mechanisms and traffic, clearer city/fleet silhouettes, and brighter asymmetric stellar structures. Interactive playback and export now use the same analyzed visual energy. The previous trailer shows v0.4 and the previous full movie shows v0.3; the full v0.5 4K60 export is on hold at the owner's request. See [the energy rework](docs/ENERGY_REWORK.md) and [current verification](docs/VERIFICATION.md).
+[![Release v0.5.0](https://img.shields.io/badge/release-v0.5.0-25d9ff?style=for-the-badge&labelColor=101827)](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0)
+[![Windows and Linux](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux-86ebff?style=for-the-badge&labelColor=101827)](#launch-the-demo)
+[![Vulkan ray queries](https://img.shields.io/badge/Act_II-Vulkan_Ray_Queries-f7b84e?style=for-the-badge&labelColor=101827)](#inside-the-renderer)
+[![Code license MIT](https://img.shields.io/badge/code_license-MIT-a6b4d0?style=for-the-badge&labelColor=101827)](LICENSE)
 
-## Run
+**[▶ Watch the 1080p60 preview](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4)**
+&nbsp; · &nbsp; **[↓ Download the demo](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0)**
+&nbsp; · &nbsp; **[Svenska](docs/README.sv.md)**
 
-- **Windows:** extract `PulseAscendant-Windows-x64.zip` and run `PulseAscendant.exe`. Keep the complete `assets/` directory beside it. Windows 10/11 x64 and an OpenGL 3.3 driver are required. SDL and the MSVC runtime are statically linked.
-- **Linux:** extract `PulseAscendant-Linux-x64.tar.gz` and run `./PulseAscendant`. The build targets Ubuntu 24.04 x64, GCC 13 and glibc 2.39, with a working X11/Wayland display and OpenGL driver.
+</div>
 
-The demo starts at 1280×720 and loops the complete show. No account or network connection is required. Hardware tracing additionally needs a compatible Vulkan driver; unsupported devices use the separately implemented OpenGL fallback. An Act II backend badge identifies the selected path.
+---
+
+| Three acts | Sixteen worlds | Seventy-six chapters | One continuous soundtrack |
+|:---:|:---:|:---:|:---:|
+| Three distinct visual identities | From neon cities to living architecture | Authored camera paths and transformations | **14:48.68** of music at its original speed |
+
+## See the worlds
+
+[![Six actual v0.5 captures: Neon City, Orbital Armada, Supernova, Prism Chamber, Seed Velocity and Final Ascent](docs/images/v0.5.0-energy.jpg)](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4)
+
+<p align="center"><sub>Actual v0.5 native captures. Click the gallery for a 2:40.75 preview with the original music.</sub></p>
+
+## The journey
+
+| **I · Full Throttle** | **II · Adventurous Uplift** | **III · Reality Ascendant** |
+|:---|:---|:---|
+| Neon flight, folded machines and orbital fleets. | Rain, chrome, moving foundries and refractive glass. | Desert colossi, luminous vegetation and a crystal-wing finale. |
+| **8 worlds · 31 chapters** | **4 worlds · 21 chapters** | **4 worlds · 24 chapters** |
+| `00:00 → 05:00` | `05:00 → 09:49.92` | `09:49.92 → 14:48.68` |
+| OpenGL procedural rendering | Vulkan hardware RT + OpenGL fallback | OpenGL procedural rendering |
+| ♫ *Luminous Flow* — five-minute edit | ♫ *Adventurous Uplift* — full track | ♫ *Rigid Arpeggios* — full track |
+
+<details>
+<summary><strong>Explore all 16 worlds</strong></summary>
+
+**Act I** — Photon Corridor · Plasma / Gyroid · Crystal Engine · Neon City · Fracture Machine · Cosmic Reactor · Quantum Ocean · Orbital Armada
+
+**Act II** — Chrome Cathedral · Rain District · Orbital Foundry · Prism Chamber
+
+**Act III** — Dune Colossus · Verdant Singularity · Gravity Rebellion · Reality Ascendant
+
+Each return to a world has its own staging and transformation. Read the [Act II notes](docs/ACT_II.md) and [Act III notes](docs/ACT_III.md) for the implementation.
+
+</details>
+
+## Feel the music
+
+The music drives geometry, light, surfaces and moving mechanisms. **24 frequency bands** provide sustained motion and color; a separate **100 Hz attack layer** responds to low, mid and high frequency transients. Both interactive playback and export follow the same saved analysis and audio clock.
+
+**New in v0.5:** faster authored cameras, travelling energy, working machinery, fleet escorts, articulated vegetation and stronger city/fleet/stellar compositions. The transient response now stays distinct from sustained loudness. [Read the rework notes →](docs/ENERGY_REWORK.md)
+
+Turn up the response when launching the executable:
+
+```sh
+PulseAscendant --pulse-gain 1.5
+```
+
+Use `./PulseAscendant` on Linux or `.\PulseAscendant.exe` in Windows PowerShell. Sensitivity defaults to **1**, with a range of **0–2**. Setting it to zero removes direct transients; spectrum, sustained energy and integrated musical motion remain active. These are frequency-band attacks, not separated instrument stems or a fixed metronome.
+
+## Launch the demo
+
+| | Download | Start |
+|:---|:---|:---|
+| **Windows x64** | [Windows ZIP](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Windows-x64.zip) | Extract everything, then run `PulseAscendant.exe`. |
+| **Linux x64** | [Linux tar.gz](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Linux-x64.tar.gz) | Extract everything, then run `./PulseAscendant`. |
+| **Source + music** | [Complete source ZIP](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-source.zip) | Includes all three original MP3s and four runtime WAVs. |
+
+Keep the complete `assets/` directory beside the executable. The demo starts at **1280×720**, loops the full show and needs no account or network connection.
+
+- **Windows:** Windows 10/11 x64 and an OpenGL 3.3 driver. SDL and the MSVC runtime are statically linked.
+- **Linux:** built for Ubuntu 24.04 x64, GCC 13 and glibc 2.39, with a working X11/Wayland display and OpenGL driver.
+- **Hardware RT:** a compatible Vulkan driver with KHR acceleration structures and ray queries. Unsupported devices use the separate OpenGL fallback; an Act II badge identifies the active renderer.
+
+<details>
+<summary><strong>Keyboard controls</strong></summary>
 
 | Key | Action |
-| --- | --- |
-| F1 / F2 / F3 | Jump to Act I / II / III, including its music |
-| 1–8 | Act I worlds |
-| 9 / 0 / - / = | Act II worlds |
-| Q / W / E / R | Act III worlds |
-| Left / right arrow | Previous / next chapter |
-| Tab | Modern / 320×200 retro rendering |
-| M | Mute; the music and animation clocks keep advancing |
-| F11 | Fullscreen / window |
-| Esc | Exit |
+|:---|:---|
+| **F1 / F2 / F3** | Jump to Act I / II / III, including its music |
+| **1–8** | Act I worlds |
+| **9 / 0 / - / =** | Act II worlds |
+| **Q / W / E / R** | Act III worlds |
+| **← / →** | Previous / next chapter |
+| **Tab** | Modern / 320×200 retro rendering |
+| **M** | Mute; music and animation clocks keep advancing |
+| **F11** | Fullscreen / window |
+| **Esc** | Exit |
 
-## Three acts
+</details>
 
-| Act | Music | Start | Length | Chapters |
-| --- | --- | --- | --- | --- |
-| I: Full Throttle | Luminous Flow, five-minute edit | 0:00 | 5:00 | 31 |
-| II: Adventurous Uplift | Complete supplied song | 5:00 | 4:49.92 | 21 |
-| III: Reality Ascendant | Rigid Arpeggios, complete supplied song | 9:49.92 | 4:58.76 | 24 |
+## Inside the renderer
 
-All music plays at normal speed. Act I preserves the first 299 seconds of the decoded source sample for sample, followed by a one-second fade to its exact 300-second boundary. Acts II and III retain every decoded sample of their songs. A combined stereo 48 kHz PCM16 WAV supplies one continuous audio clock; both joins follow exact integer frame offsets.
+| Layer | What it does |
+|:---|:---|
+| **OpenGL 3.3** | Procedural worlds in Acts I and III, plus a separate SDF/analytic fallback for Act II. |
+| **Vulkan KHR ray queries** | Triangle BLAS/TLAS, animated instances, traced shadows, reflections and refraction in Act II. |
+| **Music analysis** | 24 logarithmic FFT bands from 35 Hz–18 kHz at 20 Hz, plus independent low/mid/high attacks at 100 Hz. |
+| **Direction** | 76 authored chapters, with cuts adjusted to measured attacks and persistent spectral changes. No assumed BPM. |
+| **Motion** | A deterministic, forward-moving musical clock for selected secondary animation; separately authored camera paths. |
+| **Presentation** | HDR composition, bloom, grading, captions and an optional retro rendering mode. |
 
-| Act | Worlds |
-| --- | --- |
-| I | Photon Corridor · Plasma / Gyroid · Crystal Engine · Neon City · Fracture Machine · Cosmic Reactor · Quantum Ocean · Orbital Armada |
-| II | Chrome Cathedral · Rain District · Orbital Foundry · Prism Chamber |
-| III | Dune Colossus · Verdant Singularity · Gravity Rebellion · Reality Ascendant |
+Use `--no-rt` to select the fallback, `--require-rt` to require hardware tracing, or `--rt-validation` for diagnostics when Vulkan validation layers are installed.
 
-The first act combines tunnels, refractive facets, folded architecture, fleets, an ocean and orbital effects. Act II adds polished architecture, a wet city, articulated machinery and glass prisms. Act III introduces ceramic walkers in a desert, luminous vegetation, floating stone and a crystal-wing finale. [Act II](docs/ACT_II.md) and [Act III](docs/ACT_III.md) describe their implementations.
+<details>
+<summary><strong>Rendering and soundtrack details</strong></summary>
 
-Actual v0.5 native captures: clearer city and fleet forms, stellar plasma, refractive prism, seed flight and final ascent:
+Five reusable meshes form the RT scenes within a 2,048-instance budget. Ray traversal allows up to five surface encounters. Modern RT uses two deterministic subpixel samples and an adaptive edge filter; retro uses one sample per pixel. RT output passes through host readback into an OpenGL HDR texture each frame.
 
-![Six native v0.5 views](docs/images/v0.5.0-energy.jpg)
+The renderer is not a full path tracer and does not provide general global illumination or temporal denoising. Resolution and scene complexity affect performance: **an exported 4K60 video does not imply interactive 4K60 performance**. [Rendering and provenance →](docs/SOURCE_MAP.md)
 
-Archived v0.3 captures and results remain in [the historical verification](docs/VERIFICATION-v0.3.0.md).
+All music plays at its original speed. Act I preserves the first 299 decoded seconds sample for sample, then fades for one second to its exact 300-second boundary. Acts II and III retain every decoded sample. A combined stereo 48 kHz PCM16 WAV supplies a continuous audio clock with sample-exact joins.
 
-## Music and rendering
+Chapter cuts consider measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds. Subjective musical synchronization still needs listening.
 
-Each song has independent precomputed analysis: 24 logarithmic FFT bands from **35 Hz to 18 kHz**, bass, energy and onset curves, sampled at 20 Hz and interpolated against the audio transport. Different bands drive geometry, lighting, surfaces and particle groups. A second 100 Hz layer detects separate low/mid/high frequency attacks with fast decay. These are spectral attacks, not instrument-separated stems. Use `--pulse-gain 1.5` for stronger transients, or 0 for comparison; default 1 and range 0..2. Playback and export share the same input curves. Chapter direction considers measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds and no assumed BPM. This improves cut placement; subjective musical synchronization still needs listening.
+</details>
 
-Act II can use **Vulkan KHR ray queries against triangle BLAS/TLAS**. Five reusable meshes form animated scenes within a 2,048-instance budget. Shadows, reflections and refraction use bounded ray traversal with up to five surface encounters. Modern RT rendering uses two deterministic subpixel samples plus an adaptive edge filter; retro uses one sample per pixel. OpenGL presents the HDR image and composes bloom, effects and captions.
+## Checked, measured, reviewed
 
-The RT output passes from a Vulkan device-local buffer through host readback to an OpenGL HDR texture each frame. This is not zero-copy interoperability. The renderer is not a full path tracer and does not provide general global illumination or temporal denoising. Resolution and scene complexity affect performance; **a 4K60 export is not an interactive 4K60 guarantee**.
+| v0.5 evidence | Result |
+|:---|:---|
+| Windows / Linux CTest | **6/6 passed on each platform** |
+| Windows RT / Windows fallback / Linux WSLg tours | **152/152 chapter samples on each path** |
+| Exact-time transient A/B comparison | Visible pixel changes in **all 16 worlds** |
+| 1080p60 preview | **9,645 frames**, complete decode passed; **13 audio windows** measured zero offset |
+| Independent review | Code **8.0/10** · Visual finish **7.2/10** · Sampled pace **7.3/10** |
 
-OpenGL 3.3 provides Acts I and III and a separate SDF/analytic fallback for Act II. Use `--no-rt` to select that fallback deliberately, `--require-rt` to fail if the RT backend cannot initialize, and `--rt-validation` for Vulkan diagnostics where validation layers are installed. Tracing is used only during Act II; Acts I and III keep their OpenGL renderer in either configuration.
+These checks cover the documented builds and samples; physical Linux hardware RT and full-show audience retention remain unverified. See the [verification report](docs/VERIFICATION.md), [independent review](docs/QUALITY_REVIEW.md) and [release checksums](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/SHA256SUMS.txt).
 
-## Build from source
+> **Film status:** the v0.5 1080p60 preview is available now. The full v0.5 4K60 render is on hold at the owner's request. Earlier YouTube videos show earlier versions: [v0.4 Short](https://youtube.com/shorts/uOhjmoLY6DI) · [v0.3 full film](https://youtu.be/b5ShsKNC7KM).
+
+## Make it your own
+
+The code, shaders, analysis tools and capture pipeline are included. Start from the **complete source ZIP** if you want the supplied soundtrack: a plain Git checkout intentionally omits audio.
+
+<details>
+<summary><strong>Build on Windows or Linux · dependencies · regenerate music analysis</strong></summary>
+
+### Build from source
 
 The release source bundle, `PulseAscendant-source.zip`, includes all three original MP3s, three per-act runtime WAVs, the combined WAV and generated analysis. A Git checkout intentionally omits audio. Restore **all four WAVs** before running the full checks: CTest reads Act I and the combined show, while the standalone audio checks also compare Acts II and III. Runtime binary packages include only `assets/music/second-reality-three-acts.wav`; copying that file alone is insufficient for full source validation.
 
@@ -103,7 +187,13 @@ glslangValidator -V -Os --target-env vulkan1.2 assets/shaders/rt_scene.comp -o a
 spirv-val --target-env vulkan1.2 assets/shaders/rt_scene.comp.spv
 ```
 
-## Capture and export
+
+</details>
+
+<details>
+<summary><strong>Capture, export and verification commands</strong></summary>
+
+### Capture and export
 
 Interactive playback prepares the graphics pipelines before starting the music. The window title shows progress; driver-dependent preparation can take over a minute on WSLg. Escape cancels preparation. This prevents deferred first-draw compilation from consuming the opening music.
 
@@ -116,7 +206,7 @@ python tools/storyboard.py --help
 python tools/render_video.py --app build/windows/Release/PulseAscendant.exe --require-rt --output dist/three-acts/PulseAscendant-4K60.mp4
 ```
 
-Smoke mode requests all 16 worlds in both styles; tour mode captures 18% and 82% through each chapter. Use `storyboard.py` to group these images for inspection. The historical `verify-motion.py` thresholds were designed for earlier capture timings and are not a v0.4 acceptance gate. Capture success and pixel differences do not establish artistic acceptance. See [current evidence](docs/VERIFICATION.md).
+Smoke mode requests all 16 worlds in both styles; tour mode captures 18% and 82% through each chapter. Use `storyboard.py` to group these images for inspection. The historical `verify-motion.py` thresholds were designed for earlier capture timings and are not a current acceptance gate. Capture success and pixel differences do not establish artistic acceptance. See [current evidence](docs/VERIFICATION.md).
 
 Additional audio and music-direction checks need the complete source audio plus Python and numpy:
 
@@ -132,6 +222,11 @@ The native `--render-stream --fps N` option writes bottom-up RGB24 to stdout and
 
 `tools/render_short.py --app <executable> --font <bold.ttf> --output <new.mp4>` creates a 32-second 1080×1920/60 trailer from seven native camera excerpts. It places montage cuts on measured Act III music attacks, constrains every segment to its five-second source, and identifies cached renders by SHA-256 of the executable and its assets. Trailer revision 2 removes a weak city-camera excerpt following visual review. It uses a 70–102 s excerpt of Rigid Arpeggios; the full demo retains the complete three-act audio. The original v0.3.0 source archive preserves trailer revision 1; current Git source and the separate trailer-v2 source supplement contain the updated generator.
 
+
+</details>
+
+---
+
 ## Credits and licensing
 
 **Pulse Ascendant** has its own identity and new choreography. Its history includes a selective reimagining of Future Crew's *Second Reality* (1993). Future Crew receives credit for the original demo, selected effect ideas and the 14-vertex / 24-triangle glenz geometry. [Original source](https://github.com/mtuomi/SecondReality), reference commit `071a82eddb7a7390dbaa491a8a473e0e923a55c2`, Unlicense/public domain. This is not an official Future Crew release or a complete port. The original source and prior releases remain preserved.
@@ -139,3 +234,11 @@ The native `--render-stream --fps N` option writes bottom-up RGB24 to stdout and
 Khronos Vulkan headers carry Apache-2.0 and MIT notices; the applicable notices and Apache license text are bundled under `licenses/`.
 
 New code uses the [MIT license](LICENSE); SDL uses its zlib license and bundled notices. **Music is not MIT-licensed.** Luminous Flow, Adventurous Uplift and Rigid Arpeggios were generated with Suno, carry artist metadata **joyolo**, and were supplied and requested for publication by the project owner. Their applicable rights remain separate. See [music credits and source hashes](licenses/MUSIC-NOTICE.txt), the receipts in `music/`, and [Suno's terms](https://suno.com/terms-of-service).
+
+<div align="center">
+
+**Three acts. Sixteen worlds. One pulse.**
+
+[Download](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0) · [Watch the preview](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4) · [Svenska](docs/README.sv.md)
+
+</div>

@@ -1,10 +1,25 @@
-# Pulse Ascendant
+<div align="center">
+
+<img src="../assets/branding/pulse-ascendant.svg" alt="Pulse Ascendant — tre akter, sexton världar, en puls" width="100%">
+
+### Följ pulsen. Flyg genom sexton världar.
+
+[![Version 0.5.0](https://img.shields.io/badge/version-0.5.0-25d9ff?style=for-the-badge&labelColor=101827)](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0)
+[![Windows och Linux](https://img.shields.io/badge/plattformar-Windows%20%7C%20Linux-86ebff?style=for-the-badge&labelColor=101827)](#kör)
+
+**[Ladda ned](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0)** · **[Se förhandsvisningen](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4)** · **[English](../README.md)**
+
+</div>
 
 Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara akter, 16 världar, 76 kapitel och 14:48,68 musik**. Varje återkomst till en värld har nu eget scenförlopp. Akt II använder Vulkan-hårdvaruraytracing på kompatibla grafikkort; akt I och III använder procedurala OpenGL-världar.
 
 [Se förhandsvisningen i 1080p60](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4) · [Ladda ned v0.5](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0) · [Trailer från v0.4](https://youtube.com/shorts/uOhjmoLY6DI) · [Föregående fullvideo (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
 
 **v0.5: mer fart och tydligare musikreaktion.** Snabbare kameror, separata bas-/mellanregister-/diskantanslag vid 100 Hz, arbetande maskindelar och trafik samt tydligare stad, flotta och kosmiska strukturer. Interaktiv grafik och export använder samma analyserade musikvärden. `--pulse-gain 1.5` förstärker impulserna; standard 1, intervall 0–2. Den tidigare trailern visar v0.4 och fullvideon v0.3. Ny 4K60-export avvaktar på ägarens begäran. Se [förbättringarna](ENERGY_REWORK.md) och [verifieringen](VERIFICATION.md).
+
+[![Sex faktiska bilder från v0.5: stad, rymdflotta, supernova, prismakammare, fröflykt och final](images/v0.5.0-energy.jpg)](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4)
+
+<p align="center"><sub>Bilder direkt från demot. Klicka för 2:40,75 förhandsvisning med originalmusiken.</sub></p>
 
 ## Kör
 
