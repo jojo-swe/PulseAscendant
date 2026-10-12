@@ -6,7 +6,7 @@ A standalone, music-driven 3D demo for **Windows and Linux**: **three playable a
 
 [Download v0.4](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.4.0) · [New 32-second trailer](https://youtube.com/shorts/uOhjmoLY6DI) · [Previous full video (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
 
-**v0.4 changes the direction:** distinct returning set pieces, one continuous camera path per chapter, and irreversible actions aligned to measured music accents. The downloads and new trailer show v0.4; its full 4K60 export is still rendering. The previous full video shows v0.3, whose technical/package review did not establish entertainment quality; audience feedback prompted this rework. See [the rework](docs/VARIATION_REWORK.md) and [verification](docs/VERIFICATION.md) for the current scope.
+**v0.4 changes the direction:** distinct returning set pieces, one continuous camera path per chapter, and irreversible actions aligned to measured music accents. The downloads and new trailer show v0.4. Its full 4K60 export has passed metadata, full decode and audio-alignment checks; YouTube publication is pending its daily upload limit. The previous full video shows v0.3, whose technical/package review did not establish entertainment quality; audience feedback prompted this rework. See [the rework](docs/VARIATION_REWORK.md) and [verification](docs/VERIFICATION.md) for the current scope.
 
 ## Run
 

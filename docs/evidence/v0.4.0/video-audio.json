@@ -1,0 +1,153 @@
+{
+  "video": "dist\\variation\\PulseAscendant-v04-4K60.mp4",
+  "wav": "assets\\music\\second-reality-three-acts.wav",
+  "sample_rate": 8000,
+  "scope": "Decoded mono correlation at 18 two-second windows; not full subjective listening",
+  "observations": [
+    {
+      "start": 2,
+      "duration": 2,
+      "correlation": 0.9999880710971109,
+      "offset_ms": 0.0,
+      "rms": 0.07816967431131917,
+      "pass": true
+    },
+    {
+      "start": 42,
+      "duration": 2,
+      "correlation": 0.9998717072312181,
+      "offset_ms": 0.0,
+      "rms": 0.1171396880522809,
+      "pass": true
+    },
+    {
+      "start": 110,
+      "duration": 2,
+      "correlation": 0.9998324277009037,
+      "offset_ms": 0.0,
+      "rms": 0.1795971766405788,
+      "pass": true
+    },
+    {
+      "start": 220,
+      "duration": 2,
+      "correlation": 0.9998417900167793,
+      "offset_ms": 0.0,
+      "rms": 0.16669968817645517,
+      "pass": true
+    },
+    {
+      "start": 298,
+      "duration": 2,
+      "correlation": 0.9999968866202311,
+      "offset_ms": 0.0,
+      "rms": 0.08990454181936494,
+      "pass": true
+    },
+    {
+      "start": 300,
+      "duration": 2,
+      "correlation": 0.9999967193932263,
+      "offset_ms": 0.0,
+      "rms": 0.06910064191142928,
+      "pass": true
+    },
+    {
+      "start": 342,
+      "duration": 2,
+      "correlation": 0.9996179480233243,
+      "offset_ms": 0.0,
+      "rms": 0.12356764831585725,
+      "pass": true
+    },
+    {
+      "start": 410,
+      "duration": 2,
+      "correlation": 0.9998509518882103,
+      "offset_ms": 0.0,
+      "rms": 0.14187185423244608,
+      "pass": true
+    },
+    {
+      "start": 500,
+      "duration": 2,
+      "correlation": 0.9998507627933475,
+      "offset_ms": 0.0,
+      "rms": 0.23524445060259308,
+      "pass": true
+    },
+    {
+      "start": 582,
+      "duration": 2,
+      "correlation": 0.9999814116838514,
+      "offset_ms": 0.0,
+      "rms": 0.1851996913455548,
+      "pass": true
+    },
+    {
+      "start": 588,
+      "duration": 2,
+      "correlation": 0.9999799668005446,
+      "offset_ms": 0.0,
+      "rms": 0.06161071583170923,
+      "pass": true
+    },
+    {
+      "start": 590,
+      "duration": 2,
+      "correlation": 0.9999943586849532,
+      "offset_ms": 0.0,
+      "rms": 0.07610898839582182,
+      "pass": true
+    },
+    {
+      "start": 620,
+      "duration": 2,
+      "correlation": 0.9999346043586969,
+      "offset_ms": 0.0,
+      "rms": 0.12088129739040518,
+      "pass": true
+    },
+    {
+      "start": 710,
+      "duration": 2,
+      "correlation": 0.9998889624654718,
+      "offset_ms": 0.0,
+      "rms": 0.2285255165741117,
+      "pass": true
+    },
+    {
+      "start": 815,
+      "duration": 2,
+      "correlation": 0.9999567941515062,
+      "offset_ms": 0.0,
+      "rms": 0.2432316826850933,
+      "pass": true
+    },
+    {
+      "start": 846,
+      "duration": 2,
+      "correlation": 0.9999315720227757,
+      "offset_ms": 0.0,
+      "rms": 0.295580794282205,
+      "pass": true
+    },
+    {
+      "start": 880,
+      "duration": 2,
+      "correlation": 0.9999861834855476,
+      "offset_ms": 0.0,
+      "rms": 0.3084967595218486,
+      "pass": true
+    },
+    {
+      "start": 886,
+      "duration": 2,
+      "correlation": 0.9999625146748343,
+      "offset_ms": 0.0,
+      "rms": 0.013191796313122152,
+      "pass": true
+    }
+  ],
+  "passed": true
+}

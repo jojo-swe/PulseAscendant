@@ -4,7 +4,7 @@ Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara a
 
 [Ladda ned v0.4](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.4.0) · [Ny 32 sekunders trailer](https://youtube.com/shorts/uOhjmoLY6DI) · [Föregående fullvideo (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
 
-**v0.4 gör om regin:** skilda återkomster, sammanhängande kameravägar och engångshändelser på uppmätta musikaccenter. Paketen och den nya trailern visar v0.4; hela dess 4K60-film renderas fortfarande. Föregående fullvideo visar v0.3, vars tekniska granskning inte bevisade underhållningsvärdet; publikens kritik utlöste omarbetningen. Se [omtaget](VARIATION_REWORK.md) och [aktuell verifiering](VERIFICATION.md).
+**v0.4 gör om regin:** skilda återkomster, sammanhängande kameravägar och engångshändelser på uppmätta musikaccenter. Paketen och den nya trailern visar v0.4. Hela dess 4K60-film har passerat metadata-, avkodnings- och ljudsynkprov; YouTube-publiceringen inväntar plattformens dygnsgräns för uppladdningar. Föregående fullvideo visar v0.3, vars tekniska granskning inte bevisade underhållningsvärdet; publikens kritik utlöste omarbetningen. Se [omtaget](VARIATION_REWORK.md) och [aktuell verifiering](VERIFICATION.md).
 
 ## Kör
 

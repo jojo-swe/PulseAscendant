@@ -61,7 +61,11 @@ Exportören skriver exakt ceil(duration × fps) nativebilder och begränsar ljud
 
 Regressioner: 0,07 s vid 30 fps ger **3 bilder**, och 0,035 s vid 3840×2160/60 fps ger **3 bilder**, med korrekt ljudlängd. [30 fps metadata](evidence/v0.4.0/frame-rounding-30.json), [4K60 metadata](evidence/v0.4.0/frame-rounding-4k60.json). Exportören skyddar befintliga filer, kontrollerar native show-info och WAV-format/sampleantal samt slutnamnger endast efter metadata-PASS.
 
-Fullständig v0.4-video renderas fortfarande; historiska v0.3-filer räknas inte som nya resultat. Exportens käll-/producenthash är dokumenterad separat från den senare interaktiva uppstartsändringen.
+Fullständig v0.4-video är nu verifierad: **3840×2160, 60 fps, 53 321 bilder, 888,683 s**, 5 780 448 524 byte. Hela videoströmmen avkodades till EOF med ffmpeg/CUDA, exit 0 och inga rapporterade fel. Nativeproducenten rapporterar exakt 53 321 bilder och **17 396 RT-bilder, samtliga i akt II**.
+
+AAC-ljudet jämfördes mot runtime-WAV vid 18 tvåsekundersfönster genom alla akter, båda skarvarna och slutet: **18/18 passerar**, minsta korrelation 0,999618 och största uppmätta förskjutning 0 ms vid 8 kHz analysupplösning. Åtta fullständiga bildutsnitt från den slutkodade 4K-filmen granskades. Detta styrker kodning, bildinnehåll i stickproven och ljudets tidsläge/innehåll; det ersätter inte obruten mänsklig lyssning eller underhållningsbedömning.
+
+SHA-256: `2253844f330d1af5d6e24bf2b8cd2125446de6a4cb0bb6c09d146f86a2d9aeda`. [Slutreceipt](evidence/v0.4.0/video-receipt.json), [metadata](evidence/v0.4.0/video-probe.json), [avkodning](evidence/v0.4.0/video-decode.log), [ljudfönster](evidence/v0.4.0/video-audio.json) och [kodade bildstickprov](evidence/v0.4.0/video-frames.jpg). Exportens käll-/producenthash är dokumenterad separat från den senare interaktiva uppstartsändringen. Historiska v0.3-filer räknas inte som nya resultat.
 
 ## Paket och publicering
 
@@ -71,4 +75,4 @@ ZIP-filers CRC kontrollerades för alla poster. Källarkivet jämfördes med `gi
 
 [Nya offentliga trailern](https://youtube.com/shorts/uOhjmoLY6DI) är revision 4: 1080×1920, 60 fps, 1 920 bilder, 32 s och sju nativeklipp. Full GPU-assisterad videodekodning passerar. RT-rubriken visas enbart över akt II-klipp. Bildgranskning täcker motivens läsbarhet i vertikalt format; den garanterar inte viralitet. YouTube visar sparad offentlig synlighet, färdig HD-bearbetning och inga hittade upphovsrättsproblem vid uppladdningen. Suno-musiken är deklarerad i beskrivningen och AI-inställningen.
 
-Den nya fullvideons YouTube-publicering och ändringen av gamla fullvideon till olistad återstår tills slutexporten har verifierats. Gamla versioners publiceringsbevis återanvänds inte för dessa steg.
+Den 12 oktober 2026 stoppade YouTube uppladdningen av den verifierade slutfilen med **Daglig uppladdningsgräns uppnådd**, med alternativen engångsverifiering eller 24 timmars väntan. Ingen ny huvudvideolänk skapades. Fullvideons publicering och ändringen av gamla fullvideon till olistad med hänvisning återstår. Automatisk uppföljning är aktiv för ett senare försök. Gamla versioners publiceringsbevis återanvänds inte för dessa steg.
