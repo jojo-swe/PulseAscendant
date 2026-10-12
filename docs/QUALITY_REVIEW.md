@@ -1,43 +1,28 @@
-# Pulse Ascendant v0.4 — oberoende variationsgranskning
+# Pulse Ascendant v0.5 — independent review
 
-Skrivskyddad granskare: variation_review, 2026-10-12. Baseline `01a26a8aa1d2a3860148c8551080fe5ec549aeef`. Historisk rapport bevaras i [QUALITY_REVIEW-v0.3.0.md](QUALITY_REVIEW-v0.3.0.md).
+Read-only reviewer: `v05_review`, 2026-10-12. The reviewer did not author this revision. Historical evidence remains in [QUALITY_REVIEW-v0.4.0.md](QUALITY_REVIEW-v0.4.0.md).
 
-## Granskarens slutrapport
+**Approved within the inspected scope**, exceeding the owner's requested 7/10 threshold.
 
-Den granskade omarbetningen får **7,2/10** för formvariation, kapitelutveckling och läsbarhet. Betyget avser aktuell v0.4-källa och inspekterade nativebilder, oberoende av v0.3-betyget. Jag ser inga kvarvarande P1/P2-blockerare inom denna omfattning.
+| Area | Score |
+|---|---:|
+| Code and signal pipeline | 8.0/10 |
+| Visual finish and composition | 7.2/10 |
+| Sampled motion, pace and readability | 7.3/10 |
 
-Granskningen omfattar diffen mot 01a26a8, samtliga världars tidiga/sena RT-tourbilder, Act II:s reservväg, v5-bilderna för City/Ocean och täta bildsekvenser kring kollisionen och finalen.
+The 100 Hz frequency-band attacks reach both renderers, remain deterministic when seeking and vary independently. Removing callback RMS from visual energy fixes a plausible cause of flattened interactive response. Motion integration stays forward-moving; the 208-byte RT parameter layout matches its shader.
 
-Konkreta fynd som nu är rättade och verifierade:
+The reviewer found a real RT wrapping bug: negative `std::fmod` moved late-act traffic outside its intended volume. The positive-wrap replacement fixes it. Missing `--pulse-gain` help was also corrected. **No remaining blocking code finding identified.**
 
-- **Wet Circuit:** den skymmande fasaden är borta ur kamerans siktlinje.
-- **Act III 56/60/70:** trasiga SDF-sidor har ersatts av sammanhängande ytor.
-- **Titan Overdrive 71:** kameran följer lyftet och behåller flottan synlig.
-- **Fallback 39/43:** fransiga vågplattor och triangulerade tornsidor är rena i fullstora v5-bilder.
-- **City/Ocean:** återkomsterna har nu tydligt olika huvudmotiv och kameravinklar.
-- **Orbital Collision/finalen:** tidssekvenserna visar en enda kollision med efterföljande spridning respektive kristallupplösning, ren solhorisont och sluttoning.
-- **Videoexport:** felet som kapade sista bilden vid vissa bildfrekvenser är identifierat och statiskt rättat; root rapporterar godkända regressionsprov.
+The first visual pass scored 6.5/10. Subsequent changes materially improved it:
 
-Kvarvarande regikritik är främst Armadas täta magentafält, särskilt kapitel 12/22, och ett fortsatt enkelt material- och mönsterspråk i flera miljöer. Det begränsar bildhierarkin och finishen.
+- City retains dark buildings, distinct windows and a readable landmark.
+- Armada has shaped hulls, engine pods and a clear pursuit subject. The final late-chapter sequence retains the flagship instead of leaving empty space.
+- Cosmic scenes show bright stellar streams and asymmetric remnant filaments instead of large concentric discs.
+- Garden, reactor, prism and ascent compositions remain the strongest.
 
-Låtarnas längder och kapitelgränser är bevarade. Akt II använder RT; akt I/III använder OpenGL. Lästa loggar visar Windows och Linux CTest **6/6**, samt v5-tour **152/152** för båda vägarna.
+The reviewer inspected all 16 initial world boards, revised affected boards, four OpenGL Act II boards and 14 ordered strips of 32 frames. The final three strips show continuous binary-stream development, growing supernova structure and active late Armada escorts. Fast traversal and secondary activity are visible without gross sampled camera jumps or freezes. Independent A/B measurements confirmed transient-driven pixel changes in every world.
 
-**Full kontinuerlig audiovisual upplevelse är inte godkänd genom denna granskning.** Tidsstickprov och källkod styrker förloppen, men bedömer inte hela filmens rytm, hörbara synk, kamerakomfort eller underhållningsvärde. Slutlig 4K-export och paketering återstår också utanför mitt betyg. Inget hinder från denna granskning mot att frysa nativeassets och genomföra exporten.
+Evidence: `build/energy-v05/boards-rt-v3`, `boards-gl-v2`, `sequence-v2`, `sequence-v3` and native tour logs. Published selected images and A/B evidence are under `docs/evidence/v0.5.0`. The reviewer independently ran the two synthetic reactivity tests successfully and read the final RT/OpenGL tour PASS logs.
 
-## Evidens
-
-Native fångster: build/variation/tour-rt-v5 och tour-fallback-v5. Alla världstavlor finns under boards-rt-v5 / boards-fallback-v5. Rörelsestickprov: sequence-collision vid 4 bilder/s och sequence-finale vid 2 bilder/s ur den initiala 720p30-provfilmen. Exportens tidsavrundningsavvikelse redovisas separat i [VERIFICATION.md](VERIFICATION.md).
-
-Den oberoende granskaren gjorde ingen mutation, egen GPU-körning eller kontinuerlig A/V-uppspelning. Senare artefakt-/publiceringsprov redovisas separat, inte som del av detta betyg.
-
-## Uppföljning: uppstart och Short v2
-
-Granskarens komplettering efter `faa0bf3`, fortfarande skrivskyddad:
-
-> Runtimepatchen har nu inga blockerande fynd i den granskade källan. Uppvärmningen sker före ljudstart och båda uppspelningsklockorna. Den täcker även sena korridorens partikel-/spårprogram och Engine-programmets extra retropipeline. glFinish inväntar renderarbetet, aktuell fönsterstorlek återställs och Escape/quit kontrolleras före ljudstart. Mellanscenerna presenteras inte. Export, tour och selfTest går förbi uppvärmningen.
->
-> Det lästa Linuxprovet visar 54,51 sekunders förberedelse, därefter 197 bilder på cirka 3 sekunder, med högsta bildtid 59,4 ms, vid showtid 342 s. Det stöder att förberedelsen flyttar den tidigare långa första bilden utanför spelklockan. Provet gäller en avgränsad OpenGL-körning och styrker inte jämn prestanda genom hela showen.
->
-> Short v2:s Cityklipp är tydligt bättre än carrierklippet i vertikalt format: motiv, skala och rörelseutveckling går att läsa i de granskade bilderna. Thumbnailen är visuellt konsekvent med nativeunderlaget; 4K60-märkningen behöver stödjas av den färdiga exporten.
->
-> Formvariationsbetyget ligger kvar på 7,2/10. Full kontinuerlig audiovisual upplevelse är fortsatt utanför godkännandet.
+This is source, sampled-image and ordered-frame review. It does **not** establish continuous listening acceptance, complete 14:49 audience retention, 60 fps freedom from fine shimmer, final 4K correctness or AAA quality. Remaining artistic weaknesses are simple architectural materials, soft cosmic detail, visibly stylized exhausts and a comparatively quiet carrier flyby. OpenGL fallback remains visibly flatter than the preferred RT presentation.

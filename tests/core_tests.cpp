@@ -27,6 +27,9 @@ int main() {
   CHECK(sampleTimeline(actStart(3)-1./48000).act==2);
   CHECK(sampleTimeline(actStart(3)).act==3&&sampleTimeline(actStart(3)).chapter==52);
   CHECK(parseOptions({"--show-info"}).showInfo);
+  CHECK(parseOptions({"--pulse-gain","0"}).pulseGain==0);
+  CHECK(parseOptions({"--pulse-gain","1.5"}).pulseGain==1.5f);
+  bool invalidGain=false;try{parseOptions({"--pulse-gain","2.1"});}catch(const std::runtime_error&){invalidGain=true;}CHECK(invalidGain);
   CHECK(sampleTimeline(0).scene==5);
   CHECK(sampleTimeline(-1).chapter==0);
   CHECK(sampleTimeline(std::numeric_limits<double>::infinity()).chapter==0);
@@ -46,6 +49,21 @@ int main() {
    previous=bands;
   }
   CHECK(spectrumChange>100&&spectrumSeparation>100);
+  // The three measured transient lanes must breathe independently, and motion
+  // must accelerate with music without reversing or depending on seek history.
+  for(int act=1;act<=3;++act){
+   std::array<int,3> strong{},quiet{};double lowSpeed=100,highSpeed=0;
+   for(double t=actStart(act)+1;t<actStart(act)+actDuration(act)-1;t+=.01){
+    const auto f=sampleTimeline(t),next=sampleTimeline(t+.001);
+    const float channels[]={f.kick,f.snare,f.treble};
+    for(int lane=0;lane<3;++lane){CHECK(channels[lane]>=0&&channels[lane]<=1);strong[lane]+=channels[lane]>.6f;quiet[lane]+=channels[lane]<.15f;}
+    CHECK(f.pulsePhase>=0&&f.pulsePhase<=1);
+    if(f.chapter==next.chapter){double speed=(next.motionSeconds-f.motionSeconds)/.001;lowSpeed=std::min(lowSpeed,speed);highSpeed=std::max(highSpeed,speed);CHECK(speed>1&&speed<5);}
+    CHECK(sampleTimeline(t).motionSeconds==f.motionSeconds);
+   }
+   for(int lane=0;lane<3;++lane)CHECK(strong[lane]>50&&quiet[lane]>50);
+   CHECK(highSpeed-lowSpeed>.5);
+  }
   auto bandsBefore=sampleTimeline(100).spectrum,bandsAfter=sampleTimeline(100.05).spectrum,bandsMiddle=sampleTimeline(100.025).spectrum;
   for(size_t i=0;i<24;++i)CHECK(std::abs(bandsMiddle[i]-(bandsBefore[i]+bandsAfter[i])*.5f)<.0001f);
   for(int scene=0;scene<16;++scene)CHECK(sampleTimeline(sceneStart(scene)+.001).scene==scene);

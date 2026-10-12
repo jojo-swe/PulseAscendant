@@ -6,10 +6,12 @@
 #include "act2.hpp"
 #include "act3.hpp"
 #include "cue_data.hpp"
+#include "music_reactivity.hpp"
 #include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <iomanip>
+#include <vector>
 namespace remix {
 namespace {
 static_assert(music_data::duration==act1::duration,"Regenerate Act I analysis");
@@ -25,6 +27,32 @@ const act1::Cue& cue(int chapter){int act=chapterAct(chapter);return tracks[act]
 float envelope(int act,double t,int channel){
  const auto& track=tracks[act-1];double at=t*20;int i=std::clamp(int(at),0,track.count-1),j=std::min(i+1,track.count-1);float f=float(at-std::floor(at));
  return (track.envelope[i*3+channel]*(1-f)+track.envelope[j*3+channel]*f)/255.f;
+}
+float pulse(int act,double t,int channel){
+ const int start=reactivity_data::offsets[act-1],count=reactivity_data::offsets[act]-start;
+ const double at=std::clamp(t*reactivity_data::rate,0.,double(count-1));
+ const int i=int(at),j=std::min(i+1,count-1);const float f=float(at-i);
+ return (reactivity_data::values[(start+i)*4+channel]*(1-f)+reactivity_data::values[(start+j)*4+channel]*f)/255.f;
+}
+double musicalMotion(int act,double t){
+ // Integrate velocity, never multiply absolute time by the current loudness.
+ // Identical positions on seeking/export; no backward jumps on falling beats.
+ static const auto integrals=[](){
+  std::array<std::vector<double>,3> out;
+  for(int a=1;a<=3;++a){
+   const int count=reactivity_data::offsets[a]-reactivity_data::offsets[a-1];
+   auto& values=out[a-1];values.resize(count+1);double previous=0;
+   for(int i=0;i<=count;++i){
+    const double at=double(i)/reactivity_data::rate;
+    const double speed=.5*envelope(a,at,0)+.8*pulse(a,at,0)+.35*pulse(a,at,1);
+    if(i)values[i]=values[i-1]+(speed+previous)*.5/reactivity_data::rate;
+    previous=speed;
+   }
+  }
+  return out;
+ }();
+ const auto& values=integrals[act-1];const double at=std::clamp(t*reactivity_data::rate,0.,double(values.size()-1));
+ const size_t i=size_t(at),j=std::min(i+1,values.size()-1);return values[i]+(values[j]-values[i])*(at-i);
 }
 struct Direction {int variant=0;double motionStart=0,duration=0,accent=0;};
 const auto& directions(){
@@ -42,7 +70,7 @@ const auto& directions(){
     const float score=envelope(act,actOffset+at,2)+onset*.5f+.02f*float(1-std::abs(at/d.duration-.52));
     if(score>best){best=score;d.accent=at;}
    }
-   motion+=d.duration*(1.+c.drive*1.2);
+   motion+=d.duration*(1.3+c.drive*1.65)+musicalMotion(act,actOffset+d.duration)-musicalMotion(act,actOffset);
   }
   return result;
  }();
@@ -77,11 +105,16 @@ TimelineFrame sampleTimeline(double seconds){
  f.event=float(std::exp(-std::abs(local-direction.accent)*5.));
  const float action=float(std::clamp((local-direction.accent+.3)/.6,0.,1.));
  f.action=action*action*(3-2*action);
- f.energy=envelope(f.act,f.actSeconds,0);f.bass=envelope(f.act,f.actSeconds,1);f.hit=envelope(f.act,f.actSeconds,2);
+ f.kick=pulse(f.act,f.actSeconds,0);f.snare=pulse(f.act,f.actSeconds,1);f.treble=pulse(f.act,f.actSeconds,2);f.pulsePhase=pulse(f.act,f.actSeconds,3);
+ f.energy=envelope(f.act,f.actSeconds,0);
+ f.bass=.28f*envelope(f.act,f.actSeconds,1)+.72f*f.kick;
+ f.hit=std::max({envelope(f.act,f.actSeconds,2)*.55f,f.snare,f.kick*.7f,f.treble*.5f});
  const auto& track=tracks[f.act-1];double at=f.actSeconds*20;int i=std::clamp(int(at),0,track.count-1),j=std::min(i+1,track.count-1);float blend=float(at-std::floor(at));
  for(int band=0;band<24;++band)f.spectrum[band]=(track.spectrum[i*24+band]*(1-blend)+track.spectrum[j*24+band]*blend)/255.f;
- f.drive=std::clamp(c.drive*(.72f+.28f*f.energy)+.1f*f.bass,0.f,1.f);
- f.motionSeconds=direction.motionStart+local*(1.+c.drive*1.2);f.cut=float(std::exp(-local*8.));
+ f.drive=std::clamp(c.drive*.65f+.2f*f.energy+.2f*f.kick+.1f*f.snare,0.f,1.f);
+ const double actOffset=f.actSeconds-local;
+ f.motionSeconds=direction.motionStart+local*(1.3+c.drive*1.65)+musicalMotion(f.act,f.actSeconds)-musicalMotion(f.act,actOffset);
+ f.cut=float(std::exp(-local*8.));
  f.transition=float(std::clamp(std::min(f.actSeconds,actDuration(f.act)-f.actSeconds),0.,1.));return f;
 }
 }

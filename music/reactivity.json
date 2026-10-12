@@ -1,0 +1,82 @@
+{
+  "rate": 100,
+  "channels": [
+    "low_attack",
+    "mid_attack",
+    "high_attack",
+    "low_onset_phase"
+  ],
+  "method": "Centered 2048-sample 48kHz Hann FFT; positive band flux minus local floor; independent peaks and exponential releases; no assumed BPM",
+  "release_seconds": [
+    0.16,
+    0.095,
+    0.055
+  ],
+  "refractory_seconds": [
+    0.16,
+    0.11,
+    0.07
+  ],
+  "tracks": [
+    {
+      "source": "luminous-flow-act1.wav",
+      "sha256": "1dffe4f4d7d9b82f5fd94244ba87ee3b7bed5f53c6968ca9521b90aaa5949456",
+      "samples": 30000,
+      "peaks": [
+        819,
+        1888,
+        2031
+      ],
+      "active_fraction": [
+        0.4593,
+        0.69457,
+        0.43177
+      ],
+      "saturated_fraction": [
+        0.0108,
+        0.01693,
+        0.0178
+      ]
+    },
+    {
+      "source": "adventurous-uplift.wav",
+      "sha256": "7c78d4c588456ac470b9eed0eb05928be40a65d1278f425b11bb45096fff0444",
+      "samples": 28992,
+      "peaks": [
+        791,
+        1817,
+        2080
+      ],
+      "active_fraction": [
+        0.4782,
+        0.69167,
+        0.46609
+      ],
+      "saturated_fraction": [
+        0.01187,
+        0.01638,
+        0.01725
+      ]
+    },
+    {
+      "source": "rigid-arpeggios.wav",
+      "sha256": "0ba76c4da14341f4fdc191400988f3918550b669e056131536e32c6e8f628494",
+      "samples": 29876,
+      "peaks": [
+        825,
+        1574,
+        1832
+      ],
+      "active_fraction": [
+        0.46422,
+        0.57441,
+        0.39487
+      ],
+      "saturated_fraction": [
+        0.01121,
+        0.01433,
+        0.01633
+      ]
+    }
+  ]
+}

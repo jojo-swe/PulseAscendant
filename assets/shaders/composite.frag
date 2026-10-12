@@ -27,11 +27,18 @@ void main() {
   float ca=.0007*(uEvent+uHit*.3)*length(centre);
   c.r=mix(c.r,texture(uImage,vUV+centre*ca).r,.35);
   c.b=mix(c.b,texture(uImage,vUV-centre*ca).b,.35);
-  c+=texture(uBloom,vUV).rgb*(.4+uBass*.12+uEvent*.12);
+  // Keep emissive detail readable; attacks briefly lift the light halo.
+  c+=texture(uBloom,vUV).rgb*(.28+uPulse.x*.16+uPulse.y*.08+uEvent*.08);
   c+=vec3(.02,.035,.05)*uCut;
  }
  float vig=pow(16.*vUV.x*vUV.y*(1.-vUV.x)*(1.-vUV.y),.17);
  c*=mix(.48,1.,vig);
+ if(uRetro==0){
+  float luminance=dot(c,vec3(.2126,.7152,.0722));
+  // Cool shadow separation and warm highlights, without washing blacks out.
+  vec3 grade=mix(vec3(.92,1.015,1.06),vec3(1.045,1.01,.965),smoothstep(.12,1.8,luminance));
+  c*=grade;
+ }
  // ACES-inspired bounded filmic curve, followed by gamma encoding.
  c=clamp((c*(2.51*c+.03))/(c*(2.43*c+.59)+.14),0.,1.);
  c=pow(c,vec3(1./2.2))*uFade;

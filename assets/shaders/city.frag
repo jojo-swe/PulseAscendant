@@ -9,7 +9,7 @@ vec2 city(vec3 p){
  float lane=abs(cell.x)<1.?0.:1.;
  if(uVariant==0){
   // Street-level neon towers grow in a wave ahead of the ascending camera.
-  float build=smoothstep(.0,.8,k*.25+uAction*.75+(p.z-uChapterTime*16.)*.006);
+  float build=smoothstep(.0,.8,k*.25+uAction*.75+(p.z-uChapterTime*24.)*.006);
   h*=.65+build*.5;b=box(vec3(q.x,p.y-h*.5,q.y),vec3(2.3,h*.5,2.4));
   float crown=box(vec3(q.x,p.y-h-.65,q.y),vec3(1.6,.65,1.7));b=min(b,crown);
  }else if(uVariant==1){
@@ -45,7 +45,12 @@ vec2 city(vec3 p){
   tower=min(tower,box(hero-vec3(0,29.,0),vec3(.9,3.,.9)));
   tower=min(tower,box(hero-vec3(0,34.,0),vec3(.12,2.,.12)));
   float wings=box(vec3(abs(hero.x)-(5.+uAction*3.),hero.y-12.,hero.z),vec3(1.4,.5,4.));
-  tower=min(tower,wings);if(tower<hit.x)hit=vec2(tower,2.);
+  tower=min(tower,wings);
+  // Four flying buttresses and a crown make the landmark legible against plain roofs.
+  float buttress=box(vec3(abs(hero.x)-3.7,hero.y-22.,hero.z),vec3(.30,7.,.60));
+  tower=min(tower,buttress);
+  tower=min(tower,box(vec3(hero.x,hero.y-28.,abs(hero.z)-2.2),vec3(2.8,.25,.3)));
+  if(tower<hit.x)hit=vec2(tower,5.);
  }
  if(uVariant==2){
   // A wide factory and twin chimneys dominate the side-on view across the open plaza.
@@ -77,19 +82,19 @@ void main(){
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uChapterProgress,0.,1.);
  vec3 ro,target;float lens=1.35;
  if(uVariant==0){
-  float travel=uChapterTime*16.;
+  float travel=uChapterTime*24.;
   ro=vec3(sin(k*PI)*1.2,1.5+smoothstep(.35,.95,k)*8.,travel);
   target=ro+vec3(-sin(k*PI)*.6,1.2,22.);
  }else if(uVariant==1){
   // Every roof (including the 36-unit needle) stays below this uninterrupted aerial pass.
-  ro=vec3(-20.+k*35.,40.+k*4.,-4.+k*34.);
-  target=vec3(0,14.,28.);lens=1.30;
+  ro=vec3(-24.+k*34.,39.+k*4.,-13.+k*26.);
+  target=vec3(0,22.,28.);lens=1.48;
  }else if(uVariant==2){
   // Sideways motion on z=4 inside the cleared plaza, with a fixed factory focal point.
   ro=vec3(-24.+k*48.,6.2+k*1.4,4.);
   target=vec3(0,15.+uAction*2.,27.);lens=1.25;
  }else{
-  float travel=uChapterTime*21.;ro=vec3(sin(k*PI)*1.2,16.+k*12.,travel);
+  float travel=uChapterTime*29.;ro=vec3(sin(k*PI)*1.2,16.+k*12.,travel);
   target=ro+vec3(-sin(k*PI)*.6,-1.5,22.);
  }
  vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
@@ -100,23 +105,51 @@ void main(){
  for(int i=0;i<128;i++){h=city(ro+rd*t);if(h.x<.007){hit=true;break;}t+=max(.008,h.x*.72);if(t>170.)break;}
  vec3 c=sky;
  if(hit){
-  vec3 at=ro+rd*t,n=normalAt(at);float fres=pow(1.-max(dot(n,-rd),0.),3.);vec3 neon=accent(float(uVariant)*1.2+at.z*.008);
-  c=vec3(.025,.035,.055)*(.6+max(dot(n,normalize(vec3(-1,2,-1))),0.));
-  if(h.y>1.5&&h.y<2.5){
-   vec2 grid=abs(fract(vec2((abs(n.x)>.5?at.z:at.x)*1.5,at.y*.8))-.5);
-   float window=step(.12,grid.x)*step(.12,grid.y),lit=step(.25,hash(floor(at.xz*.8)+floor(at.y*.8)));
-   float band=frequencyBand(mod(floor(at.y*.8)+floor(at.z/8.),24.));
-   c+=neon*(window*lit*(.10+band*.35)+fres*.3);
-   // A wave of lights climbs the buildings once, making the reveal legible.
-   c+=neon*line(at.y-(k*38.),.22)*.8;
-   c+=neon*line(abs(mod(at.y+1.,3.)-1.5),.028)*.15;
+  vec3 at=ro+rd*t,n=normalAt(at);float fres=pow(1.-max(dot(n,-rd),0.),3.);vec3 neon=vec3(.035,.42,.65);
+  vec3 sun=normalize(vec3(-1,2,-1));
+  float metalSpec=pow(max(dot(reflect(-sun,n),-rd),0.),70.);
+  c=vec3(.025,.035,.055)*(.6+max(dot(n,sun),0.));
+  c+=vec3(.36,.46,.57)*metalSpec*.75;
+  if((h.y>1.5&&h.y<2.5)||h.y>4.5){
+   float facade=1.-abs(n.y);
+   bool landmark=h.y>4.5;
+   vec2 windowUV=vec2(abs(n.x)>.5?at.z:at.x,at.y)*vec2(1.1,.75);
+   vec2 grid=abs(fract(windowUV)-.5);
+   // Windows belong to vertical facades. Roofs remain dark architectural mass.
+   float window=(1.-smoothstep(.23,.31,grid.x))*(1.-smoothstep(.24,.32,grid.y))*facade;
+   float occupied=step(.60,hash(floor(windowUV)+floor(at.xz/8.)*31.));
+   float band=frequencyBand(mod(floor(at.y*.75)+floor(at.z/8.),24.));
+   vec3 warm=landmark?vec3(1.2,.65,.18):mix(vec3(.95,.51,.18),vec3(.07,.32,.5),step(.72,hash(floor(at.xz/8.))));
+   c*=landmark?vec3(1.6,1.3,.9):vec3(.9,1.,1.1);
+   c+=warm*window*occupied*(.23+band*.16+uPulse.y*.30);
+   c+=vec3(.025,.09,.14)*fres*facade;
+   float scan=pow(.5+.5*cos(at.y*.58-uChapterTime*4.+floor(at.z/8.)),20.);
+   c+=neon*window*occupied*scan*(.06+uPulse.x*.22);
+   if(landmark){
+    vec3 local=at-vec3(0,0,28.);
+    float rib=line(abs(local.x)-2.5,.055)+line(abs(local.z)-2.5,.055);
+    c+=vec3(.75,.35,.065)*rib*(.35+uPulse.x*.65)*facade;
+    c+=vec3(1.,.52,.15)*line(at.y-28.,.08)*.6;
+   }
   }else if(h.y>2.5)c=neon*(h.y<3.5?2.:.35)+vec3(.08,.12,.18)*max(n.y,0.);
   else{
    float lane=line(abs(at.x)-.1,.035)*step(.6,fract(at.z*.08));
    float grid=line(min(abs(mod(at.x+.5,1.)-.5),abs(mod(at.z+2.,4.)-2.)),.018);
-   c+=neon*(lane*1.8+grid*.08+exp(-abs(abs(at.x)-3.2)*2.)*.35);
+   float wet=pow(max(dot(reflect(rd,n),normalize(vec3(.1,.08,1.))),0.),18.);
+   float stream=pow(.5+.5*cos(at.z*.4-uChapterTime*13.),18.);
+   c+=neon*(lane*1.8+grid*.08+exp(-abs(abs(at.x)-3.2)*2.)*(.35+stream*.7+uPulse.x*.55));
+   c+=vec3(.2,.3,.45)*wet*.2;
   }
-  c=mix(c,sky,1.-exp(-t*.012));
+  c=mix(c,sky+vec3(.015,.025,.035),1.-exp(-t*.020));
+ }
+ // Counterflow aircraft: world-space depth, separate lanes, no screen overlay.
+ for(int i=0;i<10;i++){
+  float fi=float(i),side=mod(fi,2.)*2.-1.;
+  float centreZ=uVariant==0||uVariant>=3?ro.z:24.;
+  float tz=centreZ+mod(fi*17.+uChapterTime*(side*23.-9.),150.)-35.;
+  vec3 traffic=vec3(side*(2.1+mod(fi,3.)*.45),uVariant>=3?24.:3.4+mod(fi,3.)*2.2,tz);
+  float along=dot(traffic-ro,rd),miss=length(ro+rd*along-traffic);
+  if(along>0.&&(!hit||along<t))c+=mix(vec3(.04,.6,1.5),vec3(1.7,.25,.035),step(0.,side))*exp(-miss*14.)*(1.+uPulse.z*.6);
  }
  color=vec4(c,1.);
 }

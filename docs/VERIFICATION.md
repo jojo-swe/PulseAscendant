@@ -1,78 +1,48 @@
-# Pulse Ascendant v0.4 — verifiering
+# Pulse Ascendant v0.5 — verification
 
-Denna version omarbetar regi, geometri och kameror efter kritik om upprepning. Historisk evidens finns i [VERIFICATION-v0.3.0.md](VERIFICATION-v0.3.0.md). Dess rörelseprov, prestandamätningar och video gäller inte automatiskt v0.4.
+This revision increases pace, separates musical attacks from sustained loudness and improves scene composition. Historical v0.4 tests/video remain in [VERIFICATION-v0.4.0.md](VERIFICATION-v0.4.0.md); they are not new v0.5 results.
 
-## Omfattning och musik
+## Audio and deterministic motion
 
-Tre akter, 16 världar och 76 kapitel över **888,68 sekunder**. Akt I använder 300 s Luminous Flow, akt II hela Adventurous Uplift och akt III hela Rigid Arpeggios. Musik, hastighet och kapitelgränser är bevarade.
+All three songs, 76 chapter boundaries, 16 worlds and 888.68 seconds remain intact. Act I preserves 299 seconds of the original decoded track followed by its existing 1 second fade; Acts II and III use their complete supplied songs at normal speed. The runtime WAV remains SHA256 `58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6`.
 
-| Akt | PCM-stereoframes vid 48 kHz | Start | Längd | Kapitel |
-| --- | ---: | ---: | ---: | ---: |
-| I | 14 400 000 | 0 s | 300 s | 31 |
-| II | 13 916 160 | 300 s | 289,92 s | 21 |
-| III | 14 340 480 | 589,92 s | 298,76 s | 24 |
+`tests/test_show.py` passes source hashes, sample-exact joins, lengths and bounded export. Five existing music-analysis/direction tests pass. Two new synthetic tests cover silence plus 80/1000/9000 Hz smooth attacks, peak timing within 30 ms, frequency isolation and decay. Native core tests cover independent bounded transient lanes, changing forward velocity, seek determinism and continuity at every chapter/act boundary.
 
-tests/test_show.py passerar: första 299 s är sampleidentiska med bevarad original-WAV, därefter följer akt I:s tidigare uttoningssekund. Den sammanfogade filen är sampleidentisk med aktfilerna vid båda skarvarna. Källhashar, aktlängder och nekad export förbi slutet är kontrollerade. Runtime-WAV har SHA-256 `58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6`.
+The generated 100 Hz low/mid/high spectral-attack receipt is [reactivity.json](../music/reactivity.json). These lanes are not separated musical instruments. Interactive rendering no longer mixes callback RMS into visual energy; export and playback use the same saved signals. Authored camera paths and the music-dependent integrated scene-motion clock are distinct.
 
-## Native byggnad och kontrollprov
+## Native evidence
 
-- Windows x64 Release, MSVC/SDL3: **CTest 6/6 passerar**.
-- Linux x64 Release, Ubuntu 24.04/GCC/SDL3: **CTest 6/6 passerar** på isolerad Xvfb/Openbox med Mesa llvmpipe.
-- Python: **5/5 FFT-/musikregiprov passerar**, samt det separata fullständiga ljud-/showprovet.
-- Vulkan-computeshadern kompilerad med glslangValidator för Vulkan 1.2 och kontrollerad med spirv-val.
+- Windows x64 Release: CTest 6/6 PASS, 8.67 seconds, MSVC/SDL3. Later graphical pass3 changes only Armada/Cosmic shader assets; these passed the final native tours below.
+- Linux Release: 6/6 CTest PASS in a private X11 namespace (36.74 seconds); WSLg OpenGL tour 152/152 at 960×540 with no reported GL errors. Three hidden starts at 42/342/620 seconds passed. All 28 copied shaders match final sources. This does not establish physical Linux hardware RT support.
+- Vulkan compute compiled for Vulkan 1.2 and checked with spirv-val. The RT 208-byte UBO and shader layout match.
+- Windows strict Vulkan RT+validation: 152/152 chapter images, 42 RT frames, all in Act II; no reported GL/Vulkan errors.
+- Windows forced OpenGL fallback: 152/152 chapter images; no reported GL errors.
+- Same-time native captures at pulse gain1 and0 show transient-driven changes in every world. Spectrum, energy and integrated musical motion stay active in this comparison; it is not a music-off test.
 
-Kärnproven täcker nu kronologiska världstillstånd, stabil kamera inom kapitlet, kontinuerlig rörelseklocka över klipp, monotont kapitel-/handlingsförlopp samt anslagets eventmaximum. Den tidigare fyrkamera-cykeln är borttagen. Kontrollproven täcker sökning, stil, mute, observerad fullscreen/resize/minimize/restore, fortsatt klocka vid minimering och avbrott som måste ge felstatus.
+[Windows tests](evidence/v0.5.0/windows-tests.log), [RT tour](evidence/v0.5.0/tour-rt.log), [OpenGL tour](evidence/v0.5.0/tour-fallback.log), [show information](evidence/v0.5.0/show-info.json), [A/B measurements](evidence/v0.5.0/pulse-comparison.json), [A/B images](evidence/v0.5.0/pulse-comparison.jpg).
 
-Linux mjukvarurenderare behövde 37–40 s för shaderstart och kontrollprov; den tidigare yttre 30 s-gränsen gav två timeouts. Startallowansen är nu 180 s, medan själva livscykelns 15 s-gräns och felkrav är oförändrade. X11-sockets isolerades i en privat mount-namespace; WSLg:s display ändrades inte.
+## Bounded performance probes
 
-[Windowslogg](evidence/v0.4.0/windows-tests.log), [Linuxlogg](evidence/v0.4.0/linux-tests.log), [show-info](evidence/v0.4.0/show-info.json) och [native-/resurshashar](evidence/v0.4.0/native-assets.json).
+NVIDIA RTX 4080, Windows driver 617.42, 1280×720, three-second hidden runs after pipeline preparation, audio disabled, vsync requested off. These are short scene probes, not a full-show benchmark or a 4K60 guarantee.
 
-### Förberedelse före musikstart
+| Start / scene | Mean FPS | Mean frame ms |
+|---|---:|---:|
+| 58s / City | 248.8 | 4.00 |
+| 77s / Cosmic | 181.0 | 5.50 |
+| 110s / Armada | 168.6 | 5.91 |
+| 411s / hardware-RT Prism | 34.3 | 29.09 |
+| 651s / Canyon | 229.4 | 4.34 |
 
-Linux drivrutin kunde tidigare blockera första bilden i 35,74 s medan musikens klocka redan gick. Interaktiv uppspelning förbereder nu samtliga världars grafikprogram, sena korridorens partikel-/spårprogram, Engine-programmets retropipeline och startbildens fulla viewport **före ljudstart och båda uppspelningsklockorna**. Fönstertiteln visar förberedelsens framsteg; Escape/quit avbryter. Export, tour och kontrolltest använder sina tidigare separata körvägar.
+Maximum observed frames ranged 31–82 ms. Logs are `evidence/v0.5.0/perf-*.log`. Vulkan RT is substantially more expensive than the procedural OpenGL scenes. Actual interactive FPS depends on scene, resolution and device. WSLg/physical Linux RT remain separate scopes.
 
-Slutversionens Windowsprov vid 342 s: 0,119 s förberedelse, sedan 301 bilder på cirka 3 s, ljud-RMS 0,149 och ljudklocka 342–345 s. Slutversionens WSLg-prov: 67,67 s förberedelse, sedan 261 bilder på cirka 3 s och högsta bildtid 20,23 ms. Dessa körningar gjordes vid 640×360 **samtidigt som 4K-exporten körde**; de verifierar ordning och avgränsad uppspelning, inte fristående prestanda eller hela showens flyt. Linuxprovet använde den tysta klockan.
+## Visual review and preview
 
-Efter denna runtimeändring passerar Windows CTest åter **6/6** (10,92 s) och Linux CTest **6/6** (108,21 s). [Windows uppspelning](evidence/v0.4.0/windows-prepared-run.log), [Linux uppspelning](evidence/v0.4.0/linux-prepared-run.log). Den visuella källan är fryst vid `faa0bf3b4a96dc4b380f822462024ee54a7eb9e2`; medieexportens producent skiljer sig från paketens senare runtime endast genom denna uppstartsändring. Grafikresurserna är identiska.
+Independent review: code 8.0/10, visual finish 7.2/10, sampled pace/readability 7.3/10. The first 6.5/10 pass was corrected before these final scores. [Full report](QUALITY_REVIEW.md) records scope and remaining limitations. This does not establish full continuous listening, audience retention or AAA quality.
 
-## GPU och bildgranskning
+A 160.75-second preview contains 13 native clips with their original source music, 1920×1080 at 60 fps and 9645 frames. Full video decode to EOF passed. All 13 decoded audio windows match their source excerpts with at most 2 ms allowed offset; [actual results](evidence/v0.5.0/preview-audio.json) show zero measured offset. Concatenating individually encoded AAC clips initially introduced 21.375 ms; the final preview rebuilds one sample-exact PCM montage and encodes its audio once. Native video packets are retained and their starting timestamp normalized.
 
-Windows: NVIDIA GeForce RTX 4080, drivrutin 617.42. OpenGL 3.3 och Vulkan KHR ray queries.
+## Full film and publication
 
-- Strikt RT med Vulkan-validering: **152/152 kapitelbilder**, inga rapporterade GL-/Vulkanfel; **42 RT-bilder**, samtliga i akt II.
-- Tvingad OpenGL-reserv: **152/152 kapitelbilder**, inga rapporterade GL-fel.
-- Varje par visar 18% och 82% av kapitlet, före och efter dess utveckling. Nativebilder och världstavlor granskades över alla 76 kapitel. Täta tidssekvenser kontrollerades dessutom kring kollisionen och finalen.
+The owner explicitly asked to hold the v0.5 full 4K60 render. It has not started; full-film decode/audio verification and publication remain pending. Do not reuse the verified v0.4 movie as v0.5. The owner explicitly superseded its queued upload with this revision.
 
-[RT-logg](evidence/v0.4.0/tour-rt.log), [fallbacklogg](evidence/v0.4.0/tour-fallback.log). Bildprov visar renderbarhet, bildinnehåll och inspekterade förlopp; de bevisar inte obruten underhållningskvalitet.
-
-**Akt II använder hårdvaruraytracing. Akt I och III använder OpenGL.** Ray queries driver primärsynlighet, skuggor, reflektion och brytning över triangel-BLAS/TLAS. Materialmodellen och analytisk miljöbelysning är förenklade; generell GI och temporal denoising saknas. Detta är ingen unbiased path tracer. Reservläget har enklare raymarchad geometri/material och lovar inte identisk bild.
-
-4K60 är deterministisk videoexport, inte ett påstående om interaktiv 4K60. Tidigare v0.3-fpsvärden återanvänds inte som aktuell benchmark. Fysisk Linux-desktop med Vulkan-RT är inte verifierad; WSLg använder OpenGL via D3D12/NVIDIA.
-
-## Oberoende granskning och gränser
-
-Den nya skrivskyddade granskaren ger **7,2/10 för formvariation, kapitelutveckling och läsbarhet**. Inga kvarvarande P1/P2-blockerare inom granskad nativeomfattning. Kameraskymning, felaktiga SDF-sidor, förlorad flottinramning och två fallbackytfel är rättade och bildverifierade. [Full rapport](QUALITY_REVIEW.md).
-
-Armadas täta magentafält och det enklare material-/mönsterspråket begränsar fortfarande finishen. Ingen obruten mänsklig lyssning eller full kontinuerlig audiovisual bedömning av hela demot är godkänd. Betyget är därför inte ett godkännande av underhållningsvärde eller AAA-kvalitet.
-
-## Videoexport
-
-Exportören skriver exakt ceil(duration × fps) nativebilder och begränsar ljudet separat. Den tidigare globala ffmpeg-tidsgränsen kapade en bild i 720p30-provfilmen; den initiala filmen används endast för tidsstickprov och räknas inte som godkänd slutexport.
-
-Regressioner: 0,07 s vid 30 fps ger **3 bilder**, och 0,035 s vid 3840×2160/60 fps ger **3 bilder**, med korrekt ljudlängd. [30 fps metadata](evidence/v0.4.0/frame-rounding-30.json), [4K60 metadata](evidence/v0.4.0/frame-rounding-4k60.json). Exportören skyddar befintliga filer, kontrollerar native show-info och WAV-format/sampleantal samt slutnamnger endast efter metadata-PASS.
-
-Fullständig v0.4-video är nu verifierad: **3840×2160, 60 fps, 53 321 bilder, 888,683 s**, 5 780 448 524 byte. Hela videoströmmen avkodades till EOF med ffmpeg/CUDA, exit 0 och inga rapporterade fel. Nativeproducenten rapporterar exakt 53 321 bilder och **17 396 RT-bilder, samtliga i akt II**.
-
-AAC-ljudet jämfördes mot runtime-WAV vid 18 tvåsekundersfönster genom alla akter, båda skarvarna och slutet: **18/18 passerar**, minsta korrelation 0,999618 och största uppmätta förskjutning 0 ms vid 8 kHz analysupplösning. Åtta fullständiga bildutsnitt från den slutkodade 4K-filmen granskades. Detta styrker kodning, bildinnehåll i stickproven och ljudets tidsläge/innehåll; det ersätter inte obruten mänsklig lyssning eller underhållningsbedömning.
-
-SHA-256: `2253844f330d1af5d6e24bf2b8cd2125446de6a4cb0bb6c09d146f86a2d9aeda`. [Slutreceipt](evidence/v0.4.0/video-receipt.json), [metadata](evidence/v0.4.0/video-probe.json), [avkodning](evidence/v0.4.0/video-decode.log), [ljudfönster](evidence/v0.4.0/video-audio.json) och [kodade bildstickprov](evidence/v0.4.0/video-frames.jpg). Exportens käll-/producenthash är dokumenterad separat från den senare interaktiva uppstartsändringen. Historiska v0.3-filer räknas inte som nya resultat.
-
-## Paket och publicering
-
-[Offentlig v0.4.0-release](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.4.0), exakt käll-/byggcommit `cd67f402b8d623895bea2dafcb18fdc457987d97`. Windows- och Linuxpaketen startade från orelaterad arbetskatalog vid 42, 342 och 620 s efter förberedelse. Windows använde verklig ljuduppspelning med observerad RMS; Linux använde tyst reservklocka på WSLg.
-
-ZIP-filers CRC kontrollerades för alla poster. Källarkivet jämfördes med `git archive` av exakt byggcommit, inklusive exportens radslut, samt med alla tre original-MP3 och fyra WAV. Paketens nativebinärer, samtliga shader-/musikhashar och Linux körbehörighet verifierades. Alla åtta GitHub-assets har samma SHA-256 och storlek som lokala slutartefakter. [Paketreceipt](evidence/v0.4.0/release-receipt.json).
-
-[Nya offentliga trailern](https://youtube.com/shorts/uOhjmoLY6DI) är revision 4: 1080×1920, 60 fps, 1 920 bilder, 32 s och sju nativeklipp. Full GPU-assisterad videodekodning passerar. RT-rubriken visas enbart över akt II-klipp. Bildgranskning täcker motivens läsbarhet i vertikalt format; den garanterar inte viralitet. YouTube visar sparad offentlig synlighet, färdig HD-bearbetning och inga hittade upphovsrättsproblem vid uppladdningen. Suno-musiken är deklarerad i beskrivningen och AI-inställningen.
-
-Den 12 oktober 2026 stoppade YouTube uppladdningen av den verifierade slutfilen med **Daglig uppladdningsgräns uppnådd**, med alternativen engångsverifiering eller 24 timmars väntan. Ingen ny huvudvideolänk skapades. Fullvideons publicering och ändringen av gamla fullvideon till olistad med hänvisning återstår. Automatisk uppföljning är aktiv för ett senare försök. Gamla versioners publiceringsbevis återanvänds inte för dessa steg.
+YouTube previously refused a new main upload because of its daily upload limit. No new main ID was created. The automatic completion follow-up is PAUSED until the owner explicitly resumes 4K delivery; it must not publish the superseded v0.4 film. The old public main remains until the new full movie is published, then will be made unlisted with a redirect. Existing older public trailers are labeled as older versions.

@@ -4,9 +4,9 @@
 
 A standalone, music-driven 3D demo for **Windows and Linux**: **three playable acts, 16 worlds, 76 chapters and 14:48.68 of music**. Each return to a world now has its own staging and transformation. Act II uses Vulkan hardware ray tracing on supported GPUs; Acts I and III use procedural OpenGL worlds.
 
-[Download v0.4](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.4.0) · [New 32-second trailer](https://youtube.com/shorts/uOhjmoLY6DI) · [Previous full video (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
+[Watch the 1080p60 preview](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4) · [Download v0.5](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0) · [Previous v0.4 trailer](https://youtube.com/shorts/uOhjmoLY6DI) · [Previous full video (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
 
-**v0.4 changes the direction:** distinct returning set pieces, one continuous camera path per chapter, and irreversible actions aligned to measured music accents. The downloads and new trailer show v0.4. Its full 4K60 export has passed metadata, full decode and audio-alignment checks; YouTube publication is pending its daily upload limit. The previous full video shows v0.3, whose technical/package review did not establish entertainment quality; audience feedback prompted this rework. See [the rework](docs/VARIATION_REWORK.md) and [verification](docs/VERIFICATION.md) for the current scope.
+**v0.5 adds momentum and visible musical attacks:** faster authored camera paths, a deterministic 100 Hz low/mid/high transient layer, working mechanisms and traffic, clearer city/fleet silhouettes, and brighter asymmetric stellar structures. Interactive playback and export now use the same analyzed visual energy. The previous trailer shows v0.4 and the previous full movie shows v0.3; the full v0.5 4K60 export is on hold at the owner's request. See [the energy rework](docs/ENERGY_REWORK.md) and [current verification](docs/VERIFICATION.md).
 
 ## Run
 
@@ -45,15 +45,15 @@ All music plays at normal speed. Act I preserves the first 299 seconds of the de
 
 The first act combines tunnels, refractive facets, folded architecture, fleets, an ocean and orbital effects. Act II adds polished architecture, a wet city, articulated machinery and glass prisms. Act III introduces ceramic walkers in a desert, luminous vegetation, floating stone and a crystal-wing finale. [Act II](docs/ACT_II.md) and [Act III](docs/ACT_III.md) describe their implementations.
 
-Actual v0.4 native captures, including the new City/Ocean compositions and Act II/III transformations:
+Actual v0.5 native captures: clearer city and fleet forms, stellar plasma, refractive prism, seed flight and final ascent:
 
-![Six native v0.4 views: aerial skyline, levitating islands, Wet Circuit, collision fragments, seed tunnel and assembled monuments](docs/images/v0.4.0-variation.jpg)
+![Six native v0.5 views](docs/images/v0.5.0-energy.jpg)
 
 Archived v0.3 captures and results remain in [the historical verification](docs/VERIFICATION-v0.3.0.md).
 
 ## Music and rendering
 
-Each song has independent precomputed analysis: 24 logarithmic FFT bands from **35 Hz to 18 kHz**, bass, energy and onset curves, sampled at 20 Hz and interpolated against the audio transport. Different bands drive geometry, lighting, surfaces and particle groups. Chapter direction considers measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds and no assumed BPM. This improves cut placement; subjective musical synchronization still needs listening.
+Each song has independent precomputed analysis: 24 logarithmic FFT bands from **35 Hz to 18 kHz**, bass, energy and onset curves, sampled at 20 Hz and interpolated against the audio transport. Different bands drive geometry, lighting, surfaces and particle groups. A second 100 Hz layer detects separate low/mid/high frequency attacks with fast decay. These are spectral attacks, not instrument-separated stems. Use `--pulse-gain 1.5` for stronger transients, or 0 for comparison; default 1 and range 0..2. Playback and export share the same input curves. Chapter direction considers measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds and no assumed BPM. This improves cut placement; subjective musical synchronization still needs listening.
 
 Act II can use **Vulkan KHR ray queries against triangle BLAS/TLAS**. Five reusable meshes form animated scenes within a 2,048-instance budget. Shadows, reflections and refraction use bounded ray traversal with up to five surface encounters. Modern RT rendering uses two deterministic subpixel samples plus an adaptive edge filter; retro uses one sample per pixel. OpenGL presents the HDR image and composes bloom, effects and captions.
 
@@ -86,7 +86,7 @@ ctest --preset linux
 bash tools/package.sh build/linux
 ```
 
-For offline dependency reuse, configure with `-DFETCHCONTENT_SOURCE_DIR_SDL3=/path/to/SDL` and a local Vulkan header include path via `REMIX_VULKAN_INCLUDE_DIR`. Add `-DREMIX_RUNTIME_TESTS=ON` to register tests that require a working display. For shader-only edits, copy the updated assets beside the executable or install to staging; the executable's POST_BUILD step may not run after an asset-only change.
+For offline dependency reuse, configure with `-DFETCHCONTENT_SOURCE_DIR_SDL3=/path/to/SDL` and a local Vulkan header include path via `REMIX_VULKAN_INCLUDE_DIR`. Add `-DREMIX_RUNTIME_TESTS=ON` to register tests that require a working display. The `remix_assets` build target synchronizes shader changes beside the executable, including shader-only builds.
 
 To recreate audio, FFT data and directed cues, install ffmpeg, Python and numpy, then run:
 
@@ -94,7 +94,7 @@ To recreate audio, FFT data and directed cues, install ffmpeg, Python and numpy,
 python tools/prepare_show.py "Luminous Flow.mp3" "Adventurous Uplift.mp3" "Rigid Arpeggios.mp3"
 ```
 
-The script checks source hashes, prepares the three runtime tracks, combines them without gaps and regenerates per-act analysis and cue direction. With the original files already under `music/source/`, it also works without arguments. The PowerShell entry point is `tools/prepare_music.ps1`.
+The script checks source hashes, prepares the three runtime tracks, combines them without gaps and regenerates per-act analysis, transient response and cue direction. With the original files already under `music/source/`, it also works without arguments. The PowerShell entry point is `tools/prepare_music.ps1`.
 
 After editing the Vulkan compute shader, rebuild and validate its shipped SPIR-V with Vulkan SDK tools:
 

@@ -6,6 +6,7 @@ namespace remix {
 struct AppOptions {
  int width=1280,height=720,scene=-1,fps=60;
  double time=0,duration=0;
+ float pulseGain=1;
  bool retro=false,noAudio=false,smoke=false,tour=false,selfTest=false,hidden=false,help=false,renderStream=false,showInfo=false;
  std::filesystem::path captureDir,assets;
  bool noRT=false,requireRT=false,rtValidation=false;

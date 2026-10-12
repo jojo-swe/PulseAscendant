@@ -53,6 +53,7 @@ def main():
                     act2_start_frame=FRAMES[0], act3_start_frame=sum(FRAMES[:2]),
                     sha256=hashlib.sha256(combined.read_bytes()).hexdigest(), runtime_file='assets/music/second-reality-three-acts.wav'), indent=2)+'\n', encoding='utf-8')
     subprocess.run([sys.executable, str(ROOT / 'tools/direct_music.py')], check=True)
+    subprocess.run([sys.executable, str(ROOT / 'tools/analyze_reactivity.py')], check=True)
 
 
 if __name__ == '__main__':

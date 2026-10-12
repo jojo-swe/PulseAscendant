@@ -1,0 +1,1429 @@
+{
+  "method": "Same native times, pulse gain0 vs1; other musical direction remains active",
+  "worlds": [
+    {
+      "scene": 0,
+      "samples": [
+        {
+          "chapter": 2,
+          "sample": "a",
+          "title": "PHOTON LAUNCH",
+          "file": "chapter-2-a.bmp",
+          "mean_channel_difference": 0.007600616663694382,
+          "changed_pixel_fraction": 0.13337962962962963
+        },
+        {
+          "chapter": 2,
+          "sample": "b",
+          "title": "PHOTON LAUNCH",
+          "file": "chapter-2-b.bmp",
+          "mean_channel_difference": 1.0358669896959327e-05,
+          "changed_pixel_fraction": 0.0
+        },
+        {
+          "chapter": 6,
+          "sample": "a",
+          "title": "HYPERDRIVE",
+          "file": "chapter-6-a.bmp",
+          "mean_channel_difference": 0.017101537436246872,
+          "changed_pixel_fraction": 0.2558256172839506
+        },
+        {
+          "chapter": 6,
+          "sample": "b",
+          "title": "HYPERDRIVE",
+          "file": "chapter-6-b.bmp",
+          "mean_channel_difference": 0.024206222966313362,
+          "changed_pixel_fraction": 0.25321373456790125
+        },
+        {
+          "chapter": 13,
+          "sample": "a",
+          "title": "CORE DIVE",
+          "file": "chapter-13-a.bmp",
+          "mean_channel_difference": 0.011233930476009846,
+          "changed_pixel_fraction": 0.145829475308642
+        },
+        {
+          "chapter": 13,
+          "sample": "b",
+          "title": "CORE DIVE",
+          "file": "chapter-13-b.bmp",
+          "mean_channel_difference": 0.009438655339181423,
+          "changed_pixel_fraction": 0.13210841049382716
+        },
+        {
+          "chapter": 25,
+          "sample": "a",
+          "title": "FULL THROTTLE",
+          "file": "chapter-25-a.bmp",
+          "mean_channel_difference": 0.027593161910772324,
+          "changed_pixel_fraction": 0.25450424382716047
+        },
+        {
+          "chapter": 25,
+          "sample": "b",
+          "title": "FULL THROTTLE",
+          "file": "chapter-25-b.bmp",
+          "mean_channel_difference": 0.02347666583955288,
+          "changed_pixel_fraction": 0.21784529320987656
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 25,
+        "sample": "a",
+        "title": "FULL THROTTLE",
+        "file": "chapter-25-a.bmp",
+        "mean_channel_difference": 0.027593161910772324,
+        "changed_pixel_fraction": 0.25450424382716047
+      }
+    },
+    {
+      "scene": 1,
+      "samples": [
+        {
+          "chapter": 11,
+          "sample": "a",
+          "title": "MATTER COLLAPSE",
+          "file": "chapter-11-a.bmp",
+          "mean_channel_difference": 0.023484565317630768,
+          "changed_pixel_fraction": 0.16525462962962964
+        },
+        {
+          "chapter": 11,
+          "sample": "b",
+          "title": "MATTER COLLAPSE",
+          "file": "chapter-11-b.bmp",
+          "mean_channel_difference": 0.007287949789315462,
+          "changed_pixel_fraction": 0.10944251543209876
+        },
+        {
+          "chapter": 19,
+          "sample": "a",
+          "title": "AFTERSHOCK",
+          "file": "chapter-19-a.bmp",
+          "mean_channel_difference": 0.006514829117804766,
+          "changed_pixel_fraction": 0.05222608024691358
+        },
+        {
+          "chapter": 19,
+          "sample": "b",
+          "title": "AFTERSHOCK",
+          "file": "chapter-19-b.bmp",
+          "mean_channel_difference": 0.006462367717176676,
+          "changed_pixel_fraction": 0.0924729938271605
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 11,
+        "sample": "a",
+        "title": "MATTER COLLAPSE",
+        "file": "chapter-11-a.bmp",
+        "mean_channel_difference": 0.023484565317630768,
+        "changed_pixel_fraction": 0.16525462962962964
+      }
+    },
+    {
+      "scene": 2,
+      "samples": [
+        {
+          "chapter": 8,
+          "sample": "a",
+          "title": "REACTOR OVERDRIVE",
+          "file": "chapter-8-a.bmp",
+          "mean_channel_difference": 0.0056868321262300014,
+          "changed_pixel_fraction": 0.1187596450617284
+        },
+        {
+          "chapter": 8,
+          "sample": "b",
+          "title": "REACTOR OVERDRIVE",
+          "file": "chapter-8-b.bmp",
+          "mean_channel_difference": 0.014142442494630814,
+          "changed_pixel_fraction": 0.1820871913580247
+        },
+        {
+          "chapter": 14,
+          "sample": "a",
+          "title": "CRYSTAL ACCELERATOR",
+          "file": "chapter-14-a.bmp",
+          "mean_channel_difference": 0.005897315684705973,
+          "changed_pixel_fraction": 0.12410686728395062
+        },
+        {
+          "chapter": 14,
+          "sample": "b",
+          "title": "CRYSTAL ACCELERATOR",
+          "file": "chapter-14-b.bmp",
+          "mean_channel_difference": 0.016343308612704277,
+          "changed_pixel_fraction": 0.2912577160493827
+        },
+        {
+          "chapter": 21,
+          "sample": "a",
+          "title": "REBUILD",
+          "file": "chapter-21-a.bmp",
+          "mean_channel_difference": 0.010084104724228382,
+          "changed_pixel_fraction": 0.1257060185185185
+        },
+        {
+          "chapter": 21,
+          "sample": "b",
+          "title": "REBUILD",
+          "file": "chapter-21-b.bmp",
+          "mean_channel_difference": 0.008707970380783081,
+          "changed_pixel_fraction": 0.10076388888888889
+        },
+        {
+          "chapter": 28,
+          "sample": "a",
+          "title": "CRYSTAL SUPREMACY",
+          "file": "chapter-28-a.bmp",
+          "mean_channel_difference": 0.005955431144684553,
+          "changed_pixel_fraction": 0.10404706790123457
+        },
+        {
+          "chapter": 28,
+          "sample": "b",
+          "title": "CRYSTAL SUPREMACY",
+          "file": "chapter-28-b.bmp",
+          "mean_channel_difference": 0.010133150033652782,
+          "changed_pixel_fraction": 0.11480324074074075
+        },
+        {
+          "chapter": 31,
+          "sample": "a",
+          "title": "ASCENT VECTOR",
+          "file": "chapter-31-a.bmp",
+          "mean_channel_difference": 0.0005504745640791953,
+          "changed_pixel_fraction": 0.00423804012345679
+        },
+        {
+          "chapter": 31,
+          "sample": "b",
+          "title": "ASCENT VECTOR",
+          "file": "chapter-31-b.bmp",
+          "mean_channel_difference": 0.0006353511125780642,
+          "changed_pixel_fraction": 0.005669367283950617
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 14,
+        "sample": "b",
+        "title": "CRYSTAL ACCELERATOR",
+        "file": "chapter-14-b.bmp",
+        "mean_channel_difference": 0.016343308612704277,
+        "changed_pixel_fraction": 0.2912577160493827
+      }
+    },
+    {
+      "scene": 3,
+      "samples": [
+        {
+          "chapter": 3,
+          "sample": "a",
+          "title": "NEON DESCENT",
+          "file": "chapter-3-a.bmp",
+          "mean_channel_difference": 0.005329611245542765,
+          "changed_pixel_fraction": 0.09229938271604939
+        },
+        {
+          "chapter": 3,
+          "sample": "b",
+          "title": "NEON DESCENT",
+          "file": "chapter-3-b.bmp",
+          "mean_channel_difference": 0.0012244463432580233,
+          "changed_pixel_fraction": 0.014556327160493827
+        },
+        {
+          "chapter": 7,
+          "sample": "a",
+          "title": "SKYLINE CHASE",
+          "file": "chapter-7-a.bmp",
+          "mean_channel_difference": 0.0046259029768407345,
+          "changed_pixel_fraction": 0.0723996913580247
+        },
+        {
+          "chapter": 7,
+          "sample": "b",
+          "title": "SKYLINE CHASE",
+          "file": "chapter-7-b.bmp",
+          "mean_channel_difference": 0.007895457558333874,
+          "changed_pixel_fraction": 0.10221836419753086
+        },
+        {
+          "chapter": 17,
+          "sample": "a",
+          "title": "TERMINAL VELOCITY",
+          "file": "chapter-17-a.bmp",
+          "mean_channel_difference": 0.00834457203745842,
+          "changed_pixel_fraction": 0.09923032407407407
+        },
+        {
+          "chapter": 17,
+          "sample": "b",
+          "title": "TERMINAL VELOCITY",
+          "file": "chapter-17-b.bmp",
+          "mean_channel_difference": 0.006223863922059536,
+          "changed_pixel_fraction": 0.10038966049382717
+        },
+        {
+          "chapter": 24,
+          "sample": "a",
+          "title": "SECOND IGNITION",
+          "file": "chapter-24-a.bmp",
+          "mean_channel_difference": 0.005649870727211237,
+          "changed_pixel_fraction": 0.06934413580246913
+        },
+        {
+          "chapter": 24,
+          "sample": "b",
+          "title": "SECOND IGNITION",
+          "file": "chapter-24-b.bmp",
+          "mean_channel_difference": 0.002997127827256918,
+          "changed_pixel_fraction": 0.061878858024691355
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 17,
+        "sample": "a",
+        "title": "TERMINAL VELOCITY",
+        "file": "chapter-17-a.bmp",
+        "mean_channel_difference": 0.00834457203745842,
+        "changed_pixel_fraction": 0.09923032407407407
+      }
+    },
+    {
+      "scene": 4,
+      "samples": [
+        {
+          "chapter": 5,
+          "sample": "a",
+          "title": "FRACTURE GATE",
+          "file": "chapter-5-a.bmp",
+          "mean_channel_difference": 0.004751676693558693,
+          "changed_pixel_fraction": 0.017197145061728394
+        },
+        {
+          "chapter": 5,
+          "sample": "b",
+          "title": "FRACTURE GATE",
+          "file": "chapter-5-b.bmp",
+          "mean_channel_difference": 0.00760089373216033,
+          "changed_pixel_fraction": 0.1330960648148148
+        },
+        {
+          "chapter": 10,
+          "sample": "a",
+          "title": "INFINITE MACHINE",
+          "file": "chapter-10-a.bmp",
+          "mean_channel_difference": 0.002465285360813141,
+          "changed_pixel_fraction": 0.03630787037037037
+        },
+        {
+          "chapter": 10,
+          "sample": "b",
+          "title": "INFINITE MACHINE",
+          "file": "chapter-10-b.bmp",
+          "mean_channel_difference": 0.0012193198781460524,
+          "changed_pixel_fraction": 0.02357638888888889
+        },
+        {
+          "chapter": 15,
+          "sample": "a",
+          "title": "FRACTURE CASCADE",
+          "file": "chapter-15-a.bmp",
+          "mean_channel_difference": 0.0003530899411998689,
+          "changed_pixel_fraction": 0.0021412037037037038
+        },
+        {
+          "chapter": 15,
+          "sample": "b",
+          "title": "FRACTURE CASCADE",
+          "file": "chapter-15-b.bmp",
+          "mean_channel_difference": 0.00010783557081595063,
+          "changed_pixel_fraction": 7.716049382716049e-05
+        },
+        {
+          "chapter": 26,
+          "sample": "a",
+          "title": "VECTOR STORM",
+          "file": "chapter-26-a.bmp",
+          "mean_channel_difference": 0.0123324329033494,
+          "changed_pixel_fraction": 0.1771875
+        },
+        {
+          "chapter": 26,
+          "sample": "b",
+          "title": "VECTOR STORM",
+          "file": "chapter-26-b.bmp",
+          "mean_channel_difference": 0.007645956706255674,
+          "changed_pixel_fraction": 0.14276234567901236
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 26,
+        "sample": "a",
+        "title": "VECTOR STORM",
+        "file": "chapter-26-a.bmp",
+        "mean_channel_difference": 0.0123324329033494,
+        "changed_pixel_fraction": 0.1771875
+      }
+    },
+    {
+      "scene": 5,
+      "samples": [
+        {
+          "chapter": 1,
+          "sample": "a",
+          "title": "IGNITION",
+          "file": "chapter-1-a.bmp",
+          "mean_channel_difference": 0.0004849814285989851,
+          "changed_pixel_fraction": 0.008647762345679013
+        },
+        {
+          "chapter": 1,
+          "sample": "b",
+          "title": "IGNITION",
+          "file": "chapter-1-b.bmp",
+          "mean_channel_difference": 0.0016522255027666688,
+          "changed_pixel_fraction": 0.032191358024691356
+        },
+        {
+          "chapter": 9,
+          "sample": "a",
+          "title": "ORBITAL STORM",
+          "file": "chapter-9-a.bmp",
+          "mean_channel_difference": 0.016355011612176895,
+          "changed_pixel_fraction": 0.1959182098765432
+        },
+        {
+          "chapter": 9,
+          "sample": "b",
+          "title": "ORBITAL STORM",
+          "file": "chapter-9-b.bmp",
+          "mean_channel_difference": 0.008632101118564606,
+          "changed_pixel_fraction": 0.17022183641975308
+        },
+        {
+          "chapter": 16,
+          "sample": "a",
+          "title": "SUPERNOVA",
+          "file": "chapter-16-a.bmp",
+          "mean_channel_difference": 0.0004109098808839917,
+          "changed_pixel_fraction": 0.004216820987654321
+        },
+        {
+          "chapter": 16,
+          "sample": "b",
+          "title": "SUPERNOVA",
+          "file": "chapter-16-b.bmp",
+          "mean_channel_difference": 0.006299854256212711,
+          "changed_pixel_fraction": 0.025054012345679014
+        },
+        {
+          "chapter": 27,
+          "sample": "a",
+          "title": "SOLAR WIND",
+          "file": "chapter-27-a.bmp",
+          "mean_channel_difference": 0.005931369960308075,
+          "changed_pixel_fraction": 0.08584876543209877
+        },
+        {
+          "chapter": 27,
+          "sample": "b",
+          "title": "SOLAR WIND",
+          "file": "chapter-27-b.bmp",
+          "mean_channel_difference": 0.006103185471147299,
+          "changed_pixel_fraction": 0.08814236111111111
+        },
+        {
+          "chapter": 30,
+          "sample": "a",
+          "title": "LIGHTSPEED",
+          "file": "chapter-30-a.bmp",
+          "mean_channel_difference": 0.0496872216463089,
+          "changed_pixel_fraction": 0.6595756172839506
+        },
+        {
+          "chapter": 30,
+          "sample": "b",
+          "title": "LIGHTSPEED",
+          "file": "chapter-30-b.bmp",
+          "mean_channel_difference": 0.00899429153650999,
+          "changed_pixel_fraction": 0.16362461419753085
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 30,
+        "sample": "a",
+        "title": "LIGHTSPEED",
+        "file": "chapter-30-a.bmp",
+        "mean_channel_difference": 0.0496872216463089,
+        "changed_pixel_fraction": 0.6595756172839506
+      }
+    },
+    {
+      "scene": 6,
+      "samples": [
+        {
+          "chapter": 4,
+          "sample": "a",
+          "title": "QUANTUM OCEAN",
+          "file": "chapter-4-a.bmp",
+          "mean_channel_difference": 0.00017185357864946127,
+          "changed_pixel_fraction": 0.0037943672839506172
+        },
+        {
+          "chapter": 4,
+          "sample": "b",
+          "title": "QUANTUM OCEAN",
+          "file": "chapter-4-b.bmp",
+          "mean_channel_difference": 0.0014775528106838465,
+          "changed_pixel_fraction": 0.020943287037037038
+        },
+        {
+          "chapter": 20,
+          "sample": "a",
+          "title": "ZERO GRAVITY",
+          "file": "chapter-20-a.bmp",
+          "mean_channel_difference": 0.027862530201673508,
+          "changed_pixel_fraction": 0.3202777777777778
+        },
+        {
+          "chapter": 20,
+          "sample": "b",
+          "title": "ZERO GRAVITY",
+          "file": "chapter-20-b.bmp",
+          "mean_channel_difference": 0.02091411128640175,
+          "changed_pixel_fraction": 0.24403742283950616
+        },
+        {
+          "chapter": 23,
+          "sample": "a",
+          "title": "REBIRTH",
+          "file": "chapter-23-a.bmp",
+          "mean_channel_difference": 0.01842678152024746,
+          "changed_pixel_fraction": 0.10694444444444444
+        },
+        {
+          "chapter": 23,
+          "sample": "b",
+          "title": "REBIRTH",
+          "file": "chapter-23-b.bmp",
+          "mean_channel_difference": 0.016974423080682755,
+          "changed_pixel_fraction": 0.175727237654321
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 20,
+        "sample": "a",
+        "title": "ZERO GRAVITY",
+        "file": "chapter-20-a.bmp",
+        "mean_channel_difference": 0.027862530201673508,
+        "changed_pixel_fraction": 0.3202777777777778
+      }
+    },
+    {
+      "scene": 7,
+      "samples": [
+        {
+          "chapter": 12,
+          "sample": "a",
+          "title": "ORBITAL ARMADA",
+          "file": "chapter-12-a.bmp",
+          "mean_channel_difference": 0.0030319911893457174,
+          "changed_pixel_fraction": 0.023532021604938273
+        },
+        {
+          "chapter": 12,
+          "sample": "b",
+          "title": "ORBITAL ARMADA",
+          "file": "chapter-12-b.bmp",
+          "mean_channel_difference": 0.004425502382218838,
+          "changed_pixel_fraction": 0.037330246913580244
+        },
+        {
+          "chapter": 18,
+          "sample": "a",
+          "title": "EVENT HORIZON",
+          "file": "chapter-18-a.bmp",
+          "mean_channel_difference": 0.002176861511543393,
+          "changed_pixel_fraction": 0.0153125
+        },
+        {
+          "chapter": 18,
+          "sample": "b",
+          "title": "EVENT HORIZON",
+          "file": "chapter-18-b.bmp",
+          "mean_channel_difference": 0.0006882035522721708,
+          "changed_pixel_fraction": 0.010968364197530864
+        },
+        {
+          "chapter": 22,
+          "sample": "a",
+          "title": "RESONANCE",
+          "file": "chapter-22-a.bmp",
+          "mean_channel_difference": 0.004295718856155872,
+          "changed_pixel_fraction": 0.045931712962962966
+        },
+        {
+          "chapter": 22,
+          "sample": "b",
+          "title": "RESONANCE",
+          "file": "chapter-22-b.bmp",
+          "mean_channel_difference": 0.0005196784622967243,
+          "changed_pixel_fraction": 0.007743055555555556
+        },
+        {
+          "chapter": 29,
+          "sample": "a",
+          "title": "FINAL PURSUIT",
+          "file": "chapter-29-a.bmp",
+          "mean_channel_difference": 0.0014333066064864397,
+          "changed_pixel_fraction": 0.011165123456790124
+        },
+        {
+          "chapter": 29,
+          "sample": "b",
+          "title": "FINAL PURSUIT",
+          "file": "chapter-29-b.bmp",
+          "mean_channel_difference": 0.0016326378099620342,
+          "changed_pixel_fraction": 0.012231867283950617
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 12,
+        "sample": "b",
+        "title": "ORBITAL ARMADA",
+        "file": "chapter-12-b.bmp",
+        "mean_channel_difference": 0.004425502382218838,
+        "changed_pixel_fraction": 0.037330246913580244
+      }
+    },
+    {
+      "scene": 8,
+      "samples": [
+        {
+          "chapter": 32,
+          "sample": "a",
+          "title": "CHROME AWAKENING",
+          "file": "chapter-32-a.bmp",
+          "mean_channel_difference": 0.0015746111748740077,
+          "changed_pixel_fraction": 0.013742283950617284
+        },
+        {
+          "chapter": 32,
+          "sample": "b",
+          "title": "CHROME AWAKENING",
+          "file": "chapter-32-b.bmp",
+          "mean_channel_difference": 0.0017804204253479838,
+          "changed_pixel_fraction": 0.01570601851851852
+        },
+        {
+          "chapter": 33,
+          "sample": "a",
+          "title": "CATHEDRAL OF LIGHT",
+          "file": "chapter-33-a.bmp",
+          "mean_channel_difference": 0.0006390427006408572,
+          "changed_pixel_fraction": 0.0002507716049382716
+        },
+        {
+          "chapter": 33,
+          "sample": "b",
+          "title": "CATHEDRAL OF LIGHT",
+          "file": "chapter-33-b.bmp",
+          "mean_channel_difference": 0.00261930120177567,
+          "changed_pixel_fraction": 0.05522376543209877
+        },
+        {
+          "chapter": 38,
+          "sample": "a",
+          "title": "LIQUID CHROME",
+          "file": "chapter-38-a.bmp",
+          "mean_channel_difference": 0.03903115913271904,
+          "changed_pixel_fraction": 0.2683179012345679
+        },
+        {
+          "chapter": 38,
+          "sample": "b",
+          "title": "LIQUID CHROME",
+          "file": "chapter-38-b.bmp",
+          "mean_channel_difference": 0.04357945919036865,
+          "changed_pixel_fraction": 0.2974324845679012
+        },
+        {
+          "chapter": 43,
+          "sample": "a",
+          "title": "GOLDEN ASCENT",
+          "file": "chapter-43-a.bmp",
+          "mean_channel_difference": 0.005990904290229082,
+          "changed_pixel_fraction": 0.10208140432098765
+        },
+        {
+          "chapter": 43,
+          "sample": "b",
+          "title": "GOLDEN ASCENT",
+          "file": "chapter-43-b.bmp",
+          "mean_channel_difference": 0.0040342556312680244,
+          "changed_pixel_fraction": 0.07386766975308642
+        },
+        {
+          "chapter": 47,
+          "sample": "a",
+          "title": "CHROME RESONANCE",
+          "file": "chapter-47-a.bmp",
+          "mean_channel_difference": 0.006625134032219648,
+          "changed_pixel_fraction": 0.06524691358024691
+        },
+        {
+          "chapter": 47,
+          "sample": "b",
+          "title": "CHROME RESONANCE",
+          "file": "chapter-47-b.bmp",
+          "mean_channel_difference": 0.005246984306722879,
+          "changed_pixel_fraction": 0.08800925925925926
+        },
+        {
+          "chapter": 51,
+          "sample": "a",
+          "title": "CATHEDRAL FINALE",
+          "file": "chapter-51-a.bmp",
+          "mean_channel_difference": 0.011375496163964272,
+          "changed_pixel_fraction": 0.13553626543209876
+        },
+        {
+          "chapter": 51,
+          "sample": "b",
+          "title": "CATHEDRAL FINALE",
+          "file": "chapter-51-b.bmp",
+          "mean_channel_difference": 0.0007073373417370021,
+          "changed_pixel_fraction": 0.001570216049382716
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 38,
+        "sample": "b",
+        "title": "LIQUID CHROME",
+        "file": "chapter-38-b.bmp",
+        "mean_channel_difference": 0.04357945919036865,
+        "changed_pixel_fraction": 0.2974324845679012
+      }
+    },
+    {
+      "scene": 9,
+      "samples": [
+        {
+          "chapter": 34,
+          "sample": "a",
+          "title": "RAIN DISTRICT",
+          "file": "chapter-34-a.bmp",
+          "mean_channel_difference": 0.014608148485422134,
+          "changed_pixel_fraction": 0.20048418209876542
+        },
+        {
+          "chapter": 34,
+          "sample": "b",
+          "title": "RAIN DISTRICT",
+          "file": "chapter-34-b.bmp",
+          "mean_channel_difference": 0.0068481857888400555,
+          "changed_pixel_fraction": 0.14138310185185185
+        },
+        {
+          "chapter": 37,
+          "sample": "a",
+          "title": "NEON PURSUIT",
+          "file": "chapter-37-a.bmp",
+          "mean_channel_difference": 0.011653387919068336,
+          "changed_pixel_fraction": 0.20742476851851852
+        },
+        {
+          "chapter": 37,
+          "sample": "b",
+          "title": "NEON PURSUIT",
+          "file": "chapter-37-b.bmp",
+          "mean_channel_difference": 0.013474116101861,
+          "changed_pixel_fraction": 0.19097029320987655
+        },
+        {
+          "chapter": 41,
+          "sample": "a",
+          "title": "WET CIRCUIT",
+          "file": "chapter-41-a.bmp",
+          "mean_channel_difference": 0.014075824059545994,
+          "changed_pixel_fraction": 0.2545235339506173
+        },
+        {
+          "chapter": 41,
+          "sample": "b",
+          "title": "WET CIRCUIT",
+          "file": "chapter-41-b.bmp",
+          "mean_channel_difference": 0.006353304255753756,
+          "changed_pixel_fraction": 0.10256944444444445
+        },
+        {
+          "chapter": 45,
+          "sample": "a",
+          "title": "MIDNIGHT VELOCITY",
+          "file": "chapter-45-a.bmp",
+          "mean_channel_difference": 0.0025744042359292507,
+          "changed_pixel_fraction": 0.02591628086419753
+        },
+        {
+          "chapter": 45,
+          "sample": "b",
+          "title": "MIDNIGHT VELOCITY",
+          "file": "chapter-45-b.bmp",
+          "mean_channel_difference": 0.008959203958511353,
+          "changed_pixel_fraction": 0.12114197530864197
+        },
+        {
+          "chapter": 49,
+          "sample": "a",
+          "title": "ELECTRIC HORIZON",
+          "file": "chapter-49-a.bmp",
+          "mean_channel_difference": 0.010876908898353577,
+          "changed_pixel_fraction": 0.17742283950617285
+        },
+        {
+          "chapter": 49,
+          "sample": "b",
+          "title": "ELECTRIC HORIZON",
+          "file": "chapter-49-b.bmp",
+          "mean_channel_difference": 0.019218888133764267,
+          "changed_pixel_fraction": 0.25051118827160496
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 49,
+        "sample": "b",
+        "title": "ELECTRIC HORIZON",
+        "file": "chapter-49-b.bmp",
+        "mean_channel_difference": 0.019218888133764267,
+        "changed_pixel_fraction": 0.25051118827160496
+      }
+    },
+    {
+      "scene": 10,
+      "samples": [
+        {
+          "chapter": 35,
+          "sample": "a",
+          "title": "ORBITAL FOUNDRY",
+          "file": "chapter-35-a.bmp",
+          "mean_channel_difference": 0.009288428351283073,
+          "changed_pixel_fraction": 0.11189621913580247
+        },
+        {
+          "chapter": 35,
+          "sample": "b",
+          "title": "ORBITAL FOUNDRY",
+          "file": "chapter-35-b.bmp",
+          "mean_channel_difference": 0.01109382789582014,
+          "changed_pixel_fraction": 0.13444444444444445
+        },
+        {
+          "chapter": 39,
+          "sample": "a",
+          "title": "KINETIC ARRAY",
+          "file": "chapter-39-a.bmp",
+          "mean_channel_difference": 0.029371175915002823,
+          "changed_pixel_fraction": 0.1970679012345679
+        },
+        {
+          "chapter": 39,
+          "sample": "b",
+          "title": "KINETIC ARRAY",
+          "file": "chapter-39-b.bmp",
+          "mean_channel_difference": 0.0159318745136261,
+          "changed_pixel_fraction": 0.18124421296296298
+        },
+        {
+          "chapter": 42,
+          "sample": "a",
+          "title": "MACHINE HEART",
+          "file": "chapter-42-a.bmp",
+          "mean_channel_difference": 0.009410343132913113,
+          "changed_pixel_fraction": 0.058423996913580245
+        },
+        {
+          "chapter": 42,
+          "sample": "b",
+          "title": "MACHINE HEART",
+          "file": "chapter-42-b.bmp",
+          "mean_channel_difference": 0.013246049173176289,
+          "changed_pixel_fraction": 0.07923225308641975
+        },
+        {
+          "chapter": 46,
+          "sample": "a",
+          "title": "ORBITAL COLLISION",
+          "file": "chapter-46-a.bmp",
+          "mean_channel_difference": 8.105130109470338e-05,
+          "changed_pixel_fraction": 0.0012924382716049383
+        },
+        {
+          "chapter": 46,
+          "sample": "b",
+          "title": "ORBITAL COLLISION",
+          "file": "chapter-46-b.bmp",
+          "mean_channel_difference": 0.0005116245592944324,
+          "changed_pixel_fraction": 0.011440972222222222
+        },
+        {
+          "chapter": 50,
+          "sample": "a",
+          "title": "UPLIFT",
+          "file": "chapter-50-a.bmp",
+          "mean_channel_difference": 0.005577531177550554,
+          "changed_pixel_fraction": 0.04131365740740741
+        },
+        {
+          "chapter": 50,
+          "sample": "b",
+          "title": "UPLIFT",
+          "file": "chapter-50-b.bmp",
+          "mean_channel_difference": 0.0009464516188018024,
+          "changed_pixel_fraction": 0.022175925925925925
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 39,
+        "sample": "a",
+        "title": "KINETIC ARRAY",
+        "file": "chapter-39-a.bmp",
+        "mean_channel_difference": 0.029371175915002823,
+        "changed_pixel_fraction": 0.1970679012345679
+      }
+    },
+    {
+      "scene": 11,
+      "samples": [
+        {
+          "chapter": 36,
+          "sample": "a",
+          "title": "PRISM CHAMBER",
+          "file": "chapter-36-a.bmp",
+          "mean_channel_difference": 0.01741963066160679,
+          "changed_pixel_fraction": 0.13187692901234568
+        },
+        {
+          "chapter": 36,
+          "sample": "b",
+          "title": "PRISM CHAMBER",
+          "file": "chapter-36-b.bmp",
+          "mean_channel_difference": 0.009307708591222763,
+          "changed_pixel_fraction": 0.10177854938271605
+        },
+        {
+          "chapter": 40,
+          "sample": "a",
+          "title": "SPECTRAL REFRACTION",
+          "file": "chapter-40-a.bmp",
+          "mean_channel_difference": 0.0036985925398766994,
+          "changed_pixel_fraction": 0.060285493827160495
+        },
+        {
+          "chapter": 40,
+          "sample": "b",
+          "title": "SPECTRAL REFRACTION",
+          "file": "chapter-40-b.bmp",
+          "mean_channel_difference": 0.014265213161706924,
+          "changed_pixel_fraction": 0.20809413580246913
+        },
+        {
+          "chapter": 44,
+          "sample": "a",
+          "title": "INNER LIGHT",
+          "file": "chapter-44-a.bmp",
+          "mean_channel_difference": 0.010018987581133842,
+          "changed_pixel_fraction": 0.08889274691358025
+        },
+        {
+          "chapter": 44,
+          "sample": "b",
+          "title": "INNER LIGHT",
+          "file": "chapter-44-b.bmp",
+          "mean_channel_difference": 0.010894600301980972,
+          "changed_pixel_fraction": 0.12341628086419754
+        },
+        {
+          "chapter": 48,
+          "sample": "a",
+          "title": "PRISM BREAK",
+          "file": "chapter-48-a.bmp",
+          "mean_channel_difference": 0.00849939975887537,
+          "changed_pixel_fraction": 0.1213136574074074
+        },
+        {
+          "chapter": 48,
+          "sample": "b",
+          "title": "PRISM BREAK",
+          "file": "chapter-48-b.bmp",
+          "mean_channel_difference": 0.004354575183242559,
+          "changed_pixel_fraction": 0.06457754629629629
+        },
+        {
+          "chapter": 52,
+          "sample": "a",
+          "title": "BEYOND THE PRISM",
+          "file": "chapter-52-a.bmp",
+          "mean_channel_difference": 0.025642845779657364,
+          "changed_pixel_fraction": 0.3730439814814815
+        },
+        {
+          "chapter": 52,
+          "sample": "b",
+          "title": "BEYOND THE PRISM",
+          "file": "chapter-52-b.bmp",
+          "mean_channel_difference": 0.003976683132350445,
+          "changed_pixel_fraction": 0.014751157407407407
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 52,
+        "sample": "a",
+        "title": "BEYOND THE PRISM",
+        "file": "chapter-52-a.bmp",
+        "mean_channel_difference": 0.025642845779657364,
+        "changed_pixel_fraction": 0.3730439814814815
+      }
+    },
+    {
+      "scene": 12,
+      "samples": [
+        {
+          "chapter": 53,
+          "sample": "a",
+          "title": "SUNRISE OF GIANTS",
+          "file": "chapter-53-a.bmp",
+          "mean_channel_difference": 0.0,
+          "changed_pixel_fraction": 0.0
+        },
+        {
+          "chapter": 53,
+          "sample": "b",
+          "title": "SUNRISE OF GIANTS",
+          "file": "chapter-53-b.bmp",
+          "mean_channel_difference": 0.00010038681648438796,
+          "changed_pixel_fraction": 0.0001408179012345679
+        },
+        {
+          "chapter": 54,
+          "sample": "a",
+          "title": "DUNE COLOSSUS",
+          "file": "chapter-54-a.bmp",
+          "mean_channel_difference": 0.007080277428030968,
+          "changed_pixel_fraction": 0.07895833333333334
+        },
+        {
+          "chapter": 54,
+          "sample": "b",
+          "title": "DUNE COLOSSUS",
+          "file": "chapter-54-b.bmp",
+          "mean_channel_difference": 0.005984514951705933,
+          "changed_pixel_fraction": 0.04547646604938271
+        },
+        {
+          "chapter": 58,
+          "sample": "a",
+          "title": "SANDSTORM PURSUIT",
+          "file": "chapter-58-a.bmp",
+          "mean_channel_difference": 0.015191766433417797,
+          "changed_pixel_fraction": 0.33900077160493824
+        },
+        {
+          "chapter": 58,
+          "sample": "b",
+          "title": "SANDSTORM PURSUIT",
+          "file": "chapter-58-b.bmp",
+          "mean_channel_difference": 0.005144945811480284,
+          "changed_pixel_fraction": 0.0475366512345679
+        },
+        {
+          "chapter": 62,
+          "sample": "a",
+          "title": "CERAMIC TITANS",
+          "file": "chapter-62-a.bmp",
+          "mean_channel_difference": 0.0004649247566703707,
+          "changed_pixel_fraction": 0.0011458333333333333
+        },
+        {
+          "chapter": 62,
+          "sample": "b",
+          "title": "CERAMIC TITANS",
+          "file": "chapter-62-b.bmp",
+          "mean_channel_difference": 0.016566118225455284,
+          "changed_pixel_fraction": 0.14883101851851852
+        },
+        {
+          "chapter": 67,
+          "sample": "a",
+          "title": "SUNFIRE ADVANCE",
+          "file": "chapter-67-a.bmp",
+          "mean_channel_difference": 0.0051020486280322075,
+          "changed_pixel_fraction": 0.09048032407407407
+        },
+        {
+          "chapter": 67,
+          "sample": "b",
+          "title": "SUNFIRE ADVANCE",
+          "file": "chapter-67-b.bmp",
+          "mean_channel_difference": 0.011916072107851505,
+          "changed_pixel_fraction": 0.15899112654320988
+        },
+        {
+          "chapter": 71,
+          "sample": "a",
+          "title": "TITAN OVERDRIVE",
+          "file": "chapter-71-a.bmp",
+          "mean_channel_difference": 0.014354035258293152,
+          "changed_pixel_fraction": 0.30486882716049385
+        },
+        {
+          "chapter": 71,
+          "sample": "b",
+          "title": "TITAN OVERDRIVE",
+          "file": "chapter-71-b.bmp",
+          "mean_channel_difference": 0.002661040984094143,
+          "changed_pixel_fraction": 0.038898533950617285
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 62,
+        "sample": "b",
+        "title": "CERAMIC TITANS",
+        "file": "chapter-62-b.bmp",
+        "mean_channel_difference": 0.016566118225455284,
+        "changed_pixel_fraction": 0.14883101851851852
+      }
+    },
+    {
+      "scene": 13,
+      "samples": [
+        {
+          "chapter": 55,
+          "sample": "a",
+          "title": "THE LIVING CIRCUIT",
+          "file": "chapter-55-a.bmp",
+          "mean_channel_difference": 0.0008900034008547664,
+          "changed_pixel_fraction": 0.002625385802469136
+        },
+        {
+          "chapter": 55,
+          "sample": "b",
+          "title": "THE LIVING CIRCUIT",
+          "file": "chapter-55-b.bmp",
+          "mean_channel_difference": 0.009101836942136288,
+          "changed_pixel_fraction": 0.15375385802469135
+        },
+        {
+          "chapter": 59,
+          "sample": "a",
+          "title": "VERDANT SINGULARITY",
+          "file": "chapter-59-a.bmp",
+          "mean_channel_difference": 0.012135207653045654,
+          "changed_pixel_fraction": 0.19247492283950618
+        },
+        {
+          "chapter": 59,
+          "sample": "b",
+          "title": "VERDANT SINGULARITY",
+          "file": "chapter-59-b.bmp",
+          "mean_channel_difference": 0.0175962895154953,
+          "changed_pixel_fraction": 0.27001543209876544
+        },
+        {
+          "chapter": 63,
+          "sample": "a",
+          "title": "SEED VELOCITY",
+          "file": "chapter-63-a.bmp",
+          "mean_channel_difference": 0.016975201666355133,
+          "changed_pixel_fraction": 0.19749614197530865
+        },
+        {
+          "chapter": 63,
+          "sample": "b",
+          "title": "SEED VELOCITY",
+          "file": "chapter-63-b.bmp",
+          "mean_channel_difference": 0.014223778620362282,
+          "changed_pixel_fraction": 0.18587770061728395
+        },
+        {
+          "chapter": 66,
+          "sample": "a",
+          "title": "BREATH OF LIGHT",
+          "file": "chapter-66-a.bmp",
+          "mean_channel_difference": 0.0023190814536064863,
+          "changed_pixel_fraction": 0.003244598765432099
+        },
+        {
+          "chapter": 66,
+          "sample": "b",
+          "title": "BREATH OF LIGHT",
+          "file": "chapter-66-b.bmp",
+          "mean_channel_difference": 0.01477254368364811,
+          "changed_pixel_fraction": 0.1267824074074074
+        },
+        {
+          "chapter": 69,
+          "sample": "a",
+          "title": "GROWTH CASCADE",
+          "file": "chapter-69-a.bmp",
+          "mean_channel_difference": 0.05523154139518738,
+          "changed_pixel_fraction": 0.5222646604938271
+        },
+        {
+          "chapter": 69,
+          "sample": "b",
+          "title": "GROWTH CASCADE",
+          "file": "chapter-69-b.bmp",
+          "mean_channel_difference": 0.012977777048945427,
+          "changed_pixel_fraction": 0.15720293209876543
+        },
+        {
+          "chapter": 73,
+          "sample": "a",
+          "title": "INFINITE BLOOM",
+          "file": "chapter-73-a.bmp",
+          "mean_channel_difference": 0.013597376644611359,
+          "changed_pixel_fraction": 0.19100501543209877
+        },
+        {
+          "chapter": 73,
+          "sample": "b",
+          "title": "INFINITE BLOOM",
+          "file": "chapter-73-b.bmp",
+          "mean_channel_difference": 0.03091971017420292,
+          "changed_pixel_fraction": 0.2703491512345679
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 69,
+        "sample": "a",
+        "title": "GROWTH CASCADE",
+        "file": "chapter-69-a.bmp",
+        "mean_channel_difference": 0.05523154139518738,
+        "changed_pixel_fraction": 0.5222646604938271
+      }
+    },
+    {
+      "scene": 14,
+      "samples": [
+        {
+          "chapter": 56,
+          "sample": "a",
+          "title": "GRAVITY REBELLION",
+          "file": "chapter-56-a.bmp",
+          "mean_channel_difference": 0.005295093171298504,
+          "changed_pixel_fraction": 0.045403163580246916
+        },
+        {
+          "chapter": 56,
+          "sample": "b",
+          "title": "GRAVITY REBELLION",
+          "file": "chapter-56-b.bmp",
+          "mean_channel_difference": 0.003372188424691558,
+          "changed_pixel_fraction": 0.0285570987654321
+        },
+        {
+          "chapter": 60,
+          "sample": "a",
+          "title": "FALLING HORIZONS",
+          "file": "chapter-60-a.bmp",
+          "mean_channel_difference": 0.0031374667305499315,
+          "changed_pixel_fraction": 0.031761188271604936
+        },
+        {
+          "chapter": 60,
+          "sample": "b",
+          "title": "FALLING HORIZONS",
+          "file": "chapter-60-b.bmp",
+          "mean_channel_difference": 0.005192641634494066,
+          "changed_pixel_fraction": 0.0439158950617284
+        },
+        {
+          "chapter": 64,
+          "sample": "a",
+          "title": "TIDAL FRACTURE",
+          "file": "chapter-64-a.bmp",
+          "mean_channel_difference": 0.009700087830424309,
+          "changed_pixel_fraction": 0.16339313271604938
+        },
+        {
+          "chapter": 64,
+          "sample": "b",
+          "title": "TIDAL FRACTURE",
+          "file": "chapter-64-b.bmp",
+          "mean_channel_difference": 0.010983962565660477,
+          "changed_pixel_fraction": 0.2191261574074074
+        },
+        {
+          "chapter": 68,
+          "sample": "a",
+          "title": "ORBITAL UPRISING",
+          "file": "chapter-68-a.bmp",
+          "mean_channel_difference": 0.008464493788778782,
+          "changed_pixel_fraction": 0.09291859567901234
+        },
+        {
+          "chapter": 68,
+          "sample": "b",
+          "title": "ORBITAL UPRISING",
+          "file": "chapter-68-b.bmp",
+          "mean_channel_difference": 0.009788607247173786,
+          "changed_pixel_fraction": 0.10918981481481481
+        },
+        {
+          "chapter": 72,
+          "sample": "a",
+          "title": "BREAK THE HORIZON",
+          "file": "chapter-72-a.bmp",
+          "mean_channel_difference": 0.005164463073015213,
+          "changed_pixel_fraction": 0.05728009259259259
+        },
+        {
+          "chapter": 72,
+          "sample": "b",
+          "title": "BREAK THE HORIZON",
+          "file": "chapter-72-b.bmp",
+          "mean_channel_difference": 0.024171767756342888,
+          "changed_pixel_fraction": 0.20141010802469136
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 72,
+        "sample": "b",
+        "title": "BREAK THE HORIZON",
+        "file": "chapter-72-b.bmp",
+        "mean_channel_difference": 0.024171767756342888,
+        "changed_pixel_fraction": 0.20141010802469136
+      }
+    },
+    {
+      "scene": 15,
+      "samples": [
+        {
+          "chapter": 57,
+          "sample": "a",
+          "title": "ARCH OF TOMORROW",
+          "file": "chapter-57-a.bmp",
+          "mean_channel_difference": 0.005151015240699053,
+          "changed_pixel_fraction": 0.08671489197530864
+        },
+        {
+          "chapter": 57,
+          "sample": "b",
+          "title": "ARCH OF TOMORROW",
+          "file": "chapter-57-b.bmp",
+          "mean_channel_difference": 0.007240180857479572,
+          "changed_pixel_fraction": 0.1029783950617284
+        },
+        {
+          "chapter": 61,
+          "sample": "a",
+          "title": "CRYSTAL WINGS",
+          "file": "chapter-61-a.bmp",
+          "mean_channel_difference": 0.01124406699091196,
+          "changed_pixel_fraction": 0.0882716049382716
+        },
+        {
+          "chapter": 61,
+          "sample": "b",
+          "title": "CRYSTAL WINGS",
+          "file": "chapter-61-b.bmp",
+          "mean_channel_difference": 0.0007378283189609647,
+          "changed_pixel_fraction": 0.0017978395061728396
+        },
+        {
+          "chapter": 65,
+          "sample": "a",
+          "title": "REALITY CONVERGENCE",
+          "file": "chapter-65-a.bmp",
+          "mean_channel_difference": 0.006102739367634058,
+          "changed_pixel_fraction": 0.08149498456790123
+        },
+        {
+          "chapter": 65,
+          "sample": "b",
+          "title": "REALITY CONVERGENCE",
+          "file": "chapter-65-b.bmp",
+          "mean_channel_difference": 0.011367574334144592,
+          "changed_pixel_fraction": 0.1252662037037037
+        },
+        {
+          "chapter": 70,
+          "sample": "a",
+          "title": "ASCENDANT ARRAY",
+          "file": "chapter-70-a.bmp",
+          "mean_channel_difference": 0.0063540758565068245,
+          "changed_pixel_fraction": 0.05638888888888889
+        },
+        {
+          "chapter": 70,
+          "sample": "b",
+          "title": "ASCENDANT ARRAY",
+          "file": "chapter-70-b.bmp",
+          "mean_channel_difference": 0.03310350701212883,
+          "changed_pixel_fraction": 0.37073881172839507
+        },
+        {
+          "chapter": 74,
+          "sample": "a",
+          "title": "THREE ACTS ONE REALITY",
+          "file": "chapter-74-a.bmp",
+          "mean_channel_difference": 0.015823785215616226,
+          "changed_pixel_fraction": 0.17633680555555556
+        },
+        {
+          "chapter": 74,
+          "sample": "b",
+          "title": "THREE ACTS ONE REALITY",
+          "file": "chapter-74-b.bmp",
+          "mean_channel_difference": 0.007635996676981449,
+          "changed_pixel_fraction": 0.07762538580246914
+        },
+        {
+          "chapter": 75,
+          "sample": "a",
+          "title": "THE FINAL ASCENT",
+          "file": "chapter-75-a.bmp",
+          "mean_channel_difference": 0.02493644505739212,
+          "changed_pixel_fraction": 0.43690972222222224
+        },
+        {
+          "chapter": 75,
+          "sample": "b",
+          "title": "THE FINAL ASCENT",
+          "file": "chapter-75-b.bmp",
+          "mean_channel_difference": 0.03631412237882614,
+          "changed_pixel_fraction": 0.5446199845679013
+        },
+        {
+          "chapter": 76,
+          "sample": "a",
+          "title": "REALITY ASCENDANT",
+          "file": "chapter-76-a.bmp",
+          "mean_channel_difference": 0.0026041967794299126,
+          "changed_pixel_fraction": 0.0056307870370370374
+        },
+        {
+          "chapter": 76,
+          "sample": "b",
+          "title": "REALITY ASCENDANT",
+          "file": "chapter-76-b.bmp",
+          "mean_channel_difference": 0.0,
+          "changed_pixel_fraction": 0.0
+        }
+      ],
+      "strongest_sample": {
+        "chapter": 75,
+        "sample": "b",
+        "title": "THE FINAL ASCENT",
+        "file": "chapter-75-b.bmp",
+        "mean_channel_difference": 0.03631412237882614,
+        "changed_pixel_fraction": 0.5446199845679013
+      }
+    }
+  ]
+}

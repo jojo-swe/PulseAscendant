@@ -60,7 +60,8 @@ struct HardwareRT::Impl {
  Acceleration tlas{};
  Buffer *instanceBuffer=nullptr,*objects=nullptr,*parameters=nullptr,*output=nullptr,*scratch=nullptr,*readback=nullptr,*objectUpload=nullptr,*parameterUpload=nullptr;
  struct Object {float base[4],emission[4],material[4];};
- struct Parameters {float eye[4],forward[4],right[4],up[4],clock[4],music[4],bands[24];};
+ struct Parameters {float eye[4],forward[4],right[4],up[4],clock[4],music[4],pulse[4],bands[24];};
+ static_assert(sizeof(Parameters)==208,"RT std140 parameter layout must match rt_scene.comp");
  std::vector<VkAccelerationStructureInstanceKHR> instances;
  std::vector<Object> objectData;
  ~Impl(){
@@ -201,6 +202,13 @@ struct HardwareRT::Impl {
   // irreversible action; the chapter clock never cycles the camera or set.
   const int variant=f.variant;
   const float p=f.chapterProgress,action=f.action,impact=f.event;
+  const float kick=std::clamp(f.kick,0.f,1.f),snare=std::clamp(f.snare,0.f,1.f),treble=std::clamp(f.treble,0.f,1.f);
+  // Continuous transport uses an integrated clock. Onsets only change physical
+  // size/deflection/light, never multiply time (which would teleport geometry).
+  const float transport=float(f.motionSeconds)+float(f.localSeconds)*.8f;
+  // GLSL-style positive modulo remains in range after arbitrarily many laps,
+  // including negative transport. No finite offset can make fmod equivalent.
+  auto wrap=[](float x,float period){return x-period*std::floor(x/period);};
   auto ease=[](float x){x=std::clamp(x,0.f,1.f);return x*x*(3-2*x);};
   auto mix=[](V3 a,V3 b,float x){return a*(1-x)+b*x;};
   auto beam=[&](V3 from,V3 to,float radius,V3 base,float metal,float rough,V3 emission=V3{}){
@@ -214,7 +222,7 @@ struct HardwareRT::Impl {
    floor(65);
    if(variant==0){
     // A flat slab tears upward into a chrome spine, one blade after another.
-    for(int j=0;j<28;++j){float z=(j-13.5f)*.72f,grow=ease(p*2.4f-j*.035f),height=.12f+grow*(2.8f+1.4f*std::sin(j*.21f));
+    for(int j=0;j<28;++j){float z=(j-13.5f)*.72f,grow=ease(p*2.4f-j*.035f),height=.12f+grow*(2.8f+1.4f*std::sin(j*.21f)+f.spectrum[j%24]*1.25f);
      add(0,{std::sin(j*.3f)*1.2f,height-1,z},{2.7f,height,.16f},j*.025f,(-.3f+.6f*grow)*std::sin(j*.27f),steel,.98f,.08f);
      beam({-2.7f,height*2-1.02f,z},{2.7f,height*2-1.02f,z},.035f,cyan,0,.2f,cyan*(1.2f+f.spectrum[j%24]));
     }
@@ -232,8 +240,8 @@ struct HardwareRT::Impl {
     eye={-1.7f+3.4f*p,1.8f+4.5f*p,-24+32*p};target=eye+V3{0,2,13};
    }else if(variant==2){
     // Four flowing metal ribbons resolve from a liquid sheet into a rising wave.
-    for(int lane=0;lane<4;++lane)for(int j=0;j<56;++j){float z=(j-27.5f)*.52f,phase=z*.3f+float(f.localSeconds)*1.1f+lane*.7f;
-     float height=1.3f+(1+action*2.4f)*std::sin(phase),x=(lane-1.5f)*2.4f+std::sin(phase*.7f)*action*1.5f;
+    for(int lane=0;lane<4;++lane)for(int j=0;j<56;++j){float z=(j-27.5f)*.52f,phase=z*.3f+float(f.localSeconds)*1.9f+lane*.7f;
+     float height=1.3f+(1+action*2.4f+bass*.9f)*std::sin(phase),x=(lane-1.5f)*2.4f+std::sin(phase*.7f)*action*1.5f;
      add(0,{x,height,z},{.9f,.065f,.3f},.06f*std::cos(phase),.35f*std::cos(phase),lane%2?gold:steel,.99f,.055f);
      if(j%7==0)beam({x-.85f,height+.08f,z},{x+.85f,height+.08f,z},.025f,cyan,0,.2f,cyan*(1.3f+bass));
     }
@@ -266,7 +274,7 @@ struct HardwareRT::Impl {
    }
   }else if(world==1){
    floor(100,.07f);
-   const float local=float(f.localSeconds);
+   const float local=float(f.localSeconds)*1.65f;
    // The city is rebuilt for each visit: avenue, rail chase, folded circuit,
    // aerial canyon, then an evacuation into the horizon.
    for(int side:{-1,1})for(int j=0;j<22;++j){float seed=.5f+.5f*std::sin(j*7.1f+side),z=(j-10.5f)*7.f,height=4+seed*(variant==3?24:14);
@@ -288,7 +296,7 @@ struct HardwareRT::Impl {
      add(0,{x,8.7f,14},{1.45f,.4f,.8f},0,0,steel,.9f,.11f);
      add(0,{x,8.7f,13.17f},{1.25f,.07f,.02f},0,0,pink,0,.2f,pink*3);
     }
-    eye={1.4f,1.4f+.5f*p,-25+28*p};target=eye+V3{0,1,22};
+    eye={1.4f,1.4f+.5f*p,-35+57*p};target=eye+V3{0,1,22};
    }else if(variant==1){
     // A long maglev overtakes at the left, with an open road ahead of the camera.
     beam({-5.8f,.25f,-90},{-5.8f,.25f,90},.1f,steel,.85f,.13f);
@@ -301,7 +309,7 @@ struct HardwareRT::Impl {
      add(0,{j%2?2.1f:.1f,.2f,z},{.65f,.25f,1.2f},0,0,gold,.9f,.12f);
      add(0,{j%2?2.1f:.1f,.22f,z-1.23f},{.5f,.04f,.025f},0,0,pink,0,.2f,pink*4);
     }
-    eye={1.4f,2.1f+1.5f*action,-32+69*p};target=eye+V3{-.3f,.3f,20};
+    eye={1.4f,2.1f+1.5f*action,-40+94*p};target=eye+V3{-.3f,.3f,20};
    }else if(variant==2){
     // The street is a suspended diamond circuit; its two banks peel apart.
     for(int j=0;j<18;++j){float z=(j-8.5f)*5.5f;
@@ -350,7 +358,7 @@ struct HardwareRT::Impl {
     eye=mix({18,9,-22},{13,6,-14},p);target={0,2,0};
    }else if(variant==1){
     // A suspended square matrix buckles into a travelling saddle wave.
-    for(int x=-7;x<=7;++x)for(int z=-7;z<=7;++z){float wave=std::sin(x*.4f+z*.28f-float(f.localSeconds)*1.8f),height=4+wave*(.3f+action*3);
+    for(int x=-7;x<=7;++x)for(int z=-7;z<=7;++z){float wave=std::sin(x*.4f+z*.28f-float(f.localSeconds)*2.9f),height=4+wave*(.6f+action*3)+kick*.8f;
      add(0,{x*1.7f,height,z*1.7f},{.72f,.12f,.72f},.08f*x,action*wave*.25f,(x+z)%3?steel:gold,.94f,.12f);
      if((x+z)%3==0)add(0,{x*1.7f,height+.15f,z*1.7f},{.55f,.025f,.55f},0,0,cyan,0,.2f,cyan*(.8f+f.spectrum[(x+z+24)%24]*2));
     }
@@ -358,12 +366,12 @@ struct HardwareRT::Impl {
     eye=mix({24,20,-29},{18,14,-25},p);target={0,4,0};
    }else if(variant==2){
     // Ten industrial pistons part a block to reveal a vertical energy heart.
-    for(int side:{-1,1})for(int j=0;j<5;++j){float z=(j-2.f)*2.4f,stroke=(.5f+.5f*std::sin(float(f.localSeconds)*2.7f+j*.7f))*(.5f+f.spectrum[j*4]*2);
+    for(int side:{-1,1})for(int j=0;j<5;++j){float z=(j-2.f)*2.4f,stroke=(.5f+.5f*std::sin(float(f.localSeconds)*2.7f+j*.7f))*(.7f+f.spectrum[j*4]*2.8f)+kick*.7f;
      beam({side*10.f,3,z},{side*(4+stroke),3,z},.55f,steel,.97f,.1f);
      add(0,{side*(3.2f+action*3),3,z},{.6f,2.6f,.8f},0,0,gold,.9f,.13f);
     }
     for(int side:{-1,1})for(int z:{-1,1})add(0,{side*(1.9f+action*3),3,z*1.9f},{1.65f,3,1.65f},side*action*.15f,0,steel,.96f,.09f);
-    beam({0,-.7f,0},{0,8+action*7,0},.14f+impact*.18f,cyan,0,.25f,cyan*(2+action*3+bass));
+    beam({0,-.7f,0},{0,8+action*7,0},.14f+impact*.18f+kick*.35f,cyan,0,.25f,cyan*(2+action*3+bass));
     eye=mix({20,10,-27},{18,13,-24},p);target={0,4.5f,0};
    }else if(variant==3){
     // Two cargo formations collide once, then their fragments keep separating.
@@ -404,9 +412,9 @@ struct HardwareRT::Impl {
    if(variant==0){
     // A monolithic glass cube separates into eight refracting corners.
     for(int x:{-1,1})for(int y:{-1,1})for(int z:{-1,1}){
-     add(0,{x*(1.6f+action*2.6f),4+y*(1.6f+action*.5f),z*(1.6f+action*2.6f)},{1.55f,1.55f,1.55f},action*x*.15f,action*z*.1f,{.65f,.88f,1},.08f,.025f,{},.95f);
+     add(0,{x*(1.6f+action*2.6f),4+y*(1.6f+action*.5f),z*(1.6f+action*2.6f)},{1.55f,1.55f,1.55f},action*x*.15f+std::sin(float(f.localSeconds)*.9f+x)*.12f,action*z*.1f,{.65f,.88f,1},.08f,.025f,{},.95f);
     }
-    add(2,{0,4,0},{.65f,2.8f,.65f},.3f,0,gold,.1f,.03f,gold*(.4f+impact));
+    add(2,{0,4,0},{.65f+kick*.35f,2.8f+kick,.65f+kick*.35f},.3f,0,gold,.1f,.03f,gold*(.4f+impact));
     beam({-12,4,-4},{12,4,4},.045f,cyan,0,.2f,cyan*(2+bass));
     eye=mix({13,7,-19},{9,9,-17},p);target={0,4,0};
    }else if(variant==1){
@@ -421,7 +429,7 @@ struct HardwareRT::Impl {
    }else if(variant==2){
     // A quieter floating book of glass opens into a sparse wing of interior light.
     for(int j=0;j<14;++j){float a=(j-6.5f)*.085f*(.1f+action),x=(j-6.5f)*.45f;
-     add(0,{x,3.7f+std::abs(j-6.5f)*action*.28f,0},{.16f,3.2f,3.5f},a,-a,{.65f,.9f,.83f},.05f,.025f,{},.96f);
+     add(0,{x,3.7f+std::abs(j-6.5f)*action*.28f,0},{.16f,3.2f,3.5f},a+snare*.08f,-a,{.65f,.9f,.83f},.05f,.025f,{},.96f);
      beam({x,1,0},{x,5+action*2,0},.035f,gold,0,.2f,gold*(.7f+bass*.5f));
     }
     add(0,{0,-.8f,0},{7,.2f,6},0,0,{.05f,.12f,.17f},.8f,.1f);
@@ -448,6 +456,43 @@ struct HardwareRT::Impl {
     }
     add(2,{0,5,76},{2.2f,5,2.2f},.4f,0,gold,.6f,.1f,gold*.8f);
     eye={0,2.2f+2.3f*p,-28+66*p};target=eye+V3{0,.8f,20};
+   }
+  }
+  // Secondary activity has a different physical role in each world. These
+  // are real reflected/refracted meshes, with bounded counts (at most 96 extra).
+  if(world==0){
+   // Low spectrum pylons frame the sculpture; each bar has its own FFT band.
+   for(int side:{-1,1})for(int j=0;j<24;++j){
+    float z=(j-11.5f)*2.2f,x=side*(variant==3?14.f:11.f),v=f.spectrum[j];
+    float height=.12f+v*3.5f+kick*.5f;
+    add(0,{x,height*.5f-.95f,z},{.16f,height*.5f,.22f},0,0,steel,.9f,.18f);
+    add(0,{x,height-.91f,z},{.18f,.06f,.24f},0,0,cyan,0,.18f,cyan*(.8f+v*3+snare));
+   }
+  }else if(world==1){
+   // Two remote air corridors keep cross traffic visible throughout a chapter.
+   for(int lane=0;lane<2;++lane)for(int j=0;j<18;++j){
+    float x=wrap(j*9.f+transport*(lane?13.f:-11.f),162.f)-81;
+    float y=12.f+lane*19.f,z=27.f+lane*13.f;
+    V3 e=lane?gold:cyan;
+    add(0,{x,y,z},{1.3f,.16f,.28f},0,0,steel,.9f,.16f);
+    beam({x,y,z},{x-(lane?1.f:-1.f)*(2.5f+treble*3),y,z},.045f,e,0,.2f,e*(1.4f+snare*2));
+   }
+  }else if(world==2 && variant!=3){
+   // Hot industrial material races along the side conveyors, clear of the hero.
+   for(int side:{-1,1})for(int j=0;j<16;++j){
+    float z=wrap(j*3.8f-transport*12,60.f)-30;
+    float y=.3f+std::abs(std::sin(j*2.3f+float(f.localSeconds)*2.f))*(.8f+snare*2);
+    V3 e=j%3?gold:pink;
+    add(2,{side*10.f,y,z},{.11f,.18f,.5f},0,.3f*j,e,.25f,.2f,e*(1.2f+treble*2));
+   }
+  }else if(world==3){
+   // Refracted light packets pass through the glass. Their band-dependent
+   // length makes the treble motion legible without flashing the entire set.
+   for(int lane=0;lane<3;++lane)for(int j=0;j<12;++j){
+    float z=wrap(j*5.f+transport*(5.f+lane*2),60.f)-30;
+    float x=(lane-1)*5.f,y=2.3f+lane*2.2f,v=f.spectrum[(j+lane*8)%24];
+    V3 e=lane==0?cyan:(lane==1?gold:pink);
+    beam({x,y,z},{x,y,z+.35f+v*2.5f},.04f+treble*.025f,e,0,.2f,e*(1.5f+v*3));
    }
   }
   // Architectural surroundings provide depth and scale without putting a wall
@@ -577,8 +622,16 @@ struct HardwareRT::Impl {
    float a=t*.13f+f.shot*pi*.5f,r=world==4?19.f:(world==5?17.f:(world==6?25.f:24.f));r+=std::sin(f.progress*pi)*1.2f;
    float y=world==4?6.f:(world==5?6.5f:8.f);eye={std::sin(a)*r,y+std::sin(t*.17f)*1.5f,std::cos(a)*r};target={0,world==4?2.7f:(world==5?3.5f:3.4f),0};
   }
+  if(world<4){
+   // A continuous lateral arc reveals depth around the hero; fly-throughs keep
+   // their clear aisle. No periodic orbit and no camera shake on drum hits.
+   if(world!=1 && !(world==0&&(variant==1||variant==5)) && !(world==3&&variant==4)){
+    const float arc=std::sin(p*pi);
+    eye=eye+V3{arc*(variant%2?-3.5f:3.5f),arc*1.5f,arc*2.f};
+   }
+  }
   V3 forward=norm(target-eye),right=norm(cross(forward,{0,1,0})),up=cross(right,forward);
-  Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
+  Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;result.pulse[0]=kick;result.pulse[1]=snare;result.pulse[2]=treble;result.pulse[3]=f.pulsePhase;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
  }
  const float* render(const TimelineFrame& f,int w,int h){
   if(!rtViewportFits(uint32_t(w),uint32_t(h),maxOutputBytes))throw std::runtime_error("RT viewport exceeds this device's storage buffer range; reduce window size");

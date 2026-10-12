@@ -98,7 +98,11 @@ void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  gl::UseProgram(p);gl::Uniform1f(gl::GetUniformLocation(p,"uTime"),float(frame_.motionSeconds));
  gl::Uniform2f(gl::GetUniformLocation(p,"uResolution"),float(width_),float(height_));
  gl::Uniform1i(gl::GetUniformLocation(p,"uScene"),scene);gl::Uniform1i(gl::GetUniformLocation(p,"uRetro"),retro);
- gl::Uniform1f(gl::GetUniformLocation(p,"uEnergy"),std::clamp(std::max(energy_*3.f,frame_.energy),0.f,1.f));
+ // Use the same exact musical clock in interactive playback and offline export.
+ // Callback RMS is diagnostic only; mixing it here held loud tracks near1.
+ gl::Uniform1f(gl::GetUniformLocation(p,"uEnergy"),frame_.energy);
+ const float pulses[]={frame_.kick,frame_.snare,frame_.treble,frame_.pulsePhase};
+ gl::Uniform4fv(gl::GetUniformLocation(p,"uPulse"),1,pulses);
  gl::Uniform1f(gl::GetUniformLocation(p,"uDrive"),frame_.drive);
  gl::Uniform1f(gl::GetUniformLocation(p,"uBass"),frame_.bass);
  gl::Uniform1f(gl::GetUniformLocation(p,"uHit"),frame_.hit);
@@ -116,8 +120,14 @@ void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  gl::Uniform1fv(gl::GetUniformLocation(p,"uSpectrum[0]"),24,frame_.spectrum.data());
 }
 void Renderer::quad(GLuint p) {gl::UseProgram(p);gl::BindVertexArray(vao_);glDrawArrays(GL_TRIANGLES,0,3);}
-void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
- frame_=frame;
+void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
+ frame_=input;
+ frame_.kick=std::clamp(input.kick*pulseGain_,0.f,1.f);
+ frame_.snare=std::clamp(input.snare*pulseGain_,0.f,1.f);
+ frame_.treble=std::clamp(input.treble*pulseGain_,0.f,1.f);
+ frame_.bass=std::clamp(input.bass+.72f*(frame_.kick-input.kick),0.f,1.f);
+ frame_.hit=std::clamp(input.hit*pulseGain_,0.f,1.f);
+ const auto& frame=frame_;
  auto extent=renderExtent(width_,height_,retro);target(scene_,extent.width,extent.height,retro);
  target(output_,width_,height_,false);
  if(!retro) {target(blur_[0],std::max(1,width_/2),std::max(1,height_/2),false);target(blur_[1],std::max(1,width_/2),std::max(1,height_/2),false);}

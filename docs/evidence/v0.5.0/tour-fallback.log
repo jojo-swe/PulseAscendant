@@ -1,0 +1,4 @@
+Tracing renderer: OPENGL FALLBACK / disabled with --no-rt
+Video: windows | GPU: NVIDIA Corporation / NVIDIA GeForce RTX 4080/PCIe/SSE2 / 3.3.0 NVIDIA 617.42 | OpenGL fallback
+TOUR PASS: 152 exact-time chapter captures rendered without GL errors
+Render backend: NVIDIA Corporation / NVIDIA GeForce RTX 4080/PCIe/SSE2 / 3.3.0 NVIDIA 617.42 | OpenGL fallback

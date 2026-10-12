@@ -7,13 +7,14 @@ float blockS(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.))+min(max(q.x
 float shell(vec3 p){
  float k=clamp(uChapterProgress,0.,1.),a=uAction;
  if(uVariant==0){
-  vec3 q=p;q.xy=rot(k*.35)*q.xy;
-  float radius=1.65-a*.9-k*.12;
-  vec3 g=q*3.3;float gyroid=(abs(dot(sin(g),cos(g.zxy)))-.24)/6.7;
+  vec3 q=p;q.xy=rot(k*.35+uChapterTime*.26)*q.xy;
+  q.xz=rot(uChapterTime*.17)*q.xz;
+  float radius=1.65-a*.9-k*.12+uPulse.x*.055;
+  vec3 g=q*3.3+vec3(0,uChapterTime*.65,0);float gyroid=(abs(dot(sin(g),cos(g.zxy)))-.24)/6.7;
   float d=max(gyroid,length(q)-radius);
   for(int i=0;i<6;i++){
    float angle=float(i)*PI/3.;vec3 offset=vec3(cos(angle),.4*sin(angle*2.),sin(angle))*(1.3+a*1.5);
-   vec3 shard=q-offset;shard.xy=rot(angle+a)*shard.xy;
+   vec3 shard=q-offset;shard.xy=rot(angle+a+uChapterTime*.65)*shard.xy;
    float size=.12+a*.2;d=min(d,blockS(shard,vec3(size,.33+a*.18,size)));
   }
   return d;
@@ -27,7 +28,7 @@ float shell(vec3 p){
    q.xz=rot(angle*.3)*q.xz;
    float spire=blockS(q,vec3(.23+fi*.035,h*.5,.28));
    // Horizontal gaps distinguish rebuilt slabs from the collapsing porous sphere.
-   spire=max(spire,-(abs(mod(q.y+.23,.46)-.23)-.045));d=min(d,spire);
+   spire=max(spire,-(abs(mod(q.y+.23,.46)-.23)-(.045+uPulse.y*.028)));d=min(d,spire);
   }
   return d;
  }
@@ -52,7 +53,7 @@ float shadeShadow(vec3 p,vec3 l) {
 }
 float occlusion(vec3 p,vec3 n) {float f=0.;for(int i=1;i<=4;i++){float h=float(i)*.06;f+=max(0.,h-mapS(p+n*h).x)/float(i);}return clamp(1.-f*2.,.2,1.);}
 float plasma(vec3 p) {
- return sin(p.x*3.4+sin(p.y*2.1+uTime*.32)*2.4+uTime*.24)+sin(p.y*4.+sin(p.z*2.7-uTime*.23)*2.1-uTime*.36);
+ return sin(p.x*3.4+sin(p.y*2.1+uTime*.82)*2.4+uTime*.64)+sin(p.y*4.+sin(p.z*2.7-uTime*.63)*2.1-uTime*.86);
 }
 vec3 env(vec3 rd) {
  vec3 c=vec3(.006,.012,.026)+vec3(.012,.025,.04)*max(rd.y,0.);
@@ -73,8 +74,8 @@ vec3 surface(vec3 p,vec3 n,vec3 v,float id,bool reflected) {
  if(id>1.5) {
   float vein=pow(.5+.5*sin(f*7.+p.z*2.),18.);
   float band=frequencyBand((atan(p.z,p.x)/PI+1.)*11.99);
-  c+=mix(vec3(.015,1.,1.8),vec3(2.,.28,.025),smoothstep(-.2,1.,f))*vein*(.2+band*2.4);
-  c+=vec3(.03,.28,.36)*fresnel;
+  c+=mix(vec3(.015,1.,1.8),vec3(2.,.28,.025),smoothstep(-.2,1.,f))*vein*(.2+band*1.65+uPulse.x*2.2+uPulse.z*.65);
+  c+=vec3(.03,.28,.36)*fresnel*(1.+uPulse.y);
  }
  return c;
 }
@@ -99,7 +100,7 @@ void main() {
   if(hit.y<1.5&&uRetro==0)c=mix(c,reflection(pos+n*.02,reflect(rd,n)),.45);
   c=mix(c,env(rd)*.1,1.-exp(-t*(hit.y<1.5?.22:.025)));
  }
- c+=vec3(.01,.24,.35)*glow;
+ c+=vec3(.01,.24,.35)*glow*(1.+uPulse.x*1.8);
  // Distant star particles in the black chamber.
  vec2 cell=floor(vUV*uResolution/3.);float h=hash(cell);
  if(!found)c+=step(.999,h)*vec3(.1,.2,.3)*(.5+.5*sin(h*100.+uTime));

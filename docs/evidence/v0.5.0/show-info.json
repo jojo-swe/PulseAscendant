@@ -1,0 +1,721 @@
+{
+  "title": "PULSE ASCENDANT",
+  "version": "0.5.0",
+  "duration": 888.68,
+  "music": "music/second-reality-three-acts.wav",
+  "planned_acts": 3,
+  "act2_available": true,
+  "act3_available": true,
+  "acts": [
+    {
+      "number": 1,
+      "start": 0,
+      "duration": 300,
+      "frames": 14400000,
+      "title": "ACT I / FULL THROTTLE",
+      "music": "music/luminous-flow-act1.wav"
+    },
+    {
+      "number": 2,
+      "start": 300,
+      "duration": 289.92,
+      "frames": 13916160,
+      "title": "ACT II / ADVENTUROUS UPLIFT",
+      "music": "music/adventurous-uplift.wav"
+    },
+    {
+      "number": 3,
+      "start": 589.92,
+      "duration": 298.76,
+      "frames": 14340480,
+      "title": "ACT III / REALITY ASCENDANT",
+      "music": "music/rigid-arpeggios.wav"
+    }
+  ],
+  "chapters": [
+    {
+      "start": 0,
+      "duration": 6.65,
+      "accent": 3.2,
+      "act": 1,
+      "scene": 5,
+      "variant": 0,
+      "title": "IGNITION"
+    },
+    {
+      "start": 6.65,
+      "duration": 10.05,
+      "accent": 10.6,
+      "act": 1,
+      "scene": 0,
+      "variant": 0,
+      "title": "PHOTON LAUNCH"
+    },
+    {
+      "start": 16.7,
+      "duration": 11.6,
+      "accent": 24.1,
+      "act": 1,
+      "scene": 3,
+      "variant": 0,
+      "title": "NEON DESCENT"
+    },
+    {
+      "start": 28.3,
+      "duration": 10.6,
+      "accent": 32.7,
+      "act": 1,
+      "scene": 6,
+      "variant": 0,
+      "title": "QUANTUM OCEAN"
+    },
+    {
+      "start": 38.9,
+      "duration": 7.25,
+      "accent": 43.95,
+      "act": 1,
+      "scene": 4,
+      "variant": 0,
+      "title": "FRACTURE GATE"
+    },
+    {
+      "start": 46.15,
+      "duration": 10.4,
+      "accent": 51.25,
+      "act": 1,
+      "scene": 0,
+      "variant": 1,
+      "title": "HYPERDRIVE"
+    },
+    {
+      "start": 56.55,
+      "duration": 7.25,
+      "accent": 60.3,
+      "act": 1,
+      "scene": 3,
+      "variant": 1,
+      "title": "SKYLINE CHASE"
+    },
+    {
+      "start": 63.8,
+      "duration": 11,
+      "accent": 71.3,
+      "act": 1,
+      "scene": 2,
+      "variant": 0,
+      "title": "REACTOR OVERDRIVE"
+    },
+    {
+      "start": 74.8,
+      "duration": 11.2,
+      "accent": 80.95,
+      "act": 1,
+      "scene": 5,
+      "variant": 1,
+      "title": "ORBITAL STORM"
+    },
+    {
+      "start": 86,
+      "duration": 9.85,
+      "accent": 91.45,
+      "act": 1,
+      "scene": 4,
+      "variant": 1,
+      "title": "INFINITE MACHINE"
+    },
+    {
+      "start": 95.85,
+      "duration": 7.85,
+      "accent": 101.1,
+      "act": 1,
+      "scene": 1,
+      "variant": 0,
+      "title": "MATTER COLLAPSE"
+    },
+    {
+      "start": 103.7,
+      "duration": 13.1,
+      "accent": 112,
+      "act": 1,
+      "scene": 7,
+      "variant": 0,
+      "title": "ORBITAL ARMADA"
+    },
+    {
+      "start": 116.8,
+      "duration": 8.75,
+      "accent": 123.35,
+      "act": 1,
+      "scene": 0,
+      "variant": 2,
+      "title": "CORE DIVE"
+    },
+    {
+      "start": 125.55,
+      "duration": 11.75,
+      "accent": 130.1,
+      "act": 1,
+      "scene": 2,
+      "variant": 1,
+      "title": "CRYSTAL ACCELERATOR"
+    },
+    {
+      "start": 137.3,
+      "duration": 10.5,
+      "accent": 144.3,
+      "act": 1,
+      "scene": 4,
+      "variant": 2,
+      "title": "FRACTURE CASCADE"
+    },
+    {
+      "start": 147.8,
+      "duration": 10.25,
+      "accent": 152.15,
+      "act": 1,
+      "scene": 5,
+      "variant": 2,
+      "title": "SUPERNOVA"
+    },
+    {
+      "start": 158.05,
+      "duration": 7.2,
+      "accent": 161.55,
+      "act": 1,
+      "scene": 3,
+      "variant": 2,
+      "title": "TERMINAL VELOCITY"
+    },
+    {
+      "start": 165.25,
+      "duration": 12.2,
+      "accent": 171.8,
+      "act": 1,
+      "scene": 7,
+      "variant": 1,
+      "title": "EVENT HORIZON"
+    },
+    {
+      "start": 177.45,
+      "duration": 10.05,
+      "accent": 181.4,
+      "act": 1,
+      "scene": 1,
+      "variant": 1,
+      "title": "AFTERSHOCK"
+    },
+    {
+      "start": 187.5,
+      "duration": 11.1,
+      "accent": 194.45,
+      "act": 1,
+      "scene": 6,
+      "variant": 1,
+      "title": "ZERO GRAVITY"
+    },
+    {
+      "start": 198.6,
+      "duration": 9.15,
+      "accent": 202.3,
+      "act": 1,
+      "scene": 2,
+      "variant": 2,
+      "title": "REBUILD"
+    },
+    {
+      "start": 207.75,
+      "duration": 11.1,
+      "accent": 215.8,
+      "act": 1,
+      "scene": 7,
+      "variant": 2,
+      "title": "RESONANCE"
+    },
+    {
+      "start": 218.85,
+      "duration": 9.8,
+      "accent": 222.8,
+      "act": 1,
+      "scene": 6,
+      "variant": 2,
+      "title": "REBIRTH"
+    },
+    {
+      "start": 228.65,
+      "duration": 11.55,
+      "accent": 232.15,
+      "act": 1,
+      "scene": 3,
+      "variant": 3,
+      "title": "SECOND IGNITION"
+    },
+    {
+      "start": 240.2,
+      "duration": 8.05,
+      "accent": 245.2,
+      "act": 1,
+      "scene": 0,
+      "variant": 3,
+      "title": "FULL THROTTLE"
+    },
+    {
+      "start": 248.25,
+      "duration": 9.55,
+      "accent": 251.95,
+      "act": 1,
+      "scene": 4,
+      "variant": 3,
+      "title": "VECTOR STORM"
+    },
+    {
+      "start": 257.8,
+      "duration": 9.15,
+      "accent": 260.65,
+      "act": 1,
+      "scene": 5,
+      "variant": 3,
+      "title": "SOLAR WIND"
+    },
+    {
+      "start": 266.95,
+      "duration": 11.85,
+      "accent": 271.3,
+      "act": 1,
+      "scene": 2,
+      "variant": 3,
+      "title": "CRYSTAL SUPREMACY"
+    },
+    {
+      "start": 278.8,
+      "duration": 6.4,
+      "accent": 280.85,
+      "act": 1,
+      "scene": 7,
+      "variant": 3,
+      "title": "FINAL PURSUIT"
+    },
+    {
+      "start": 285.2,
+      "duration": 7.2,
+      "accent": 287.4,
+      "act": 1,
+      "scene": 5,
+      "variant": 4,
+      "title": "LIGHTSPEED"
+    },
+    {
+      "start": 292.4,
+      "duration": 7.6,
+      "accent": 295.45,
+      "act": 1,
+      "scene": 2,
+      "variant": 4,
+      "title": "ASCENT VECTOR"
+    },
+    {
+      "start": 300,
+      "duration": 11,
+      "accent": 308.15,
+      "act": 2,
+      "scene": 8,
+      "variant": 0,
+      "title": "CHROME AWAKENING"
+    },
+    {
+      "start": 311,
+      "duration": 16.25,
+      "accent": 316.35,
+      "act": 2,
+      "scene": 8,
+      "variant": 1,
+      "title": "CATHEDRAL OF LIGHT"
+    },
+    {
+      "start": 327.25,
+      "duration": 13.8,
+      "accent": 332.9,
+      "act": 2,
+      "scene": 9,
+      "variant": 0,
+      "title": "RAIN DISTRICT"
+    },
+    {
+      "start": 341.05,
+      "duration": 11.9,
+      "accent": 345.9,
+      "act": 2,
+      "scene": 10,
+      "variant": 0,
+      "title": "ORBITAL FOUNDRY"
+    },
+    {
+      "start": 352.95,
+      "duration": 16.75,
+      "accent": 358.7,
+      "act": 2,
+      "scene": 11,
+      "variant": 0,
+      "title": "PRISM CHAMBER"
+    },
+    {
+      "start": 369.7,
+      "duration": 11.4,
+      "accent": 377.15,
+      "act": 2,
+      "scene": 9,
+      "variant": 1,
+      "title": "NEON PURSUIT"
+    },
+    {
+      "start": 381.1,
+      "duration": 13.15,
+      "accent": 389,
+      "act": 2,
+      "scene": 8,
+      "variant": 2,
+      "title": "LIQUID CHROME"
+    },
+    {
+      "start": 394.25,
+      "duration": 13.9,
+      "accent": 399.4,
+      "act": 2,
+      "scene": 10,
+      "variant": 1,
+      "title": "KINETIC ARRAY"
+    },
+    {
+      "start": 408.15,
+      "duration": 16.9,
+      "accent": 415.45,
+      "act": 2,
+      "scene": 11,
+      "variant": 1,
+      "title": "SPECTRAL REFRACTION"
+    },
+    {
+      "start": 425.05,
+      "duration": 13.7,
+      "accent": 433.55,
+      "act": 2,
+      "scene": 9,
+      "variant": 2,
+      "title": "WET CIRCUIT"
+    },
+    {
+      "start": 438.75,
+      "duration": 10.9,
+      "accent": 442.45,
+      "act": 2,
+      "scene": 10,
+      "variant": 2,
+      "title": "MACHINE HEART"
+    },
+    {
+      "start": 449.65,
+      "duration": 15.2,
+      "accent": 457.25,
+      "act": 2,
+      "scene": 8,
+      "variant": 3,
+      "title": "GOLDEN ASCENT"
+    },
+    {
+      "start": 464.85,
+      "duration": 13.9,
+      "accent": 470.05,
+      "act": 2,
+      "scene": 11,
+      "variant": 2,
+      "title": "INNER LIGHT"
+    },
+    {
+      "start": 478.75,
+      "duration": 14.95,
+      "accent": 484.4,
+      "act": 2,
+      "scene": 9,
+      "variant": 3,
+      "title": "MIDNIGHT VELOCITY"
+    },
+    {
+      "start": 493.7,
+      "duration": 14.75,
+      "accent": 501.3,
+      "act": 2,
+      "scene": 10,
+      "variant": 3,
+      "title": "ORBITAL COLLISION"
+    },
+    {
+      "start": 508.45,
+      "duration": 15.6,
+      "accent": 515.85,
+      "act": 2,
+      "scene": 8,
+      "variant": 4,
+      "title": "CHROME RESONANCE"
+    },
+    {
+      "start": 524.05,
+      "duration": 13.65,
+      "accent": 532.95,
+      "act": 2,
+      "scene": 11,
+      "variant": 3,
+      "title": "PRISM BREAK"
+    },
+    {
+      "start": 537.7,
+      "duration": 17.3,
+      "accent": 542.9,
+      "act": 2,
+      "scene": 9,
+      "variant": 4,
+      "title": "ELECTRIC HORIZON"
+    },
+    {
+      "start": 555,
+      "duration": 16.95,
+      "accent": 567.6,
+      "act": 2,
+      "scene": 10,
+      "variant": 4,
+      "title": "UPLIFT"
+    },
+    {
+      "start": 571.95,
+      "duration": 9.9,
+      "accent": 577.4,
+      "act": 2,
+      "scene": 8,
+      "variant": 5,
+      "title": "CATHEDRAL FINALE"
+    },
+    {
+      "start": 581.85,
+      "duration": 8.07,
+      "accent": 585.05,
+      "act": 2,
+      "scene": 11,
+      "variant": 4,
+      "title": "BEYOND THE PRISM"
+    },
+    {
+      "start": 589.92,
+      "duration": 11.55,
+      "accent": 596.77,
+      "act": 3,
+      "scene": 12,
+      "variant": 0,
+      "title": "SUNRISE OF GIANTS"
+    },
+    {
+      "start": 601.47,
+      "duration": 9.8,
+      "accent": 604.27,
+      "act": 3,
+      "scene": 12,
+      "variant": 1,
+      "title": "DUNE COLOSSUS"
+    },
+    {
+      "start": 611.27,
+      "duration": 13.7,
+      "accent": 621.27,
+      "act": 3,
+      "scene": 13,
+      "variant": 0,
+      "title": "THE LIVING CIRCUIT"
+    },
+    {
+      "start": 624.97,
+      "duration": 10.45,
+      "accent": 632.47,
+      "act": 3,
+      "scene": 14,
+      "variant": 0,
+      "title": "GRAVITY REBELLION"
+    },
+    {
+      "start": 635.42,
+      "duration": 10.65,
+      "accent": 642.92,
+      "act": 3,
+      "scene": 15,
+      "variant": 0,
+      "title": "ARCH OF TOMORROW"
+    },
+    {
+      "start": 646.07,
+      "duration": 15.25,
+      "accent": 656.07,
+      "act": 3,
+      "scene": 12,
+      "variant": 2,
+      "title": "SANDSTORM PURSUIT"
+    },
+    {
+      "start": 661.32,
+      "duration": 8.7,
+      "accent": 665.67,
+      "act": 3,
+      "scene": 13,
+      "variant": 1,
+      "title": "VERDANT SINGULARITY"
+    },
+    {
+      "start": 670.02,
+      "duration": 11.75,
+      "accent": 673.72,
+      "act": 3,
+      "scene": 14,
+      "variant": 1,
+      "title": "FALLING HORIZONS"
+    },
+    {
+      "start": 681.77,
+      "duration": 12.8,
+      "accent": 686.12,
+      "act": 3,
+      "scene": 15,
+      "variant": 1,
+      "title": "CRYSTAL WINGS"
+    },
+    {
+      "start": 694.57,
+      "duration": 14.35,
+      "accent": 701.77,
+      "act": 3,
+      "scene": 12,
+      "variant": 3,
+      "title": "CERAMIC TITANS"
+    },
+    {
+      "start": 708.92,
+      "duration": 12.4,
+      "accent": 717.82,
+      "act": 3,
+      "scene": 13,
+      "variant": 2,
+      "title": "SEED VELOCITY"
+    },
+    {
+      "start": 721.32,
+      "duration": 8.25,
+      "accent": 727.37,
+      "act": 3,
+      "scene": 14,
+      "variant": 2,
+      "title": "TIDAL FRACTURE"
+    },
+    {
+      "start": 729.57,
+      "duration": 13,
+      "accent": 736.92,
+      "act": 3,
+      "scene": 15,
+      "variant": 2,
+      "title": "REALITY CONVERGENCE"
+    },
+    {
+      "start": 742.57,
+      "duration": 11.3,
+      "accent": 750.82,
+      "act": 3,
+      "scene": 13,
+      "variant": 3,
+      "title": "BREATH OF LIGHT"
+    },
+    {
+      "start": 753.87,
+      "duration": 13.75,
+      "accent": 761.02,
+      "act": 3,
+      "scene": 12,
+      "variant": 4,
+      "title": "SUNFIRE ADVANCE"
+    },
+    {
+      "start": 767.62,
+      "duration": 10.5,
+      "accent": 772.72,
+      "act": 3,
+      "scene": 14,
+      "variant": 3,
+      "title": "ORBITAL UPRISING"
+    },
+    {
+      "start": 778.12,
+      "duration": 13.7,
+      "accent": 785.12,
+      "act": 3,
+      "scene": 13,
+      "variant": 4,
+      "title": "GROWTH CASCADE"
+    },
+    {
+      "start": 791.82,
+      "duration": 11.9,
+      "accent": 795.92,
+      "act": 3,
+      "scene": 15,
+      "variant": 3,
+      "title": "ASCENDANT ARRAY"
+    },
+    {
+      "start": 803.72,
+      "duration": 12.55,
+      "accent": 811.52,
+      "act": 3,
+      "scene": 12,
+      "variant": 5,
+      "title": "TITAN OVERDRIVE"
+    },
+    {
+      "start": 816.27,
+      "duration": 11.7,
+      "accent": 819.77,
+      "act": 3,
+      "scene": 14,
+      "variant": 4,
+      "title": "BREAK THE HORIZON"
+    },
+    {
+      "start": 827.97,
+      "duration": 10.8,
+      "accent": 834.67,
+      "act": 3,
+      "scene": 13,
+      "variant": 5,
+      "title": "INFINITE BLOOM"
+    },
+    {
+      "start": 838.77,
+      "duration": 15.1,
+      "accent": 845.27,
+      "act": 3,
+      "scene": 15,
+      "variant": 4,
+      "title": "THREE ACTS ONE REALITY"
+    },
+    {
+      "start": 853.87,
+      "duration": 17.7,
+      "accent": 865.52,
+      "act": 3,
+      "scene": 15,
+      "variant": 5,
+      "title": "THE FINAL ASCENT"
+    },
+    {
+      "start": 871.57,
+      "duration": 17.11,
+      "accent": 881.92,
+      "act": 3,
+      "scene": 15,
+      "variant": 6,
+      "title": "REALITY ASCENDANT"
+    }
+  ]
+}

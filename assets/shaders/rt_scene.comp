@@ -5,7 +5,7 @@ layout(set=0,binding=0) uniform accelerationStructureEXT scene;
 layout(set=0,binding=1,std430) writeonly buffer Pixels {vec4 pixels[];};
 struct Object {vec4 base;vec4 emission;vec4 material;};
 layout(set=0,binding=2,std430) readonly buffer Objects {Object objects[];};
-layout(set=0,binding=3,std140) uniform Parameters {vec4 eye,forward,right,up,clock,music;vec4 bands[6];} u;
+layout(set=0,binding=3,std140) uniform Parameters {vec4 eye,forward,right,up,clock,music,pulse;vec4 bands[6];} u;
 const float PI=3.14159265359;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float band(int n){return u.bands[n/4][n%4];}
@@ -83,26 +83,45 @@ Object surfaceMaterial(Hit hit,Object material){
    floorAccent=vec3(.025,.015,.08)*seam;
   }
  }
+ // Facade apertures follow the surface rather than floating HUD graphics.
+ if(world==1 && abs(hit.n.y)<.2 && metal>.3 && hit.p.y>0.){
+  vec2 face=abs(hit.n.x)>.5?hit.p.zy:hit.p.xy;
+  vec2 cell=fract(face*vec2(.65,1.1));
+  float window=step(.18,cell.x)*step(cell.x,.76)*step(.22,cell.y)*step(cell.y,.68);
+  float occupied=step(.35,hash(floor(face*vec2(.65,1.1))));
+  floorAccent+=mix(vec3(.04,.22,.35),vec3(.55,.26,.06),hash(floor(face*.2)))*window*occupied*(.7+u.pulse.z*.8);
+ }
+ // Brushed panel breakup keeps metal from reading as featureless plastic.
+ if(world==2 && metal>.5){
+  float machining=.5+.5*sin(dot(hit.p,vec3(0.,45.,3.)));
+  rough=clamp(rough+machining*.045,.06,.6);
+  base*=.88+.12*machining;
+ }
+ if(world<4 && dot(material.emission.rgb,vec3(1))>.4){
+  int bandIndex=int(mod(floor(abs(hit.p.z)*.6+abs(hit.p.x)*.35),24.));
+  float packet=pow(max(0.,sin(hit.p.z*.35-u.clock.z*3.2)),10.);
+  material.emission.rgb*=.6+band(bandIndex)*1.7+u.pulse.x*.55+u.pulse.y*.7+packet*.55;
+ }
  material.base.rgb=base;material.material.x=rough;material.emission.rgb+=floorAccent;
  return material;
 }
 vec3 shade(Hit hit,vec3 ray,Object material,vec2 pixel){
  vec3 base=material.base.rgb;float metal=material.base.a,rough=material.material.x;int world=int(u.clock.w);
- vec3 color=base*(.12+.08*u.music.z)*(1.-metal)+sky(hit.n)*base*(1.-metal)*.7+material.emission.rgb;
+ vec3 color=base*(.12+.08*u.music.z)*(1.-metal)+sky(hit.n)*base*(1.-metal)*.7;
  if(int(u.clock.w)==4){vec3 sun=normalize(vec3(-.5,.65,.7));color+=base*max(dot(hit.n,sun),0.)*1.3*visibility(hit.p+hit.n*.02,sun,200.);}
  color+=sky(reflect(ray,hit.n))*base*metal*rough*.6;
  for(int i=0;i<3;i++){
   vec3 position=u.eye.xyz+(i==0?vec3(4,6,7):(i==1?vec3(-7,2,-3):vec3(1,6,-12)));
   vec3 lightColor=i==0?vec3(1.4,.72,.3):(i==1?vec3(.05,.6,1.4):vec3(1.4,.035,.2));
   if(world==2)lightColor=i==0?vec3(1.8,.55,.09):(i==1?vec3(.12,.3,.55):vec3(1.5,.15,.025));
-  if(world==3)lightColor=i==0?vec3(.85,.95,1.4):(i==1?vec3(.2,.75,1.2):vec3(.9,.12,.8));
+  if(world==3)lightColor=i==0?vec3(.85,.95,1.4):(i==1?vec3(.08,.55,1.2):vec3(1.2,.44,.12));
   vec3 delta=position-hit.p;float distance=length(delta);vec3 light=delta/distance;
   float shadow=1.;if(i==0&&dot(hit.n,light)>.0){
    vec2 jitter=vec2(hash(pixel),hash(pixel.yx+17.))-.5;
    vec3 soft=normalize(delta+u.right.xyz*jitter.x*.35+u.up.xyz*jitter.y*.35);
    shadow=visibility(hit.p+hit.n*.015,soft,distance);
   }
-  color+=brdf(hit.n,-ray,light,base,metal,rough)*lightColor*(220./(3.+distance*distance))*(.6+u.music.x*.7)*shadow;
+  color+=brdf(hit.n,-ray,light,base,metal,rough)*lightColor*(220./(3.+distance*distance))*(.8+u.music.x*.3+u.pulse.x*.18)*shadow;
  }
  return color;
 }
@@ -122,7 +141,7 @@ vec3 samplePixel(vec2 pixel,vec2 extent){
   }else{
    vec3 F=mix(vec3(.04),material.base.rgb,material.base.a);F+=(1.-F)*fresnel;
    float reflection=(1.-material.material.x*.7);vec3 reflectWeight=F*reflection;
-   color+=throughput*shade(hit,ray,material,pixel)*(1.-reflectWeight);
+   color+=throughput*(material.emission.rgb+shade(hit,ray,material,pixel)*(1.-reflectWeight));
    throughput*=reflectWeight;
    if(max(throughput.x,max(throughput.y,throughput.z))<.015){throughput=vec3(0);break;}
    ray=reflect(ray,hit.n);origin=hit.p+hit.n*.016;

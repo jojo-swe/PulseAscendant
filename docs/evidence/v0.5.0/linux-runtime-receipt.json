@@ -1,0 +1,42 @@
+{
+  "build": "/home/jojo/.cache/second-reality-remix/public-build-v05",
+  "executable_sha256": "f5e4210c86c1c60f445b4c26467958c9083f573ab456b886c9d96134c23a141a",
+  "shader_files_verified": 28,
+  "tour_frames": 152,
+  "tour_width": 960,
+  "tour_height": 540,
+  "backend": "WSLg X11, Microsoft D3D12 / NVIDIA GeForce RTX 4080, Mesa 25.2.8",
+  "tour_result": "PASS: 152 exact-time chapter captures rendered without GL errors",
+  "ctest_passed": 6,
+  "ctest_total": 6,
+  "ctest_seconds": 36.74,
+  "ctest_display": "private mount namespace, Xvfb/Openbox, llvmpipe",
+  "interactive_starts": [
+    {
+      "prepare_seconds": 26.8026,
+      "max_frame_ms": 20.5426,
+      "frames": 494,
+      "time": 42,
+      "seconds": 1
+    },
+    {
+      "prepare_seconds": 26.6701,
+      "max_frame_ms": 9.46839,
+      "frames": 309,
+      "time": 342,
+      "seconds": 1
+    },
+    {
+      "prepare_seconds": 23.3192,
+      "max_frame_ms": 16.2627,
+      "frames": 363,
+      "time": 620,
+      "seconds": 1
+    }
+  ],
+  "interactive_width": 640,
+  "interactive_height": 360,
+  "interactive_audio": "silent",
+  "limits": "Hidden short diagnostics, not a full-show performance or subjective visual acceptance result; physical Linux Vulkan RT unverified",
+  "packaging": "held pending parent docs-ready"
+}

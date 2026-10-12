@@ -31,6 +31,7 @@ int runApp(const AppOptions& o) {
  auto assets=o.assets.empty()?findAssets(SDL_GetBasePath()):o.assets;
  if(auto* icon=SDL_LoadBMP((assets/"branding"/"pulse-ascendant.bmp").string().c_str())){SDL_SetWindowIcon(raw,icon);SDL_DestroySurface(icon);}
  Renderer renderer(assets);renderer.initialize(!o.noRT,o.requireRT,o.rtValidation);renderer.resize(o.width,o.height);
+ renderer.setPulseGain(o.pulseGain);
  (o.renderStream?std::cerr:std::cout)<<"Video: "<<SDL_GetCurrentVideoDriver()<<" | GPU: "<<renderer.diagnostics()<<'\n';
  if(o.renderStream) {
 #ifdef _WIN32
@@ -176,7 +177,6 @@ int runApp(const AppOptions& o) {
   if(SDL_GetWindowFlags(raw)&SDL_WINDOW_MINIMIZED){SDL_Delay(30);continue;}
   int w=0,h=0;SDL_GetWindowSizeInPixels(raw,&w,&h);if(w<=0||h<=0){SDL_Delay(30);continue;}
   renderer.resize(w,h);renderer.setSilent(!usingAudio);
-  renderer.setEnergy(audio.level());
   maxLevel=std::max(maxLevel,audio.level());
   double start=now();renderer.render(sampleTimeline(t),t,retro);
   if(!o.captureDir.empty()&&frames==5)renderer.capture(o.captureDir/"preview.bmp");

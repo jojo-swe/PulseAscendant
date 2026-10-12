@@ -29,6 +29,8 @@ Det sammanfogade runtime-ljudet heter fortfarande `assets/music/second-reality-t
 
 ## Musikanalys och scenbyten
 
+v0.5 kompletterar den tidigare analysen med `tools/analyze_reactivity.py` och den genererade `music_reactivity.hpp`: 100 Hz separata anslag i bas, mellanregister och diskant med snabb attack och avklingning. Musikvärdena driver lokala rörelser och ljus i båda renderingsvägarna. Interaktiv callback-RMS blandas inte längre in i grafikens energi; export och körning använder samma kurvor. `--pulse-gain 0..2` justerar anslagskänsligheten. En integrerad musikstyrd rörelseklocka styr bland annat vågor och ljuspaket, medan de flesta kameror följer separat komponerade kapitelvägar. Se [ENERGY_REWORK.md](ENERGY_REWORK.md).
+
 `tools/analyze_music.py` genererar `music_data.hpp`, `music_data_act2.hpp` och `music_data_act3.hpp` samt separata JSON-receipts. Centrerad Hann-FFT använder 8 192 samplingar vid 48 kHz och ett analyssteg per 50 ms. Analysen ger RMS-energi, bas, positiv spektral flux och 24 logaritmiska frekvensband från 35 till 18 000 Hz. Bandnivåer normaliseras, jämnas med attack/release och kvantiseras till byte.
 
 `tools/direct_music.py` söker uppmätta anslag och bestående spektrala förändringar inom ±2,5 sekunder från redaktionella mål. Dynamisk programmering väljer en sammanhängande följd med 5–18 sekunders kapitelgränser; ingen fast BPM antas. Resultatet sparas i `cue_data.hpp` och `music/direction.json`. Kamera- och materialhändelser fortsätter inom kapitlen. Lyssning behövs fortfarande för att bedöma konstnärligt lämpliga klipp.

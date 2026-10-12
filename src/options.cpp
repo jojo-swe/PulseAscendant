@@ -17,6 +17,7 @@ AppOptions parseOptions(const std::vector<std::string>& args) {
   else if(a=="--hidden")o.hidden=true;else if(a=="--help"||a=="-h")o.help=true;
   else if(a=="--capture-dir")o.captureDir=value();else if(a=="--assets")o.assets=value();
   else if(a=="--time")o.time=number();else if(a=="--duration")o.duration=number();
+  else if(a=="--pulse-gain"){double n=number();if(n>2)throw std::runtime_error("Pulse gain must be from 0 to 2");o.pulseGain=float(n);}
   else if(a=="--fps"){double n=number();if(n<1||n>120||std::floor(n)!=n)throw std::runtime_error("FPS must be an integer from 1 to 120");o.fps=int(n);}
   else if(a=="--scene") {double n=number();if(n<1||n>16||std::floor(n)!=n)throw std::runtime_error("Scene must be from 1 to 16");o.scene=int(n)-1;}
   else if(a=="--width"||a=="--height") {double n=number();if(n<64||n>8192||std::floor(n)!=n)throw std::runtime_error("Dimensions must be integers from 64 to 8192");(a=="--width"?o.width:o.height)=int(n);}

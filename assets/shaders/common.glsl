@@ -4,6 +4,8 @@ uniform int uShot;
 uniform int uVariant;
 uniform float uChapterProgress,uChapterTime,uEvent,uAction;
 uniform float uAccentTime,uChapterDuration;
+// Independent 100Hz measured low/mid/high attacks and low-onset phase.
+uniform vec4 uPulse;
 uniform float uSpectrum[24];
 float frequencyBand(float index){return uSpectrum[int(clamp(floor(index),0.,23.))];}
 float midrange(){return (uSpectrum[10]+uSpectrum[12]+uSpectrum[14])*.333333;}

@@ -5,8 +5,8 @@ uniform vec2 uResolution;uniform float uTime;uniform int uRetro;
 float boxO(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.);}
 float waves(vec2 p){
  float calm=uVariant==1?.35:.7;
- float swell=sin(p.x*.34+uTime*.35)*.16+sin(p.y*.27-uTime*.28)*.22;
- float detail=sin(dot(p,vec2(.7,.5))+uTime*.45)*(.03+midrange()*.07);
+ float swell=sin(p.x*.34+uTime*.85)*.16+sin(p.y*.27-uTime*.68)*.22;
+ float detail=sin(dot(p,vec2(.7,.5))+uTime*1.15)*(.035+midrange()*.06+uPulse.x*.045);
  return (swell+detail)*calm;
 }
 vec3 sky(vec3 rd){
@@ -16,7 +16,7 @@ vec3 sky(vec3 rd){
  vec3 horizon=uVariant==0?vec3(.16,.055,.19):(uVariant==1?vec3(.025,.08,.15):vec3(.32,.17,.09));
  vec3 zenith=uVariant==2?vec3(.025,.07,.12):vec3(.005,.015,.05);
  vec3 c=mix(zenith,horizon,exp(-abs(rd.y)*5.));c+=vec3(1.7,.6,.17)*sun;
- float aurora=pow(.5+.5*sin(rd.x*12.+rd.y*8.+sin(rd.x*9.+uTime*.04)),15.);
+ float aurora=pow(.5+.5*sin(rd.x*12.+rd.y*8.+sin(rd.x*9.+uTime*.19)),15.);
  if(uVariant==1)c+=vec3(.025,.28,.22)*aurora*.18*smoothstep(.03,.4,rd.y);
  return c;
 }
@@ -70,7 +70,7 @@ void main(){
  // Each return has a different dominant composition and a clear, finite camera path.
  vec3 ro,target;float lens=1.5;
  if(uVariant==0){
-  ro=vec3(sin(k*PI)*.8,2.3+k*.65,uChapterTime*4.+4.);
+  ro=vec3(sin(k*PI)*.8,2.3+k*.65,uChapterTime*8.+4.);
   target=ro+vec3(1.5,-.8,20.);
  }else if(uVariant==1){
   // Safely above all island geometry, looking down across a large central split island.
@@ -90,16 +90,19 @@ void main(){
   if(h.y>1.5){
    vec3 l=normalize(vec3(-.3,.8,.5));float edge=pow(1.-max(dot(n,-rd),0.),3.);
    c=vec3(.035,.12,.15)*(.35+max(dot(n,l),0.))+sky(reflect(rd,n))*.7;
-   c+=mix(vec3(.03,.6,.8),vec3(.4,.8,.2),float(uVariant==2))*(edge*.45+uEvent*.2);
+   c+=mix(vec3(.03,.6,.8),vec3(.4,.8,.2),float(uVariant==2))*(edge*.5+uEvent*.2+uPulse.y*.7);
+   float veins=pow(.5+.5*sin(at.y*6.-uChapterTime*4.+at.x*2.),24.);
+   c+=vec3(.035,.55,.75)*veins*(.25+uPulse.x*1.3);
    if(uVariant==0)c+=vec3(.03,.3,.55)*line(at.y-(uChapterProgress*7.),.08);
   }else{
    float fres=.08+.92*pow(1.-max(dot(n,-rd),0.),5.);
    c=mix(vec3(.005,.035,.055),sky(reflect(rd,n)),fres);
-   float foam=pow(.5+.5*sin(at.x*.7+at.z*.5+waves(at.xz)*5.-uTime*.3),22.);
+   float foam=pow(.5+.5*sin(at.x*.7+at.z*.5+waves(at.xz)*5.-uTime*1.1),22.);
    // One expanding wave marks each chapter's musical event and then leaves the frame.
    float waveRadius=uAction*70.+uChapterProgress*4.;
    float ring=line(length(at.xz-vec2(0,32.))-waveRadius,.3);
-   c+=vec3(.04,.24,.3)*(foam*.12+ring*.6)*(1.+uBass*.2);
+   float caustic=pow(.5+.5*sin(at.x*1.7+uTime*.8)*sin(at.z*1.4-uTime*.7),12.);
+   c+=vec3(.04,.35,.45)*(foam*.32+ring*.6+caustic*(.15+uPulse.z*.5))*(1.+uPulse.x*.9);
   }
   c=mix(c,sky(rd),1.-exp(-t*.009));
  }

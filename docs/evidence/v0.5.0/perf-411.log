@@ -1,0 +1,8 @@
+Tracing renderer: Vulkan KHR ray queries / NVIDIA GeForce RTX 4080 / RT frames=0
+Video: windows | GPU: NVIDIA Corporation / NVIDIA GeForce RTX 4080/PCIe/SSE2 / 3.3.0 NVIDIA 617.42 | Vulkan KHR ray queries / NVIDIA GeForce RTX 4080 / RT frames=0
+PREPARE PASS: all world pipelines and initial viewport ready before audio, 0.129238 s
+Audio: SILENT MODE
+Render backend: NVIDIA Corporation / NVIDIA GeForce RTX 4080/PCIe/SSE2 / 3.3.0 NVIDIA 617.42 | Vulkan KHR ray queries / NVIDIA GeForce RTX 4080 / RT frames=109
+Frames: 104 | FPS: 34.3468 | mean frame ms: 29.0919 | max ms: 81.8154 | vsync request accepted: 1
+Audio frames supplied: 0 | playback seconds: 413.999
+Maximum observed music RMS: 0

@@ -16,12 +16,18 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--music', type=Path)
     parser.add_argument('--require-rt', action='store_true', help='Fail if hardware RT is unavailable')
+    parser.add_argument('--no-rt', action='store_true', help='Render the OpenGL fallback')
+    parser.add_argument('--pulse-gain', type=float, default=1, help='Transient sensitivity0..2; other musical direction remains active')
     parser.add_argument('--width', type=int, default=3840)
     parser.add_argument('--height', type=int, default=2160)
     parser.add_argument('--fps', type=int, default=60)
     parser.add_argument('--start', type=float, default=0)
     parser.add_argument('--duration', type=float, help='Default: remainder of the playable show')
     args = parser.parse_args()
+    if not 0 <= args.pulse_gain <= 2 or not math.isfinite(args.pulse_gain):
+        parser.error('Pulse gain must be from0 to2')
+    if args.no_rt and args.require_rt:
+        parser.error('--no-rt and --require-rt conflict')
     app, output = args.app.resolve(), args.output.resolve()
     show = json.loads(subprocess.check_output([str(app), '--show-info'], text=True))
     length = float(show['duration'])
@@ -46,6 +52,9 @@ def main():
     expected_frames = math.ceil(args.duration * args.fps - 1e-9)
     if args.require_rt:
         producer_args.append('--require-rt')
+    if args.no_rt:
+        producer_args.append('--no-rt')
+    producer_args.extend(['--pulse-gain', str(args.pulse_gain)])
     maxrate, bufsize = ('64M', '128M') if args.width*args.height >= 3840*2160 else ('28M', '56M')
     encoder_args = ['ffmpeg', '-hide_banner', '-nostdin', '-f', 'rawvideo', '-pixel_format', 'rgb24',
                     '-video_size', f'{args.width}x{args.height}', '-framerate', str(args.fps), '-i', 'pipe:0',

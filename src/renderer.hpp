@@ -17,7 +17,7 @@ public:
  void readPixelsRGB(std::vector<unsigned char>&);
  std::string diagnostics() const;
  void setSilent(bool silent) {silent_=silent;}
- void setEnergy(float energy) {energy_=energy;}
+ void setPulseGain(float gain) {pulseGain_=gain;}
 private:
  struct Target { GLuint fbo=0,texture=0; int w=0,h=0; };
  Target scene_,blur_[2],output_;
@@ -32,7 +32,7 @@ private:
  TimelineFrame frame_;
  int width_=1280,height_=720,meshCount_=0;
  bool silent_=false;
- float energy_=0;
+ float pulseGain_=1;
  std::filesystem::path assets_;
  GLuint program(const std::string& vertex,const std::string& fragment);
  std::string source(const std::string& name);

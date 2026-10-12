@@ -1,0 +1,112 @@
+{
+  "video": "dist\\energy-v05\\PulseAscendant-v05-Energy-Preview-1080p60.mp4",
+  "expected_frames": 9645,
+  "actual_frames": 9645,
+  "observations": [
+    {
+      "file": "00-binary.mp4",
+      "preview_start": 0.0,
+      "source_start": 74.8,
+      "correlation": 0.9998509786356607,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "00-supernova.mp4",
+      "preview_start": 11.2,
+      "source_start": 147.8,
+      "correlation": 0.9999104628613258,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "01-hyperdrive.mp4",
+      "preview_start": 21.45,
+      "source_start": 46.15,
+      "correlation": 0.9999091591709343,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "02-skyline.mp4",
+      "preview_start": 31.85,
+      "source_start": 56.55,
+      "correlation": 0.9998638990550839,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "03-armada.mp4",
+      "preview_start": 39.1,
+      "source_start": 103.7,
+      "correlation": 0.9998702981110239,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "04-carrier.mp4",
+      "preview_start": 52.2,
+      "source_start": 165.25,
+      "correlation": 0.999858902319569,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "05-pursuit.mp4",
+      "preview_start": 64.4,
+      "source_start": 278.8,
+      "correlation": 0.999853057088407,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "06-rain.mp4",
+      "preview_start": 70.80000000000001,
+      "source_start": 327.25,
+      "correlation": 0.9996852990905912,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "07-foundry.mp4",
+      "preview_start": 84.60000000000001,
+      "source_start": 394.25,
+      "correlation": 0.9999037471850095,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "08-prism.mp4",
+      "preview_start": 98.50000000000001,
+      "source_start": 408.15,
+      "correlation": 0.9998504642422194,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "09-canyon.mp4",
+      "preview_start": 115.4,
+      "source_start": 646.07,
+      "correlation": 0.9999375527852418,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "10-seed.mp4",
+      "preview_start": 130.65,
+      "source_start": 708.92,
+      "correlation": 0.999905674165128,
+      "offset_ms": 0.0,
+      "pass": true
+    },
+    {
+      "file": "11-ascent.mp4",
+      "preview_start": 143.05,
+      "source_start": 853.87,
+      "correlation": 0.9999360796749793,
+      "offset_ms": 0.0,
+      "pass": true
+    }
+  ],
+  "passed": true
+}
