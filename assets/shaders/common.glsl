@@ -1,6 +1,9 @@
 const float PI=3.14159265359;
 uniform float uDrive,uBass,uHit,uProgress,uCut,uTheme;
 uniform int uShot;
+uniform int uVariant;
+uniform float uChapterProgress,uChapterTime,uEvent,uAction;
+uniform float uAccentTime,uChapterDuration;
 uniform float uSpectrum[24];
 float frequencyBand(float index){return uSpectrum[int(clamp(floor(index),0.,23.))];}
 float midrange(){return (uSpectrum[10]+uSpectrum[12]+uSpectrum[14])*.333333;}

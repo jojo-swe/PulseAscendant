@@ -1,104 +1,56 @@
-# Pulse Ascendant v0.3 — verifiering
+# Pulse Ascendant v0.4 — verifiering
 
-## Spelbar omfattning
+Denna version omarbetar regi, geometri och kameror efter kritik om upprepning. Historisk evidens finns i [VERIFICATION-v0.3.0.md](VERIFICATION-v0.3.0.md). Dess rörelseprov, prestandamätningar och video gäller inte automatiskt v0.4.
 
-Tre akter, 16 världar och 76 kapitel över **888,68 sekunder (14:48,68)**. Akt I är den nya femminutersredigeringen av Luminous Flow. Akt II använder hela Adventurous Uplift och akt III hela Rigid Arpeggios, båda i normal hastighet. Originalfilerna och v0.2:s publicerade resurser är bevarade. Historiska resultat finns separat i [VERIFICATION-v0.2.0.md](VERIFICATION-v0.2.0.md).
+## Omfattning och musik
 
-| Akt | PCM-stereoframes | Startframe | Längd | Kapitel |
+Tre akter, 16 världar och 76 kapitel över **888,68 sekunder**. Akt I använder 300 s Luminous Flow, akt II hela Adventurous Uplift och akt III hela Rigid Arpeggios. Musik, hastighet och kapitelgränser är bevarade.
+
+| Akt | PCM-stereoframes vid 48 kHz | Start | Längd | Kapitel |
 | --- | ---: | ---: | ---: | ---: |
-| I | 14 400 000 | 0 | 300 s | 31 |
-| II | 13 916 160 | 14 400 000 | 289,92 s | 21 |
-| III | 14 340 480 | 28 316 160 | 298,76 s | 24 |
-| Totalt | 42 656 640 | 0 | 888,68 s | 76 |
+| I | 14 400 000 | 0 s | 300 s | 31 |
+| II | 13 916 160 | 300 s | 289,92 s | 21 |
+| III | 14 340 480 | 589,92 s | 298,76 s | 24 |
 
-Alla ljudfiler är stereo PCM16 vid 48 kHz. Den gemensamma runtime-WAV:en är cirka 171 MB, under läsarens 256 MiB-gräns. Uppspelningen lagrar cirka 341 MB avkodade float-samplingar; WAV-inläsningen har dessutom en tillfällig bytebuffer. Detta är en minnesbaserad transport, ingen strömmad ljudavkodare.
+tests/test_show.py passerar: första 299 s är sampleidentiska med bevarad original-WAV, därefter följer akt I:s tidigare uttoningssekund. Den sammanfogade filen är sampleidentisk med aktfilerna vid båda skarvarna. Källhashar, aktlängder och nekad export förbi slutet är kontrollerade. Runtime-WAV har SHA-256 `58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6`.
 
-## Native byggnad och automatiska prov
+## Native byggnad och kontrollprov
 
-Windows x64: C++17, MSVC 19.51 / Visual Studio 18 2026, CMake 4.4.4, statiskt länkad SDL 3.4.18 och MSVC-runtime. Linux x64: Ubuntu 24.04, GCC 13, CMake 3.28, samma SDL-version.
+- Windows x64 Release, MSVC/SDL3: **CTest 6/6 passerar**.
+- Linux x64 Release, Ubuntu 24.04/GCC/SDL3: **CTest 6/6 passerar** på isolerad Xvfb/Openbox med Mesa llvmpipe.
+- Python: **5/5 FFT-/musikregiprov passerar**, samt det separata fullständiga ljud-/showprovet.
+- Vulkan-computeshadern kompilerad med glslangValidator för Vulkan 1.2 och kontrollerad med spirv-val.
 
-- **Windows CTest: 6/6 godkända.**
-- **Linux CTest: 6/6 godkända** på isolerad Xvfb/Openbox med Mesa llvmpipe.
-- **FFT: 2/2 Python-prov godkända**, med tystnad och rena 100/1 000/10 000 Hz-toner.
-- **Musikregi: 3/3 syntetiska Python-prov godkända**, inklusive tydliga anslag, tystnad och omöjliga kapitelintervall.
-- **tests/test_show.py: godkänt** för tre akter, titel, 76 kapitel, 16 världar, käll-/runtimehashar, sample-identitet vid båda skarvarna och nekad export förbi slutet.
-- SPIR-V kompilerad med glslangValidator -V -Os --target-env vulkan1.2 och godkänd av spirv-val.
+Kärnproven täcker nu kronologiska världstillstånd, stabil kamera inom kapitlet, kontinuerlig rörelseklocka över klipp, monotont kapitel-/handlingsförlopp samt anslagets eventmaximum. Den tidigare fyrkamera-cykeln är borttagen. Kontrollproven täcker sökning, stil, mute, observerad fullscreen/resize/minimize/restore, fortsatt klocka vid minimering och avbrott som måste ge felstatus.
 
-CTest täcker aktlängder, kapitelgränser, fyra kameravarianter i varje kapitel, spektruminterpolation, ljudsökning och mute, båda aktövergångarna, slutloop, felaktig musiklängd och observerade fönstertillstånd. Ett avbrutet kontrollprov måste ge felstatus. Ingen fysisk tangentbordsgenomspelning eller obruten mänsklig lyssning av hela demot är verifierad.
+Linux mjukvarurenderare behövde 37–40 s för shaderstart och kontrollprov; den tidigare yttre 30 s-gränsen gav två timeouts. Startallowansen är nu 180 s, medan själva livscykelns 15 s-gräns och felkrav är oförändrade. X11-sockets isolerades i en privat mount-namespace; WSLg:s display ändrades inte.
 
-Linux-displayprovet använder egen Xvfb/Openbox i en privat mount-namespace. Det ändrar inte användarens WSLg-display. WSLg:s tidigare misslyckade minimeringsprov räknas inte som godkänd livscykel.
+[Windowslogg](evidence/v0.4.0/windows-tests.log), [Linuxlogg](evidence/v0.4.0/linux-tests.log), [show-info](evidence/v0.4.0/show-info.json) och [native-/resurshashar](evidence/v0.4.0/native-assets.json).
 
-## Windows GPU och rendering
+## GPU och bildgranskning
 
-NVIDIA GeForce RTX 4080, drivrutin 617.42, OpenGL 3.3 core och Vulkan KHR ray queries.
+Windows: NVIDIA GeForce RTX 4080, drivrutin 617.42. OpenGL 3.3 och Vulkan KHR ray queries.
 
-**32/32 scen/stil-bilder** renderade med strikt RT och Vulkan-validering utan rapporterade GL- eller Vulkan-valideringsfel. De åtta världarna i akterna II–III använder den riktiga RT-backenden; akt I använder OpenGL. Backendräknaren bekräftade 16 RT-bilder i smoke-provet.
+- Strikt RT med Vulkan-validering: **152/152 kapitelbilder**, inga rapporterade GL-/Vulkanfel; **42 RT-bilder**, samtliga i akt II.
+- Tvingad OpenGL-reserv: **152/152 kapitelbilder**, inga rapporterade GL-fel.
+- Varje par visar 18% och 82% av kapitlet, före och efter dess utveckling. Nativebilder och världstavlor granskades över alla 76 kapitel. Täta tidssekvenser kontrollerades dessutom kring kollisionen och finalen.
 
-**152/152 exakta kapitelbilder** renderade med strikt RT och Vulkan-validering. Backendräknaren bekräftade 90 RT-bilder. Rörelseprovet godkände **76/76 kapitel**. Det använder +2,0/+2,6 s i varje kapitel, bildens 15–80 procent i höjd, medelförändring över 0,012, mer än 10 procent ändrade pixlar och rimlig ljusnivå.
+[RT-logg](evidence/v0.4.0/tour-rt.log), [fallbacklogg](evidence/v0.4.0/tour-fallback.log). Bildprov visar renderbarhet, bildinnehåll och inspekterade förlopp; de bevisar inte obruten underhållningskvalitet.
 
-Den separat tvingade OpenGL-reservvägen renderade också alla 152 kapitelbilder och gav **76/76 godkända rörelseprov**. Referensresultat finns i [RT-rapporten](evidence/v0.3.0/motion-rt.json) och [fallbackrapporten](evidence/v0.3.0/motion-fallback.json). Dessa mätningar visar föränderliga, icke-tomma bilder; de mäter inte konstnärlig kvalitet.
+**Akt II använder hårdvaruraytracing. Akt I och III använder OpenGL.** Ray queries driver primärsynlighet, skuggor, reflektion och brytning över triangel-BLAS/TLAS. Materialmodellen och analytisk miljöbelysning är förenklade; generell GI och temporal denoising saknas. Detta är ingen unbiased path tracer. Reservläget har enklare raymarchad geometri/material och lovar inte identisk bild.
 
-RT-backenden bygger fem triangel-BLAS och en TLAS med rörliga instanser. Ray queries används för primärsynlighet, skuggor, reflektion och brytning. Upp till fem ytmöten är en begränsad materialmodell, inte en unbiased path tracer. Analytisk miljöbelysning och förenklad dimma används; generell GI och temporal denoising saknas.
+4K60 är deterministisk videoexport, inte ett påstående om interaktiv 4K60. Tidigare v0.3-fpsvärden återanvänds inte som aktuell benchmark. Fysisk Linux-desktop med Vulkan-RT är inte verifierad; WSLg använder OpenGL via D3D12/NVIDIA.
 
-Output, material och uniformdata ligger i Vulkan-enhetsminne. Kopieringsbarriärer, fence och cachebart/coherent stagingminne ordnar överföringen till CPU:n och vidare till OpenGL HDR. Enheter som enbart erbjuder CPU/mjukvarurendering godtas inte som hårdvaru-RT. Saknad loader eller lämplig GPU ger synligt OpenGL-reservläge. --require-rt och --rt-validation ger strikt fel i stället.
+## Oberoende granskning och gränser
 
-Storlek kontrolleras mot vald enhets maxStorageBufferRange före allokering och descriptoruppdatering. Kärnprovet täcker 4K inom 128 MiB och en större viewport som överskrider gränsen.
+Den nya skrivskyddade granskaren ger **7,2/10 för formvariation, kapitelutveckling och läsbarhet**. Inga kvarvarande P1/P2-blockerare inom granskad nativeomfattning. Kameraskymning, felaktiga SDF-sidor, förlorad flottinramning och två fallbackytfel är rättade och bildverifierade. [Full rapport](QUALITY_REVIEW.md).
 
-## Interaktiv RT-prestanda
+Armadas täta magentafält och det enklare material-/mönsterspråket begränsar fortfarande finishen. Ingen obruten mänsklig lyssning eller full kontinuerlig audiovisual bedömning av hela demot är godkänd. Betyget är därför inte ett godkännande av underhållningsvärde eller AAA-kvalitet.
 
-Tre sekunder per representativ värld, modern stil, full upplösning, två RT-samplingar per pixel, dolt fönster, ljud av och begärd vsync av. CPU-ur runt renderanrop och bufferbyte, inklusive RT/GL-överföringen; ingen separat GPU-timer. Initialisering före bildloopen ingår inte. Resultaten är korta stickprov, inte en garanti för hela demot eller andra datorer.
+## Videoexport
 
-| Värld | 1280×720 fps | 1920×1080 fps |
-| --- | ---: | ---: |
-| Chrome Cathedral | 48,5 | 27,0 |
-| Rain District | 37,0 | 19,1 |
-| Orbital Foundry | 38,2 | 20,8 |
-| Prism Chamber | 43,9 | 24,9 |
-| Dune Colossus | 51,0 | 29,7 |
-| Verdant Singularity | 47,3 | 27,9 |
-| Gravity Rebellion | 46,3 | 22,5 |
-| Reality Ascendant | 53,6 | 26,3 |
+Exportören skriver exakt ceil(duration × fps) nativebilder och begränsar ljudet separat. Den tidigare globala ffmpeg-tidsgränsen kapade en bild i 720p30-provfilmen; den initiala filmen används endast för tidsstickprov och räknas inte som godkänd slutexport.
 
-[Maskinläsbara resultat](evidence/v0.3.0/benchmark.json) innehåller bildantal, medel- och högsta bildtid. Den tidigare okachade stagingflaskhalsen låg under en bild/s i 1080p och är korrigerad. Den nya versionen når fortfarande inte stabila 60 fps i RT vid standardupplösningen på denna GPU. För högre interaktiv bildfrekvens kan lägre upplösning, retrostil eller OpenGL-reservläget användas. **4K60-videoexport innebär inte 4K60 i realtid.**
+Regressioner: 0,07 s vid 30 fps ger **3 bilder**, och 0,035 s vid 3840×2160/60 fps ger **3 bilder**, med korrekt ljudlängd. [30 fps metadata](evidence/v0.4.0/frame-rounding-30.json), [4K60 metadata](evidence/v0.4.0/frame-rounding-4k60.json). Exportören skyddar befintliga filer, kontrollerar native show-info och WAV-format/sampleantal samt slutnamnger endast efter metadata-PASS.
 
-## Linux och systemberoenden
-
-Native ELF bygger och kontrollsviten passerar på Ubuntu 24.04. GPU-rendering i WSLg använder OpenGL via Microsoft D3D12 / NVIDIA GeForce RTX 4080, Mesa 25.2.8. Denna miljö erbjuder ingen verifierad Vulkan-RT-väg till NVIDIA-kortet. Mesa llvmpipe erbjuder ray queries i mjukvara och väljs därför bort av RT-backenden.
-
-Linux GPU-tour renderade **152/152 bilder** via den automatiskt valda OpenGL-reserven. [Rörelseprovet](evidence/v0.3.0/motion-linux.json) godkände **76/76 kapitel**. Ett separat --require-rt-prov avvisade miljön med exitstatus 1, vilket bekräftar att llvmpipe inte räknas som hårdvaru-RT. Fysisk Linux-desktop med Vulkan-hårdvaruraytracing återstår att verifiera.
-
-Linux smoke renderade även **32/32 scen/stil-bilder** via WSLg. Extraherade Windows-ZIP och Linux-tarball jämfördes mot aktuellt program och kombinerad WAV. Båda startades från annan arbetskatalog vid 42, 342 och 620 s, vilket täcker alla tre akter och resursvägar. Windows spelade ljud med icke-noll RMS i samtliga prov. Linux-paketprovet kördes uttryckligen utan ljud; dess ljudtransport täcks av CTest, inte detta displayprov.
-
-ELF behöver libOpenGL.so.0, libstdc++.so.6, libm.so.6, libgcc_s.so.1, libc.so.6 och libGLdispatch.so.0. SDL laddar tillgängliga bild- och ljudbackends dynamiskt. Ubuntu-paket: libopengl0 libstdc++6 libx11-6 libxext6 libxrandr2 libxcursor1 libxi6 libxfixes3 libxss1 libwayland-client0 libxkbcommon0 libpulse0 libasound2t64, plus fungerande grafikdrivrutin. Systembibliotek ingår inte i tarballen.
-
-## Musikregi och ljudidentitet
-
-24 FFT-band mellan 35 Hz och 18 kHz och tre nivå-/anslagskurvor analyseras separat per akt vid 20 Hz. Kapitelregin använder faktisk anslagsstyrka och varaktig spektral förändring inom ±2,5 s från redaktionella mål. Dynamisk programmering håller kapitlen inom 5–18 s; inget fast BPM antas.
-
-| Akt | Medelanslag vid ursprungliga mål | Vid valda klipp |
-| --- | ---: | ---: |
-| I | 0,1445 | 0,7749 |
-| II | 0,2440 | 0,8584 |
-| III | 0,1487 | 0,7852 |
-
-[Alla klipp och förskjutningar](../music/direction.json) är spårbara. Detta stöder klippens anslagstajmning tekniskt; musikaliska fraser och upplevd synk behöver fortfarande bedömas genom lyssning.
-
-Akt I:s första 299 s jämfördes sample för sample med bevarad full WAV. Därefter följer en sekunds likaeffektsuttoning. Den gemensamma WAV:en jämfördes bit för bit med de tre separata aktfilerna. Båda nya låtarna används i sin helhet, utan tillagda toningar eller hastighetsändring. Källa, Suno-ID, sampleantal och SHA-256 finns i music/asset-receipt*.json och music/show-audio.json.
-
-## Videoexport och kvalitetsbedömning
-
-Två deterministiska exportprov över aktgränserna passerade: 298–302 s gav exakt 240 bilder; 588,8–591,8 s gav 180 bilder. Båda är 3840×2160, 60 fps, H.264 NVENC, stereo AAC vid 48 kHz och korrekt ljudlängd. Strikt RT var aktiverat. Exportverktyget skyddar befintliga filer och verifierar metadata innan resultatet slutnamnges.
-
-Den första vertikala trailern passerade exportkontrollen: **1080×1920, 60 fps, 1 920 bilder, 32 s**, med stereo AAC och åtta ursprungliga native-klipp. [Det ursprungliga manifestet](evidence/v0.3.0/short.json) bevaras. De interna klippen exporteras med strikt RT; akt I behåller sin OpenGL-rendering. Trailern är ett montage av olika aktavsnitt; dess klipp ligger på anslag i ett 70–102 s-utsnitt ur Rigid Arpeggios. De ursprungliga animationerna i varje klipp reagerar på respektive aktmusik.
-
-Efter bildgranskning togs ett skymt Rain District-utsnitt bort. Trailerrevision 2 använder de sju starkare, redan verifierade native-källorna med oförändrad program-/resurshash. Dynamisk programmering placerar sex inre klipp på uppmätta anslag och håller varje segment inom källans fem sekunder. RT-texten visas över Prism och Dune; artisttaggen anger endast Rigid Arpeggios. Den nya exporten passerade samma metadata- och ljudlängdskontroll. [Manifest för revision 2](evidence/v0.3.0/short-v2.json) visar tiderna. Native v0.3.0-paketen och deras källkodssnapshot bevaras oförändrade; trailerns revisionsmärkta film och lilla källkodstillägg distribueras separat.
-
-Den [oberoende granskaren](QUALITY_REVIEW.md) godkände treaktsimplementationen och Windows/Linux-paketen med **7,3/10**, över användarens acceptansgräns på 7/10. Byggnad, automation, GPU-bilder, musikidentitet och subjektiv helhetskvalitet är separata resultat. AAA-kvalitet, hörbar musikalisk likhet och subjektiv helhet är inte automatiskt verifierade av dessa prov. Fullängdsvideon och den färdiga Shortens bildresultat ingår inte i detta kod-/paketbetyg.
-
-### Färdig fullängdsexport
-
-Hela `PulseAscendant-4K60.mp4` passerade exportkontrollen och en fullständig avkodning av samtliga **53 321 bilder** och hela ljudströmmen utan rapporterade avkodningsfel: **3840×2160, 60 fps, 888,683 s**, 3 146 686 328 byte. Native-renderaren rapporterade 18 000 OpenGL-bilder för akt I och **35 321 Vulkan-RT-bilder** för akt II–III på RTX 4080. [Maskinläsbart kvitto](evidence/v0.3.0/full-video.json) innehåller SHA-256, renderingskommando och alla ljudjämförelser; [renderingsloggen](evidence/v0.3.0/full-video-render.log) visar backend och bildantal.
-
-Det avkodade AAC-ljudet jämfördes mot källans 42 656 640 stereosamples vid 48 kHz i sammanhängande femsekundersfönster genom hela filmen. Alla fönster passerade korrelations- och energigränserna; lägsta normaliserade korrelation var **0,99925**. De ytterligare 128 samplesen är AAC-slutpadding. Detta kontrollerar även ljudet efter fem minuter och över båda aktgränserna. AAC är förlustkomprimerat och påstås inte vara bitidentiskt med WAV-källan.
-
-[Tolv bildstickprov](evidence/v0.3.0/full-video-contact-sheet.jpg) täcker alla tre akter, båda aktövergångarna och slutet. De visar förväntade native-scener. Fullständig avkodning och dessa stickprov innebär inte att hela filmen har bedömts subjektivt genom sammanhängande bild- och ljuduppspelning. Den färdiga filmen är en offlineexport; de interaktiva RT-mätningarna ovan gäller fortfarande.
+Fullständig v0.4-video, nya paket och publicering verifieras separat när respektive slutartefakt finns; historiska v0.3-filer räknas inte som nya resultat.

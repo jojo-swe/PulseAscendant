@@ -1,0 +1,42 @@
+{
+  "version": "0.4.0",
+  "files": {
+    "build/windows/Release/PulseAscendant.exe": "1b617ebade1b331db5d76b1a6dd7eb9cc4bbabba276c6348c32659bafb5fbe3c",
+    "assets/shaders/act2.frag": "b196ec7dbc12b71042eb80f5f6f77e7be753e385b2bf100e453bb78cbdb9a747",
+    "assets/shaders/act3.frag": "9010a84819b2bb4218e85281e9c771362aedc36da8f3d923341a97c5f846ab41",
+    "assets/shaders/armada.frag": "6b3e815fe099a97e4c4661ea3c2b617a9fdb5ff5afd91720e631c3a178982d84",
+    "assets/shaders/background.frag": "63404cd3f74e4e066471cc1967be9d0a094927738d11ed0eccc804f9cb2cdfc2",
+    "assets/shaders/blur.frag": "00f49ca3d7baae2623a05a13d87af55d8c7127face9fb711a2a614159cbd241b",
+    "assets/shaders/city.frag": "22603e5227dfcad89e6c859ef6ac1f3c0a694a0fe624ca263057b0b979949dee",
+    "assets/shaders/common.glsl": "83cef5905c93261be2f47b3bb3588ffd579ba7cc23e31cc4accfb0b8b777a64d",
+    "assets/shaders/composite.frag": "6c4aed0ae5482568b7c414f06e58c263054495e4b34914546763ca3c1f8d480c",
+    "assets/shaders/corridor.frag": "4cdf59da1230e32f4cabd50d39ddf6e4f0930eaf368a15fc0c56b119514fcf10",
+    "assets/shaders/cosmic.frag": "c7056068604e2db714dd3ae25c9745bdeb128dcc48f7234fbbe726f2ac89aa6a",
+    "assets/shaders/engine.frag": "68fad2848438ef35abb1121f8ac2ea3c2f18fcaf9f5e55e6a1b2332f7c492642",
+    "assets/shaders/flight.vert": "28ae3b63c17ece3ff72fb7db38b3781b0aa010a71ad07d9921c700176f2ef95d",
+    "assets/shaders/fullscreen.vert": "a82fa3f699d66c02a7cd9ccf4ee5069ed5100d553a54ce1e3a3e16f446aa2bbf",
+    "assets/shaders/glenz.frag": "be1c311f4a544bda188647262cdd1bc15799551423b1cb1f4aaf531f69ea804f",
+    "assets/shaders/glenz.vert": "c73265706a8d420d8e1a696179084354cb2b01f24bc5a16f9935571958346fed",
+    "assets/shaders/ocean.frag": "a2d8960013f09d17a9e6250275c70de8a108c24bf577e9a578c676932789fe47",
+    "assets/shaders/plasma.frag": "f45e4787c7142fcd1e9355f04c227f0fe2152576b6619fd78e2e57d9c6095803",
+    "assets/shaders/rt_scene.comp": "518eafa0bb58972077ca15ffc28f4590f978090896e890a027d27742ad74ed28",
+    "assets/shaders/rt_scene.comp.spv": "78dc8999af3fd72af3e3383dd1b836c30bcbce00b031f26e97dc133c035875c5",
+    "assets/shaders/sculpture.frag": "2b9b869cc5e2f1f35a8f12cf90428293928cc241ef28b2a5fb38adcad2dce8bd",
+    "assets/shaders/spectrum.vert": "c4dafdbf6877ac94657c669fdbf9573fc254a27c9acada351ed4fe6877559cc3",
+    "assets/shaders/structure.frag": "6eef13c55e0e431736a6e66901aa7d9d365dab099a4837816b995337b3e80a7d",
+    "assets/shaders/swarm.frag": "9e148ec1ae4977fcb1d1acefbb89b860e6ca725a7906f27888edce5cbcbedb42",
+    "assets/shaders/swarm.vert": "32faf07e74635d270e767ce22c4bea3efcaed4ef5c982545d608c18806231c6c",
+    "assets/shaders/text.frag": "bb792e2b4f39ce3d0c4082c709335714b5182cdd4e06d5956eabd56b3e7c741d",
+    "assets/shaders/text.vert": "5075f5edf5e469d5cdbd44471af6429731ef0a5f8ef88a0e06997a644f473b33",
+    "assets/shaders/tunnel.frag": "63482681e1f6b4e9786eedeadfeeba307184fc79daab0242193eb246e2cce666",
+    "assets/shaders/tunnel.vert": "7ba686047114ce40ca13c199294ee7c3daf968b3a9a2c4a433a16459fc04fb01",
+    "assets/music/second-reality-three-acts.wav": "58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6"
+  },
+  "capture_times": "18% and 82% through each chapter",
+  "windows_tour": {
+    "rt_frames": 42,
+    "captures": 152,
+    "fallback_captures": 152
+  },
+  "review": "7.2/10 for inspected form variation, chapter development and readability; no full audiovisual acceptance"
+}

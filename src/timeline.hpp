@@ -3,9 +3,9 @@
 #include <string>
 namespace remix {
 struct TimelineFrame {
- int act=1,scene=0,chapter=0,shot=0;
- double actSeconds=0,localSeconds=0,motionSeconds=0;
- float transition=1,progress=0,drive=0,bass=0,hit=0,energy=0,cut=0;
+ int act=1,scene=0,chapter=0,shot=0,variant=0;
+ double actSeconds=0,localSeconds=0,motionSeconds=0,accentSeconds=0,chapterDuration=0;
+ float transition=1,progress=0,chapterProgress=0,event=0,action=0,drive=0,bass=0,hit=0,energy=0,cut=0;
  std::array<float,24> spectrum{};
  const char* title="";
 };

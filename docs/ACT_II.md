@@ -8,12 +8,12 @@ Act II plays the complete **Adventurous Uplift** soundtrack at normal speed: **1
 
 | Scene ID | Key | World | Vulkan geometry and action |
 | --- | --- | --- | --- |
-| 8 | 9 | Chrome Cathedral | Repeated reflective arches and emissive ribs frame moving polished spheres. Lights and the central form follow the music. |
-| 9 | 0 | Rain District | Layered skyline and foreground buildings surround a moving avenue. Traffic, rain instances, reactive windows and wet surfaces move independently. |
-| 10 | - | Orbital Foundry | Nested metal rings, rotating arrays and tall machinery surround an animated central solid. |
-| 11 | = | Prism Chamber | Moving glass prisms surround a larger refractive crystal, with emissive structures and spectrum geometry. |
+| 8 | 9 | Chrome Cathedral | Blade sculpture, mirror vault, floating bands, gold tower, mirror book and opening cathedral gate. |
+| 9 | 0 | Rain District | Ground-level avenue, train chase, banked highway, skyscraper escape and fleet departure. |
+| 10 | - | Orbital Foundry | Assembly line, wave grid, piston heart, collision and launch. |
+| 11 | = | Prism Chamber | Split glass cube, refracting monoliths, light book, flying fragments and exit portal. |
 
-F2 seeks to the act's first sample. Scene keys and chapter arrows seek the audio and graphics together. Four camera variants run within chapters; the scene changes use measured attacks and persistent spectral changes rather than a fixed BPM. The generated musical-direction report is `music/direction.json`. Its numerical choices still require listening for subjective synchronization.
+F2 seeks to the act's first sample. Scene keys and chapter arrows seek the audio and graphics together. In v0.4 each return has a different structure and action. A continuous camera path replaces the four automatic cuts inside a chapter. A measured musical accent advances the one-time transformation; FFT bands supply smaller animation. Chapter boundaries still come from `music/direction.json`. Numerical choices require listening for subjective synchronization.
 
 ## Hardware rendering and fallback
 

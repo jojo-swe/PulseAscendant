@@ -19,15 +19,15 @@ vec3 antialias(vec2 uv){
 }
 void main() {
  vec2 centre=vUV-.5;
- float speed=(uDrive*.0035+uCut*.018+uHit*.001)*float(uRetro==0);
+ float speed=(uEvent*.002+uCut*.006)*float(uRetro==0);
  vec3 c=vec3(0);
  for(int i=0;i<6;i++)c+=texture(uImage,vUV-centre*speed*float(i)).rgb/6.;
- if(uRetro==0&&uScene>=8)c=mix(c,antialias(vUV),.7);
+ if(uRetro==0)c=mix(c,antialias(vUV),.7);
  if(uRetro==0) {
-  float ca=.0012*(uDrive+uHit)*length(centre);
+  float ca=.0007*(uEvent+uHit*.3)*length(centre);
   c.r=mix(c.r,texture(uImage,vUV+centre*ca).r,.35);
   c.b=mix(c.b,texture(uImage,vUV-centre*ca).b,.35);
-  c+=texture(uBloom,vUV).rgb*(.55+uBass*.2);
+  c+=texture(uBloom,vUV).rgb*(.4+uBass*.12+uEvent*.12);
   c+=vec3(.02,.035,.05)*uCut;
  }
  float vig=pow(16.*vUV.x*vUV.y*(1.-vUV.x)*(1.-vUV.y),.17);

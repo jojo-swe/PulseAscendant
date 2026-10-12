@@ -1,10 +1,10 @@
 # Pulse Ascendant
 
-Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara akter, 16 världar, 76 kapitel och 14:48,68 musik**. Akt II och III använder Vulkan-hårdvaruraytracing på kompatibla grafikkort. En separat OpenGL-renderare finns för alla världar.
+Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara akter, 16 världar, 76 kapitel och 14:48,68 musik**. Varje återkomst till en värld har nu eget scenförlopp. Akt II använder Vulkan-hårdvaruraytracing på kompatibla grafikkort; akt I och III använder procedurala OpenGL-världar.
 
 [Hela demot i 4K60](https://youtu.be/b5ShsKNC7KM) · [Releaser](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [32 sekunders trailer](https://youtube.com/shorts/TYgXs76yKls) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
 
-Treaktsversionen v0.3 och Windows/Linux-paketen är oberoende granskade och godkända med **7,3/10**. Se [granskningsrapporten](QUALITY_REVIEW.md) och aktuell verifiering. Tidigare publicerade videor och releaser avser äldre versioner.
+**v0.4 gör om regin:** skilda återkomster, sammanhängande kameravägar och engångshändelser på uppmätta musikaccenter. Länkad fullvideo och trailer visar ännu v0.3. Dess tekniska granskning bevisade inte underhållningsvärdet; publikens kritik utlöste omarbetningen. Se [omtaget](VARIATION_REWORK.md) och [aktuell verifiering](VERIFICATION.md).
 
 ## Kör
 
@@ -38,17 +38,17 @@ Musiken spelas i normal hastighet. De första 299 sekunderna i akt I är samplei
 
 Varje låt har egen FFT-analys med 24 logaritmiska frekvensband mellan 35 Hz och 18 kHz. Kurvorna analyseras vid 20 Hz och interpoleras vid aktuell ljudposition. Bas, mellanregister, diskant och anslag styr olika objekt, material, ljus och partiklar samtidigt. Inget mikrofon- eller systemljud spelas in.
 
-Scenbyten väljs med uppmätta anslag och bestående spektrala förändringar inom ±2,5 sekunder från redaktionella mål. Kapitlen begränsas till 5–18 sekunder; ingen fast BPM antas. Kameraklipp sker även inom kapitlen. Upplevd musikalisk synk behöver bedömas genom lyssning, separat från analysen.
+Scenbyten väljs med uppmätta anslag och bestående spektrala förändringar inom ±2,5 sekunder från redaktionella mål. Kapitlen begränsas till 5–18 sekunder; ingen fast BPM antas. Varje kapitel får en sammanhängande kameraväg och en separat huvudhändelse på en uppmätt accent. Upplevd musikalisk synk behöver bedömas genom lyssning, separat från analysen.
 
 Akt I rymmer tunnlar, kristaller, stad, vikta maskiner, reaktor, hav och rymdflotta. Akt II tillför kromkatedral, regnstad, orbital fabrik och prismakammare. Akt III tillför ökenkolosser, lysande växtarkitektur, flytande sten och en kristallvingad final. Se [akt II](ACT_II.md) och [akt III](ACT_III.md).
 
 ## Renderingsvägar
 
-Vulkan-renderaren för akt II och III använder riktiga KHR-ray queries mot triangel-BLAS och en dynamisk TLAS. Fem grundmesh används inom en budget på 2 048 instanser. Strålar ger skuggor, reflektioner och brytning med högst fem ytträffar. Modern RT använder två deterministiska subpixelprover och ett adaptivt kantfilter; retro använder ett prov per pixel.
+Vulkan-renderaren för akt II använder riktiga KHR-ray queries mot triangel-BLAS och en dynamisk TLAS. Fem grundmesh används inom en budget på 2 048 instanser. Strålar ger skuggor, reflektioner och brytning med högst fem ytträffar. Modern RT använder två deterministiska subpixelprover och ett adaptivt kantfilter; retro använder ett prov per pixel.
 
 Resultatet kopieras från Vulkan-enhetsminne via värdminne till en OpenGL-HDR-textur varje bild. Det är inte zero-copy. Renderaren är ingen fullständig path tracer och ger ingen allmän global illumination eller temporal denoising. En exporterad 4K60-video innebär inte garanterade 60 interaktiva bilder per sekund i 4K.
 
-OpenGL 3.3-reserven använder separata SDF- och analytiska världar. Välj `--no-rt` för den vägen, `--require-rt` för att kräva tillgänglig Vulkan-RT och `--rt-validation` för Vulkan-diagnostik där valideringslagren finns. Akt I använder OpenGL i båda konfigurationerna.
+OpenGL 3.3 kör akt I och III samt en separat reserv för akt II. Välj `--no-rt` för reserven, `--require-rt` för att kräva tillgänglig Vulkan-RT och `--rt-validation` för Vulkan-diagnostik där valideringslagren finns. Akt I och III använder alltid OpenGL.
 
 ## Bygg och återskapa ljud
 
@@ -99,7 +99,7 @@ Smoke-läget begär alla 16 världar i två stilar. Tour-läget begär två exak
 
 Exportören läser programmets `--show-info`, kontrollerar ljudets format och sampleantal samt tillåter endast intervall inom 888,68 sekunder. Den behöver ffmpeg/ffprobe och NVIDIA NVENC. För en kort akt III-förhandsvisning kan `--start 589.92 --duration 5` läggas till. Paket och ny export placeras under `dist/three-acts/`.
 
-Enbart shaderändringar utlöser inte säkert kopiering av resurser till exe-katalogen. Kopiera då aktuella `assets/` dit eller installera till staging. Aktuell native-, Linux-, RT-, fallback- och kvalitetsacceptans dokumenteras i [VERIFICATION.md](VERIFICATION.md); historiska provresultat gäller inte automatiskt den nya versionen.
+CMake synkroniserar `assets/` till programkatalogen även när bara shaders har ändrats. Aktuell native-, Linux-, RT-, fallback- och kvalitetsacceptans dokumenteras i [VERIFICATION.md](VERIFICATION.md); historiska provresultat gäller inte automatiskt den nya versionen.
 
 ## Krediter
 

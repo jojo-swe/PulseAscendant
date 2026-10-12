@@ -3,44 +3,92 @@ in vec2 vUV;out vec4 color;
 uniform vec2 uResolution;uniform float uTime;uniform int uRetro;uniform float uEnergy;
 uniform vec4 uPlanes[24];
 #include "common.glsl"
-mat3 crystalRotation() {
- float a=uTime*.19+.3,b=uTime*.27,c=cos(a),s=sin(a),cb=cos(b),sb=sin(b);
+mat3 crystalRotation(){
+ float a=.3+uChapterProgress*.45+uAction*.35,b=.4+float(uVariant)*.57;
+ float c=cos(a),s=sin(a),cb=cos(b),sb=sin(b);
  return mat3(cb,0,-sb,0,1,0,sb,0,cb)*mat3(1,0,0,0,c,s,0,-s,c);
 }
-vec3 crystalOffset() {return vec3(0,sin(uTime*.55)*.1,0);}
+vec3 crystalOffset(){
+ if(uVariant==1)return vec3(0,.2,-.8);
+ if(uVariant==2)return vec3(0,.45+uAction*.5,0);
+ if(uVariant>=4)return vec3(0,.1+uAction*1.5,0);
+ return vec3(0,.15,0);
+}
+vec3 crystalScale(){
+ if(uVariant==1)return vec3(.35,.35,1.15);
+ if(uVariant==2)return vec3(.48,.75,.48);
+ if(uVariant==3)return vec3(.70,.90,.70);
+ return vec3(.55);
+}
 // Exact convex clipping against the 24 planes derived from original GLENZ triangles.
 bool crystalHit(vec3 ro,vec3 rd,out float nearT,out float farT,out vec3 nearN,out vec3 farN) {
  mat3 rotation=crystalRotation();
- vec3 o=transpose(rotation)*(ro-crystalOffset())/.55,d=transpose(rotation)*rd/.55;
+ vec3 scale=crystalScale();vec3 o=transpose(rotation)*(ro-crystalOffset())/scale,d=transpose(rotation)*rd/scale;
  nearT=-10000.;farT=10000.;nearN=vec3(0);farN=vec3(0);
  for(int i=0;i<24;i++) {
   vec3 n=uPlanes[i].xyz;float dist=uPlanes[i].w-dot(n,o),den=dot(n,d);
   if(abs(den)<.000001){if(dist<0.)return false;}
   else {
    float t=dist/den;
-   if(den<0.&&t>nearT){nearT=t;nearN=rotation*n;}
-   if(den>0.&&t<farT){farT=t;farN=rotation*n;}
+   if(den<0.&&t>nearT){nearT=t;nearN=normalize(rotation*(n/scale));}
+   if(den>0.&&t<farT){farT=t;farN=normalize(rotation*(n/scale));}
   }
  }
  return farT>max(nearT,0.);
 }
-// Analytic scene distances: three rotating metal/emissive gyroscopes over a reflective floor.
-vec2 mapScene(vec3 p) {
- vec2 hit=vec2(p.y+1.65,1.);
- for(int i=0;i<3;i++) {
-  vec3 q=p;float fi=float(i);
-  q.xz=rot(uTime*(.10+fi*.035)+fi*1.1)*q.xz;
-  q.yz=rot(.35+fi*.8+uTime*.08)*q.yz;
-  float radius=1.12+fi*.20+frequencyBand(4.+fi*6.)*.07;
-  vec2 t=vec2(length(q.xy)-radius,q.z);
-  float tube=length(t)-.055;
-  if(tube<hit.x)hit=vec2(tube,2.+fi);
-  // Evenly spaced machined collars and emitters around each ring.
-  float a=atan(q.y,q.x),cell=6.2831853/48.;
-  float sector=mod(a+cell*.5,cell)-cell*.5;
-  vec3 b=vec3(cos(sector)*length(q.xy)-radius,sin(sector)*length(q.xy),q.z);
-  float collar=length(max(abs(b)-vec3(.09,.025,.09),0.))-.012;
-  if(collar<hit.x)hit=vec2(collar,5.+fi);
+float blockE(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.);}
+vec2 mapScene(vec3 p){
+ float k=clamp(uChapterProgress,0.,1.),action=uAction;vec2 hit=vec2(p.y+1.65,1.);
+ if(uVariant==0){
+  // The reactor uncages its core: three massive gimbals unlock into different planes.
+  for(int i=0;i<3;i++){
+   vec3 q=p;float fi=float(i);q.xz=rot(fi*1.1+action*.5)*q.xz;
+   q.yz=rot(.25+fi*.7+action*(fi-1.)*.9)*q.yz;
+   float radius=1.15+fi*.28+action*.15;
+   float tube=length(vec2(length(q.xy)-radius,q.z))-.065;
+   if(tube<hit.x)hit=vec2(tube,2.+fi);
+  }
+  float foot=blockE(vec3(abs(p.x)-2.,p.y+.8,p.z),vec3(.55,.85,.65));
+  if(foot<hit.x)hit=vec2(foot,5.);
+ }else if(uVariant==1){
+  // A longitudinal rail cannon replaces the orbital rings entirely.
+  float rails=blockE(vec3(abs(p.x)-1.15,p.y+.3,p.z),vec3(.14,.18,3.5));
+  if(rails<hit.x)hit=vec2(rails,3.);
+  for(int i=0;i<4;i++){
+   float z=float(i)*1.7-2.5;vec3 q=p-vec3(0,0,z+action*.5);
+   float collar=max(abs(q.x)*.866+abs(q.y)*.5,abs(q.y))-(1.35+action*.5);
+   float hoop=length(vec2(collar,q.z))-.09;if(hoop<hit.x)hit=vec2(hoop,2.+mod(float(i),3.));
+  }
+ }else if(uVariant==2){
+  // Exploded modules converge into a tall asymmetric prism cradle.
+  for(int i=0;i<6;i++){
+   float fi=float(i),a=fi*PI/3.,r=2.5-action*1.3;
+   vec3 at=vec3(cos(a)*r,-.2+mod(fi,3.)*.45+action*.15,sin(a)*r);
+   vec3 q=p-at;q.xz=rot(a)*q.xz;
+   float d=blockE(q,vec3(.28,.35+fi*.05,.38));if(d<hit.x)hit=vec2(d,2.+mod(fi,3.));
+  }
+  float pedestal=blockE(p+vec3(0,1.45,0),vec3(.8,.2,.8));if(pedestal<hit.x)hit=vec2(pedestal,5.);
+ }else if(uVariant==3){
+  // A crown of blade-like cathedral buttresses opens around a taller crystal.
+  for(int i=0;i<6;i++){
+   float fi=float(i),a=fi*PI/3.;vec3 q=p;q.xz=rot(a)*q.xz;
+   q-=vec3(1.65+action*.6,.2,0);q.xy=rot(.25+action*.35)*q.xy;
+   float fin=blockE(q,vec3(.13,1.8,.52));if(fin<hit.x)hit=vec2(fin,2.+mod(fi,3.));
+  }
+  float crown=length(vec2(length(p.xz)-(2.1+action*.5),p.y+1.1))-.08;
+  if(crown<hit.x)hit=vec2(crown,4.);
+ }else{
+  // The Act I finale: four separated decks align into a launch spire.
+  for(int i=0;i<4;i++){
+   float fi=float(i),y=-1.2+fi*.67;vec3 q=p-vec3(0,y,0);
+   q.xz=rot((1.-action)*fi*.6)*q.xz;
+   float r=1.55-fi*.19+action*.15;
+   float deck=blockE(q,vec3(r,.07,r));
+   deck=max(deck,-(length(q.xz)-(.6+action*.32)));
+   if(deck<hit.x)hit=vec2(deck,2.+mod(fi,3.));
+  }
+  vec3 b=p-vec3(0,.6+action*1.5,0);
+  float beam=max(length(b.xz)-.055,abs(b.y)-(1.3+action*2.));if(beam<hit.x)hit=vec2(beam,6.);
  }
  return hit;
 }
@@ -134,7 +182,7 @@ vec3 glassSurface(vec3 p,vec3 rd,vec3 n) {
  vec3 through=vec3(red.r,(red.g+blue.g)*.5,blue.b);
  float F=.04+.96*pow(1.-max(dot(-rd,n),0.),5.);
  vec3 c=mix(through,reflected,F);
- vec3 local=transpose(crystalRotation())*(p-crystalOffset())/.55;
+ vec3 local=transpose(crystalRotation())*(p-crystalOffset())/crystalScale();
  float first=100.,second=100.;
  for(int i=0;i<24;i++) {
   float d=abs(dot(uPlanes[i].xyz,local)-uPlanes[i].w);
@@ -147,7 +195,14 @@ vec3 glassSurface(vec3 p,vec3 rd,vec3 n) {
 }
 void main() {
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);
- vec3 ro=orbitEye(uTime,4.9),rd=orbitRay(p,ro,uTime);
+ float k=clamp(uChapterProgress,0.,1.);
+ vec3 ro;
+ if(uVariant==1)ro=vec3(4.7-k,2.3,5.7-k*1.8);
+ else if(uVariant==2)ro=vec3(4.6-k*.5,2.7+k*.5,4.6);
+ else if(uVariant==3)ro=vec3(4.7,2.3+k,5.4-k*.7);
+ else if(uVariant>=4)ro=vec3(4.5-k*.6,2.8+k*.4,5.5);
+ else ro=vec3(4.0-k*.6,1.7+k*.3,4.4);
+ vec3 rd=cameraBasis(ro,vec3(0,uVariant>=4?.8:0.,0))*normalize(vec3(p,1.7));
  float t=0.,glow=0.;vec2 hit=vec2(0);bool found=false;
  int steps=uRetro==1?64:112;
  for(int i=0;i<112;i++) {

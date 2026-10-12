@@ -1,0 +1,1701 @@
+{
+  "scope": "18%/82% chapter stills; pixel changes do not establish entertainment quality",
+  "paths": {
+    "rt-v5": {
+      "chapters": [
+        {
+          "chapter": 1,
+          "mean_change": 0.0661875382065773,
+          "changed_fraction": 0.3261900522317189,
+          "mean_brightness": 0.12179338932037354,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 2,
+          "mean_change": 0.19525045156478882,
+          "changed_fraction": 0.7155330009496677,
+          "mean_brightness": 0.2962529957294464,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 3,
+          "mean_change": 0.15771400928497314,
+          "changed_fraction": 0.7567574786324787,
+          "mean_brightness": 0.3495962619781494,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 4,
+          "mean_change": 0.02411346510052681,
+          "changed_fraction": 0.1727267331433998,
+          "mean_brightness": 0.30390220880508423,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 5,
+          "mean_change": 0.12479683756828308,
+          "changed_fraction": 0.35761514719848053,
+          "mean_brightness": 0.2960819602012634,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 6,
+          "mean_change": 0.15302854776382446,
+          "changed_fraction": 0.6149513295346629,
+          "mean_brightness": 0.3323622941970825,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 7,
+          "mean_change": 0.1138194277882576,
+          "changed_fraction": 0.774735873694207,
+          "mean_brightness": 0.3071950674057007,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 8,
+          "mean_change": 0.0463714674115181,
+          "changed_fraction": 0.22226970560303894,
+          "mean_brightness": 0.13066843152046204,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 9,
+          "mean_change": 0.45772263407707214,
+          "changed_fraction": 0.9106570512820513,
+          "mean_brightness": 0.11559628695249557,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 10,
+          "mean_change": 0.21219028532505035,
+          "changed_fraction": 0.8116749762583096,
+          "mean_brightness": 0.3742981553077698,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 11,
+          "mean_change": 0.12486939877271652,
+          "changed_fraction": 0.36237535612535615,
+          "mean_brightness": 0.13555222749710083,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 12,
+          "mean_change": 0.1357259601354599,
+          "changed_fraction": 0.43337488129154794,
+          "mean_brightness": 0.22285449504852295,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 13,
+          "mean_change": 0.16042029857635498,
+          "changed_fraction": 0.6052231718898385,
+          "mean_brightness": 0.2627722918987274,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 14,
+          "mean_change": 0.1018182784318924,
+          "changed_fraction": 0.4241631054131054,
+          "mean_brightness": 0.12518031895160675,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 15,
+          "mean_change": 0.09571470320224762,
+          "changed_fraction": 0.21953050807217475,
+          "mean_brightness": 0.18524926900863647,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 16,
+          "mean_change": 0.22505652904510498,
+          "changed_fraction": 0.791820987654321,
+          "mean_brightness": 0.10671471059322357,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 17,
+          "mean_change": 0.1448841243982315,
+          "changed_fraction": 0.7277985517568851,
+          "mean_brightness": 0.31924158334732056,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 18,
+          "mean_change": 0.1610293835401535,
+          "changed_fraction": 0.6950765669515669,
+          "mean_brightness": 0.1916443109512329,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 19,
+          "mean_change": 0.04586440324783325,
+          "changed_fraction": 0.13801341405508072,
+          "mean_brightness": 0.07625075429677963,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 20,
+          "mean_change": 0.04206637293100357,
+          "changed_fraction": 0.2018014007597341,
+          "mean_brightness": 0.19175195693969727,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 21,
+          "mean_change": 0.05948533117771149,
+          "changed_fraction": 0.21788342830009497,
+          "mean_brightness": 0.12735387682914734,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 22,
+          "mean_change": 0.07371354103088379,
+          "changed_fraction": 0.38237179487179485,
+          "mean_brightness": 0.4432806968688965,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 23,
+          "mean_change": 0.04223880544304848,
+          "changed_fraction": 0.23969017094017095,
+          "mean_brightness": 0.40239718556404114,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 24,
+          "mean_change": 0.15452079474925995,
+          "changed_fraction": 0.8006558641975309,
+          "mean_brightness": 0.3154769241809845,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 25,
+          "mean_change": 0.17578493058681488,
+          "changed_fraction": 0.6611229819563152,
+          "mean_brightness": 0.26269420981407166,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 26,
+          "mean_change": 0.13203206658363342,
+          "changed_fraction": 0.3144824311490978,
+          "mean_brightness": 0.1287904679775238,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 27,
+          "mean_change": 0.03387857601046562,
+          "changed_fraction": 0.1382389601139601,
+          "mean_brightness": 0.10530299693346024,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 28,
+          "mean_change": 0.06292054802179337,
+          "changed_fraction": 0.25774869420702756,
+          "mean_brightness": 0.13543809950351715,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 29,
+          "mean_change": 0.012863422743976116,
+          "changed_fraction": 0.031988960113960116,
+          "mean_brightness": 0.12931880354881287,
+          "legacy_threshold_pass": false
+        },
+        {
+          "chapter": 30,
+          "mean_change": 0.0933922752737999,
+          "changed_fraction": 0.6558731006647673,
+          "mean_brightness": 0.17558157444000244,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 31,
+          "mean_change": 0.02686980366706848,
+          "changed_fraction": 0.12955840455840456,
+          "mean_brightness": 0.09436193108558655,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 32,
+          "mean_change": 0.1241878867149353,
+          "changed_fraction": 0.7114553656220323,
+          "mean_brightness": 0.2620720863342285,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 33,
+          "mean_change": 0.08906636387109756,
+          "changed_fraction": 0.5687262583095917,
+          "mean_brightness": 0.4388662278652191,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 34,
+          "mean_change": 0.03637905791401863,
+          "changed_fraction": 0.13024097815764482,
+          "mean_brightness": 0.1222931370139122,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 35,
+          "mean_change": 0.06604082882404327,
+          "changed_fraction": 0.4019883665716999,
+          "mean_brightness": 0.17272399365901947,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 36,
+          "mean_change": 0.06937476992607117,
+          "changed_fraction": 0.3967562915479582,
+          "mean_brightness": 0.27919065952301025,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 37,
+          "mean_change": 0.0453699566423893,
+          "changed_fraction": 0.2089357787274454,
+          "mean_brightness": 0.12770143151283264,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 38,
+          "mean_change": 0.12925486266613007,
+          "changed_fraction": 0.76934650997151,
+          "mean_brightness": 0.34060919284820557,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 39,
+          "mean_change": 0.11056853085756302,
+          "changed_fraction": 0.4529053893637227,
+          "mean_brightness": 0.2185068279504776,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 40,
+          "mean_change": 0.060975756496191025,
+          "changed_fraction": 0.29871201329534663,
+          "mean_brightness": 0.2638760805130005,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 41,
+          "mean_change": 0.04760044440627098,
+          "changed_fraction": 0.15980531813865148,
+          "mean_brightness": 0.11687619984149933,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 42,
+          "mean_change": 0.043917492032051086,
+          "changed_fraction": 0.2881143162393162,
+          "mean_brightness": 0.16248193383216858,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 43,
+          "mean_change": 0.09022922813892365,
+          "changed_fraction": 0.42151293922127253,
+          "mean_brightness": 0.3182288408279419,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 44,
+          "mean_change": 0.0356113463640213,
+          "changed_fraction": 0.2155715811965812,
+          "mean_brightness": 0.2747356593608856,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 45,
+          "mean_change": 0.012126177549362183,
+          "changed_fraction": 0.07285731244064578,
+          "mean_brightness": 0.09364484250545502,
+          "legacy_threshold_pass": false
+        },
+        {
+          "chapter": 46,
+          "mean_change": 0.025181056931614876,
+          "changed_fraction": 0.166289767331434,
+          "mean_brightness": 0.20785585045814514,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 47,
+          "mean_change": 0.08069334179162979,
+          "changed_fraction": 0.3842740978157645,
+          "mean_brightness": 0.3038039207458496,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 48,
+          "mean_change": 0.04966167360544205,
+          "changed_fraction": 0.28844076448243117,
+          "mean_brightness": 0.2692810893058777,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 49,
+          "mean_change": 0.0800686627626419,
+          "changed_fraction": 0.5244984567901234,
+          "mean_brightness": 0.11988285928964615,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 50,
+          "mean_change": 0.09319344907999039,
+          "changed_fraction": 0.7663075735992403,
+          "mean_brightness": 0.19533926248550415,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 51,
+          "mean_change": 0.1385815292596817,
+          "changed_fraction": 0.7557098765432099,
+          "mean_brightness": 0.2945992648601532,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 52,
+          "mean_change": 0.15973879396915436,
+          "changed_fraction": 0.8348528015194682,
+          "mean_brightness": 0.36572209000587463,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 53,
+          "mean_change": 0.06815192848443985,
+          "changed_fraction": 0.4522406220322887,
+          "mean_brightness": 0.5950083136558533,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 54,
+          "mean_change": 0.11714212596416473,
+          "changed_fraction": 0.634642094017094,
+          "mean_brightness": 0.5298669934272766,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 55,
+          "mean_change": 0.05274258181452751,
+          "changed_fraction": 0.34987535612535614,
+          "mean_brightness": 0.17761817574501038,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 56,
+          "mean_change": 0.10853344202041626,
+          "changed_fraction": 0.627656101614435,
+          "mean_brightness": 0.2213960886001587,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 57,
+          "mean_change": 0.0956571102142334,
+          "changed_fraction": 0.4405923551756885,
+          "mean_brightness": 0.3769453763961792,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 58,
+          "mean_change": 0.09351971000432968,
+          "changed_fraction": 0.5620607787274454,
+          "mean_brightness": 0.5193042159080505,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 59,
+          "mean_change": 0.1256374716758728,
+          "changed_fraction": 0.5087873931623932,
+          "mean_brightness": 0.22619469463825226,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 60,
+          "mean_change": 0.024780424311757088,
+          "changed_fraction": 0.13253501899335232,
+          "mean_brightness": 0.13884815573692322,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 61,
+          "mean_change": 0.0913618877530098,
+          "changed_fraction": 0.3895714624881291,
+          "mean_brightness": 0.29912927746772766,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 62,
+          "mean_change": 0.09686733037233353,
+          "changed_fraction": 0.5754303181386514,
+          "mean_brightness": 0.5731701254844666,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 63,
+          "mean_change": 0.13261795043945312,
+          "changed_fraction": 0.5512345679012346,
+          "mean_brightness": 0.26266735792160034,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 64,
+          "mean_change": 0.25138843059539795,
+          "changed_fraction": 0.6387078584995252,
+          "mean_brightness": 0.20886357128620148,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 65,
+          "mean_change": 0.11425768584012985,
+          "changed_fraction": 0.48855947293447294,
+          "mean_brightness": 0.33925825357437134,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 66,
+          "mean_change": 0.10661417990922928,
+          "changed_fraction": 0.5851258309591643,
+          "mean_brightness": 0.28552955389022827,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 67,
+          "mean_change": 0.12171852588653564,
+          "changed_fraction": 0.6093126780626781,
+          "mean_brightness": 0.5520665049552917,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 68,
+          "mean_change": 0.05389782041311264,
+          "changed_fraction": 0.28995132953466285,
+          "mean_brightness": 0.16677935421466827,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 69,
+          "mean_change": 0.17400377988815308,
+          "changed_fraction": 0.7257359924026591,
+          "mean_brightness": 0.1711454689502716,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 70,
+          "mean_change": 0.24776940047740936,
+          "changed_fraction": 0.8533802231718899,
+          "mean_brightness": 0.29436904191970825,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 71,
+          "mean_change": 0.15537135303020477,
+          "changed_fraction": 0.8740533000949667,
+          "mean_brightness": 0.44291335344314575,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 72,
+          "mean_change": 0.06610949337482452,
+          "changed_fraction": 0.3023682336182336,
+          "mean_brightness": 0.23541326820850372,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 73,
+          "mean_change": 0.05755075439810753,
+          "changed_fraction": 0.30787037037037035,
+          "mean_brightness": 0.2376893311738968,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 74,
+          "mean_change": 0.15512840449810028,
+          "changed_fraction": 0.7272910731244064,
+          "mean_brightness": 0.4423554539680481,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 75,
+          "mean_change": 0.1328503042459488,
+          "changed_fraction": 0.6454653371320038,
+          "mean_brightness": 0.6382378339767456,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 76,
+          "mean_change": 0.06129542738199234,
+          "changed_fraction": 0.23908772554605887,
+          "mean_brightness": 0.5561602115631104,
+          "legacy_threshold_pass": true
+        }
+      ],
+      "legacy_threshold_failures": [
+        29,
+        45
+      ]
+    },
+    "fallback-v5": {
+      "chapters": [
+        {
+          "chapter": 1,
+          "mean_change": 0.0661875382065773,
+          "changed_fraction": 0.3261900522317189,
+          "mean_brightness": 0.12179338932037354,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 2,
+          "mean_change": 0.19525045156478882,
+          "changed_fraction": 0.7155330009496677,
+          "mean_brightness": 0.2962529957294464,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 3,
+          "mean_change": 0.15771400928497314,
+          "changed_fraction": 0.7567574786324787,
+          "mean_brightness": 0.3495962619781494,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 4,
+          "mean_change": 0.02411346510052681,
+          "changed_fraction": 0.1727267331433998,
+          "mean_brightness": 0.30390220880508423,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 5,
+          "mean_change": 0.12479683756828308,
+          "changed_fraction": 0.35761514719848053,
+          "mean_brightness": 0.2960819602012634,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 6,
+          "mean_change": 0.15302854776382446,
+          "changed_fraction": 0.6149513295346629,
+          "mean_brightness": 0.3323622941970825,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 7,
+          "mean_change": 0.1138194277882576,
+          "changed_fraction": 0.774735873694207,
+          "mean_brightness": 0.3071950674057007,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 8,
+          "mean_change": 0.0463714674115181,
+          "changed_fraction": 0.22226970560303894,
+          "mean_brightness": 0.13066843152046204,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 9,
+          "mean_change": 0.45772263407707214,
+          "changed_fraction": 0.9106570512820513,
+          "mean_brightness": 0.11559628695249557,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 10,
+          "mean_change": 0.21219028532505035,
+          "changed_fraction": 0.8116749762583096,
+          "mean_brightness": 0.3742981553077698,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 11,
+          "mean_change": 0.12486939877271652,
+          "changed_fraction": 0.36237535612535615,
+          "mean_brightness": 0.13555222749710083,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 12,
+          "mean_change": 0.1357259601354599,
+          "changed_fraction": 0.43337488129154794,
+          "mean_brightness": 0.22285449504852295,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 13,
+          "mean_change": 0.16042029857635498,
+          "changed_fraction": 0.6052231718898385,
+          "mean_brightness": 0.2627722918987274,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 14,
+          "mean_change": 0.1018182784318924,
+          "changed_fraction": 0.4241631054131054,
+          "mean_brightness": 0.12518031895160675,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 15,
+          "mean_change": 0.09571470320224762,
+          "changed_fraction": 0.21953050807217475,
+          "mean_brightness": 0.18524926900863647,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 16,
+          "mean_change": 0.22505652904510498,
+          "changed_fraction": 0.791820987654321,
+          "mean_brightness": 0.10671471059322357,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 17,
+          "mean_change": 0.1448841243982315,
+          "changed_fraction": 0.7277985517568851,
+          "mean_brightness": 0.31924158334732056,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 18,
+          "mean_change": 0.1610293835401535,
+          "changed_fraction": 0.6950765669515669,
+          "mean_brightness": 0.1916443109512329,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 19,
+          "mean_change": 0.04586440324783325,
+          "changed_fraction": 0.13801341405508072,
+          "mean_brightness": 0.07625075429677963,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 20,
+          "mean_change": 0.04206637293100357,
+          "changed_fraction": 0.2018014007597341,
+          "mean_brightness": 0.19175195693969727,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 21,
+          "mean_change": 0.05948533117771149,
+          "changed_fraction": 0.21788342830009497,
+          "mean_brightness": 0.12735387682914734,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 22,
+          "mean_change": 0.07371354103088379,
+          "changed_fraction": 0.38237179487179485,
+          "mean_brightness": 0.4432806968688965,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 23,
+          "mean_change": 0.04223880544304848,
+          "changed_fraction": 0.23969017094017095,
+          "mean_brightness": 0.40239718556404114,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 24,
+          "mean_change": 0.15452079474925995,
+          "changed_fraction": 0.8006558641975309,
+          "mean_brightness": 0.3154769241809845,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 25,
+          "mean_change": 0.17578493058681488,
+          "changed_fraction": 0.6611229819563152,
+          "mean_brightness": 0.26269420981407166,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 26,
+          "mean_change": 0.13203206658363342,
+          "changed_fraction": 0.3144824311490978,
+          "mean_brightness": 0.1287904679775238,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 27,
+          "mean_change": 0.03387857601046562,
+          "changed_fraction": 0.1382389601139601,
+          "mean_brightness": 0.10530299693346024,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 28,
+          "mean_change": 0.06292054802179337,
+          "changed_fraction": 0.25774869420702756,
+          "mean_brightness": 0.13543809950351715,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 29,
+          "mean_change": 0.012863422743976116,
+          "changed_fraction": 0.031988960113960116,
+          "mean_brightness": 0.12931880354881287,
+          "legacy_threshold_pass": false
+        },
+        {
+          "chapter": 30,
+          "mean_change": 0.0933922752737999,
+          "changed_fraction": 0.6558731006647673,
+          "mean_brightness": 0.17558157444000244,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 31,
+          "mean_change": 0.02686980366706848,
+          "changed_fraction": 0.12955840455840456,
+          "mean_brightness": 0.09436193108558655,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 32,
+          "mean_change": 0.12482423335313797,
+          "changed_fraction": 0.6327486942070275,
+          "mean_brightness": 0.4771869480609894,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 33,
+          "mean_change": 0.12878568470478058,
+          "changed_fraction": 0.5768548195631529,
+          "mean_brightness": 0.5813114643096924,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 34,
+          "mean_change": 0.08648006618022919,
+          "changed_fraction": 0.49512405033238366,
+          "mean_brightness": 0.2896638810634613,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 35,
+          "mean_change": 0.14488394558429718,
+          "changed_fraction": 0.6370014245014245,
+          "mean_brightness": 0.49704787135124207,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 36,
+          "mean_change": 0.0926816463470459,
+          "changed_fraction": 0.5213378442545109,
+          "mean_brightness": 0.5346226096153259,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 37,
+          "mean_change": 0.09135818481445312,
+          "changed_fraction": 0.5220916429249762,
+          "mean_brightness": 0.2953406870365143,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 38,
+          "mean_change": 0.11601069569587708,
+          "changed_fraction": 0.5644408831908831,
+          "mean_brightness": 0.5131891965866089,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 39,
+          "mean_change": 0.1143576130270958,
+          "changed_fraction": 0.5596242877492877,
+          "mean_brightness": 0.5017654299736023,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 40,
+          "mean_change": 0.05321080982685089,
+          "changed_fraction": 0.3479908594491928,
+          "mean_brightness": 0.5251703858375549,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 41,
+          "mean_change": 0.07508645951747894,
+          "changed_fraction": 0.49236111111111114,
+          "mean_brightness": 0.28859633207321167,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 42,
+          "mean_change": 0.08905365318059921,
+          "changed_fraction": 0.5097904795821463,
+          "mean_brightness": 0.40751323103904724,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 43,
+          "mean_change": 0.10096888989210129,
+          "changed_fraction": 0.47812796771130106,
+          "mean_brightness": 0.454043447971344,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 44,
+          "mean_change": 0.04297575727105141,
+          "changed_fraction": 0.30537452516619185,
+          "mean_brightness": 0.5429924726486206,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 45,
+          "mean_change": 0.04587595537304878,
+          "changed_fraction": 0.3454326923076923,
+          "mean_brightness": 0.25845882296562195,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 46,
+          "mean_change": 0.03476252406835556,
+          "changed_fraction": 0.08087310066476733,
+          "mean_brightness": 0.29760685563087463,
+          "legacy_threshold_pass": false
+        },
+        {
+          "chapter": 47,
+          "mean_change": 0.06586530059576035,
+          "changed_fraction": 0.3497536799620133,
+          "mean_brightness": 0.4249729514122009,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 48,
+          "mean_change": 0.04811260476708412,
+          "changed_fraction": 0.308113722697056,
+          "mean_brightness": 0.50108402967453,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 49,
+          "mean_change": 0.11083963513374329,
+          "changed_fraction": 0.7323896011396012,
+          "mean_brightness": 0.290616512298584,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 50,
+          "mean_change": 0.15996204316616058,
+          "changed_fraction": 0.8864939458689459,
+          "mean_brightness": 0.46771371364593506,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 51,
+          "mean_change": 0.1966550201177597,
+          "changed_fraction": 0.7585618471035138,
+          "mean_brightness": 0.6053644418716431,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 52,
+          "mean_change": 0.15605394542217255,
+          "changed_fraction": 0.9074163105413106,
+          "mean_brightness": 0.671200692653656,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 53,
+          "mean_change": 0.06815192848443985,
+          "changed_fraction": 0.4522406220322887,
+          "mean_brightness": 0.5950083136558533,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 54,
+          "mean_change": 0.11714212596416473,
+          "changed_fraction": 0.634642094017094,
+          "mean_brightness": 0.5298669934272766,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 55,
+          "mean_change": 0.05274258181452751,
+          "changed_fraction": 0.34987535612535614,
+          "mean_brightness": 0.17761817574501038,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 56,
+          "mean_change": 0.10853344202041626,
+          "changed_fraction": 0.627656101614435,
+          "mean_brightness": 0.2213960886001587,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 57,
+          "mean_change": 0.0956571102142334,
+          "changed_fraction": 0.4405923551756885,
+          "mean_brightness": 0.3769453763961792,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 58,
+          "mean_change": 0.09351971000432968,
+          "changed_fraction": 0.5620607787274454,
+          "mean_brightness": 0.5193042159080505,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 59,
+          "mean_change": 0.1256374716758728,
+          "changed_fraction": 0.5087873931623932,
+          "mean_brightness": 0.22619469463825226,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 60,
+          "mean_change": 0.024780424311757088,
+          "changed_fraction": 0.13253501899335232,
+          "mean_brightness": 0.13884815573692322,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 61,
+          "mean_change": 0.0913618877530098,
+          "changed_fraction": 0.3895714624881291,
+          "mean_brightness": 0.29912927746772766,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 62,
+          "mean_change": 0.09686733037233353,
+          "changed_fraction": 0.5754303181386514,
+          "mean_brightness": 0.5731701254844666,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 63,
+          "mean_change": 0.13261795043945312,
+          "changed_fraction": 0.5512345679012346,
+          "mean_brightness": 0.26266735792160034,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 64,
+          "mean_change": 0.25138843059539795,
+          "changed_fraction": 0.6387078584995252,
+          "mean_brightness": 0.20886357128620148,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 65,
+          "mean_change": 0.11425768584012985,
+          "changed_fraction": 0.48855947293447294,
+          "mean_brightness": 0.33925825357437134,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 66,
+          "mean_change": 0.10661417990922928,
+          "changed_fraction": 0.5851258309591643,
+          "mean_brightness": 0.28552955389022827,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 67,
+          "mean_change": 0.12171852588653564,
+          "changed_fraction": 0.6093126780626781,
+          "mean_brightness": 0.5520665049552917,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 68,
+          "mean_change": 0.05389782041311264,
+          "changed_fraction": 0.28995132953466285,
+          "mean_brightness": 0.16677935421466827,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 69,
+          "mean_change": 0.17400377988815308,
+          "changed_fraction": 0.7257359924026591,
+          "mean_brightness": 0.1711454689502716,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 70,
+          "mean_change": 0.24776940047740936,
+          "changed_fraction": 0.8533802231718899,
+          "mean_brightness": 0.29436904191970825,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 71,
+          "mean_change": 0.15537135303020477,
+          "changed_fraction": 0.8740533000949667,
+          "mean_brightness": 0.44291335344314575,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 72,
+          "mean_change": 0.06610949337482452,
+          "changed_fraction": 0.3023682336182336,
+          "mean_brightness": 0.23541326820850372,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 73,
+          "mean_change": 0.05755075439810753,
+          "changed_fraction": 0.30787037037037035,
+          "mean_brightness": 0.2376893311738968,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 74,
+          "mean_change": 0.15512840449810028,
+          "changed_fraction": 0.7272910731244064,
+          "mean_brightness": 0.4423554539680481,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 75,
+          "mean_change": 0.1328503042459488,
+          "changed_fraction": 0.6454653371320038,
+          "mean_brightness": 0.6382378339767456,
+          "legacy_threshold_pass": true
+        },
+        {
+          "chapter": 76,
+          "mean_change": 0.06129542738199234,
+          "changed_fraction": 0.23908772554605887,
+          "mean_brightness": 0.5561602115631104,
+          "legacy_threshold_pass": true
+        }
+      ],
+      "legacy_threshold_failures": [
+        29,
+        46
+      ]
+    },
+    "linux-v5": {
+      "chapters": [
+        {
+          "chapter": 1,
+          "mean_change": 0.06695123016834259,
+          "changed_fraction": 0.3280003561253561,
+          "mean_brightness": 0.12062285840511322,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.002747002989053726
+        },
+        {
+          "chapter": 2,
+          "mean_change": 0.19526202976703644,
+          "changed_fraction": 0.7154973884140551,
+          "mean_brightness": 0.2962336540222168,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.108045191562269e-05
+        },
+        {
+          "chapter": 3,
+          "mean_change": 0.16343823075294495,
+          "changed_fraction": 0.7645002374169041,
+          "mean_brightness": 0.35482630133628845,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.005480323918163776
+        },
+        {
+          "chapter": 4,
+          "mean_change": 0.024117009714245796,
+          "changed_fraction": 0.17271783000949667,
+          "mean_brightness": 0.30387601256370544,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.70120090135606e-05
+        },
+        {
+          "chapter": 5,
+          "mean_change": 0.12481050938367844,
+          "changed_fraction": 0.3575854700854701,
+          "mean_brightness": 0.2960326671600342,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 5.325199163053185e-05
+        },
+        {
+          "chapter": 6,
+          "mean_change": 0.15304140746593475,
+          "changed_fraction": 0.6151382953466287,
+          "mean_brightness": 0.33233681321144104,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.6658970455173403e-05
+        },
+        {
+          "chapter": 7,
+          "mean_change": 0.11456713825464249,
+          "changed_fraction": 0.7782615147198481,
+          "mean_brightness": 0.3084796667098999,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.002073440933600068
+        },
+        {
+          "chapter": 8,
+          "mean_change": 0.04638562351465225,
+          "changed_fraction": 0.22252492877492877,
+          "mean_brightness": 0.13064511120319366,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.00048635550774633884
+        },
+        {
+          "chapter": 9,
+          "mean_change": 0.4581257402896881,
+          "changed_fraction": 0.9103513770180437,
+          "mean_brightness": 0.11464230716228485,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0028241171967238188
+        },
+        {
+          "chapter": 10,
+          "mean_change": 0.21221120655536652,
+          "changed_fraction": 0.8116779439696107,
+          "mean_brightness": 0.3742698132991791,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.855604179785587e-05
+        },
+        {
+          "chapter": 11,
+          "mean_change": 0.12488967180252075,
+          "changed_fraction": 0.36241690408357075,
+          "mean_brightness": 0.13547855615615845,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 7.594237831654027e-05
+        },
+        {
+          "chapter": 12,
+          "mean_change": 0.13598781824111938,
+          "changed_fraction": 0.4334698480531814,
+          "mean_brightness": 0.22260214388370514,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0016137678176164627
+        },
+        {
+          "chapter": 13,
+          "mean_change": 0.16042976081371307,
+          "changed_fraction": 0.605389363722697,
+          "mean_brightness": 0.26274335384368896,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 3.0394792702281848e-05
+        },
+        {
+          "chapter": 14,
+          "mean_change": 0.10179471969604492,
+          "changed_fraction": 0.4243886514719848,
+          "mean_brightness": 0.1250980645418167,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0003888361097779125
+        },
+        {
+          "chapter": 15,
+          "mean_change": 0.09573519974946976,
+          "changed_fraction": 0.21956315289648623,
+          "mean_brightness": 0.1851986050605774,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 5.630892337649129e-05
+        },
+        {
+          "chapter": 16,
+          "mean_change": 0.22510123252868652,
+          "changed_fraction": 0.7908446106362773,
+          "mean_brightness": 0.10662369430065155,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0033658540342003107
+        },
+        {
+          "chapter": 17,
+          "mean_change": 0.14507323503494263,
+          "changed_fraction": 0.728193257359924,
+          "mean_brightness": 0.31940606236457825,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0002443648409098387
+        },
+        {
+          "chapter": 18,
+          "mean_change": 0.16126477718353271,
+          "changed_fraction": 0.6978751187084521,
+          "mean_brightness": 0.19174005091190338,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0010128662688657641
+        },
+        {
+          "chapter": 19,
+          "mean_change": 0.045871034264564514,
+          "changed_fraction": 0.13800154320987654,
+          "mean_brightness": 0.07615402340888977,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 9.696074994280934e-05
+        },
+        {
+          "chapter": 20,
+          "mean_change": 0.04205513000488281,
+          "changed_fraction": 0.20154024216524216,
+          "mean_brightness": 0.1917245090007782,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.7624932045000605e-05
+        },
+        {
+          "chapter": 21,
+          "mean_change": 0.05950026959180832,
+          "changed_fraction": 0.21790716999050333,
+          "mean_brightness": 0.12728233635425568,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0003948219818994403
+        },
+        {
+          "chapter": 22,
+          "mean_change": 0.07372104376554489,
+          "changed_fraction": 0.38237476258309594,
+          "mean_brightness": 0.4432681202888489,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 3.712550096679479e-05
+        },
+        {
+          "chapter": 23,
+          "mean_change": 0.04223906621336937,
+          "changed_fraction": 0.23968423551756884,
+          "mean_brightness": 0.4023917615413666,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 6.470795142377028e-06
+        },
+        {
+          "chapter": 24,
+          "mean_change": 0.15908697247505188,
+          "changed_fraction": 0.8161443494776828,
+          "mean_brightness": 0.32335761189460754,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.008175733499228954
+        },
+        {
+          "chapter": 25,
+          "mean_change": 0.175912007689476,
+          "changed_fraction": 0.6619509734093068,
+          "mean_brightness": 0.262811541557312,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.00017225915507879108
+        },
+        {
+          "chapter": 26,
+          "mean_change": 0.13205422461032867,
+          "changed_fraction": 0.31450617283950616,
+          "mean_brightness": 0.12872323393821716,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 6.800908158766106e-05
+        },
+        {
+          "chapter": 27,
+          "mean_change": 0.03414816036820412,
+          "changed_fraction": 0.14016203703703703,
+          "mean_brightness": 0.10507888346910477,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.003168545663356781
+        },
+        {
+          "chapter": 28,
+          "mean_change": 0.06294441968202591,
+          "changed_fraction": 0.2575379867046534,
+          "mean_brightness": 0.13536803424358368,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0004761605814564973
+        },
+        {
+          "chapter": 29,
+          "mean_change": 0.013241803273558617,
+          "changed_fraction": 0.03197412155745489,
+          "mean_brightness": 0.12878869473934174,
+          "legacy_threshold_pass": false,
+          "windows_mean_absolute_difference": 0.0018145791254937649
+        },
+        {
+          "chapter": 30,
+          "mean_change": 0.09360280632972717,
+          "changed_fraction": 0.6590396486229819,
+          "mean_brightness": 0.17476697266101837,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.002878571394830942
+        },
+        {
+          "chapter": 31,
+          "mean_change": 0.02686949074268341,
+          "changed_fraction": 0.1297067901234568,
+          "mean_brightness": 0.09426465630531311,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.00031591576407663524
+        },
+        {
+          "chapter": 32,
+          "mean_change": 0.12482771277427673,
+          "changed_fraction": 0.6326982431149097,
+          "mean_brightness": 0.4771825671195984,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 4.833697857975494e-06
+        },
+        {
+          "chapter": 33,
+          "mean_change": 0.12878760695457458,
+          "changed_fraction": 0.5768577872744539,
+          "mean_brightness": 0.5813035368919373,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 8.542411706002895e-06
+        },
+        {
+          "chapter": 34,
+          "mean_change": 0.08649624139070511,
+          "changed_fraction": 0.4951270180436847,
+          "mean_brightness": 0.289644718170166,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.9183442418579943e-05
+        },
+        {
+          "chapter": 35,
+          "mean_change": 0.14489059150218964,
+          "changed_fraction": 0.6369954890788224,
+          "mean_brightness": 0.4970361590385437,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.2992010852030944e-05
+        },
+        {
+          "chapter": 36,
+          "mean_change": 0.09268252551555634,
+          "changed_fraction": 0.5213200379867047,
+          "mean_brightness": 0.5346212387084961,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.5595119293720927e-06
+        },
+        {
+          "chapter": 37,
+          "mean_change": 0.09136898070573807,
+          "changed_fraction": 0.5220857075023742,
+          "mean_brightness": 0.2953234910964966,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.7220485460711643e-05
+        },
+        {
+          "chapter": 38,
+          "mean_change": 0.11601664870977402,
+          "changed_fraction": 0.5644379154795821,
+          "mean_brightness": 0.5131859183311462,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 4.775505658471957e-06
+        },
+        {
+          "chapter": 39,
+          "mean_change": 0.11436077952384949,
+          "changed_fraction": 0.5596272554605888,
+          "mean_brightness": 0.5017563700675964,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.0101905900228303e-05
+        },
+        {
+          "chapter": 40,
+          "mean_change": 0.05321158468723297,
+          "changed_fraction": 0.3479938271604938,
+          "mean_brightness": 0.5251677632331848,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.9793650355713908e-06
+        },
+        {
+          "chapter": 41,
+          "mean_change": 0.07510656118392944,
+          "changed_fraction": 0.4924590455840456,
+          "mean_brightness": 0.28857681155204773,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.955973857548088e-05
+        },
+        {
+          "chapter": 42,
+          "mean_change": 0.08906000852584839,
+          "changed_fraction": 0.5098349952516619,
+          "mean_brightness": 0.4074966311454773,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.688302290858701e-05
+        },
+        {
+          "chapter": 43,
+          "mean_change": 0.10097205638885498,
+          "changed_fraction": 0.47811609686609685,
+          "mean_brightness": 0.45403751730918884,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 6.307872354227584e-06
+        },
+        {
+          "chapter": 44,
+          "mean_change": 0.04297524318099022,
+          "changed_fraction": 0.30536265432098764,
+          "mean_brightness": 0.5429907441139221,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.1840937733941246e-06
+        },
+        {
+          "chapter": 45,
+          "mean_change": 0.04589414969086647,
+          "changed_fraction": 0.3455899810066477,
+          "mean_brightness": 0.258436381816864,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.250417492177803e-05
+        },
+        {
+          "chapter": 46,
+          "mean_change": 0.03476075455546379,
+          "changed_fraction": 0.08088793922127255,
+          "mean_brightness": 0.2975628674030304,
+          "legacy_threshold_pass": false,
+          "windows_mean_absolute_difference": 4.405790605233051e-05
+        },
+        {
+          "chapter": 47,
+          "mean_change": 0.06587139517068863,
+          "changed_fraction": 0.34975961538461536,
+          "mean_brightness": 0.42495888471603394,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.4431231647904497e-05
+        },
+        {
+          "chapter": 48,
+          "mean_change": 0.04810752719640732,
+          "changed_fraction": 0.3081166904083571,
+          "mean_brightness": 0.5010777115821838,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 6.591079454665305e-06
+        },
+        {
+          "chapter": 49,
+          "mean_change": 0.11085277795791626,
+          "changed_fraction": 0.7323985042735043,
+          "mean_brightness": 0.2905978560447693,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.3508928279625252e-05
+        },
+        {
+          "chapter": 50,
+          "mean_change": 0.15998594462871552,
+          "changed_fraction": 0.8866512345679012,
+          "mean_brightness": 0.46770215034484863,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.2569172213261481e-05
+        },
+        {
+          "chapter": 51,
+          "mean_change": 0.19666102528572083,
+          "changed_fraction": 0.7585559116809116,
+          "mean_brightness": 0.6053622364997864,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 2.4866733383532846e-06
+        },
+        {
+          "chapter": 52,
+          "mean_change": 0.15605862438678741,
+          "changed_fraction": 0.9074133428300095,
+          "mean_brightness": 0.6711997389793396,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 1.1056250741603435e-06
+        },
+        {
+          "chapter": 53,
+          "mean_change": 0.06869767606258392,
+          "changed_fraction": 0.454255698005698,
+          "mean_brightness": 0.5938892960548401,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0023968552704900503
+        },
+        {
+          "chapter": 54,
+          "mean_change": 0.1159997209906578,
+          "changed_fraction": 0.6327961775878442,
+          "mean_brightness": 0.5292736291885376,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.004128055647015572
+        },
+        {
+          "chapter": 55,
+          "mean_change": 0.05240164324641228,
+          "changed_fraction": 0.34922839506172837,
+          "mean_brightness": 0.17693276703357697,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0027223341166973114
+        },
+        {
+          "chapter": 56,
+          "mean_change": 0.09621162712574005,
+          "changed_fraction": 0.5982253086419753,
+          "mean_brightness": 0.22111615538597107,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0028624217957258224
+        },
+        {
+          "chapter": 57,
+          "mean_change": 0.09593188017606735,
+          "changed_fraction": 0.4414618945868946,
+          "mean_brightness": 0.3771366775035858,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.001445865142159164
+        },
+        {
+          "chapter": 58,
+          "mean_change": 0.09377732127904892,
+          "changed_fraction": 0.5651946818613486,
+          "mean_brightness": 0.5193743705749512,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.005738948471844196
+        },
+        {
+          "chapter": 59,
+          "mean_change": 0.12544585764408112,
+          "changed_fraction": 0.50545465337132,
+          "mean_brightness": 0.22668980062007904,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.002432464389130473
+        },
+        {
+          "chapter": 60,
+          "mean_change": 0.024899626150727272,
+          "changed_fraction": 0.13320868945868947,
+          "mean_brightness": 0.13893656432628632,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0010917532490566373
+        },
+        {
+          "chapter": 61,
+          "mean_change": 0.09121532738208771,
+          "changed_fraction": 0.38924798195631527,
+          "mean_brightness": 0.2995004951953888,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.00433761440217495
+        },
+        {
+          "chapter": 62,
+          "mean_change": 0.09747900068759918,
+          "changed_fraction": 0.5862832383665717,
+          "mean_brightness": 0.5722891688346863,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.002632271032780409
+        },
+        {
+          "chapter": 63,
+          "mean_change": 0.13214969635009766,
+          "changed_fraction": 0.5504065764482431,
+          "mean_brightness": 0.26219773292541504,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0026593368966132402
+        },
+        {
+          "chapter": 64,
+          "mean_change": 0.2499997466802597,
+          "changed_fraction": 0.6410315764482432,
+          "mean_brightness": 0.21061494946479797,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.00435291463509202
+        },
+        {
+          "chapter": 65,
+          "mean_change": 0.11453256011009216,
+          "changed_fraction": 0.489761396011396,
+          "mean_brightness": 0.33949023485183716,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0022928225807845592
+        },
+        {
+          "chapter": 66,
+          "mean_change": 0.1060265377163887,
+          "changed_fraction": 0.5832917853751187,
+          "mean_brightness": 0.28542011976242065,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0021599740721285343
+        },
+        {
+          "chapter": 67,
+          "mean_change": 0.12162110954523087,
+          "changed_fraction": 0.615224358974359,
+          "mean_brightness": 0.5504735708236694,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0045568570494651794
+        },
+        {
+          "chapter": 68,
+          "mean_change": 0.05387275293469429,
+          "changed_fraction": 0.29270239791073127,
+          "mean_brightness": 0.16632899641990662,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.002263188362121582
+        },
+        {
+          "chapter": 69,
+          "mean_change": 0.1739501655101776,
+          "changed_fraction": 0.7259437321937322,
+          "mean_brightness": 0.17109544575214386,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0017799402121454477
+        },
+        {
+          "chapter": 70,
+          "mean_change": 0.2478102445602417,
+          "changed_fraction": 0.8540924738841406,
+          "mean_brightness": 0.2949744760990143,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.005139164626598358
+        },
+        {
+          "chapter": 71,
+          "mean_change": 0.1540282517671585,
+          "changed_fraction": 0.8691921889838556,
+          "mean_brightness": 0.44280990958213806,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0018583500059321523
+        },
+        {
+          "chapter": 72,
+          "mean_change": 0.06627988070249557,
+          "changed_fraction": 0.3024068138651472,
+          "mean_brightness": 0.23647236824035645,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.004166146740317345
+        },
+        {
+          "chapter": 73,
+          "mean_change": 0.05760662630200386,
+          "changed_fraction": 0.30935125830959165,
+          "mean_brightness": 0.2379780113697052,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0017544216243550181
+        },
+        {
+          "chapter": 74,
+          "mean_change": 0.15482130646705627,
+          "changed_fraction": 0.726525403608737,
+          "mean_brightness": 0.44226163625717163,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.003627171739935875
+        },
+        {
+          "chapter": 75,
+          "mean_change": 0.1327466368675232,
+          "changed_fraction": 0.6442396723646724,
+          "mean_brightness": 0.6383097171783447,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0019052396528422832
+        },
+        {
+          "chapter": 76,
+          "mean_change": 0.0615985281765461,
+          "changed_fraction": 0.23905211301044635,
+          "mean_brightness": 0.555910587310791,
+          "legacy_threshold_pass": true,
+          "windows_mean_absolute_difference": 0.0013409401290118694
+        }
+      ],
+      "legacy_threshold_failures": [
+        29,
+        46
+      ]
+    }
+  }
+}

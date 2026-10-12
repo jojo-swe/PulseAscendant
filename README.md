@@ -2,18 +2,18 @@
 
 ![Pulse Ascendant: three ascending facets and a pulse line](assets/branding/pulse-ascendant.svg)
 
-A standalone, music-driven 3D demo for **Windows and Linux**: **three playable acts, 16 worlds, 76 chapters and 14:48.68 of music**. The first act transforms a selection of classic demoscene ideas; the next two introduce new worlds with Vulkan hardware ray tracing on supported GPUs.
+A standalone, music-driven 3D demo for **Windows and Linux**: **three playable acts, 16 worlds, 76 chapters and 14:48.68 of music**. Each return to a world now has its own staging and transformation. Act II uses Vulkan hardware ray tracing on supported GPUs; Acts I and III use procedural OpenGL worlds.
 
 [Full demo in 4K60](https://youtu.be/b5ShsKNC7KM) · [Releases](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [32-second trailer](https://youtube.com/shorts/TYgXs76yKls) · [Swedish instructions](docs/README.sv.md) · [Rendering and provenance](docs/SOURCE_MAP.md) · [Verification](docs/VERIFICATION.md)
 
-The three-act v0.3 implementation and Windows/Linux packages passed independent review at **7.3/10**. See the [review](docs/QUALITY_REVIEW.md) and verification document for measured results and acceptance limits; older releases and videos describe earlier versions.
+**v0.4 changes the direction:** distinct returning set pieces, one continuous camera path per chapter, and irreversible actions aligned to measured music accents. The linked full video and trailer currently show v0.3. Its technical/package review did not establish entertainment quality; the audience feedback prompted this rework. See [the rework](docs/VARIATION_REWORK.md) and [verification](docs/VERIFICATION.md) for the current scope.
 
 ## Run
 
 - **Windows:** extract `PulseAscendant-Windows-x64.zip` and run `PulseAscendant.exe`. Keep the complete `assets/` directory beside it. Windows 10/11 x64 and an OpenGL 3.3 driver are required. SDL and the MSVC runtime are statically linked.
 - **Linux:** extract `PulseAscendant-Linux-x64.tar.gz` and run `./PulseAscendant`. The build targets Ubuntu 24.04 x64, GCC 13 and glibc 2.39, with a working X11/Wayland display and OpenGL driver.
 
-The demo starts at 1280×720 and loops the complete show. No account or network connection is required. Hardware tracing additionally needs a compatible Vulkan driver; unsupported devices use the separately implemented OpenGL fallback. An on-screen backend badge identifies the selected path.
+The demo starts at 1280×720 and loops the complete show. No account or network connection is required. Hardware tracing additionally needs a compatible Vulkan driver; unsupported devices use the separately implemented OpenGL fallback. An Act II backend badge identifies the selected path.
 
 | Key | Action |
 | --- | --- |
@@ -45,23 +45,21 @@ All music plays at normal speed. Act I preserves the first 299 seconds of the de
 
 The first act combines tunnels, refractive facets, folded architecture, fleets, an ocean and orbital effects. Act II adds polished architecture, a wet city, articulated machinery and glass prisms. Act III introduces ceramic walkers in a desert, luminous vegetation, floating stone and a crystal-wing finale. [Act II](docs/ACT_II.md) and [Act III](docs/ACT_III.md) describe their implementations.
 
-Actual native RT captures from the current build:
+Actual v0.4 native captures, including the new City/Ocean compositions and Act II/III transformations:
 
-| Chrome Cathedral | Dune Colossus |
-| --- | --- |
-| ![Chrome Cathedral](docs/images/act2-chrome.png) | ![Dune Colossus](docs/images/act3-dune.png) |
-| Verdant Singularity | Reality Ascendant |
-| ![Verdant Singularity](docs/images/act3-verdant.png) | ![Reality Ascendant](docs/images/act3-finale.png) |
+![Six native v0.4 views: aerial skyline, levitating islands, Wet Circuit, collision fragments, seed tunnel and assembled monuments](docs/images/v0.4.0-variation.jpg)
+
+Archived v0.3 captures and results remain in [the historical verification](docs/VERIFICATION-v0.3.0.md).
 
 ## Music and rendering
 
 Each song has independent precomputed analysis: 24 logarithmic FFT bands from **35 Hz to 18 kHz**, bass, energy and onset curves, sampled at 20 Hz and interpolated against the audio transport. Different bands drive geometry, lighting, surfaces and particle groups. Chapter direction considers measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds and no assumed BPM. This improves cut placement; subjective musical synchronization still needs listening.
 
-Acts II and III can use **Vulkan KHR ray queries against triangle BLAS/TLAS**. Five reusable meshes form animated scenes within a 2,048-instance budget. Shadows, reflections and refraction use bounded ray traversal with up to five surface encounters. Modern RT rendering uses two deterministic subpixel samples plus an adaptive edge filter; retro uses one sample per pixel. OpenGL presents the HDR image and composes bloom, effects and captions.
+Act II can use **Vulkan KHR ray queries against triangle BLAS/TLAS**. Five reusable meshes form animated scenes within a 2,048-instance budget. Shadows, reflections and refraction use bounded ray traversal with up to five surface encounters. Modern RT rendering uses two deterministic subpixel samples plus an adaptive edge filter; retro uses one sample per pixel. OpenGL presents the HDR image and composes bloom, effects and captions.
 
 The RT output passes from a Vulkan device-local buffer through host readback to an OpenGL HDR texture each frame. This is not zero-copy interoperability. The renderer is not a full path tracer and does not provide general global illumination or temporal denoising. Resolution and scene complexity affect performance; **a 4K60 export is not an interactive 4K60 guarantee**.
 
-OpenGL 3.3 also provides a separate SDF/analytic fallback for all 16 worlds. Use `--no-rt` to select it deliberately, `--require-rt` to fail if the RT backend cannot initialize, and `--rt-validation` for Vulkan diagnostics where validation layers are installed. Act I uses its OpenGL renderer in either configuration.
+OpenGL 3.3 provides Acts I and III and a separate SDF/analytic fallback for Act II. Use `--no-rt` to select that fallback deliberately, `--require-rt` to fail if the RT backend cannot initialize, and `--rt-validation` for Vulkan diagnostics where validation layers are installed. Tracing is used only during Act II; Acts I and III keep their OpenGL renderer in either configuration.
 
 ## Build from source
 

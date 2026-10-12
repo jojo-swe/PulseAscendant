@@ -55,7 +55,8 @@ int runApp(const AppOptions& o) {
   auto dir=o.captureDir.empty()?std::filesystem::path("captures"):o.captureDir;
   if(o.tour){
    for(int chapter=0;chapter<chapterCount();++chapter)for(int sample=0;sample<2;++sample){
-    double t=chapterStart(chapter)+2.+sample*.6;renderer.render(sampleTimeline(t),t,o.retro);
+    const double start=chapterStart(chapter),end=chapter+1<chapterCount()?chapterStart(chapter+1):showDuration();
+    double t=start+(end-start)*(sample?.82:.18);renderer.render(sampleTimeline(t),t,o.retro);
     renderer.capture(dir/("chapter-"+std::to_string(chapter+1)+(sample?"-b.bmp":"-a.bmp")));SDL_GL_SwapWindow(raw);
    }
    std::cout<<"TOUR PASS: "<<chapterCount()*2<<" exact-time chapter captures rendered without GL errors\n";

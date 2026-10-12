@@ -103,6 +103,13 @@ void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  gl::Uniform1f(gl::GetUniformLocation(p,"uBass"),frame_.bass);
  gl::Uniform1f(gl::GetUniformLocation(p,"uHit"),frame_.hit);
  gl::Uniform1f(gl::GetUniformLocation(p,"uProgress"),frame_.progress);
+ gl::Uniform1f(gl::GetUniformLocation(p,"uChapterProgress"),frame_.chapterProgress);
+ gl::Uniform1f(gl::GetUniformLocation(p,"uChapterTime"),float(frame_.localSeconds));
+ gl::Uniform1f(gl::GetUniformLocation(p,"uAccentTime"),float(frame_.accentSeconds));
+ gl::Uniform1f(gl::GetUniformLocation(p,"uChapterDuration"),float(frame_.chapterDuration));
+ gl::Uniform1f(gl::GetUniformLocation(p,"uEvent"),frame_.event);
+ gl::Uniform1f(gl::GetUniformLocation(p,"uAction"),frame_.action);
+ gl::Uniform1i(gl::GetUniformLocation(p,"uVariant"),frame_.variant);
  gl::Uniform1f(gl::GetUniformLocation(p,"uCut"),frame_.cut);
  gl::Uniform1f(gl::GetUniformLocation(p,"uTheme"),float(frame_.chapter%6));
  gl::Uniform1i(gl::GetUniformLocation(p,"uShot"),frame_.shot);
@@ -117,11 +124,11 @@ void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
  gl::BindFramebuffer(GL_FRAMEBUFFER,scene_.fbo);glViewport(0,0,scene_.w,scene_.h);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
  const GLuint worlds[]={background_,plasma_,engine_,city_,structure_,cosmic_,ocean_,armada_};
  GLuint p=frame.scene>=12?act3_:(frame.scene>=8?act2_:worlds[std::clamp(frame.scene,0,7)]);
- if(frame.scene>=8&&rt_){
+ if(frame.act==2&&rt_){
   try{const float* hdr=rt_->render(frame,scene_.w,scene_.h);glBindTexture(GL_TEXTURE_2D,scene_.texture);glTexSubImage2D(GL_TEXTURE_2D,0,0,0,scene_.w,scene_.h,GL_RGBA,GL_FLOAT,hdr);}
   catch(const std::exception& e){if(rtRequired_)throw;rtStatus_=e.what();std::cerr<<"RT stopped; OpenGL fallback: "<<rtStatus_<<'\n';rt_.reset();uniforms(p,seconds,frame.scene,retro);quad(p);}
  }else{uniforms(p,seconds,frame.scene,retro);quad(p);}
- if(frame.scene==0) {
+ if(frame.scene==0&&frame.variant>=3) {
   auto dots=makeTunnel(frame.motionSeconds);uniforms(particle_,seconds,0,retro);
   gl::BindVertexArray(vao_);gl::BindBuffer(GL_ARRAY_BUFFER,buffer_);
   gl::BufferData(GL_ARRAY_BUFFER,dots.size()*sizeof(Particle),dots.data(),GL_STREAM_DRAW);
@@ -133,15 +140,13 @@ void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
   glCullFace(GL_FRONT);glDrawArrays(GL_TRIANGLES,0,meshCount_);glCullFace(GL_BACK);glDrawArrays(GL_TRIANGLES,0,meshCount_);
   glDisable(GL_CULL_FACE);glDisable(GL_BLEND);
  }
- // Simultaneous 3D trails and the scene's primary geometry, with independent colour/beat layers.
- if(frame.scene<8){
+ // Only the last corridor runs need this extra raster trail layer.
+ // Fleet silhouettes and the city supply their own motion and depth cues.
+ if(frame.scene==0&&frame.variant>=3){
  GLuint overlay=(frame.scene==1||frame.scene==2||frame.scene==5)?swarm_:flight_;
  uniforms(overlay,seconds,frame.scene,retro);gl::BindVertexArray(vao_);
  glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE);
- glDrawArrays(GL_LINES,0,retro?2000:(frame.scene==5?48000:((frame.scene==1||frame.scene==2)?16000:8000)));
- if(frame.scene==1||frame.scene==2||frame.scene==5) {
-  uniforms(spectrum_,seconds,frame.scene,retro);glDrawArrays(GL_LINES,0,24*4*24);
- }
+ glDrawArrays(GL_LINES,0,retro?600:1800);
  glDisable(GL_BLEND);
  }
  if(!retro) {
@@ -171,7 +176,7 @@ void Renderer::render(const TimelineFrame& frame,double seconds,bool retro) {
  float caption=std::clamp(float(std::min(frame.localSeconds/.2,(3.2-frame.localSeconds)/.6)),0.f,1.f)*frame.transition;
  if(caption>0)label(std::to_string(frame.chapter+1)+" / "+frame.title,width_*.045f,height_*.86f,scale*1.1f,.65f,.9f,1.f,caption);
  if(retro)label("RETRO",width_*.86f,height_*.07f,scale,.7f,.9f,1.f);
- if(frame.act>=2)label(rt_?"VULKAN / HARDWARE RAY TRACING":"OPENGL / RAYMARCH FALLBACK",width_*.045f,height_*.91f,scale*.65f,.45f,.7f,.85f);
+ if(frame.act==2)label(rt_?"VULKAN / HARDWARE RAY TRACING":"OPENGL / RAYMARCH FALLBACK",width_*.045f,height_*.91f,scale*.65f,.45f,.7f,.85f);
  if(clock<8.||silent_)label(silent_?"SILENT MODE / AUDIO UNAVAILABLE":"F1 F2 F3 ACT   1-8 9 0 - = WORLD   ARROWS CHAPTER   TAB RETRO   F11 FULLSCREEN",width_*.045f,height_*.94f,scale*.65f,.45f,.6f,.7f);
  gl::BindFramebuffer(GL_READ_FRAMEBUFFER,output_.fbo);gl::BindFramebuffer(GL_DRAW_FRAMEBUFFER,0);
  gl::BlitFramebuffer(0,0,width_,height_,0,0,width_,height_,GL_COLOR_BUFFER_BIT,GL_NEAREST);

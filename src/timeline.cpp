@@ -26,6 +26,28 @@ float envelope(int act,double t,int channel){
  const auto& track=tracks[act-1];double at=t*20;int i=std::clamp(int(at),0,track.count-1),j=std::min(i+1,track.count-1);float f=float(at-std::floor(at));
  return (track.envelope[i*3+channel]*(1-f)+track.envelope[j*3+channel]*f)/255.f;
 }
+struct Direction {int variant=0;double motionStart=0,duration=0,accent=0;};
+const auto& directions(){
+ // Seeking samples the same integrated motion and one-time stage action.
+ static const auto result=[](){
+  std::array<Direction,act1::cues.size()+act2::cues.size()+act3::cues.size()> result{};
+  std::array<int,16> visits{};double motion=0;
+  for(int chapter=0;chapter<chapterCount();++chapter){
+   const int act=chapterAct(chapter)+1;const auto& c=cue(chapter);
+   const double start=chapterStart(chapter),end=chapter+1<chapterCount()?chapterStart(chapter+1):showDuration();
+   auto& d=result[chapter];d.variant=visits[c.scene]++;d.motionStart=motion;d.duration=end-start;d.accent=d.duration*.5;
+   float best=-1;const double actOffset=start-actStart(act);
+   for(double at=std::ceil(d.duration*.28*20)/20;at<=d.duration*.76;at+=.05){
+    const float onset=std::max(0.f,envelope(act,actOffset+at,1)-envelope(act,actOffset+at-.1,1));
+    const float score=envelope(act,actOffset+at,2)+onset*.5f+.02f*float(1-std::abs(at/d.duration-.52));
+    if(score>best){best=score;d.accent=at;}
+   }
+   motion+=d.duration*(1.+c.drive*1.2);
+  }
+  return result;
+ }();
+ return result;
+}
 }
 double actStart(int act){std::uint64_t frames=0;for(int i=0;i<std::clamp(act-1,0,2);++i)frames+=tracks[i].frames;return frames/48000.0;}
 double actDuration(int act){return tracks[std::clamp(act-1,0,2)].frames/48000.0;}
@@ -37,24 +59,29 @@ double chapterStart(int chapter){chapter=std::clamp(chapter,0,chapterCount()-1);
 double sceneStart(int scene){scene=std::clamp(scene,0,15);for(int i=0;i<chapterCount();++i)if(cue(i).scene==scene)return chapterStart(i);return 0;}
 std::string showInfoJson(){
  std::ostringstream out;out<<std::setprecision(12);
- out<<"{\"title\":\"PULSE ASCENDANT\",\"duration\":"<<showDuration()<<",\"music\":\""<<showMusic()
+ out<<"{\"title\":\"PULSE ASCENDANT\",\"version\":\""<<REMIX_VERSION<<"\",\"duration\":"<<showDuration()<<",\"music\":\""<<showMusic()
     <<"\",\"planned_acts\":3,\"act2_available\":true,\"act3_available\":true,\"acts\":[";
  for(int i=0;i<3;++i){if(i)out<<',';out<<"{\"number\":"<<i+1<<",\"start\":"<<actStart(i+1)<<",\"duration\":"<<actDuration(i+1)<<",\"frames\":"<<tracks[i].frames<<",\"title\":\""<<tracks[i].title<<"\",\"music\":\""<<tracks[i].music<<"\"}";}
  out<<"],\"chapters\":[";
- for(int i=0;i<chapterCount();++i){if(i)out<<',';out<<"{\"start\":"<<chapterStart(i)<<",\"act\":"<<chapterAct(i)+1<<",\"scene\":"<<cue(i).scene<<",\"title\":\""<<cue(i).title<<"\"}";}
+ for(int i=0;i<chapterCount();++i){if(i)out<<',';const auto& d=directions()[i];out<<"{\"start\":"<<chapterStart(i)<<",\"duration\":"<<d.duration<<",\"accent\":"<<chapterStart(i)+d.accent<<",\"act\":"<<chapterAct(i)+1<<",\"scene\":"<<cue(i).scene<<",\"variant\":"<<d.variant<<",\"title\":\""<<cue(i).title<<"\"}";}
  out<<"]}\n";return out.str();
 }
 TimelineFrame sampleTimeline(double seconds){
  double t=wrapShowTime(seconds);int index=0;while(index+1<chapterCount()&&t+1e-9>=chapterStart(index+1))++index;
  const auto& c=cue(index);double local=std::max(0.,t-chapterStart(index));
  TimelineFrame f;f.act=chapterAct(index)+1;f.actSeconds=t-actStart(f.act);f.scene=c.scene;f.chapter=index;f.title=c.title;f.localSeconds=local;
- double end=index+1<chapterCount()?chapterStart(index+1):showDuration(),shotLength=std::min(4.,(end-chapterStart(index))/4.);
- f.shot=(c.variant+int(local/shotLength))%4;f.progress=float(std::fmod(local,shotLength)/shotLength);
+ const auto& direction=directions()[index];
+ f.accentSeconds=direction.accent;f.chapterDuration=direction.duration;
+ f.variant=direction.variant;f.shot=c.variant;
+ f.progress=f.chapterProgress=float(std::clamp(local/direction.duration,0.,1.));
+ f.event=float(std::exp(-std::abs(local-direction.accent)*5.));
+ const float action=float(std::clamp((local-direction.accent+.3)/.6,0.,1.));
+ f.action=action*action*(3-2*action);
  f.energy=envelope(f.act,f.actSeconds,0);f.bass=envelope(f.act,f.actSeconds,1);f.hit=envelope(f.act,f.actSeconds,2);
  const auto& track=tracks[f.act-1];double at=f.actSeconds*20;int i=std::clamp(int(at),0,track.count-1),j=std::min(i+1,track.count-1);float blend=float(at-std::floor(at));
  for(int band=0;band<24;++band)f.spectrum[band]=(track.spectrum[i*24+band]*(1-blend)+track.spectrum[j*24+band]*blend)/255.f;
  f.drive=std::clamp(c.drive*(.72f+.28f*f.energy)+.1f*f.bass,0.f,1.f);
- f.motionSeconds=f.actSeconds+local*(1.+c.drive*2.2);f.cut=float(std::exp(-local*8.));
+ f.motionSeconds=direction.motionStart+local*(1.+c.drive*1.2);f.cut=float(std::exp(-local*8.));
  f.transition=float(std::clamp(std::min(f.actSeconds,actDuration(f.act)-f.actSeconds),0.,1.));return f;
 }
 }

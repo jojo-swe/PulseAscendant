@@ -43,18 +43,23 @@ def main():
         parser.error('Output or partial render already exists; choose a new output name')
     producer_args = [str(app), '--render-stream', '--fps', str(args.fps), '--width', str(args.width),
                      '--height', str(args.height), '--time', str(args.start), '--duration', str(args.duration)]
+    expected_frames = math.ceil(args.duration * args.fps - 1e-9)
     if args.require_rt:
         producer_args.append('--require-rt')
+    maxrate, bufsize = ('64M', '128M') if args.width*args.height >= 3840*2160 else ('28M', '56M')
     encoder_args = ['ffmpeg', '-hide_banner', '-nostdin', '-f', 'rawvideo', '-pixel_format', 'rgb24',
                     '-video_size', f'{args.width}x{args.height}', '-framerate', str(args.fps), '-i', 'pipe:0',
                     '-ss', str(args.start), '-i', str(music), '-map', '0:v:0', '-map', '1:a:0',
                     '-vf', 'vflip,scale=in_range=full:out_range=tv:out_color_matrix=bt709,format=yuv420p',
                     '-c:v', 'h264_nvenc', '-preset', 'p6', '-tune', 'hq', '-rc', 'vbr', '-cq', '18',
-                    '-b:v', '0', '-maxrate', '28M', '-bufsize', '56M', '-multipass', 'qres',
+                    '-b:v', '0', '-maxrate', maxrate, '-bufsize', bufsize, '-multipass', 'qres',
                     '-rc-lookahead', '24', '-spatial-aq', '1', '-temporal-aq', '1', '-bf', '3',
                     '-g', str(args.fps * 2), '-fps_mode', 'cfr', '-colorspace', 'bt709',
                     '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
-                    '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-t', str(args.duration),
+                    # A global -t rounds video length to the nearest frame and
+                    # can discard the last native frame. Bound audio separately.
+                    '-frames:v', str(expected_frames), '-af', f'atrim=duration={args.duration}',
+                    '-c:a', 'aac', '-b:a', '320k', '-ar', '48000',
                     '-movflags', '+faststart', '-metadata', f'title={show["title"]}',
                     '-metadata', 'artist=jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo (Suno)',
                     '-metadata', 'comment=Three playable acts. Music generated with Suno.',
@@ -84,7 +89,6 @@ def main():
                                                 '-of', 'json', str(partial)]))
     video = next(s for s in probe['streams'] if s['codec_type'] == 'video')
     audio = next(s for s in probe['streams'] if s['codec_type'] == 'audio')
-    expected_frames = math.ceil(args.duration * args.fps - 1e-9)
     assert (video['width'], video['height']) == (args.width, args.height)
     assert video['avg_frame_rate'] == f'{args.fps}/1'
     assert int(video['nb_frames']) == expected_frames

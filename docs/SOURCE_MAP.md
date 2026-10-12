@@ -35,11 +35,11 @@ Det sammanfogade runtime-ljudet heter fortfarande `assets/music/second-reality-t
 
 Renderaren interpolerar varje akts kurvor mot ljudpositionen. Det är reproducerbar analys av de medföljande låtarna, inte mikrofonanalys, nottranskribering eller systemljudsinspelning. Mute stoppar inte analysklockan. SDL-kökompensation och reservklocka hanteras i ljudspelaren; exakt fysisk ljudlatens och upplevd synk är separata acceptansfrågor.
 
-## Vulkan-hårdvarutracing i akt II och III
+## Vulkan-hårdvarutracing i akt II
 
 `hardware_rt.cpp` laddar Vulkan dynamiskt och kontrollerar varje enhets egna krav. Renderaren använder `VK_KHR_acceleration_structure`, `VK_KHR_deferred_host_operations`, buffer device addresses och `VK_KHR_ray_query`.
 
-Fem statiska triangel-BLAS representerar box, triangulerad sfär, oktaeder, ring och dynterräng. En TLAS byggs för de aktuella animerade instanserna, med en hård budget på 2 048. `hardware_rt.cpp` skapar kromkatedral, regnstad, fabrik och prismakammare. `act3_rt.inl` skapar keramiska vandrare, förgrenad vegetation, flytande sten och finalens kristallvingar, ringar och flotta. Spektrumstaplar och många emissiva objekt ingår i den verkliga TLAS:en.
+Fem statiska triangel-BLAS representerar box, triangulerad sfär, oktaeder, ring och dynterräng. En TLAS byggs för de aktuella animerade instanserna, med en hård budget på 2 048. `hardware_rt.cpp` skapar akt II:s olika krom-, stads-, fabriks- och glasförlopp. `act3_rt.inl` bevarar v0.3:s äldre akt III-geometri; den anropas inte av programmets v0.4-renderingsväg. Emissiva objekt ingår i den verkliga TLAS:en. De generiska spektrumringarna har tagits bort ur akt II.
 
 `rt_scene.comp` använder KHR-ray queries för primär synlighet, skuggor och begränsad reflektion/brytning. Varje prov har högst fem ytträffar. Glas har ett förenklat brytningsindex och totalreflektionsväg; kvarvarande energi vid gränsen ersätts med begränsat miljöljus. Det är ingen opartisk path tracer, ingen allmän GI-lösning och ingen fullständig fysisk glasmodell. Modern upplösning använder två deterministiska subpixelprover; 320×200 använder ett. Compositorn kompletterar med adaptiv kantutjämning, utan temporal historik eller temporal denoising.
 
@@ -56,7 +56,7 @@ SDK-verktygen är utvecklingsberoenden. Körningen använder den medföljande ko
 
 ## OpenGL, compositing och begränsningar
 
-OpenGL 3.3 förblir fönster- och presentationsväg. Akt I använder rasterisering, SDF-raymarching och analytiska skärningar. `act2.frag` och `act3.frag` är separata fallback-världar för senare akter. Deras SDF-geometry är inte identisk med Vulkan-mesharna, och deras miljöreflektioner återskapar inte full synlighet för reflekterade rörliga objekt. Backend-märkningen ska skilja dessa vägar åt.
+OpenGL 3.3 förblir fönster- och presentationsväg. Akt I och III använder rasterisering, SDF-raymarching och analytiska skärningar. `act2.frag` är en separat reserv för akt II. SDF-geometrin är inte identisk med Vulkan-mesharna, och miljöreflektionerna återskapar inte full synlighet för reflekterade rörliga objekt. Akt II:s backend-märkning skiljer dessa vägar åt.
 
 HDR, bloom, filmisk tonmappning, gamma, begränsad radiell oskärpa och färgseparation binder ihop lagren. Retro renderar världen vid 320×200 och skalar med närmaste pixel; texten använder utdataupplösningen. Det är ingen DOS-emulator eller AI-uppskalning.
 

@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TIMES = (8.65, 127.55, 354.95, 603.47, 663.32, 626.97, 840.77)
+# Collision, carrier, refracting monoliths, one-time impact, canyon chase,
+# seed tunnel, assembled monuments. Only clips 2 and 3 are Act II hardware RT.
+TIMES = (77.8, 169., 409.5, 500.6, 647., 710.5, 846.)
 
 
 def directed_cuts(hits, music_start, duration, count):
@@ -48,7 +50,7 @@ def main():
             while block := stream.read(4*1024*1024):
                 identity.update(block)
     source_hash = identity.hexdigest()
-    work = ROOT / 'build/short-v03' / source_hash
+    work = ROOT / 'build/short-v04' / source_hash
     work.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     partial = output.with_suffix('.rendering.mp4')
@@ -80,8 +82,8 @@ def main():
     for i,(a,b) in enumerate(zip(cuts,cuts[1:])):
         filters.append(f'[{i}:v]trim=duration={b-a:.9f},setpts=PTS-STARTPTS[v{i}]')
     filters.append(''.join(f'[v{i}]' for i in range(len(TIMES)))+f'concat=n={len(TIMES)}:v=1:a=0[montage]')
-    captions = [('16 WORLDS','ONE PULSE',cuts[0],cuts[2]),('HARDWARE RAY TRACING','MUSIC DRIVES THE MOTION',cuts[2],cuts[4]),
-                ('THREE ACTS','14 MINUTES OF EXPLORATION',cuts[4],cuts[6]),('PULSE ASCENDANT','RUN IT. GET THE SOURCE.',cuts[6],cuts[7])]
+    captions = [('BUILT FROM CODE','MUSIC SETS IT IN MOTION',cuts[0],cuts[2]),('HARDWARE RAY TRACING','ACT II / REFLECTIONS + IMPACT',cuts[2],cuts[4]),
+                ('THREE ACTS','76 CHAPTERS / 16 WORLDS',cuts[4],cuts[6]),('PULSE ASCENDANT','RUN IT. GET THE SOURCE.',cuts[6],cuts[7])]
     overlay = "drawbox=x=0:y=120:w=iw:h=220:color=black@0.55:t=fill"
     for title,subtitle,a,b in captions:
         enable = f"between(t,{a},{b-.001})"
@@ -110,7 +112,7 @@ def main():
     assert (video['width'],video['height'],int(video['nb_frames']),video['avg_frame_rate']) == (1080,1920,1920,'60/1')
     assert abs(float(audio['duration'])-duration)<.05
     partial.rename(output)
-    manifest = dict(title='PULSE ASCENDANT',trailer_revision=2,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo (Suno)',
+    manifest = dict(title='PULSE ASCENDANT',trailer_revision=3,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo (Suno)',
                     music_start=music_start,cuts=cuts,source_times=TIMES,probe=probe)
     output.with_suffix('.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
     print(f'SHORT PASS: {output}, 1080x1920, 60 fps, 1920 frames, 32 seconds',flush=True)

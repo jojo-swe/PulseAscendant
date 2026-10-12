@@ -1,0 +1,19 @@
+_NET_SUPPORTING_WM_CHECK(WINDOW): window id # 0x40011f
+Internal ctest changing into directory: /home/jojo/.cache/second-reality-remix/public-build
+Test project /home/jojo/.cache/second-reality-remix/public-build
+    Start 1: core
+1/6 Test #1: core .............................   Passed    2.30 sec
+    Start 2: act3_plan
+2/6 Test #2: act3_plan ........................   Passed    0.00 sec
+    Start 3: audio
+3/6 Test #3: audio ............................   Passed    8.39 sec
+    Start 4: show_info
+4/6 Test #4: show_info ........................   Passed    0.01 sec
+    Start 5: incomplete_control
+5/6 Test #5: incomplete_control ...............   Passed   37.43 sec
+    Start 6: lifecycle
+6/6 Test #6: lifecycle ........................   Passed   39.66 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =  87.80 sec

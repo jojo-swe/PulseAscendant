@@ -197,36 +197,386 @@ struct HardwareRT::Impl {
  Parameters scene(const TimelineFrame& f,int w,int h){
   instances.clear();objectData.clear();float t=float(f.motionSeconds),bass=f.bass;int world=f.scene-8;
   V3 cyan{.035f,.55f,.8f},gold{.95f,.72f,.25f},pink{.8f,.035f,.22f},steel{.65f,.73f,.85f};
-  if(world<4||world==7)add(0,{0,-1.4f,0},{80,.3f,80},0,0,{.45f,.5f,.57f},.95f,.09f);
+  // Each occurrence is a directed set piece. The music accent advances an
+  // irreversible action; the chapter clock never cycles the camera or set.
+  const int variant=f.variant;
+  const float p=f.chapterProgress,action=f.action,impact=f.event;
+  auto ease=[](float x){x=std::clamp(x,0.f,1.f);return x*x*(3-2*x);};
+  auto mix=[](V3 a,V3 b,float x){return a*(1-x)+b*x;};
+  auto beam=[&](V3 from,V3 to,float radius,V3 base,float metal,float rough,V3 emission=V3{}){
+   V3 delta=to-from;float length=std::sqrt(dot(delta,delta));
+   if(length<.002f)return;
+   add(0,(from+to)*.5f,{radius,radius,length*.5f},std::atan2(delta.x,delta.z),0,base,metal,rough,emission,0,-std::asin(std::clamp(delta.y/length,-1.f,1.f)));
+  };
+  auto floor=[&](float extent,float rough=.1f){add(0,{0,-1.4f,0},{extent,.3f,extent},0,0,{.25f,.3f,.38f},.85f,rough);};
+  V3 eye{},target{0,2,0};
   if(world==0){
-   for(int z=-6;z<=6;++z){add(3,{0,-1,z*9.f},{6,7,4},0,0,steel,.96f,.1f);add(3,{0,-1,z*9.f-.2f},{5.7f,6.7f,.6f},0,0,cyan,0,.2f,cyan*(1.5f+f.hit*4));for(int j=0;j<=12;++j){float a=j*pi/12;add(1,{std::cos(a)*6,-1+std::sin(a)*7,z*9.f},{.18f,.18f,.18f},0,0,gold,.9f,.1f);}}
-   for(int i=0;i<24;++i){float a=i*2*pi/24+t*.2f;add(1,{std::sin(a)*3,2+std::sin(a*3+t)*.7f,std::cos(a)*3},{.2f,.2f,.2f},0,0,gold,.9f,.1f);}
-   add(1,{0,2,0},{1.1f+bass*.2f,1.1f+bass*.2f,1.1f+bass*.2f},0,0,gold,.95f,.05f);
+   floor(65);
+   if(variant==0){
+    // A flat slab tears upward into a chrome spine, one blade after another.
+    for(int j=0;j<28;++j){float z=(j-13.5f)*.72f,grow=ease(p*2.4f-j*.035f),height=.12f+grow*(2.8f+1.4f*std::sin(j*.21f));
+     add(0,{std::sin(j*.3f)*1.2f,height-1,z},{2.7f,height,.16f},j*.025f,(-.3f+.6f*grow)*std::sin(j*.27f),steel,.98f,.08f);
+     beam({-2.7f,height*2-1.02f,z},{2.7f,height*2-1.02f,z},.035f,cyan,0,.2f,cyan*(1.2f+f.spectrum[j%24]));
+    }
+    eye=mix({16,10,-29},{-16,12,-25},p);target=mix({0,1,0},{0,3,0},p);
+   }else if(variant==1){
+    // A monumental vaulted gallery unfolds overhead; the central aisle stays open.
+    for(int j=0;j<12;++j){float z=(j-5.5f)*4.6f,open=ease(action+j*.025f),height=9+open*5;
+     for(int side:{-1,1}){
+      V3 foot{side*8.f,-1,z},elbow{side*(7.f+open*1.5f),height*.62f,z},apex{side*(.25f+open),height,z};
+      beam(foot,elbow,.23f,steel,.97f,.11f);beam(elbow,apex,.23f,steel,.97f,.1f);
+      beam(elbow+V3{side*-.3f,0,-.25f},apex+V3{side*-.3f,0,-.25f},.045f,gold,0,.2f,gold*(1.4f+impact));
+      add(0,{side*9.1f,3,z},{.18f,4,1.6f},0,side*-.08f,steel,.95f,.08f);
+     }
+    }
+    eye={-1.7f+3.4f*p,1.8f+4.5f*p,-24+32*p};target=eye+V3{0,2,13};
+   }else if(variant==2){
+    // Four flowing metal ribbons resolve from a liquid sheet into a rising wave.
+    for(int lane=0;lane<4;++lane)for(int j=0;j<56;++j){float z=(j-27.5f)*.52f,phase=z*.3f+float(f.localSeconds)*1.1f+lane*.7f;
+     float height=1.3f+(1+action*2.4f)*std::sin(phase),x=(lane-1.5f)*2.4f+std::sin(phase*.7f)*action*1.5f;
+     add(0,{x,height,z},{.9f,.065f,.3f},.06f*std::cos(phase),.35f*std::cos(phase),lane%2?gold:steel,.99f,.055f);
+     if(j%7==0)beam({x-.85f,height+.08f,z},{x+.85f,height+.08f,z},.025f,cyan,0,.2f,cyan*(1.3f+bass));
+    }
+    eye=mix({15,5,-22},{9,9,-9},p);target={0,2,1};
+   }else if(variant==3){
+    // A staggered gold skyline is extruded from the mirror floor as we ascend.
+    for(int x=-4;x<=4;++x)for(int z=-3;z<=3;++z){float seed=.5f+.5f*std::sin(float(x*13+z*7)),grow=ease(p*2.f-.28f*seed),height=.15f+grow*(3+15*seed);
+     add(0,{x*2.4f,height-1,z*2.4f},{.7f,height,.7f},.1f*x,0,gold,.95f,.12f);
+     add(0,{x*2.4f,height*2-.94f,z*2.4f},{.72f,.035f,.72f},.1f*x,0,cyan,0,.2f,cyan*(1.4f+bass));
+    }
+    eye=mix({27,12,-38},{34,46,-48},p);target=mix({0,6,0},{0,16,0},p);
+   }else if(variant==4){
+    // A single mirror book fans into a long, asymmetrical staircase of light.
+    for(int j=0;j<36;++j){float spread=ease(action+.015f*j),a=(-.65f+j*.038f)*spread;
+     V3 base{(j-17.5f)*.35f*spread,1+j*.07f*spread,(j-17.5f)*.9f*spread};
+     add(0,base,{4.5f,.08f,2.4f},a,-.6f*spread+j*.025f,steel,.98f,.065f);
+     beam(base+V3{-4.5f,.15f,0},base+V3{4.5f,.15f,0},.045f,j%3?cyan:gold,0,.2f,(j%3?cyan:gold)*(1.5f+f.spectrum[j%24]*2));
+    }
+    eye=mix({-22,11,-28},{-24,16,-38},p);target={0,2.8f,0};
+   }else{
+    // The final cathedral is a pair of massive folded doors, then a clear flight out.
+    float open=action;
+    for(int side:{-1,1})for(int j=0;j<18;++j){float z=(j-8.5f)*1.3f,x=side*(3.1f+open*(6+j*.08f));
+     add(0,{x,6,z},{2.8f,7,.32f},side*open*.55f,side*open*.18f,steel,.98f,.07f);
+     add(0,{x-side*2.8f,6,z-.36f},{.06f,6.9f,.04f},0,side*open*.18f,gold,0,.2f,gold*(1.5f+impact*2));
+    }
+    for(int side:{-1,1})beam({side*9.f,-1,-18},{side*9.f,-1,35},.08f,cyan,0,.2f,cyan*(2+bass));
+    add(2,{0,8,36},{2.4f,7,2.4f},.3f,0,gold,.92f,.1f);
+    eye={18*(1-ease(p*1.6f)),10-5*p,-34+42*p};target={0,5,6+30*p};
+   }
   }else if(world==1){
-   // Layered distant skyline closes the view beyond the fast foreground avenue.
-   for(int j=0;j<48;++j){float a=j*2*pi/48,r=105+12*std::sin(j*3.7f),height=9+8*(.5f+.5f*std::sin(j*7.1f));V3 position{std::sin(a)*r,height-1,std::cos(a)*r};add(0,position,{3.5f,height,3.5f},a,0,{.06f,.11f,.18f},.45f,.3f);add(0,position+V3{0,height+.03f,0},{3.5f,.03f,3.5f},a,0,cyan,0,.2f,cyan*.7f);}
-   for(int side:{-1,1})for(int z=-10;z<=10;++z)add(0,{side*3.f,-1.085f,z*7.f},{.035f,.008f,2.7f},0,0,cyan,0,.2f,cyan*(1+f.bass*2));
-   for(int j=0;j<12;++j){float z=std::fmod(j*13.f-t*(j%2?7.f:-9.f),140.f);if(z<0)z+=140;z-=70;float x=j%2?2.2f:-2.2f;add(0,{x,.1f+std::sin(t+j)*.12f,z},{.65f,.22f,1.2f},0,0,steel,.95f,.09f);add(0,{x,.1f,z-1.21f},{.5f,.035f,.025f},0,0,pink,0,.2f,pink*5);}
-   for(int z=-12;z<=12;++z)for(int side:{-1,1})for(int row=0;row<3;++row){float seed=std::sin(float(z*37+row*19+side)*17.3f)*.5f+.5f,height=3+seed*13;float x=side*(8.f+row*6);add(0,{x,height-1,z*6.f},{2.4f,height,2.3f},0,0,{.09f,.13f,.2f},.65f,.2f);for(int j=0;j<5;++j){V3 e=j%2?pink:cyan;add(0,{x-side*2.42f,j*height*.37f,z*6.f},{.025f,.055f,1.8f},0,0,e,0,.2f,e*(1+f.spectrum[(j*4+row)%24]*4));}}
-   for(int i=0;i<120;++i){float z=std::fmod(i*7.73f+t*14,140.f)-70,x=std::sin(i*12.7f)*6,y=std::fmod(i*2.3f-t*16,18.f);if(y<0)y+=18;add(0,{x,y,z},{.008f,.3f,.008f},0,.08f,cyan,0,.2f,cyan*.7f);}
+   floor(100,.07f);
+   const float local=float(f.localSeconds);
+   // The city is rebuilt for each visit: avenue, rail chase, folded circuit,
+   // aerial canyon, then an evacuation into the horizon.
+   for(int side:{-1,1})for(int j=0;j<22;++j){float seed=.5f+.5f*std::sin(j*7.1f+side),z=(j-10.5f)*7.f,height=4+seed*(variant==3?24:14);
+    float x=side*(variant==2?13.f:11.f),lean=variant==2?side*action*.2f:0;
+    if(variant==3)x=side*(16.f+(j%3)*4);
+    if(variant==4)x=side*(13.f+action*(j%4)*3.f);
+    add(0,{x,height-1,z},{2.9f,height,2.6f},variant==4?side*action*.12f:0,lean,{.07f,.12f,.2f},.65f,.23f);
+    for(int level=0;level<4;++level){V3 e=(j+level)%3?cyan:pink;float y=height*(.3f+level*.43f);
+     add(0,{x-side*2.94f,y,z},{.035f,.1f,2.4f},0,lean,e,0,.2f,e*(.7f+f.spectrum[(j+level*5)%24]*2));
+    }
+   }
+   for(int side:{-1,1})for(int j=0;j<30;++j){float z=(j-14.5f)*5;
+    add(0,{side*4.8f,-1.075f,z},{.055f,.015f,1.8f},variant==2?side*.12f:0,0,cyan,0,.2f,cyan*(1.4f+bass));
+   }
+   if(variant==0){
+    // One cross-street convoy passes, revealing the rain-lit avenue behind it.
+    beam({-23,8,14},{23,8,14},.18f,steel,.85f,.15f);
+    for(int j=0;j<8;++j){float x=-25+55*p-j*3.7f;
+     add(0,{x,8.7f,14},{1.45f,.4f,.8f},0,0,steel,.9f,.11f);
+     add(0,{x,8.7f,13.17f},{1.25f,.07f,.02f},0,0,pink,0,.2f,pink*3);
+    }
+    eye={1.4f,1.4f+.5f*p,-25+28*p};target=eye+V3{0,1,22};
+   }else if(variant==1){
+    // A long maglev overtakes at the left, with an open road ahead of the camera.
+    beam({-5.8f,.25f,-90},{-5.8f,.25f,90},.1f,steel,.85f,.13f);
+    float nose=-43+110*p;
+    for(int j=0;j<16;++j){float z=nose-j*4.8f;
+     add(0,{-5.8f,1.7f,z},{1.05f,1.3f,2.2f},0,0,steel,.96f,.09f);
+     add(0,{-4.73f,2,z},{.03f,.18f,1.8f},0,0,cyan,0,.2f,cyan*(2+bass));
+    }
+    for(int j=0;j<12;++j){float z=70-j*12-local*7;
+     add(0,{j%2?2.1f:.1f,.2f,z},{.65f,.25f,1.2f},0,0,gold,.9f,.12f);
+     add(0,{j%2?2.1f:.1f,.22f,z-1.23f},{.5f,.04f,.025f},0,0,pink,0,.2f,pink*4);
+    }
+    eye={1.4f,2.1f+1.5f*action,-32+69*p};target=eye+V3{-.3f,.3f,20};
+   }else if(variant==2){
+    // The street is a suspended diamond circuit; its two banks peel apart.
+    for(int j=0;j<18;++j){float z=(j-8.5f)*5.5f;
+     for(int side:{-1,1}){float y=2+action*std::max(0.f,5-std::abs(j-8.f))*.7f;
+      add(0,{side*(4.5f+action*3),y,z},{3.9f,.24f,2.4f},side*.12f,side*action*.2f,steel,.92f,.1f);
+      beam({side*1.2f,y+.3f,z-2.3f},{side*8.f,y+.3f,z+2.3f},.05f,pink,0,.2f,pink*(1.4f+bass));
+     }
+    }
+    eye=mix({0,34,-28},{0,30,-2},p);target={0,3+4*action,14};
+   }else if(variant==3){
+    // Aerial scale replaces the previous street shots; traffic streams cross below.
+    for(int level=0;level<3;++level)for(int j=0;j<24;++j){float z=(j-11.5f)*5-local*(7+level*2),x=-8+level*8.f,y=9+level*9.f;
+     add(0,{x,y,z},{.35f,.15f,1.6f},0,0,steel,.9f,.12f);
+     add(0,{x,y,z-1.65f},{.28f,.06f,.04f},0,0,level%2?pink:cyan,0,.2f,(level%2?pink:cyan)*4);
+    }
+    for(int level=0;level<3;++level)beam({-17,10+level*9.f,10+level*14.f},{17,10+level*9.f,10+level*14.f},.12f,steel,.85f,.18f);
+    eye=mix({0,48,-44},{0,54,-9},p);target={0,18,15+20*p};
+   }else{
+    // An entire fleet lifts once from the wet roofs; the camera reveals the horizon.
+    for(int j=0;j<70;++j){float x=(j%10-4.5f)*4,z=(j/10-3.f)*8+5,launch=ease(action-(j%7)*.04f),y=4+launch*(20+(j%5)*4);
+     add(2,{x,y,z},{.75f,.25f,1.3f},0,launch*.2f,steel,.88f,.14f);
+     if(launch>.01f)beam({x,y-.4f,z},{x,y-.4f-launch*4,z},.055f,cyan,0,.2f,cyan*(3+bass));
+    }
+    add(2,{0,17,70},{17,22,12},.2f,0,gold,.8f,.14f);
+    eye=mix({0,3,-24},{0,20,-35},p);target={0,9+action*15,18};
+   }
+   // Rain only belongs to the ground-level opening and pursuit, not every city view.
+   if(variant<2)for(int j=0;j<90;++j){float y=std::fmod(j*2.3f-local*15,23.f);if(y<0)y+=23;
+    add(0,{std::sin(j*12.7f)*8,y,(j-45)*1.6f},{.008f,.22f,.008f},0,.12f,cyan,0,.2f,cyan*.45f);
+   }
   }else if(world==2){
-   for(int ring=0;ring<4;++ring)add(3,{0,1.6f+ring*.4f,0},{4.4f+ring*.7f,4.4f+ring*.7f,4},t*(ring%2?.2f:-.16f),0,ring%2?gold:steel,.97f,.08f,{},0,pi*.5f+std::sin(t*.2f+ring)*.16f);
-   for(int ring=0;ring<5;++ring)for(int j=0;j<32;++j){float a=j*2*pi/32+t*(ring%2?.15f:-.2f),r=3+ring*.7f;add(0,{std::sin(a)*r,ring*.8f,std::cos(a)*r},{.2f,.16f,.55f},-a,0,ring%2?gold:steel,.9f,.15f);}
-   for(int j=0;j<8;++j){float a=j*2*pi/8-t*.3f;add(0,{std::sin(a)*7,2,std::cos(a)*7},{.6f,3.2f,.6f},-a,0,steel,.95f,.13f);add(1,{std::sin(a)*7,5.3f,std::cos(a)*7},{.3f,.3f,.3f},0,0,pink,0,.2f,pink*(3+f.hit*6));}
-   add(2,{0,2,0},{1.8f,2.8f,1.8f},t*.3f,t*.16f,gold,.8f,.1f);
+   if(variant!=3)floor(70,.15f);
+   if(variant==0){
+    // Parts converge along a conveyor and six gantries assemble a winged engine.
+    for(int j=0;j<26;++j){float z=(j-12.5f)*1.3f;
+     add(0,{0,-.45f,z},{3,.18f,.42f},0,0,steel,.85f,.2f);
+     for(int side:{-1,1})add(0,{side*3.3f,.1f,z},{.09f,.05f,.55f},0,0,pink,0,.2f,pink*(1.4f+bass));
+    }
+    for(int j=0;j<6;++j){float z=(j-2.5f)*3,close=ease(action+j*.04f);
+     for(int side:{-1,1}){beam({side*8.f,-1,z},{side*8.f,7,z},.22f,steel,.9f,.18f);beam({side*8.f,7,z},{side*(6-4*close),3.8f,z},.32f,gold,.88f,.15f);}
+    }
+    for(int side:{-1,1})for(int j=0;j<10;++j){float attach=ease(action+j*.025f),x=side*(9-7*attach);
+     add(0,{x,2+(j%3)*.3f,(j-4.5f)*.7f},{2,.17f,.32f},side*attach*.4f,side*(1-attach)*.4f,steel,.95f,.1f);
+    }
+    add(2,{0,2,0},{1.2f,1.1f,5},0,0,gold,.9f,.12f);
+    eye=mix({18,9,-22},{13,6,-14},p);target={0,2,0};
+   }else if(variant==1){
+    // A suspended square matrix buckles into a travelling saddle wave.
+    for(int x=-7;x<=7;++x)for(int z=-7;z<=7;++z){float wave=std::sin(x*.4f+z*.28f-float(f.localSeconds)*1.8f),height=4+wave*(.3f+action*3);
+     add(0,{x*1.7f,height,z*1.7f},{.72f,.12f,.72f},.08f*x,action*wave*.25f,(x+z)%3?steel:gold,.94f,.12f);
+     if((x+z)%3==0)add(0,{x*1.7f,height+.15f,z*1.7f},{.55f,.025f,.55f},0,0,cyan,0,.2f,cyan*(.8f+f.spectrum[(x+z+24)%24]*2));
+    }
+    for(int side:{-1,1})for(int z:{-1,1})beam({side*14.f,-1,z*14.f},{side*14.f,12,z*14.f},.25f,steel,.9f,.2f);
+    eye=mix({24,20,-29},{18,14,-25},p);target={0,4,0};
+   }else if(variant==2){
+    // Ten industrial pistons part a block to reveal a vertical energy heart.
+    for(int side:{-1,1})for(int j=0;j<5;++j){float z=(j-2.f)*2.4f,stroke=(.5f+.5f*std::sin(float(f.localSeconds)*2.7f+j*.7f))*(.5f+f.spectrum[j*4]*2);
+     beam({side*10.f,3,z},{side*(4+stroke),3,z},.55f,steel,.97f,.1f);
+     add(0,{side*(3.2f+action*3),3,z},{.6f,2.6f,.8f},0,0,gold,.9f,.13f);
+    }
+    for(int side:{-1,1})for(int z:{-1,1})add(0,{side*(1.9f+action*3),3,z*1.9f},{1.65f,3,1.65f},side*action*.15f,0,steel,.96f,.09f);
+    beam({0,-.7f,0},{0,8+action*7,0},.14f+impact*.18f,cyan,0,.25f,cyan*(2+action*3+bass));
+    eye=mix({20,10,-27},{18,13,-24},p);target={0,4.5f,0};
+   }else if(variant==3){
+    // Two cargo formations collide once, then their fragments keep separating.
+    const float accent=std::max(.01f,float(f.accentSeconds));
+    const float duration=float(f.chapterDuration);
+    float collide=ease(float(f.localSeconds)/accent);
+    float burst=ease((float(f.localSeconds)-accent)/std::max(.25f,duration-accent));
+    for(int side:{-1,1})for(int j=0;j<108;++j){float gx=j%6-2.5f,gy=(j/6)%3-1.f,gz=j/18-2.5f;
+     // Half width = 2.5*.65 + .28. The leading cube faces meet at x=0
+     // exactly at the measured accent, before any scatter is applied.
+     V3 packed{side*(17-(17-1.905f)*collide)+gx*.65f,3+gy*.75f,gz*.85f};
+     V3 scatter{std::sin(j*2.13f+side)*25,7+std::cos(j*1.37f)*16,std::sin(j*3.71f)*22};
+     V3 location=packed+scatter*burst;
+     add(j%4?0:2,location,{.28f,.3f,.35f},burst*j*.31f,burst*j*.18f,side<0?steel:gold,.9f,.13f);
+     if(j%9==0)beam(location,location-scatter*(burst*.15f),.025f,pink,0,.2f,pink*(2+impact*3));
+    }
+    if(impact>.01f||burst>.001f)for(int j=0;j<18;++j){float a=j*2*pi/18;
+     beam({std::cos(a)*(1+burst*15),3+std::sin(a)*(1+burst*15),1},{std::cos(a)*(2+burst*24),3+std::sin(a)*(2+burst*24),1},.035f,cyan,0,.2f,cyan*(impact*6+burst*.4f));
+    }
+    eye=mix({8,8,-37},{-5,13,-43},p);target={0,3,0};
+   }else{
+    // The completed engine launches; a withdrawing gantry gives a readable silhouette.
+    float launch=action*ease((p-.25f)/.75f),height=3+launch*36;
+    add(2,{0,height,0},{2,1.8f,7},0,pi*.5f,gold,.91f,.1f,{},0,pi*.5f);
+    for(int side:{-1,1}){
+     add(0,{side*3.f,height-1,0},{3.8f,.18f,2},side*.5f,side*.18f,steel,.97f,.08f);
+     beam({side*(5+action*6),-1,-3},{side*(5+action*6),16,-3},.35f,steel,.88f,.18f);
+     beam({side*(5+action*6),16,-3},{side*(2+action*8),16,0},.22f,gold,.9f,.15f);
+     for(int j=0;j<12;++j){float plume=(j+1)*.7f*(.15f+launch),width=.6f*(1-j/14.f);
+      add(2,{side*1.2f,height-2-plume,0},{width,.7f,width},0,0,cyan,0,.2f,cyan*(2.5f+bass));
+     }
+    }
+    add(0,{0,-.6f,0},{8,.5f,10},0,0,steel,.8f,.2f);
+    eye={18+launch*5,10+height*.65f,-26};target={0,height,0};
+   }
   }else if(world==3){
-   for(int j=0;j<16;++j){float a=j*2*pi/16,r=j%2?5.f:3.2f;add(2,{std::sin(a)*r,1.8f+std::sin(t*.7f+j)*.5f,std::cos(a)*r},{.75f,1.9f+f.spectrum[j]*.7f,.75f},a+t*.14f,.15f*std::sin(t+j),j%2?cyan:gold,.15f,.035f,{},.93f);}
-   add(2,{0,2.2f,0},{1.8f,3.2f,1.8f},t*.23f,.2f*std::sin(t*.5f),{.7f,.9f,1},.1f,.02f,{},.96f);
-   for(int j=0;j<24;++j){float a=j*2*pi/24;add(0,{std::sin(a)*9,3,std::cos(a)*9},{.15f,4,.15f},a,0,pink,.6f,.1f);}
+   floor(55,.06f);
+   if(variant==0){
+    // A monolithic glass cube separates into eight refracting corners.
+    for(int x:{-1,1})for(int y:{-1,1})for(int z:{-1,1}){
+     add(0,{x*(1.6f+action*2.6f),4+y*(1.6f+action*.5f),z*(1.6f+action*2.6f)},{1.55f,1.55f,1.55f},action*x*.15f,action*z*.1f,{.65f,.88f,1},.08f,.025f,{},.95f);
+    }
+    add(2,{0,4,0},{.65f,2.8f,.65f},.3f,0,gold,.1f,.03f,gold*(.4f+impact));
+    beam({-12,4,-4},{12,4,4},.045f,cyan,0,.2f,cyan*(2+bass));
+    eye=mix({13,7,-19},{9,9,-17},p);target={0,4,0};
+   }else if(variant==1){
+    // A line of angled glass monoliths turns one incident beam into a rainbow fan.
+    for(int j=0;j<9;++j){float z=(j-4.f)*2.4f,yaw=(j-4.f)*.13f+action*.4f;
+     add(0,{0,3,z},{1.8f,3.5f,.24f},yaw,0,{.75f,.9f,1},.05f,.025f,{},.96f);
+     V3 e=j%3==0?pink:(j%3==1?cyan:gold);
+     beam({0,3,z},{12+action*6,3+(j-4)*(.7f+action*.7f),z+(j-4)*2},.055f,e,0,.2f,e*(2.1f+f.spectrum[j*2]*2));
+    }
+    beam({-18,3,0},{0,3,0},.08f,{1,1,1},0,.2f,{2.3f,2.3f,2.3f});
+    eye=mix({-19,12,-25},{-14,10,-20},p);target={3,3,0};
+   }else if(variant==2){
+    // A quieter floating book of glass opens into a sparse wing of interior light.
+    for(int j=0;j<14;++j){float a=(j-6.5f)*.085f*(.1f+action),x=(j-6.5f)*.45f;
+     add(0,{x,3.7f+std::abs(j-6.5f)*action*.28f,0},{.16f,3.2f,3.5f},a,-a,{.65f,.9f,.83f},.05f,.025f,{},.96f);
+     beam({x,1,0},{x,5+action*2,0},.035f,gold,0,.2f,gold*(.7f+bass*.5f));
+    }
+    add(0,{0,-.8f,0},{7,.2f,6},0,0,{.05f,.12f,.17f},.8f,.1f);
+    eye=mix({-14,8,-19},{-11,6,-16},p);target={0,4,0};
+   }else if(variant==3){
+    // A huge faceted prism breaks once into a shell of tumbling glass shards.
+    float burst=action*ease((p-.25f)/.75f);
+    for(int j=0;j<144;++j){float a=j*2.399963f,y=1-2*(j+.5f)/144.f,r=std::sqrt(std::max(0.f,1-y*y));
+     V3 direction{std::cos(a)*r,y,std::sin(a)*r};float shell=2.5f+burst*(10+(j%7)*.8f);
+     add(2,{direction.x*shell,4+direction.y*shell,direction.z*shell},{.35f,.8f,.3f},a+burst*j*.07f,burst*j*.12f,j%3?V3{.65f,.9f,1}:V3{1,.8f,.6f},.06f,.025f,{},.94f);
+    }
+    if(action<.98f)add(2,{0,4,0},{2.8f*(1-action)+.05f,4*(1-action)+.05f,2.8f*(1-action)+.05f},.3f,0,{.65f,.85f,1},.05f,.025f,{},.97f);
+    for(int j=0;j<9;++j){float a=j*2*pi/9;beam({0,4,0},{std::cos(a)*20,4+std::sin(a)*14,7},.035f,j%2?cyan:gold,0,.2f,(j%2?cyan:gold)*(.5f+impact*4));}
+    eye=mix({7,7,-25},{-3,10,-31},p);target={0,4,0};
+   }else{
+    // An angular glass avenue opens into a bright, unobstructed exit to Act III.
+    for(int j=0;j<16;++j)for(int side:{-1,1}){float z=(j-7.5f)*4.8f,open=ease(action-j*.012f),x=side*(5+open*5);
+     add(0,{x,4.8f,z},{2,6,.25f},side*(.2f+open*.5f),side*.22f,{.7f,.9f,1},.06f,.025f,{},.95f);
+     beam({side*4.f,-.9f,z},{side*(4+open*4),10,z},.055f,j%2?cyan:gold,0,.2f,(j%2?cyan:gold)*(1.7f+bass));
+    }
+    // A faceted horizon with visible gaps, rather than a blank luminous wall.
+    for(int j=0;j<18;++j){float a=j*pi/17;
+     beam({0,5,76},{std::cos(a)*32,5+std::sin(a)*28,82},.08f,j%2?gold:cyan,0,.2f,(j%2?gold:cyan)*(2+bass));
+    }
+    add(2,{0,5,76},{2.2f,5,2.2f},.4f,0,gold,.6f,.1f,gold*.8f);
+    eye={0,2.2f+2.3f*p,-28+66*p};target=eye+V3{0,.8f,20};
+   }
   }
-  if(world>=4)act3Geometry(f);
-  // Actual 3D spectrum geometry participates in RT visibility and reflections.
-  if(world!=1&&world!=4)for(int ring=0;ring<2;++ring)for(int band=0;band<24;++band){float a=band*2*pi/24+t*(ring?-.07f:.09f),r=8+ring*2.f,hbar=.08f+f.spectrum[band]*1.8f;V3 e=band%2?cyan:pink;add(0,{std::sin(a)*r,hbar-1,std::cos(a)*r},{.09f,hbar,.09f},a,0,e,.6f,.1f,e*(.4f+f.spectrum[band]*2));}
-  V3 eye{},target{0,1.4f,0};float a=t*.13f+f.shot*pi*.5f;
-  if(world==0){eye={std::sin(t*.23f)*2,1.2f+std::sin(t*.11f)*.5f+f.shot*.25f,std::fmod(t*2+f.shot*3,70.f)-35};target=eye+V3{std::sin(t*.13f)*.2f,-.15f,5};}
-  else if(world==1){eye={std::sin(t*.17f)*2,1.2f+std::sin(t*.2f)*.7f+f.shot*.25f,std::fmod(t*5+f.shot*7,110.f)-55};target=eye+V3{std::sin(t*.1f),-.25f,8};}
-  else{float r=(world==2?14.f:12.5f)+std::cos(f.progress*pi)*.8f;eye={std::sin(a)*r,4.5f+std::sin(t*.2f)*1.4f,std::cos(a)*r};}
-  if(world>=4){float r=world==4?19.f:(world==5?17.f:(world==6?25.f:24.f));r+=std::sin(f.progress*pi)*1.2f;float y=world==4?6.f:(world==5?6.5f:8.f);eye={std::sin(a)*r,y+std::sin(t*.17f)*1.5f,std::cos(a)*r};target={0,world==4?2.7f:(world==5?3.5f:3.4f),0};}
+  // Architectural surroundings provide depth and scale without putting a wall
+  // between the directed camera and the moving hero. Every set uses its own
+  // silhouette; the open collision shot deliberately retains negative space.
+  V3 dark{.085f,.13f,.19f},stone{.22f,.27f,.32f};
+  if(world==0){
+   if(variant==0){
+    // Folded shipyard horizon and low inset control islands.
+    for(int j=0;j<9;++j){float x=(j-4.f)*5.5f,height=8+(j%3)*3.f;
+     add(0,{x,height-1,28+(j%2)*4.f},{1.25f,height,2},.1f*(j-4),-.12f*(j-4),dark,.8f,.23f);
+     beam({x-1,-.8f,26},{x-1,height*2-1,26},.045f,cyan,0,.25f,cyan*.7f);
+    }
+    for(int side:{-1,1})for(int j=0;j<8;++j){float z=(j-3.5f)*3.f;
+     add(0,{side*6.5f,-.65f,z},{.8f,.45f,.9f},0,0,dark,.8f,.2f);
+     add(0,{side*6.5f,-.18f,z},{.55f,.025f,.55f},0,0,cyan,0,.25f,cyan*(.4f+f.spectrum[j*3]*.5f));
+    }
+   }else if(variant==2){
+    // A long elevated aqueduct contrasts with the flowing ribbons below.
+    for(int j=0;j<3;++j){float z=24+j*8.f;
+     add(0,{0,13,z},{25,.7f,2},0,0,dark,.85f,.24f);
+     beam({-25,12,z-2.1f},{25,12,z-2.1f},.08f,gold,0,.25f,gold*.8f);
+     for(int side:{-1,1}){add(0,{side*21.f,5,z},{1.3f,6,2},0,side*-.16f,steel,.9f,.18f);beam({side*16.f,-1,z},{side*23.f,12,z},.2f,steel,.9f,.2f);}
+    }
+    for(int side:{-1,1})for(int j=0;j<6;++j)add(0,{side*8.f,-.65f,(j-2.5f)*4},{1.1f,.45f,1.5f},0,0,dark,.85f,.2f);
+   }else if(variant==3){
+    // Distant terraced arcologies make the rising gold skyline feel inhabited.
+    for(int side:{-1,1})for(int level=0;level<4;++level){float l=float(level);
+     add(0,{side*(39-l*2),6+l*9,42+l*3},{14-l*2,5,10-l},side*.18f,0,dark,.7f,.24f);
+     beam({side*(39-l*2)-14+l*2,11+l*9,31+l*4},{side*(39-l*2)+14-l*2,11+l*9,31+l*4},.07f,gold,0,.25f,gold*.6f);
+    }
+    for(int level=0;level<3;++level)add(0,{0,-.9f+level*.15f,0},{14-level*.5f,.15f,11-level*.5f},0,0,dark,.82f,.18f);
+   }else if(variant==4){
+    // Giant archive slabs frame the mirror book, with illuminated shelf slots.
+    for(int side:{-1,1})for(int j=0;j<5;++j){float z=24+j*3.f,x=side*(15+j*.7f),height=11+j*.7f;
+     add(0,{x,height-1,z},{1.1f,height,2.2f},side*.12f,side*.18f,dark,.8f,.22f);
+     for(int level=0;level<5;++level)add(0,{x-side*1.15f,level*4.f,z-2.3f},{.08f,.08f,2.2f},0,0,gold,0,.25f,gold*.7f);
+    }
+    add(0,{0,-.65f,0},{12,.45f,19},0,0,dark,.9f,.14f);
+   }else if(variant==5){
+    for(int side:{-1,1}){
+     add(2,{side*22.f,16,49},{7,20,9},side*.3f,side*.15f,dark,.85f,.18f);
+     for(int j=0;j<10;++j){float z=-24+j*6.f;add(0,{side*12.f,-.4f,z},{1.6f,.7f,1.8f},0,0,dark,.9f,.16f);add(0,{side*12.f,.33f,z},{1.3f,.04f,.9f},0,0,cyan,0,.25f,cyan*.8f);}
+    }
+   }
+  }else if(world==2){
+   if(variant==0){
+    // Sawtooth hangar ribs behind the assembly line and service machinery below.
+    for(int j=0;j<4;++j){float z=22+j*7.f;
+     for(int side:{-1,1}){beam({side*19.f,-1,z},{side*19.f,12,z},.5f,dark,.8f,.24f);beam({side*19.f,12,z},{0,20,z},.4f,steel,.85f,.22f);}
+     beam({-19,11,z},{19,11,z},.15f,gold,0,.25f,gold*.65f);
+    }
+    add(0,{0,6,46},{23,7,1},0,0,dark,.65f,.3f);
+    for(int side:{-1,1})for(int j=0;j<6;++j){float z=j*4.f;
+     add(0,{side*12.f,-.1f,z},{1.5f,.9f,1.4f},0,0,dark,.8f,.22f);
+     for(int vent=0;vent<3;++vent)add(0,{side*12.f,.85f,z+(vent-1)*.5f},{1.2f,.04f,.1f},0,0,steel,.8f,.2f);
+    }
+   }else if(variant==1){
+    // A terraced basin and clustered cooling stacks support the kinetic matrix.
+    for(int side:{-1,1})for(int level=0;level<3;++level)add(0,{side*(18+level*2.f),-.5f+level*.55f,0},{.8f,.6f,15},0,0,dark,.75f,.26f);
+    for(int side:{-1,1})for(int j=0;j<4;++j){float x=side*(17+j*3.f),height=9+j*2.f;
+     add(0,{x,height-1,27+j*2.f},{1.1f,height,2},0,0,dark,.75f,.24f);
+     add(0,{x,height*2-.8f,27+j*2.f},{1.3f,.12f,2.2f},0,0,gold,.8f,.2f);
+     beam({x,-.8f,24+j*2.f},{x,height*2-1,24+j*2.f},.055f,pink,0,.25f,pink*.7f);
+    }
+   }else if(variant==2){
+    // Laminated containment spines leave a large central opening for the heart.
+    for(int side:{-1,1})for(int j=0;j<5;++j){float x=side*(13+j*1.3f),height=8+j*1.5f;
+     add(0,{x,height-1,18+j*1.8f},{.45f,height,3.5f},side*.14f,side*.08f,dark,.85f,.2f);
+     beam({x,height*2-1,14+j*1.8f},{side*8.f,height*2-1,14+j*1.8f},.1f,gold,0,.25f,gold*.8f);
+    }
+    for(int side:{-1,1})add(0,{side*12.f,-.4f,0},{1.2f,.7f,7},0,0,dark,.82f,.2f);
+    add(0,{0,-.65f,0},{7,.45f,8},0,0,dark,.85f,.18f);
+   }else if(variant==3){
+    // Two distant derelict hulls supply orbital scale without enclosing the shot.
+    for(int side:{-1,1}){V3 centre{side*27.f,-12,58};
+     add(0,centre,{17,1.8f,5},side*.16f,side*.12f,dark,.85f,.24f);
+     for(int j=0;j<5;++j)add(0,centre+V3{(j-2)*5.f,2.1f,0},{1.4f,.6f,4.6f},side*.16f,0,steel,.85f,.23f);
+     beam(centre+V3{-14,0,-5.2f},centre+V3{14,0,-5.2f},.06f,cyan,0,.25f,cyan*.5f);
+    }
+   }else{
+    // Tall spaceport cranes remain behind the launch, with an unobstructed sky.
+    for(int side:{-1,1})for(int j=0;j<2;++j){float x=side*(21+j*14.f),z=30+j*18.f,height=35-j*8.f;
+     add(0,{x,height*.5f-1,z},{1.6f,height*.5f,3},0,0,dark,.8f,.24f);
+     beam({x-side*8.f,height,z},{x+side*11.f,height,z},.6f,steel,.85f,.22f);
+     beam({x,height-1,z-3.1f},{x,height-12,z-3.1f},.08f,pink,0,.25f,pink*.8f);
+    }
+    for(int side:{-1,1})for(int j=0;j<4;++j)add(0,{side*15.f,-.6f,j*6.f},{3,.5f,2.3f},0,0,dark,.8f,.24f);
+   }
+  }else if(world==3){
+   if(variant==0){
+    // Refracting triangular sails and a dark stepped base define the observatory.
+    for(int side:{-1,1}){
+     add(2,{side*18.f,11,24},{7,14,3},side*.3f,side*.12f,{.6f,.8f,.9f},.08f,.03f,{},.95f);
+     beam({side*18.f,-1,19},{side*18.f,25,24},.12f,steel,.85f,.18f);
+    }
+    for(int level=0;level<3;++level)add(0,{0,-.95f+level*.16f,0},{9-level*.45f,.16f,9-level*.45f},0,0,dark,.9f,.1f);
+   }else if(variant==1){
+    // Floating tuning-fork baffles behind the rainbow, with no enclosing room.
+    for(int j=0;j<3;++j){float z=26+j*7.f,y=11+j*4.f;
+     for(int side:{-1,1}){add(0,{side*19.f,y-4,z},{1.3f,7,2},0,side*.12f,dark,.85f,.22f);beam({side*19.f,y+3,z},{side*3.f,y+3,z},.3f,steel,.9f,.18f);}
+    }
+    for(int j=0;j<9;++j)add(0,{0,-.7f,(j-4)*2.4f},{3,.4f,.7f},0,0,dark,.88f,.15f);
+   }else if(variant==2){
+    // A sparse brutalist retreat keeps this chapter quiet but gives it a place.
+    for(int level=0;level<3;++level)add(0,{0,-.7f+level*.2f,7+level*4.f},{15-level*2.f,.2f,12-level*2.f},0,0,stone,.2f,.48f);
+    add(0,{-16,9,23},{3,10,3},-.16f,-.18f,stone,.25f,.45f);
+    add(0,{14,12,27},{3.5f,13,3},.15f,.12f,stone,.25f,.45f);
+    beam({-16,19,23},{14,25,27},.32f,steel,.85f,.22f);
+   }else if(variant==3){
+    // A broad angular gantry gives the expanding glass cloud a readable scale.
+    for(int side:{-1,1}){beam({side*22.f,-1,29},{side*24.f,14,29},.4f,dark,.85f,.22f);beam({side*24.f,14,29},{side*8.f,25,29},.4f,steel,.9f,.18f);}
+    beam({-8,25,29},{8,25,29},.18f,gold,0,.25f,gold*.8f);
+    for(int side:{-1,1})for(int j=0;j<4;++j)add(0,{side*(16+j*2.f),-.5f,10+j*6.f},{1.4f,.6f,2.5f},side*.2f,0,dark,.82f,.2f);
+   }else{
+    for(int side:{-1,1}){
+     add(0,{side*11.f,-.5f,10},{1.7f,.6f,50},0,0,dark,.85f,.18f);
+     add(2,{side*31.f,16,94},{8,20,5},side*.3f,side*.1f,stone,.5f,.28f);
+    }
+   }
+  }
+  if(world>=4){
+   // Legacy Act III RT path is retained for compatibility, outside Act II direction.
+   if(world==7)add(0,{0,-1.4f,0},{80,.3f,80},0,0,{.45f,.5f,.57f},.95f,.09f);
+   act3Geometry(f);
+   if(world!=4)for(int ring=0;ring<2;++ring)for(int band=0;band<24;++band){float a=band*2*pi/24+t*(ring?-.07f:.09f),r=8+ring*2.f,hbar=.08f+f.spectrum[band]*1.8f;V3 e=band%2?cyan:pink;add(0,{std::sin(a)*r,hbar-1,std::cos(a)*r},{.09f,hbar,.09f},a,0,e,.6f,.1f,e*(.4f+f.spectrum[band]*2));}
+   float a=t*.13f+f.shot*pi*.5f,r=world==4?19.f:(world==5?17.f:(world==6?25.f:24.f));r+=std::sin(f.progress*pi)*1.2f;
+   float y=world==4?6.f:(world==5?6.5f:8.f);eye={std::sin(a)*r,y+std::sin(t*.17f)*1.5f,std::cos(a)*r};target={0,world==4?2.7f:(world==5?3.5f:3.4f),0};
+  }
   V3 forward=norm(target-eye),right=norm(cross(forward,{0,1,0})),up=cross(right,forward);
   Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
  }

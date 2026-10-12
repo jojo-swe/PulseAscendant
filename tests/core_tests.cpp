@@ -49,13 +49,32 @@ int main() {
   auto bandsBefore=sampleTimeline(100).spectrum,bandsAfter=sampleTimeline(100.05).spectrum,bandsMiddle=sampleTimeline(100.025).spectrum;
   for(size_t i=0;i<24;++i)CHECK(std::abs(bandsMiddle[i]-(bandsBefore[i]+bandsAfter[i])*.5f)<.0001f);
   for(int scene=0;scene<16;++scene)CHECK(sampleTimeline(sceneStart(scene)+.001).scene==scene);
+  std::array<int,16> visits{};
   for(int chapter=0;chapter<chapterCount();++chapter) {
    double start=chapterStart(chapter),end=chapter+1<chapterCount()?chapterStart(chapter+1):showDuration();
    CHECK(end-start>=5-1e-8 && end-start<=18+1e-8);
    CHECK(sampleTimeline(start+.001).chapter==chapter);
    CHECK(sampleTimeline(end-.001).chapter==chapter);
-   bool seen[4]{};for(int shot=0;shot<4;++shot)seen[sampleTimeline(start+(shot+.5)*(end-start)/4).shot]=true;
-   for(bool camera:seen)CHECK(camera);
+   auto first=sampleTimeline(start+.001),last=sampleTimeline(end-.001);
+   CHECK(first.variant==visits[first.scene]++);
+   CHECK(std::abs(first.chapterDuration-(end-start))<1e-9);
+   const auto accent=sampleTimeline(start+first.accentSeconds);
+   CHECK(accent.chapter==chapter&&accent.event>.9999&&std::abs(accent.action-.5f)<.0001f);
+   CHECK(first.action==0&&last.action==1);
+   CHECK(first.chapterProgress<.001&&last.chapterProgress>.999);
+   auto previousFrame=first;float peakEvent=0;
+   for(int sample=1;sample<200;++sample){
+    const auto frame=sampleTimeline(start+sample*(end-start)/200);
+    CHECK(frame.shot==first.shot&&frame.variant==first.variant);
+    CHECK(frame.chapterProgress>previousFrame.chapterProgress&&frame.action>=previousFrame.action);
+    CHECK(frame.motionSeconds>previousFrame.motionSeconds);
+    peakEvent=std::max(peakEvent,frame.event);previousFrame=frame;
+   }
+   CHECK(peakEvent>.75f);
+   if(chapter>0){
+    const double before=sampleTimeline(start-.0001).motionSeconds,after=sampleTimeline(start+.0001).motionSeconds;
+    CHECK(after>before&&after-before<.001); // no rewind at chapter or act cuts
+   }
   }
   for(double t=0;t<showDuration();t+=.05) {
    auto f=sampleTimeline(t);
