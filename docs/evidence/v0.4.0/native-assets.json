@@ -30,7 +30,8 @@
     "assets/shaders/text.vert": "5075f5edf5e469d5cdbd44471af6429731ef0a5f8ef88a0e06997a644f473b33",
     "assets/shaders/tunnel.frag": "63482681e1f6b4e9786eedeadfeeba307184fc79daab0242193eb246e2cce666",
     "assets/shaders/tunnel.vert": "7ba686047114ce40ca13c199294ee7c3daf968b3a9a2c4a433a16459fc04fb01",
-    "assets/music/second-reality-three-acts.wav": "58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6"
+    "assets/music/second-reality-three-acts.wav": "58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6",
+    "build/windows-final/Release/PulseAscendant.exe": "b2f80ede1092a303039ec4796b70b3fc678d6a2562cc434bbcf5d78babb2127e"
   },
   "capture_times": "18% and 82% through each chapter",
   "windows_tour": {
@@ -38,5 +39,29 @@
     "captures": 152,
     "fallback_captures": 152
   },
-  "review": "7.2/10 for inspected form variation, chapter development and readability; no full audiovisual acceptance"
+  "review": "7.2/10 for inspected form variation, chapter development and readability; no full audiovisual acceptance",
+  "visual_source_commit": "faa0bf3b4a96dc4b380f822462024ee54a7eb9e2",
+  "media_producer": {
+    "path": "build/windows/Release/PulseAscendant.exe",
+    "sha256": "1b617ebade1b331db5d76b1a6dd7eb9cc4bbabba276c6348c32659bafb5fbe3c",
+    "scope": "Frozen graphics build used by 4K60 export and Short revision 4"
+  },
+  "runtime_changes_after_visual_commit": "Only app.cpp startup preparation before audio; render-stream branch and all graphics assets unchanged.",
+  "linux_runtime_sha256": "32817be3053b3d257b0e05442a815a5768a8b66281ef5ab204ecfdb4fdd042c1",
+  "runtime_tests": {
+    "windows": "6/6 after final startup patch",
+    "linux": "6/6 after final startup patch"
+  },
+  "short": {
+    "trailer_revision": 4,
+    "source_hash": "fb3592cfbba301f13737bf468d118a605fdda55551c7d7871fd2be14af1f7fa2",
+    "resolution": [
+      1080,
+      1920
+    ],
+    "fps": 60,
+    "frames": 1920,
+    "duration": 32,
+    "decode": "Complete GPU-assisted decode passed"
+  }
 }

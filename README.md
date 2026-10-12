@@ -105,16 +105,18 @@ spirv-val --target-env vulkan1.2 assets/shaders/rt_scene.comp.spv
 
 ## Capture and export
 
+Interactive playback prepares the graphics pipelines before starting the music. The window title shows progress; driver-dependent preparation can take over a minute on WSLg. Escape cancels preparation. This prevents deferred first-draw compilation from consuming the opening music.
+
 `PulseAscendant --show-info` prints the three acts, measured durations, audio asset and all 76 directed chapter starts as JSON without initializing a display.
 
 ```powershell
 build/windows/Release/PulseAscendant.exe --smoke-test --no-audio --capture-dir build/captures
 build/windows/Release/PulseAscendant.exe --tour-test --no-audio --capture-dir build/tour
-python tools/verify-motion.py build/tour build/motion.json
+python tools/storyboard.py --help
 python tools/render_video.py --app build/windows/Release/PulseAscendant.exe --require-rt --output dist/three-acts/PulseAscendant-4K60.mp4
 ```
 
-Smoke mode requests all 16 worlds in both styles; tour mode requests two exact-time captures per chapter. Capture success and image motion are separate from artistic acceptance. See [current evidence](docs/VERIFICATION.md).
+Smoke mode requests all 16 worlds in both styles; tour mode captures 18% and 82% through each chapter. Use `storyboard.py` to group these images for inspection. The historical `verify-motion.py` thresholds were designed for earlier capture timings and are not a v0.4 acceptance gate. Capture success and pixel differences do not establish artistic acceptance. See [current evidence](docs/VERIFICATION.md).
 
 Additional audio and music-direction checks need the complete source audio plus Python and numpy:
 

@@ -1,0 +1,7 @@
+# YouTube thumbnail provenance
+
+Built-in imagegen, 2026-10-12. Screenshot-based AI-assisted compositing, not an unmodified runtime capture. Native input frames: chapter 7-b (City), 40-b (Prism) and 59-b (Garden), from the v5 RT tour. Result copied into the project as `docs/images/v0.4.0-youtube-thumbnail.png`; upload-sized JPEG is `docs/images/v0.4.0-youtube-thumbnail.jpg`.
+
+## Final prompt
+
+Edit/compositing for a YouTube thumbnail, landscape 16:9. These three attached images are native screenshots from PULSE ASCENDANT v0.4: Image 1 pink aerial neon city; Image 2 purple refracting prism array; Image 3 green luminous DNA garden. Compose these existing screenshots as three crisp adjacent panels with a strong shared dark title strip. Preserve their actual geometry, lighting, simple material style and image content; cropping and scaling are allowed, but do not invent objects, photorealism, extra graphical detail or improve the rendering. This must accurately advertise the demo. Remove only existing tiny UI captions by cropping where possible. Large perfectly readable white sans-serif text verbatim: 'MUSIC → WORLDS'. Smaller brand text verbatim: 'PULSE ASCENDANT'. A small corner badge verbatim: '4K60'. Ensure title is legible at 320x180, avoid decorative clutter and all other text. Professional but honest screenshot-based thumbnail, three contrasting color worlds. No people, logos from other brands or claims of AAA quality.

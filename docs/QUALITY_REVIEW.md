@@ -29,3 +29,15 @@ Låtarnas längder och kapitelgränser är bevarade. Akt II använder RT; akt I/
 Native fångster: build/variation/tour-rt-v5 och tour-fallback-v5. Alla världstavlor finns under boards-rt-v5 / boards-fallback-v5. Rörelsestickprov: sequence-collision vid 4 bilder/s och sequence-finale vid 2 bilder/s ur den initiala 720p30-provfilmen. Exportens tidsavrundningsavvikelse redovisas separat i [VERIFICATION.md](VERIFICATION.md).
 
 Den oberoende granskaren gjorde ingen mutation, egen GPU-körning eller kontinuerlig A/V-uppspelning. Senare artefakt-/publiceringsprov redovisas separat, inte som del av detta betyg.
+
+## Uppföljning: uppstart och Short v2
+
+Granskarens komplettering efter `faa0bf3`, fortfarande skrivskyddad:
+
+> Runtimepatchen har nu inga blockerande fynd i den granskade källan. Uppvärmningen sker före ljudstart och båda uppspelningsklockorna. Den täcker även sena korridorens partikel-/spårprogram och Engine-programmets extra retropipeline. glFinish inväntar renderarbetet, aktuell fönsterstorlek återställs och Escape/quit kontrolleras före ljudstart. Mellanscenerna presenteras inte. Export, tour och selfTest går förbi uppvärmningen.
+>
+> Det lästa Linuxprovet visar 54,51 sekunders förberedelse, därefter 197 bilder på cirka 3 sekunder, med högsta bildtid 59,4 ms, vid showtid 342 s. Det stöder att förberedelsen flyttar den tidigare långa första bilden utanför spelklockan. Provet gäller en avgränsad OpenGL-körning och styrker inte jämn prestanda genom hela showen.
+>
+> Short v2:s Cityklipp är tydligt bättre än carrierklippet i vertikalt format: motiv, skala och rörelseutveckling går att läsa i de granskade bilderna. Thumbnailen är visuellt konsekvent med nativeunderlaget; 4K60-märkningen behöver stödjas av den färdiga exporten.
+>
+> Formvariationsbetyget ligger kvar på 7,2/10. Full kontinuerlig audiovisual upplevelse är fortsatt utanför godkännandet.

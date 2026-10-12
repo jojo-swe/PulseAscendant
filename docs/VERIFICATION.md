@@ -27,6 +27,14 @@ Linux mjukvarurenderare behövde 37–40 s för shaderstart och kontrollprov; de
 
 [Windowslogg](evidence/v0.4.0/windows-tests.log), [Linuxlogg](evidence/v0.4.0/linux-tests.log), [show-info](evidence/v0.4.0/show-info.json) och [native-/resurshashar](evidence/v0.4.0/native-assets.json).
 
+### Förberedelse före musikstart
+
+Linux drivrutin kunde tidigare blockera första bilden i 35,74 s medan musikens klocka redan gick. Interaktiv uppspelning förbereder nu samtliga världars grafikprogram, sena korridorens partikel-/spårprogram, Engine-programmets retropipeline och startbildens fulla viewport **före ljudstart och båda uppspelningsklockorna**. Fönstertiteln visar förberedelsens framsteg; Escape/quit avbryter. Export, tour och kontrolltest använder sina tidigare separata körvägar.
+
+Slutversionens Windowsprov vid 342 s: 0,119 s förberedelse, sedan 301 bilder på cirka 3 s, ljud-RMS 0,149 och ljudklocka 342–345 s. Slutversionens WSLg-prov: 67,67 s förberedelse, sedan 261 bilder på cirka 3 s och högsta bildtid 20,23 ms. Dessa körningar gjordes vid 640×360 **samtidigt som 4K-exporten körde**; de verifierar ordning och avgränsad uppspelning, inte fristående prestanda eller hela showens flyt. Linuxprovet använde den tysta klockan.
+
+Efter denna runtimeändring passerar Windows CTest åter **6/6** (10,92 s) och Linux CTest **6/6** (108,21 s). [Windows uppspelning](evidence/v0.4.0/windows-prepared-run.log), [Linux uppspelning](evidence/v0.4.0/linux-prepared-run.log). Den visuella källan är fryst vid `faa0bf3b4a96dc4b380f822462024ee54a7eb9e2`; medieexportens producent skiljer sig från paketens senare runtime endast genom denna uppstartsändring. Grafikresurserna är identiska.
+
 ## GPU och bildgranskning
 
 Windows: NVIDIA GeForce RTX 4080, drivrutin 617.42. OpenGL 3.3 och Vulkan KHR ray queries.

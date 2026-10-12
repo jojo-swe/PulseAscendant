@@ -87,15 +87,17 @@ Utan argument används originalfilerna under `music/source/`. PowerShell-ingång
 
 ## Diagnostik och export
 
+Interaktiv uppspelning förbereder grafikprogrammen före musikstart. Fönstertiteln visar framsteg; på WSLg kan detta ta över en minut beroende på drivrutin. Escape avbryter. Förberedelsen hindrar drivrutinens första shaderkörning från att förbruka musikens inledning.
+
 ```powershell
 build/windows/Release/PulseAscendant.exe --show-info
 build/windows/Release/PulseAscendant.exe --smoke-test --no-audio --capture-dir build/captures
 build/windows/Release/PulseAscendant.exe --tour-test --no-audio --capture-dir build/tour
-python tools/verify-motion.py build/tour build/motion.json
+python tools/storyboard.py --help
 python tools/render_video.py --app build/windows/Release/PulseAscendant.exe --require-rt --output dist/three-acts/PulseAscendant-4K60.mp4
 ```
 
-Smoke-läget begär alla 16 världar i två stilar. Tour-läget begär två exakta tidpunkter i varje kapitel. Testerna för bildförändring är inte betyg på konstnärlig kvalitet. Lägg till `-DREMIX_RUNTIME_TESTS=ON` vid konfigurering för displayberoende kontrolltester.
+Smoke-läget begär alla 16 världar i två stilar. Tour-läget fångar 18% och 82% genom varje kapitel. `storyboard.py` grupperar bilderna för granskning. Trösklarna i äldre `verify-motion.py` utgår från tidigare fångsttider och är ingen acceptansgräns för v0.4. Bildförändring är inget betyg på konstnärlig kvalitet. Lägg till `-DREMIX_RUNTIME_TESTS=ON` vid konfigurering för displayberoende kontrolltester.
 
 Exportören läser programmets `--show-info`, kontrollerar ljudets format och sampleantal samt tillåter endast intervall inom 888,68 sekunder. Den behöver ffmpeg/ffprobe och NVIDIA NVENC. För en kort akt III-förhandsvisning kan `--start 589.92 --duration 5` läggas till. Paket och ny export placeras under `dist/three-acts/`.
 

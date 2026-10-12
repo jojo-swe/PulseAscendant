@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-# Collision, carrier, refracting monoliths, one-time impact, canyon chase,
+# Collision, aerial skyline, refracting monoliths, one-time impact, canyon chase,
 # seed tunnel, assembled monuments. Only clips 2 and 3 are Act II hardware RT.
-TIMES = (77.8, 169., 409.5, 500.6, 647., 710.5, 846.)
+TIMES = (77.8, 58.6, 409.5, 500.6, 647., 710.5, 846.)
 
 
 def directed_cuts(hits, music_start, duration, count):
@@ -112,7 +112,7 @@ def main():
     assert (video['width'],video['height'],int(video['nb_frames']),video['avg_frame_rate']) == (1080,1920,1920,'60/1')
     assert abs(float(audio['duration'])-duration)<.05
     partial.rename(output)
-    manifest = dict(title='PULSE ASCENDANT',trailer_revision=3,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo (Suno)',
+    manifest = dict(title='PULSE ASCENDANT',trailer_revision=4,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo (Suno)',
                     music_start=music_start,cuts=cuts,source_times=TIMES,probe=probe)
     output.with_suffix('.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
     print(f'SHORT PASS: {output}, 1080x1920, 60 fps, 1920 frames, 32 seconds',flush=True)

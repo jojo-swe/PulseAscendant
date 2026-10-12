@@ -1,17 +1,17 @@
 Test project C:/Users/johnj/Documents/Codex/2026-10-11/anv-nd-https-github-com-morluto/SecondRealityRemix-Public/build/windows
     Start 1: core
-1/6 Test #1: core .............................   Passed    0.81 sec
+1/6 Test #1: core .............................   Passed    0.43 sec
     Start 2: act3_plan
-2/6 Test #2: act3_plan ........................   Passed    0.12 sec
+2/6 Test #2: act3_plan ........................   Passed    0.07 sec
     Start 3: audio
-3/6 Test #3: audio ............................   Passed    2.79 sec
+3/6 Test #3: audio ............................   Passed    2.57 sec
     Start 4: show_info
-4/6 Test #4: show_info ........................   Passed    0.17 sec
+4/6 Test #4: show_info ........................   Passed    1.01 sec
     Start 5: incomplete_control
-5/6 Test #5: incomplete_control ...............   Passed    1.39 sec
+5/6 Test #5: incomplete_control ...............   Passed    2.83 sec
     Start 6: lifecycle
-6/6 Test #6: lifecycle ........................   Passed    2.93 sec
+6/6 Test #6: lifecycle ........................   Passed    3.97 sec
 
 100% tests passed out of 6
 
-Total Test time (real) =   8.25 sec
+Total Test time (real) =  10.92 sec

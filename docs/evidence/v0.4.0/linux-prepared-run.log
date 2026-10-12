@@ -1,0 +1,8 @@
+Tracing renderer: OPENGL FALLBACK / disabled with --no-rt
+Video: x11 | GPU: Microsoft Corporation / D3D12 (NVIDIA GeForce RTX 4080) / 4.6 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 | OpenGL fallback
+PREPARE PASS: all world pipelines and initial viewport ready before audio, 67.671 s
+Audio: SILENT MODE
+Render backend: Microsoft Corporation / D3D12 (NVIDIA GeForce RTX 4080) / 4.6 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 | OpenGL fallback
+Frames: 261 | FPS: 86.974 | mean frame ms: 11.454 | max ms: 20.2328 | vsync request accepted: 0
+Audio frames supplied: 0 | playback seconds: 344.99
+Maximum observed music RMS: 0

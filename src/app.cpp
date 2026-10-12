@@ -2,6 +2,7 @@
 #include "audio_player.hpp"
 #include "renderer.hpp"
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_opengl.h>
 #include <iostream>
 #include <cmath>
 #include <fstream>
@@ -70,10 +71,36 @@ int runApp(const AppOptions& o) {
   std::cout<<"SMOKE PASS: thirty-two scenes/styles rendered without GL errors\n";
   std::cout<<"Render backend: "<<renderer.diagnostics()<<'\n';return 0;
  }
+ double initial=o.scene>=0?sceneStart(o.scene):o.time;
+ // Some drivers defer pipeline compilation until the first actual draw. Pay
+ // that cost before starting either clock, including the later worlds.
+ // Export and capture modes above keep their exact frame counts unchanged.
+ if(!o.selfTest) {
+  const auto prepareBegin=SDL_GetTicksNS();
+  glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);SDL_GL_SwapWindow(raw);
+  renderer.resize(64,64);
+  auto prepareCancelled=[](){SDL_Event event;while(SDL_PollEvent(&event))if(event.type==SDL_EVENT_QUIT||(event.type==SDL_EVENT_KEY_DOWN&&event.key.key==SDLK_ESCAPE))return true;return false;};
+  for(int scene=0;scene<16;++scene) {
+   SDL_SetWindowTitle(raw,("PULSE ASCENDANT / Preparing "+std::to_string(scene+1)+" of 16").c_str());
+   if(prepareCancelled())return 0;
+   double t=sceneStart(scene)+2.;
+   // The late corridor also uses the tunnel-point and flight-line programs.
+   if(scene==0)for(int chapter=0;chapter<chapterCount();++chapter){const double at=chapterStart(chapter)+2.;auto frame=sampleTimeline(at);if(frame.scene==0&&frame.variant>=3){t=at;break;}}
+   renderer.render(sampleTimeline(t),t,o.retro);glFinish();
+   // Preload the extra triangle pipeline before an eventual Tab style switch.
+   if(scene==2&&!o.retro){renderer.render(sampleTimeline(t),t,true);glFinish();}
+  }
+  if(prepareCancelled())return 0;
+  int preparedWidth=0,preparedHeight=0;SDL_GetWindowSizeInPixels(raw,&preparedWidth,&preparedHeight);
+  renderer.resize(preparedWidth,preparedHeight);
+  renderer.render(sampleTimeline(initial),initial,o.retro);glFinish();SDL_GL_SwapWindow(raw);
+  if(prepareCancelled())return 0;
+  SDL_SetWindowTitle(raw,"PULSE ASCENDANT");
+  std::cerr<<"PREPARE PASS: all world pipelines and initial viewport ready before audio, "<<(SDL_GetTicksNS()-prepareBegin)/1e9<<" s\n";
+ }
  AudioPlayer audio;
  if(!o.noAudio&&SDL_InitSubSystem(SDL_INIT_AUDIO))audio.start(assets/showMusic(),showDuration());
  std::cout<<"Audio: "<<audio.status()<<'\n';
- double initial=o.scene>=0?sceneStart(o.scene):o.time;
  audio.seek(initial);
  auto now=[](){return SDL_GetTicksNS()/1e9;};
  auto awaitWindow=[&](auto ready,const char* error) {
