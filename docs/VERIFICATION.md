@@ -43,6 +43,16 @@ A 160.75-second preview contains 13 native clips with their original source musi
 
 ## Full film and publication
 
-The owner explicitly asked to hold the v0.5 full 4K60 render. It has not started; full-film decode/audio verification and publication remain pending. Do not reuse the verified v0.4 movie as v0.5. The owner explicitly superseded its queued upload with this revision.
+The owner resumed the v0.5 full 4K60 render, which is now complete and verified. YouTube publication remains pending. Do not reuse the verified v0.4 movie as v0.5. The owner explicitly superseded its queued upload with this revision.
 
-YouTube previously refused a new main upload because of its daily upload limit. No new main ID was created. The automatic completion follow-up is PAUSED until the owner explicitly resumes 4K delivery; it must not publish the superseded v0.4 film. The old public main remains until the new full movie is published, then will be made unlisted with a redirect. Existing older public trailers are labeled as older versions.
+YouTube previously refused a new main upload because of its daily upload limit. No new main ID was created. The automatic completion follow-up is ACTIVE following the owner's resumption; it must not publish the superseded v0.4 film. The old public main remains until the new full movie is published, then will be made unlisted with a redirect. Existing older public trailers are labeled as older versions.
+
+## Completed full 4K60 export
+
+The v0.5 final file contains **53,321 frames at 3840×2160 / 60 fps**, with 888.683 seconds of video and 888.68 seconds of audio. File size: **6,712,158,215 bytes**. The native producer reports 17,396 hardware-RT frames, confined to Act II. The producer and runtime shader/audio hashes matched the verified v0.5 release before rendering.
+
+Full CUDA-assisted ffmpeg decoding reached EOF with all 53,321 frames, exit 0 and no error output. Eighteen two-second decoded audio windows across all acts, both joins and the ending passed comparison against the runtime WAV: minimum correlation **0.999618**, maximum measured offset **0 ms** at 8 kHz analysis resolution. Five full-aspect final-video images at 58, 110, 411, 651 and 865 seconds were inspected without gross corruption or orientation errors. This is technical and sampled visual evidence, not full uninterrupted listening or audience-retention acceptance.
+
+[Video receipt](evidence/v0.5.0/video-receipt.json) · [Metadata](evidence/v0.5.0/video-probe.json) · [Full decode result](evidence/v0.5.0/video-decode-result.json) · [Decoded frame count](evidence/v0.5.0/video-decode-progress.log) · [Audio windows](evidence/v0.5.0/video-audio.json). Final encoded images: [City](evidence/v0.5.0/video-frame-58.jpg), [Fleet](evidence/v0.5.0/video-frame-110.jpg), [Prism](evidence/v0.5.0/video-frame-411.jpg), [Canyon](evidence/v0.5.0/video-frame-651.jpg), [Ascent](evidence/v0.5.0/video-frame-865.jpg).
+
+SHA-256: `a37e6645dcacbaf9b032ea517b7b2f23b1e60b1fd0ed5e6b9e9d5edfe8ef494e`. The immutable v0.5.0 binary/source archives remain the already verified release; these later video receipts are supplemental evidence.

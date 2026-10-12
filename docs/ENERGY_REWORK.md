@@ -22,4 +22,4 @@ Synthetic narrow-band attacks test measured timing, decay and frequency isolatio
 
 The first visual pass scored 6.5/10 and prompted further City, Armada and Cosmic composition work. The final independent review scored code 8.0/10, visual finish 7.2/10 and sampled pace/readability 7.3/10. Final Windows RT and OpenGL tours each passed all 152 samples. Linux WSLg passed 152 samples and all six CTest checks. A 160.75-second native 1080p60 preview passed complete video decoding and 13 source-audio comparisons with zero measured offset. See [verification](VERIFICATION.md) and [review](QUALITY_REVIEW.md) for the bounded scope.
 
-The owner has asked to hold the full 4K render. It has not started, and automatic film delivery is paused pending explicit instruction to resume.
+The owner resumed rendering. The full 4K60 export is complete and verified; automatic delivery remains active for the pending YouTube publication. See the verification report for exact evidence.

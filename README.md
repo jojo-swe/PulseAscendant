@@ -136,7 +136,7 @@ Chapter cuts consider measured attacks and persistent spectral changes within ±
 
 These checks cover the documented builds and samples; physical Linux hardware RT and full-show audience retention remain unverified. See the [verification report](docs/VERIFICATION.md), [independent review](docs/QUALITY_REVIEW.md) and [release checksums](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/SHA256SUMS.txt).
 
-> **Film status:** the v0.5 1080p60 preview is available now. The full v0.5 4K60 render is on hold at the owner's request. Earlier YouTube videos show earlier versions: [v0.4 Short](https://youtube.com/shorts/uOhjmoLY6DI) · [v0.3 full film](https://youtu.be/b5ShsKNC7KM).
+> **Film status:** the v0.5 1080p60 preview is available now. The full v0.5 4K60 export is complete and verified; YouTube publication is pending the earlier upload limit. Earlier YouTube videos show earlier versions: [v0.4 Short](https://youtube.com/shorts/uOhjmoLY6DI) · [v0.3 full film](https://youtu.be/b5ShsKNC7KM).
 
 ## Make it your own
 

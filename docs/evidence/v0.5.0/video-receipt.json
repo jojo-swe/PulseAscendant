@@ -1,0 +1,32 @@
+{
+  "version": "0.5.0",
+  "file": "PulseAscendant-v05-4K60.mp4",
+  "sha256": "a37e6645dcacbaf9b032ea517b7b2f23b1e60b1fd0ed5e6b9e9d5edfe8ef494e",
+  "bytes": 6712158215,
+  "source_commit": "624df31e24c4afbb7fe509e89372519d5c3addaf",
+  "producer_sha256": "67349d94218d540112fae1a924ecab32e2c4d13b01c1b73216cb64d655469e29",
+  "runtime_wav_sha256": "58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6",
+  "width": 3840,
+  "height": 2160,
+  "fps": "60/1",
+  "frames": 53321,
+  "duration_seconds": 888.683008,
+  "audio_duration_seconds": 888.68,
+  "rt_frames": 17396,
+  "rt_scope": "Act II only",
+  "full_video_decode": "PASS: ffmpeg CUDA-assisted decode to EOF, 53321 decoded frames, exit 0, no error output",
+  "decode_completed_utc": "2026-10-12T11:27:07.8279628Z",
+  "audio_windows": 18,
+  "minimum_audio_correlation": 0.9996179480233243,
+  "maximum_absolute_audio_offset_ms": 0.0,
+  "visual_samples_seconds": [
+    58,
+    110,
+    411,
+    651,
+    865
+  ],
+  "visual_scope": "Five full-aspect frames from the final encoded video inspected; no gross corruption or orientation error observed",
+  "acceptance_limit": "No full uninterrupted subjective listening or audience-retention acceptance",
+  "youtube_status": "Pending upload; earlier daily upload limit. Conservative retry not before 2026-10-13T02:10Z; not a verified reset time."
+}
