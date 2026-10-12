@@ -61,4 +61,14 @@ Exportören skriver exakt ceil(duration × fps) nativebilder och begränsar ljud
 
 Regressioner: 0,07 s vid 30 fps ger **3 bilder**, och 0,035 s vid 3840×2160/60 fps ger **3 bilder**, med korrekt ljudlängd. [30 fps metadata](evidence/v0.4.0/frame-rounding-30.json), [4K60 metadata](evidence/v0.4.0/frame-rounding-4k60.json). Exportören skyddar befintliga filer, kontrollerar native show-info och WAV-format/sampleantal samt slutnamnger endast efter metadata-PASS.
 
-Fullständig v0.4-video, nya paket och publicering verifieras separat när respektive slutartefakt finns; historiska v0.3-filer räknas inte som nya resultat.
+Fullständig v0.4-video renderas fortfarande; historiska v0.3-filer räknas inte som nya resultat. Exportens käll-/producenthash är dokumenterad separat från den senare interaktiva uppstartsändringen.
+
+## Paket och publicering
+
+[Offentlig v0.4.0-release](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.4.0), exakt käll-/byggcommit `cd67f402b8d623895bea2dafcb18fdc457987d97`. Windows- och Linuxpaketen startade från orelaterad arbetskatalog vid 42, 342 och 620 s efter förberedelse. Windows använde verklig ljuduppspelning med observerad RMS; Linux använde tyst reservklocka på WSLg.
+
+ZIP-filers CRC kontrollerades för alla poster. Källarkivet jämfördes med `git archive` av exakt byggcommit, inklusive exportens radslut, samt med alla tre original-MP3 och fyra WAV. Paketens nativebinärer, samtliga shader-/musikhashar och Linux körbehörighet verifierades. Alla åtta GitHub-assets har samma SHA-256 och storlek som lokala slutartefakter. [Paketreceipt](evidence/v0.4.0/release-receipt.json).
+
+[Nya offentliga trailern](https://youtube.com/shorts/uOhjmoLY6DI) är revision 4: 1080×1920, 60 fps, 1 920 bilder, 32 s och sju nativeklipp. Full GPU-assisterad videodekodning passerar. RT-rubriken visas enbart över akt II-klipp. Bildgranskning täcker motivens läsbarhet i vertikalt format; den garanterar inte viralitet. YouTube visar sparad offentlig synlighet, färdig HD-bearbetning och inga hittade upphovsrättsproblem vid uppladdningen. Suno-musiken är deklarerad i beskrivningen och AI-inställningen.
+
+Den nya fullvideons YouTube-publicering och ändringen av gamla fullvideon till olistad återstår tills slutexporten har verifierats. Gamla versioners publiceringsbevis återanvänds inte för dessa steg.

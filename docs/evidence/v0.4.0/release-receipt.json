@@ -1,0 +1,66 @@
+{
+  "version": "0.4.0",
+  "source_commit": "cd67f402b8d623895bea2dafcb18fdc457987d97",
+  "visual_source_commit": "faa0bf3b4a96dc4b380f822462024ee54a7eb9e2",
+  "media_producer": {
+    "path": "build/windows/Release/PulseAscendant.exe",
+    "sha256": "1b617ebade1b331db5d76b1a6dd7eb9cc4bbabba276c6348c32659bafb5fbe3c",
+    "scope": "Frozen graphics build used by 4K60 export and Short revision 4"
+  },
+  "windows_runtime_sha256": "b2f80ede1092a303039ec4796b70b3fc678d6a2562cc434bbcf5d78babb2127e",
+  "linux_runtime_sha256": "32817be3053b3d257b0e05442a815a5768a8b66281ef5ab204ecfdb4fdd042c1",
+  "runtime_wav_sha256": "58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6",
+  "tests": {
+    "windows_ctest": "6/6",
+    "linux_ctest": "6/6",
+    "rt_tour": 152,
+    "rt_tour_rt_frames": 42,
+    "fallback_tour": 152,
+    "wslg_tour": 152
+  },
+  "staged_launches": "42, 342 and 620 seconds from unrelated working directories; preparation before playback; Windows audio active, WSLg silent clock",
+  "review": "7.2/10 for inspected form variation, chapter development and readability; full audiovisual experience not accepted",
+  "archive_verification": {
+    "PulseAscendant-Windows-x64.zip": {
+      "entries": 100,
+      "crc": "all entries passed",
+      "content": "runtime and all shaders/music matched"
+    },
+    "PulseAscendant-source.zip": {
+      "entries": 173,
+      "crc": "all entries passed",
+      "content": "source commit and added audio matched"
+    },
+    "PulseAscendant-Linux-x64.tar.gz": {
+      "entries": 111,
+      "content": "ELF executable permission and runtime/shader/music hashes matched",
+      "paths": "no absolute or parent traversal paths"
+    }
+  },
+  "files": {
+    "PulseAscendant-Linux-x64.tar.gz": {
+      "sha256": "7bbcca9109c8a94a1d2aebc28daa9b206c101b8396cc3c2797dbbc36a821d4af",
+      "bytes": 173015568
+    },
+    "PulseAscendant-Short-1080x1920.json": {
+      "sha256": "95023f36ffcb5466beacaa7bb2d3f93a5c008f74007d6637b1bbc5adf1bc9f00",
+      "bytes": 4836
+    },
+    "PulseAscendant-Short-1080x1920.mp4": {
+      "sha256": "b5421c8150caa29ec80905eb97da57af84de7682dd9e11d753036d0aecb75d29",
+      "bytes": 75884546
+    },
+    "PulseAscendant-source.zip": {
+      "sha256": "df6866deae4c53dd80597063a96e3911dc7cc286dfa23ee5d188c998285394b3",
+      "bytes": 357870727
+    },
+    "PulseAscendant-Windows-x64.zip": {
+      "sha256": "4c6e350245370079d7dd1e4614009c7aa97612897211a05aa25082a5e2e1123f",
+      "bytes": 172702410
+    },
+    "SOURCE_COMMIT.txt": {
+      "sha256": "144f046ee9c5726bf3f06019891d9ce177c894c625e8a6c1bceb1d0a8ff31ff2",
+      "bytes": 42
+    }
+  }
+}

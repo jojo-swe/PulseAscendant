@@ -2,9 +2,9 @@
 
 Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara akter, 16 världar, 76 kapitel och 14:48,68 musik**. Varje återkomst till en värld har nu eget scenförlopp. Akt II använder Vulkan-hårdvaruraytracing på kompatibla grafikkort; akt I och III använder procedurala OpenGL-världar.
 
-[Hela demot i 4K60](https://youtu.be/b5ShsKNC7KM) · [Releaser](https://github.com/jojo-swe/PulseAscendant/releases/latest) · [32 sekunders trailer](https://youtube.com/shorts/TYgXs76yKls) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
+[Ladda ned v0.4](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.4.0) · [Ny 32 sekunders trailer](https://youtube.com/shorts/uOhjmoLY6DI) · [Föregående fullvideo (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
 
-**v0.4 gör om regin:** skilda återkomster, sammanhängande kameravägar och engångshändelser på uppmätta musikaccenter. Länkad fullvideo och trailer visar ännu v0.3. Dess tekniska granskning bevisade inte underhållningsvärdet; publikens kritik utlöste omarbetningen. Se [omtaget](VARIATION_REWORK.md) och [aktuell verifiering](VERIFICATION.md).
+**v0.4 gör om regin:** skilda återkomster, sammanhängande kameravägar och engångshändelser på uppmätta musikaccenter. Paketen och den nya trailern visar v0.4; hela dess 4K60-film renderas fortfarande. Föregående fullvideo visar v0.3, vars tekniska granskning inte bevisade underhållningsvärdet; publikens kritik utlöste omarbetningen. Se [omtaget](VARIATION_REWORK.md) och [aktuell verifiering](VERIFICATION.md).
 
 ## Kör
 

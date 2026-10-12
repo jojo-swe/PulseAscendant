@@ -8,9 +8,9 @@ Pulse Ascendant är ett fristående tre akter långt demo med egen identitet, 16
 | --- | --- | --- |
 | `TUNNELI/TUN10.PAS`, `TUNNELI/TUNN.PAS` | Ringar med sinusförskjuten mittpunkt och perspektiv genom division med djup | `scene_math.cpp` skapar 160 × 96 punkter med nya frekvenser och hastigheter. `corridor.frag` sphere-tracar en böjd vägg; `tunnel.*` rasteriserar ljuspartiklar. |
 | `PLZPART/PLZ.C`, `PLZSINI` | Summerade sinusfält, modulerade koordinater och rörliga faser | `sculpture.frag` använder nya 3D-frekvenser på en gyroid med skuggning, AO, frekvensstyrda ådror och golvreflektion. Originalets tabeller och VGA-paletter kopieras inte. |
-| `GLENZ/MAIN.C`, `points[]`, `epolys[]` | Samma 14 normaliserade vertexpositioner och 24 trianglar | `glenzMesh` behåller geometrin. `engine.frag` kombinerar analytiska facettplan, brytande glas och tre metallringar. Retro använder rasteriserade facetter. |
+| `GLENZ/MAIN.C`, `points[]`, `epolys[]` | Samma 14 normaliserade vertexpositioner och 24 trianglar | `glenzMesh` behåller geometrin i retroläget. Moderna `engine.frag` använder eget mekaniskt formspråk med buröppning, kanon, modulmontering, bladkatedral och uppskjutning. |
 
-Fem ytterligare akt I-världar saknar direkt motsvarande originalkod: `city.frag`, `structure.frag`, `cosmic.frag`, `ocean.frag` och `armada.frag`. `flight.vert` och `swarm.vert` skapar samtidiga spår från vertex-ID. `spectrum.vert` bygger 96 frekvensstyrda trådmodellsstaplar i fyra kransar. Dessa OpenGL-partikellager har inte full djupocklusion mot de raymarchade SDF-världarna.
+Fem ytterligare akt I-världar saknar direkt motsvarande originalkod: `city.frag`, `structure.frag`, `cosmic.frag`, `ocean.frag` och `armada.frag`. Äldre `swarm.*` och `spectrum.vert` bevaras i källan, men de generiska overlaylagren används inte i v0.4. Sena korridoren behåller en begränsad mängd tunnelpartiklar och spår via `flight.vert`. Dessa lager har inte full djupocklusion mot SDF-världen.
 
 ## Tre akter och en ljudklocka
 
