@@ -3,6 +3,17 @@
   "duration": 888.68,
   "act2_start_frame": 14400000,
   "act3_start_frame": 28316160,
-  "sha256": "58ca253cb4c427c0aa89f96e9cd4e12efb02ee8852ea75fd2cac0159321b2ea6",
-  "runtime_file": "assets/music/second-reality-three-acts.wav"
+  "sha256": "d6cef27742d64495f30f54a902f9d7913e705fe9bee6cb1d87ba63c6534d8827",
+  "runtime_file": "assets/music/second-reality-three-acts.wav",
+  "transition_method": "2s equal-power fades plus short decaying outgoing echo tail; original sample clocks and source tracks retained",
+  "bridge_windows_frames": [
+    [
+      14304000,
+      14496000
+    ],
+    [
+      28220160,
+      28412160
+    ]
+  ]
 }

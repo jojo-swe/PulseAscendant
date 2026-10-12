@@ -76,6 +76,19 @@ int main() {
             <<", strong bass="<<strongTravel/strongTravelCount<<"; global range="<<lowSpeed<<".."<<highSpeed<<'\n';
   }
   auto bandsBefore=sampleTimeline(100).spectrum,bandsAfter=sampleTimeline(100.05).spectrum,bandsMiddle=sampleTimeline(100.025).spectrum;
+  // A camera's normalized forward speed must not jump on individual drum hits.
+  // Check real soundtrack data at output cadence, excluding editorial cuts.
+  double cameraSpeedStep=0;
+  for(double t=1;t<showDuration()-1;t+=1./60){
+   auto a=sampleTimeline(t),b=sampleTimeline(t+1./60),c=sampleTimeline(t+2./60);
+   if(a.chapter==c.chapter){
+    double speed0=(b.cameraProgress-a.cameraProgress)*a.chapterDuration*60;
+    double speed1=(c.cameraProgress-b.cameraProgress)*a.chapterDuration*60;
+    cameraSpeedStep=std::max(cameraSpeedStep,std::abs(speed1-speed0));
+   }
+  }
+  std::cout<<"Maximum camera speed step at60fps: "<<cameraSpeedStep<<'\n';
+  CHECK(cameraSpeedStep<.08);
   for(size_t i=0;i<24;++i)CHECK(std::abs(bandsMiddle[i]-(bandsBefore[i]+bandsAfter[i])*.5f)<.0001f);
   for(int scene=0;scene<16;++scene)CHECK(sampleTimeline(sceneStart(scene)+.001).scene==scene);
   std::array<int,16> visits{};

@@ -695,25 +695,25 @@ void cameraDirection(out vec3 eye,out vec3 target,out float focal){
  if(uScene==12){
   if(uVariant==0){eye=vec3(13.-progress*6.,2.4+progress*3.,20.-progress*5.);target=vec3(0,2.5+progress*2.,0);}
   else if(uVariant==1){eye=vec3(11.5,1.1+progress*2.,9.-progress*9.);target=vec3(0,2.3,-progress*7.);focal=1.45;}
-  else if(uVariant==2){float z=8.-uTravelTime*15.;eye=vec3(sin(z*.075)*2.2,1.05,z);target=vec3(sin((z-12.)*.075)*2.2,1.5,z-12.);focal=1.2;}
+  else if(uVariant==2){float z=8.-uCameraTime*15.;eye=vec3(sin(z*.075)*2.2,1.05,z);target=vec3(sin((z-12.)*.075)*2.2,1.5,z-12.);focal=1.2;}
   else if(uVariant==3){eye=vec3(14.-progress*5.,5.+progress*5.,20.-progress*3.);target=vec3(0,3.5,0);}
-  else if(uVariant==4){eye=vec3(10.-progress*4.,2.5+progress*2.,12.-uTravelTime*8.);target=vec3(0,2.8,eye.z-8.);focal=1.4;}
+  else if(uVariant==4){eye=vec3(10.-progress*4.,2.5+progress*2.,12.-uCameraTime*8.);target=vec3(0,2.8,eye.z-8.);focal=1.4;}
   else{float launch=smoothstep(.15,.9,uAction);eye=vec3(19.-progress*4.,7.+progress*13.,24.-progress*10.);target=vec3(0,3.+launch*launch*30.,0);focal=1.3;}
  }else if(uScene==13){
   if(uVariant==0){eye=vec3(7.-progress*2.,2.2+progress*3.,12.-progress*3.);target=vec3(0,.3+development()*3.,0);}
   else if(uVariant==1){eye=vec3(8.-progress*2.,2.+progress*8.,11.-progress*3.);target=vec3(0,1.+progress*9.,0);focal=1.4;}
-  else if(uVariant==2){float z=8.-uTravelTime*17.;eye=vec3(sin(z*.1)*.6,0.,z);target=vec3(0,0.,z-12.);focal=1.2;}
+  else if(uVariant==2){float z=8.-uCameraTime*17.;eye=vec3(sin(z*.1)*.6,0.,z);target=vec3(0,0.,z-12.);focal=1.2;}
   else if(uVariant==3){eye=vec3(1.8-progress*.9,3.4,12.-progress*1.5);target=vec3(0,0.,0);focal=1.8;}
   else if(uVariant==4){eye=vec3(20.-progress*10.,16.+progress*3.,22.-progress*8.);target=vec3(0,2.,0);focal=1.45;}
   else{eye=vec3(3.,8.-progress*2.,18.+progress*4.);target=vec3(0,3.4,0);focal=1.45;}
  }else if(uScene==14){
   if(uVariant==0){eye=vec3(20.-progress*7.,12.+progress*5.,25.-progress*6.);target=vec3(0,-1.+uAction*4.,0);focal=1.4;}
-  else if(uVariant==1){float z=24.-progress*88.;eye=vec3(0,12.+z*.375,z);target=vec3(sin(floor((z-15.)/8.)*1.7)*4.,5.+(z-15.)*.375,z-15.);focal=1.2;}
+  else if(uVariant==1){float z=24.-progress*88.;eye=vec3(0,12.+z*.375,z);target=vec3(sin(((z-15.)/8.)*1.7)*4.,5.+(z-15.)*.375,z-15.);focal=1.2;}
   else if(uVariant==2){eye=vec3(3.-progress*3.,8.-progress*4.,23.-progress*12.);target=vec3(0,0,0);focal=1.4;}
   else if(uVariant==3){eye=vec3(18.-progress*5.,6.+progress*10.,25.-progress*4.);target=vec3(0,3.+uAction*8.,0);focal=1.45;}
   else{eye=vec3(sin(progress*PI)*1.5,2.,17.-progress*15.);target=vec3(0,2.,-25.);focal=1.25;}
  }else{
-  if(uVariant==0){eye=vec3(sin(progress*PI)*1.5,1.2+progress*1.3,22.-uTravelTime*7.5);target=eye+vec3(0,1.,-12.);focal=1.3;}
+  if(uVariant==0){eye=vec3(sin(progress*PI)*1.5,1.2+progress*1.3,22.-uCameraTime*7.5);target=eye+vec3(0,1.,-12.);focal=1.3;}
   else if(uVariant==1){eye=vec3(3.-progress*3.,10.-progress*4.,18.-progress*3.);target=vec3(0,3.,0);focal=1.55;}
   else if(uVariant==2){eye=vec3(4.-progress*4.,5.+progress*3.,24.-progress*6.);target=vec3(0,4.,0);focal=1.5;}
   else if(uVariant==3){eye=vec3(26.-progress*12.,20.+progress*5.,28.-progress*10.);target=vec3(0,3.,0);focal=1.25;}
@@ -726,9 +726,8 @@ void main(){
  vec2 p=(vUV-.5)*vec2(uResolution.x/max(uResolution.y,1.),1.);
  vec3 eye,target;float focal;cameraDirection(eye,target,focal);
  bool quiet=uScene==13&&uVariant==3||uScene==15&&uVariant>=6;
- float shake=quiet?0.:.0012;
- p+=vec2(sin(uTime*29.),cos(uTime*23.))*uHit*shake;
- if(uScene==12&&uVariant==2||uScene==13&&uVariant==2)p=rot(sin(uTravelTime*.45)*.1)*p;
+ cinematicRig(eye,target,quiet?.12:.45);p=rot(cinematicBank())*p;
+ if(uScene==12&&uVariant==2||uScene==13&&uVariant==2)p=rot(sin(uCameraTime*.25)*.045)*p;
  vec3 ray=cameraBasis(eye,target)*normalize(vec3(p,musicLens(focal)));
  float visibleDistance;
  vec3 c=renderWorld(eye,ray,visibleDistance)*(1.+.025*uCut);

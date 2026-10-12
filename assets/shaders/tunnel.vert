@@ -5,7 +5,7 @@ out vec3 vColor; out float vAlpha;
 #include "common.glsl"
 void main() {
  float z=aParticle.z;
- vec2 p=rot(-flightBank(uTime))*(aParticle.xy-flightOffset(uTime))/z*(1.65-uDrive*.5-uHit*.04);
+ vec2 p=rot(-flightBank(uCameraTime))*(aParticle.xy-flightOffset(uCameraTime))/z*1.65;
  p.x*=uResolution.y/uResolution.x;
  gl_Position=vec4(p,0.,1.);
  gl_PointSize=clamp(uResolution.y*.028/z*(uRetro==1?.7:1.4),1.,32.);

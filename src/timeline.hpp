@@ -4,7 +4,7 @@
 namespace remix {
 struct TimelineFrame {
  int act=1,scene=0,chapter=0,shot=0,variant=0;
- double actSeconds=0,localSeconds=0,motionSeconds=0,travelSeconds=0,accentSeconds=0,chapterDuration=0;
+ double actSeconds=0,localSeconds=0,motionSeconds=0,travelSeconds=0,cameraSeconds=0,accentSeconds=0,chapterDuration=0;
  float cameraProgress=0;
  float transition=1,progress=0,chapterProgress=0,event=0,action=0,drive=0,bass=0,hit=0,energy=0,cut=0;
  float kick=0,snare=0,treble=0,pulsePhase=0;

@@ -57,10 +57,10 @@ vec3 wallNormal(vec3 p){vec2 e=vec2(.006,0);return normalize(vec3(corridor(p+e.x
 void main(){
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  // The camera travels toward an exit once. Its progress does not reset inside a chapter.
- float z=uTravelTime*(uVariant==2?16.:21.)+k*k*24.;
+ float z=uCameraTime*(uVariant==2?16.:21.)+k*k*24.;
  vec3 ro=vec3(centre(z)+vec2(sin(k*PI)*.32,cos(k*PI)*.16),z);
  p=rot(sin(k*PI*2.)*(uVariant==3?.22:.09))*p;
- vec3 target=vec3(centre(z+24.),z+24.);vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(1.32)));
+ vec3 target=vec3(centre(z+24.),z+24.);cinematicRig(ro,target,.18);p=rot(cinematicBank())*p;vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(1.32)));
  float t=.03,volume=0.;bool found=false;vec2 h=vec2(0.);
  for(int i=0;i<104;i++){
   vec3 at=ro+rd*t;h=corridor(at);float ds=clamp(h.x,.012,1.5);

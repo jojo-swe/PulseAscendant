@@ -206,7 +206,9 @@ void main() {
  else if(uVariant==3)ro=vec3(4.7,2.3+k,5.4-k*.7);
  else if(uVariant>=4)ro=vec3(4.5-k*.6,2.8+k*.4,5.5);
  else ro=vec3(4.0-k*.6,1.7+k*.3,4.4);
- vec3 rd=cameraBasis(ro,vec3(0,uVariant>=4?.8:0.,0))*normalize(vec3(p,musicLens(1.7)));
+ ro.xz=rot((k-.5)*.55)*ro.xz;vec3 target=vec3(0,uVariant>=4?.8:0.,0);
+ cinematicRig(ro,target,1.1);p=rot(cinematicBank())*p;
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(1.7)));
  float t=0.,glow=0.;vec2 hit=vec2(0);bool found=false;
  int steps=uRetro==1?64:112;
  for(int i=0;i<112;i++) {

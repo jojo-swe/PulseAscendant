@@ -70,7 +70,7 @@ void main(){
  // Each return has a different dominant composition and a clear, finite camera path.
  vec3 ro,target;float lens=1.5;
  if(uVariant==0){
-  ro=vec3(sin(k*PI)*.8,2.3+k*.65,uTravelTime*8.+4.);
+  ro=vec3(sin(k*PI)*.8,2.3+k*.65,uCameraTime*8.+4.);
   target=ro+vec3(1.5,-.8,20.);
  }else if(uVariant==1){
   // Safely above all island geometry, looking down across a large central split island.
@@ -81,6 +81,7 @@ void main(){
   ro=vec3(8.-k*14.,3.4+k*.5,13.-k*2.);
   target=vec3(0,6.9+uAction*.6,-1.);lens=1.35;
  }
+ cinematicRig(ro,target,1.1);p=rot(cinematicBank())*p;
  vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(lens)));
  float t=.02;vec2 h;bool found=false;
  for(int i=0;i<112;i++){h=scene(ro+rd*t);if(h.x<.006){found=true;break;}t+=clamp(h.x,.008,2.);if(t>160.)break;}

@@ -58,6 +58,32 @@ double musicalMotion(int act,double t){
  const size_t i=size_t(at),j=std::min(i+1,values.size()-1);return values[i]+(values[j]-values[i])*(at-i);
 }
 struct Direction {int variant=0;double motionStart=0,duration=0,accent=0;};
+double cameraMotion(int act,double t){
+ // A separate camera dolly clock: 650ms velocity damping, not an optical
+ // response to each drum transient. Precomputed integration makes arbitrary
+ // seeking and offline rendering identical to continuous playback.
+ static const auto integrals=[](){
+  std::array<std::vector<double>,3> out;
+  const double blend=1-std::exp(-1./(reactivity_data::rate*.65));
+  for(int a=1;a<=3;++a){
+   const int count=reactivity_data::offsets[a]-reactivity_data::offsets[a-1];
+   auto& values=out[a-1];values.resize(count+1);
+   double speed=1.8+1.2*envelope(a,0,0),previous=speed;
+   for(int i=1;i<=count;++i){
+    double at=double(i)/reactivity_data::rate,low=pulse(a,at,0),mid=pulse(a,at,1);
+    const double target=1.8+1.2*envelope(a,at,0)+.9*low*low+.3*mid*mid;
+    speed+=(target-speed)*blend;
+    values[i]=values[i-1]+(speed+previous)*.5/reactivity_data::rate;
+    previous=speed;
+   }
+  }
+  return out;
+ }();
+ const auto& values=integrals[act-1];
+ const double at=std::clamp(t*reactivity_data::rate,0.,double(values.size()-1));
+ const size_t i=size_t(at),j=std::min(i+1,values.size()-1);
+ return values[i]+(values[j]-values[i])*(at-i);
+}
 const auto& directions(){
  // Seeking samples the same integrated motion and one-time stage action.
  static const auto result=[](){
@@ -121,9 +147,11 @@ TimelineFrame sampleTimeline(double seconds){
  // Local machinery/fly-through clock: no absolute-time multiplication or jumps.
  // Camera paths still arrive at their authored endpoint exactly on the cut.
  f.travelSeconds=local*1.25+musicalDelta;
- const double travelEnd=direction.duration*1.25+musicalMotion(f.act,actOffset+direction.duration)-musicalMotion(f.act,actOffset);
- f.cameraProgress=float(std::clamp(f.travelSeconds/travelEnd,0.,1.));
+ f.cameraSeconds=cameraMotion(f.act,f.actSeconds)-cameraMotion(f.act,actOffset);
+ const double cameraEnd=cameraMotion(f.act,actOffset+direction.duration)-cameraMotion(f.act,actOffset);
+ f.cameraProgress=float(std::clamp(f.cameraSeconds/cameraEnd,0.,1.));
  f.cut=float(std::exp(-local*8.));
- f.transition=float(std::clamp(std::min(f.actSeconds,actDuration(f.act)-f.actSeconds),0.,1.));return f;
+ const float fade=float(std::clamp(std::min(f.actSeconds,actDuration(f.act)-f.actSeconds)/1.6,0.,1.));
+ f.transition=fade*fade*(3-2*fade);return f;
 }
 }

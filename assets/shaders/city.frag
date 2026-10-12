@@ -9,7 +9,7 @@ vec2 city(vec3 p){
  float lane=abs(cell.x)<1.?0.:1.;
  if(uVariant==0){
   // Street-level neon towers grow in a wave ahead of the ascending camera.
-  float build=smoothstep(.0,.8,k*.25+uAction*.75+(p.z-uTravelTime*24.)*.006);
+  float build=smoothstep(.0,.8,k*.25+uAction*.75+(p.z-uCameraTime*24.)*.006);
   h*=.65+build*.5;b=box(vec3(q.x,p.y-h*.5,q.y),vec3(2.3,h*.5,2.4));
   float crown=box(vec3(q.x,p.y-h-.65,q.y),vec3(1.6,.65,1.7));b=min(b,crown);
  }else if(uVariant==1){
@@ -82,7 +82,7 @@ void main(){
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  vec3 ro,target;float lens=1.35;
  if(uVariant==0){
-  float travel=uTravelTime*24.;
+  float travel=uCameraTime*24.;
   ro=vec3(sin(k*PI)*1.2,1.5+smoothstep(.35,.95,k)*8.,travel);
   target=ro+vec3(-sin(k*PI)*.6,1.2,22.);
  }else if(uVariant==1){
@@ -94,9 +94,10 @@ void main(){
   ro=vec3(-24.+k*48.,6.2+k*1.4,4.);
   target=vec3(0,15.+uAction*2.,27.);lens=1.25;
  }else{
-  float travel=uTravelTime*29.;ro=vec3(sin(k*PI)*1.2,16.+k*12.,travel);
+  float travel=uCameraTime*29.;ro=vec3(sin(k*PI)*1.2,16.+k*12.,travel);
   target=ro+vec3(-sin(k*PI)*.6,-1.5,22.);
  }
+ cinematicRig(ro,target,.4);p=rot(cinematicBank())*p;
  vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(lens)));
  vec3 sky=mix(vec3(.005,.009,.025),uVariant==1?vec3(.14,.085,.045):vec3(.07,.015,.11),exp(-abs(rd.y)*3.));
  if(uVariant==3)sky+=vec3(.02,.07,.1)*max(rd.y+.3,0.);

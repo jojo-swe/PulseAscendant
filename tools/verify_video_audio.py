@@ -23,12 +23,19 @@ def main():
     parser.add_argument('--video', type=Path, required=True)
     parser.add_argument('--wav', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--manifest', type=Path, help='Preview montage clip starts/durations; otherwise check the full show')
     args = parser.parse_args()
-    windows = [2, 42, 110, 220, 298, 300, 342, 410, 500, 582, 588, 590,
-               620, 710, 815, 846, 880, 886]
+    windows = [(t,t) for t in [2, 42, 110, 220, 298, 300, 342, 410, 500, 582, 588, 590,
+               620, 710, 815, 846, 880, 886]]
+    if args.manifest:
+        windows, cursor = [], 0
+        for clip in json.loads(args.manifest.read_text())['clips']:
+            for offset in (.5, clip['duration']-2.5):
+                windows.append((clip['start']+offset, cursor+offset))
+            cursor += clip['duration']
     observations = []
-    for start in windows:
-        reference = decode(args.wav, start, 2)
+    for source_start, start in windows:
+        reference = decode(args.wav, source_start, 2)
         actual = decode(args.video, start, 2)
         # Exclude resampling/codec edge transients, then search +/-25 ms.
         margin, radius = 400, 200
@@ -45,12 +52,12 @@ def main():
         norms = np.sqrt(np.maximum(0., squares[n:]-squares[:-n]-(sums[n:]-sums[:-n])**2/n))
         scores = dots / np.maximum(1e-15, np.sqrt(np.sum(center*center))*norms)
         best = int(np.argmax(scores))
-        observation = dict(start=start, duration=2, correlation=float(scores[best]),
+        observation = dict(start=start, source_start=source_start, duration=2, correlation=float(scores[best]),
                            offset_ms=(best-radius)/8, rms=float(np.sqrt(np.mean(center**2))))
         observation['pass'] = observation['correlation'] >= .98 and abs(observation['offset_ms']) <= 2
         observations.append(observation)
     result = dict(video=str(args.video), wav=str(args.wav), sample_rate=8000,
-                  scope='Decoded mono correlation at 18 two-second windows; not full subjective listening',
+                  scope=f'Decoded mono correlation at {len(windows)} two-second windows; not full subjective listening',
                   observations=observations, passed=all(o['pass'] for o in observations))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2)+'\n', encoding='utf-8')

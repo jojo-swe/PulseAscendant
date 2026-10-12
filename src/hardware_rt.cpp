@@ -623,14 +623,24 @@ struct HardwareRT::Impl {
    float y=world==4?6.f:(world==5?6.5f:8.f);eye={std::sin(a)*r,y+std::sin(t*.17f)*1.5f,std::cos(a)*r};target={0,world==4?2.7f:(world==5?3.5f:3.4f),0};
   }
   if(world<4){
-   // A continuous lateral arc reveals depth around the hero; fly-throughs keep
-   // their clear aisle. Measured attacks drive optical push, without camera shake.
+   // Directed lateral truck/crane/dolly; fly-throughs retain their clear aisle.
+   // Camera progress is damped independently of raw object/lighting transients.
    if(world!=1 && !(world==0&&(variant==1||variant==5)) && !(world==3&&variant==4)){
     const float arc=std::sin(cp*pi);
-    eye=eye+V3{arc*(variant%2?-3.5f:3.5f),arc*1.5f,arc*2.f};
+    eye=eye+V3{(variant%2?-1.f:1.f)*(cp-.5f)*5.5f,arc*1.5f,cp*2.f};
    }
   }
+  if(world<4){
+   V3 forward=norm(target-eye),right=norm(cross(forward,{0,1,0})),up=cross(right,forward);
+   const float distance=std::sqrt(dot(target-eye,target-eye));
+   const float reach=std::min(distance*.12f,world==1?.18f:.8f),side=variant%2?-1.f:1.f,arc=std::sin(cp*pi);
+   eye=eye+right*(side*reach*(2*cp-1))+up*(reach*.45f*arc)+forward*(reach*.8f*cp);
+   target=target+right*(side*reach*.18f*(2*cp-1))+up*(reach*.08f*arc);
+  }
   V3 forward=norm(target-eye),right=norm(cross(forward,{0,1,0})),up=cross(right,forward);
+  const float bank=world<4?.025f*std::sin(cp*pi)*std::sin(cp*pi*2+variant*.6f):0;
+  V3 bankRight=right*std::cos(bank)-up*std::sin(bank);
+  up=right*std::sin(bank)+up*std::cos(bank);right=bankRight;
   Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;result.pulse[0]=f.kick;result.pulse[1]=f.snare;result.pulse[2]=treble;result.pulse[3]=f.pulsePhase;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
  }
  const float* render(const TimelineFrame& f,int w,int h){

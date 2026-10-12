@@ -279,6 +279,7 @@ void main(){
  }else{
   if(v==0){eye=mix(vec3(13,7,-19),vec3(9,9,-17),p);target=vec3(0,4,0);}else if(v==1){eye=mix(vec3(-19,12,-25),vec3(-14,10,-20),p);target=vec3(3,3,0);}else if(v==2){eye=mix(vec3(-14,8,-19),vec3(-11,6,-16),p);target=vec3(0,4,0);}else if(v==3){eye=mix(vec3(7,7,-25),vec3(-3,10,-31),p);target=vec3(0,4,0);}else{eye=vec3(0,2.2+2.3*p,-28.+66.*p);target=eye+vec3(0,.8,20);}
  }
- if(world!=1 && !(world==0&&(v==1||v==5)) && !(world==3&&v==4))eye+=sin(p*PI)*vec3(v%2==0?3.5:-3.5,1.5,2.);
- vec2 uv=(vUV-.5)*vec2(uResolution.x/uResolution.y,1.);vec3 ray=cameraBasis(eye,target)*normalize(vec3(uv,musicLens(1.55)));color=vec4(traceScene(eye,ray),1);
+ if(world!=1 && !(world==0&&(v==1||v==5)) && !(world==3&&v==4))eye+=vec3((v%2==0?1.:-1.)*(p-.5)*5.5,sin(p*PI)*1.5,p*2.);
+ cinematicRig(eye,target,world==1?.18:.8);
+ vec2 uv=(vUV-.5)*vec2(uResolution.x/uResolution.y,1.);uv=rot(cinematicBank())*uv;vec3 ray=cameraBasis(eye,target)*normalize(vec3(uv,musicLens(1.55)));color=vec4(traceScene(eye,ray),1);
 }

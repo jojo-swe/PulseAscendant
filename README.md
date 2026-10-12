@@ -20,8 +20,9 @@ Procedural worlds. Moving machinery. Stellar storms. Hardware ray tracing.
 
 ---
 
-**Source preview v0.6:** stronger musical acceleration, faster travel and machinery,
-and more visible bass-driven geometry. [What changed and how it was checked](docs/KINETIC_REWORK.md).
+**Source preview v0.7:** steadier cinematic fly-throughs, physical dolly/crane
+parallax and gentler song boundaries. Beat-driven geometry retains its energy,
+with fixed per-shot camera lenses. [Camera and music changes](docs/CINEMATIC_CAMERA.md).
 The download buttons above still refer to the published v0.5 release.
 
 | Three acts | Sixteen worlds | Seventy-six chapters | One continuous soundtrack |

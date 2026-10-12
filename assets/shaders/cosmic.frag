@@ -78,6 +78,7 @@ void main(){
  else if(uVariant==2){ro=vec3(5.3-k*1.2,2.2,4.8);p=rot(-.22)*p;}
  else if(uVariant==3)ro=vec3(.8,5.8-k*1.3,5.7);
  else{ro=vec3(sin(k*PI)*.23,cos(k*PI)*.23,5.);target=ro+vec3(0,0,-12.);p=rot(k*.35)*p;}
+ cinematicRig(ro,target,.55);p=rot(cinematicBank())*p;
  vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(uVariant==4?1.15:1.65)));
  vec3 c=vec3(.001,.003,.011);float transmission=1.;
  int count=uRetro==1?48:96;

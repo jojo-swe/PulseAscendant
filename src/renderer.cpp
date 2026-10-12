@@ -110,6 +110,7 @@ void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  gl::Uniform1f(gl::GetUniformLocation(p,"uChapterProgress"),frame_.chapterProgress);
  gl::Uniform1f(gl::GetUniformLocation(p,"uChapterTime"),float(frame_.localSeconds));
  gl::Uniform1f(gl::GetUniformLocation(p,"uTravelTime"),float(frame_.travelSeconds));
+ gl::Uniform1f(gl::GetUniformLocation(p,"uCameraTime"),float(frame_.cameraSeconds));
  gl::Uniform1f(gl::GetUniformLocation(p,"uCameraProgress"),frame_.cameraProgress);
  gl::Uniform1f(gl::GetUniformLocation(p,"uAccentTime"),float(frame_.accentSeconds));
  gl::Uniform1f(gl::GetUniformLocation(p,"uChapterDuration"),float(frame_.chapterDuration));
@@ -141,7 +142,7 @@ void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
   catch(const std::exception& e){if(rtRequired_)throw;rtStatus_=e.what();std::cerr<<"RT stopped; OpenGL fallback: "<<rtStatus_<<'\n';rt_.reset();uniforms(p,seconds,frame.scene,retro);quad(p);}
  }else{uniforms(p,seconds,frame.scene,retro);quad(p);}
  if(frame.scene==0&&frame.variant>=3) {
-  auto dots=makeTunnel(frame.motionSeconds);uniforms(particle_,seconds,0,retro);
+  auto dots=makeTunnel(frame.cameraSeconds);uniforms(particle_,seconds,0,retro);
   gl::BindVertexArray(vao_);gl::BindBuffer(GL_ARRAY_BUFFER,buffer_);
   gl::BufferData(GL_ARRAY_BUFFER,dots.size()*sizeof(Particle),dots.data(),GL_STREAM_DRAW);
   gl::EnableVertexAttribArray(0);gl::VertexAttribPointer(0,4,GL_FLOAT,GL_FALSE,sizeof(Particle),nullptr);

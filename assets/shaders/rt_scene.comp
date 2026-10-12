@@ -127,7 +127,7 @@ vec3 shade(Hit hit,vec3 ray,Object material,vec2 pixel){
 }
 vec3 samplePixel(vec2 pixel,vec2 extent){
  vec2 uv=(pixel-extent*.5)/extent.y;
- vec3 ray=normalize(u.forward.xyz*(1.55*(1.+u.pulse.x*.14+u.pulse.y*.045))+u.right.xyz*uv.x+u.up.xyz*uv.y),origin=u.eye.xyz;
+ vec3 ray=normalize(u.forward.xyz*1.55+u.right.xyz*uv.x+u.up.xyz*uv.y),origin=u.eye.xyz;
  vec3 color=vec3(0),throughput=vec3(1);
  for(int bounce=0;bounce<5;bounce++){
   Hit hit;if(!trace(origin,ray,hit)){color+=throughput*sky(ray);throughput=vec3(0);break;}

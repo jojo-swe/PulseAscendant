@@ -49,10 +49,11 @@ vec2 structure(vec3 p){
 vec3 normalAt(vec3 p){vec2 e=vec2(.004,0);return normalize(vec3(structure(p+e.xyy).x-structure(p-e.xyy).x,structure(p+e.yxy).x-structure(p-e.yxy).x,structure(p+e.yyx).x-structure(p-e.yyx).x));}
 void main(){
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
- float speed=uVariant==1?19.:25.,z=uTravelTime*speed;
+ float speed=uVariant==1?19.:25.,z=uCameraTime*speed;
  float bank=uVariant==3?k*.35:sin(k*PI)*.08;
  p=rot(bank)*p;vec3 ro=vec3(sin(k*PI)*.5,uVariant==1?-.8:0.,z);
- vec3 rd=cameraBasis(ro,ro+vec3(-sin(k*PI)*.2,uVariant==2?sin(k*PI)*.4:0.,20.))*normalize(vec3(p,musicLens(1.3)));
+ vec3 target=ro+vec3(-sin(k*PI)*.2,uVariant==2?sin(k*PI)*.4:0.,20.);cinematicRig(ro,target,.18);p=rot(cinematicBank())*p;
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(1.3)));
  float t=.03,glow=0.;vec2 h;bool hit=false;
  for(int i=0;i<112;i++){
   h=structure(ro+rd*t);float ds=clamp(h.x*.65,.006,1.1);

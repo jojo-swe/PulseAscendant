@@ -38,8 +38,8 @@ vec2 fighter(vec3 q,float wing){
  float engine=max(length(q.xy)-(.10+uPulse.x*.12),abs(q.z+2.25)-(.65+uPulse.x*1.8));
  return engine<ship?vec2(engine,2.):vec2(ship,1.);
 }
-vec3 flagshipTarget(){return vec3(1.8*sin(uChapterProgress*PI),-4.+uChapterProgress*1.5,uTravelTime*9.+34.-uChapterProgress*9.);}
-vec3 pursuitTarget(){return vec3(sin(uChapterProgress*PI)*2.,.5+uAction*1.8,uTravelTime*23.+13.);}
+vec3 flagshipTarget(){return vec3(1.8*sin(uChapterProgress*PI),-4.+uChapterProgress*1.5,uCameraTime*9.+34.-uChapterProgress*9.);}
+vec3 pursuitTarget(){return vec3(sin(uChapterProgress*PI)*2.,.5+uAction*1.8,uCameraTime*23.+13.);}
 vec3 fleetCell(vec3 p){
  if(uVariant==3)return p-pursuitTarget();
  if(uVariant==1)return p-vec3(0,0,28.);
@@ -108,10 +108,11 @@ vec3 normalAt(vec3 p){vec2 e=vec2(.005,0);return normalize(vec3(fleet(p+e.xyy).x
 void main(){
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  vec3 ro,target;
- if(uVariant==0){ro=vec3(-3.+k*6.,2.8,uTravelTime*9.);target=flagshipTarget()+vec3(0,2.,2.);}
+ if(uVariant==0){ro=vec3(-3.+k*6.,2.8,uCameraTime*9.);target=flagshipTarget()+vec3(0,2.,2.);}
  else if(uVariant==1){ro=vec3(21.-k*4.,9.-k*2.,-9.+k*36.);target=vec3(0,1.,26.+k*5.);}
- else if(uVariant==2){ro=vec3(0,.7,uTravelTime*16.);target=ro+vec3(0,.3,20.);}
+ else if(uVariant==2){ro=vec3(0,.7,uCameraTime*16.);target=ro+vec3(0,.3,20.);}
  else{ro=pursuitTarget()+vec3(1.2-k*.4,.8,-6.);target=pursuitTarget()+vec3(0,0,3.);p=rot(sin(k*PI)*.12)*p;}
+ cinematicRig(ro,target,.65);p=rot(cinematicBank())*p;
  vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(1.35)));
  float t=.03,glow=0.;vec2 h;bool found=false;
  for(int i=0;i<128;i++){h=fleet(ro+rd*t);float ds=clamp(h.x*.75,.008,1.5);if(h.y>1.5&&h.y<2.5)glow+=exp(-abs(h.x)*12.)*ds;if(h.x<.004){found=true;break;}t+=ds;if(t>125.)break;}
