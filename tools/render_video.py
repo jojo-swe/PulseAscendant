@@ -92,8 +92,12 @@ def main():
         with Path(str(prefix) + '-render.log').open('wb') as render_log, \
              Path(str(prefix) + '-encode.log').open('wb') as encode_log, \
              Path(str(prefix) + '-progress.log').open('wb') as progress_log:
-            producer = subprocess.Popen(producer_args, stdout=subprocess.PIPE, stderr=render_log)
-            encoder = subprocess.Popen(encoder_args, stdin=producer.stdout, stdout=progress_log, stderr=encode_log)
+            # Windows console children otherwise create their own consoles when
+            # launched by pythonw/Task Scheduler. A closed console terminates an
+            # export independently of the renderer's graphics path.
+            background = {'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}
+            producer = subprocess.Popen(producer_args, stdout=subprocess.PIPE, stderr=render_log, **background)
+            encoder = subprocess.Popen(encoder_args, stdin=producer.stdout, stdout=progress_log, stderr=encode_log, **background)
             producer.stdout.close()
             encoder_status = encoder.wait()
             producer_status = producer.wait()
