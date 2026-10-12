@@ -30,7 +30,7 @@ vec2 corridor(vec3 p){
   // A tight hexagonal accelerator, with a travelling shock front.
   float rib=length(vec2(section(q)-(3.6+opening*.2),z))-.12;
   if(rib<hit.x)hit=vec2(rib,2.);
-  vec3 blade=vec3(q,z);blade.xy=rot(cell*.73+uChapterTime*1.5)*blade.xy;
+  vec3 blade=vec3(q,z);blade.xy=rot(cell*.73+uTravelTime*1.5)*blade.xy;
   float fin=boxC(vec3(abs(blade.x)-3.0-opening*.25-uPulse.x*.12,blade.y,blade.z),vec3(.16,.95,.30));
   if(fin<hit.x)hit=vec2(fin,3.);
  }else if(uVariant==2){
@@ -55,12 +55,12 @@ vec2 corridor(vec3 p){
 }
 vec3 wallNormal(vec3 p){vec2 e=vec2(.006,0);return normalize(vec3(corridor(p+e.xyy).x-corridor(p-e.xyy).x,corridor(p+e.yxy).x-corridor(p-e.yxy).x,corridor(p+e.yyx).x-corridor(p-e.yyx).x));}
 void main(){
- vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uChapterProgress,0.,1.);
+ vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  // The camera travels toward an exit once. Its progress does not reset inside a chapter.
- float z=uChapterTime*(uVariant==2?16.:21.)+k*k*24.;
+ float z=uTravelTime*(uVariant==2?16.:21.)+k*k*24.;
  vec3 ro=vec3(centre(z)+vec2(sin(k*PI)*.32,cos(k*PI)*.16),z);
  p=rot(sin(k*PI*2.)*(uVariant==3?.22:.09))*p;
- vec3 target=vec3(centre(z+24.),z+24.);vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,1.32));
+ vec3 target=vec3(centre(z+24.),z+24.);vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(1.32)));
  float t=.03,volume=0.;bool found=false;vec2 h=vec2(0.);
  for(int i=0;i<104;i++){
   vec3 at=ro+rd*t;h=corridor(at);float ds=clamp(h.x,.012,1.5);
@@ -80,7 +80,7 @@ void main(){
   float panel=step(.06,fract(at.z*.31))*step(.06,fract(angle*3./PI));
   float grain=.9+.1*sin(at.z*95.+q.x*60.);
   c=vec3(.04,.065,.10)*(.25+max(dot(n,l),0.))*(.6+.4*panel)*grain+vec3(.25,.5,.75)*spec;
-  float runner=pow(.5+.5*cos(at.z*.6-uChapterTime*14.+angle*2.),16.);
+  float runner=pow(.5+.5*cos(at.z*.6-uTravelTime*14.+angle*2.),16.);
   c+=emission*groove*runner*(.7+uPulse.z*1.6);
   c+=emission*(line(ring,.045)*.65+groove*.10)*(.35+band+uPulse.x*.9);
   if(h.y>1.5)c+=emission*(.45+uHit*.45+band*.6+uPulse.x*1.7);
@@ -90,7 +90,7 @@ void main(){
  }
  // Moving specks are anchored along the passage and occluded by its walls.
  for(int i=0;i<8;i++){
-  float fi=float(i),pz=z+mod(fi*11.-uChapterTime*20.,88.);
+  float fi=float(i),pz=z+mod(fi*11.-uTravelTime*20.,88.);
   float a=fi*2.39996;vec3 spark=vec3(centre(pz)+vec2(cos(a),sin(a))*2.75,pz);
   float along=dot(spark-ro,rd);float miss=length(ro+rd*along-spark);
   if(along>0.&&along<t)c+=vec3(.08,.42,.8)*exp(-miss*45.)*(.4+uPulse.z);

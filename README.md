@@ -20,6 +20,10 @@ Procedural worlds. Moving machinery. Stellar storms. Hardware ray tracing.
 
 ---
 
+**Source preview v0.6:** stronger musical acceleration, faster travel and machinery,
+and more visible bass-driven geometry. [What changed and how it was checked](docs/KINETIC_REWORK.md).
+The download buttons above still refer to the published v0.5 release.
+
 | Three acts | Sixteen worlds | Seventy-six chapters | One continuous soundtrack |
 |:---:|:---:|:---:|:---:|
 | Three distinct visual identities | From neon cities to living architecture | Authored camera paths and transformations | **14:48.68** of music at its original speed |

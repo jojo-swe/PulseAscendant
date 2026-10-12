@@ -15,10 +15,10 @@ vec2 structure(vec3 p){
   light=min(light,box(vec3(q.x,q.y+3.,q.z),vec3(3.1,.05,.63)));
  }else if(uVariant==1){
   // A low machine hall with piston towers, conveyor teeth and descending gantries.
-  float piston=.7*uAction+k*.3+sin(uChapterTime*3.2+cell*.9)*.55+uPulse.x*.3;
+  float piston=.7*uAction+k*.3+sin(uTravelTime*3.2+cell*.9)*.55+uPulse.x*.85;
   metal=box(vec3(abs(q.x)-4.,q.y+1.2,q.z),vec3(.65,3.1,1.2));
   metal=min(metal,box(vec3(q.x,q.y-3.2+piston*.5,q.z),vec3(4.3,.45,.75)));
-  vec3 gear=q;gear.xy=rot(cell*.45+uChapterTime*1.25)*gear.xy;
+  vec3 gear=q;gear.xy=rot(cell*.45+uTravelTime*1.25)*gear.xy;
   float teeth=box(vec3(abs(gear.x)-2.7,gear.y-3.5,gear.z),vec3(.45,.8,.5));metal=min(metal,teeth);
   float floorD=p.y+3.6;metal=min(metal,floorD);
   vec3 rail=vec3(abs(p.x)-1.9,p.y+3.3,0.);light=length(rail.xy)-.08;
@@ -48,11 +48,11 @@ vec2 structure(vec3 p){
 }
 vec3 normalAt(vec3 p){vec2 e=vec2(.004,0);return normalize(vec3(structure(p+e.xyy).x-structure(p-e.xyy).x,structure(p+e.yxy).x-structure(p-e.yxy).x,structure(p+e.yyx).x-structure(p-e.yyx).x));}
 void main(){
- vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uChapterProgress,0.,1.);
- float speed=uVariant==1?19.:25.,z=uChapterTime*speed;
+ vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
+ float speed=uVariant==1?19.:25.,z=uTravelTime*speed;
  float bank=uVariant==3?k*.35:sin(k*PI)*.08;
  p=rot(bank)*p;vec3 ro=vec3(sin(k*PI)*.5,uVariant==1?-.8:0.,z);
- vec3 rd=cameraBasis(ro,ro+vec3(-sin(k*PI)*.2,uVariant==2?sin(k*PI)*.4:0.,20.))*normalize(vec3(p,1.3));
+ vec3 rd=cameraBasis(ro,ro+vec3(-sin(k*PI)*.2,uVariant==2?sin(k*PI)*.4:0.,20.))*normalize(vec3(p,musicLens(1.3)));
  float t=.03,glow=0.;vec2 h;bool hit=false;
  for(int i=0;i<112;i++){
   h=structure(ro+rd*t);float ds=clamp(h.x*.65,.006,1.1);
@@ -65,7 +65,7 @@ void main(){
   float panel=step(.035,fract(at.y*1.5))*step(.035,fract(at.z*.75));
   float grain=.93+.07*sin(at.y*80.+at.x*40.);
   c=vec3(.085,.13,.19)*(.35+max(dot(n,l),0.))*(.55+.45*panel)*grain+vec3(.4,.65,.9)*spec;
-  float runner=pow(.5+.5*cos(at.z*.7-uChapterTime*17.+at.y),20.);
+  float runner=pow(.5+.5*cos(at.z*.7-uTravelTime*17.+at.y),20.);
   c+=neon*(edge*.28+float(h.y>1.5)*(.55+uBass*.3+uEvent*.9+uPulse.x*1.6+runner*.9));
   c+=vec3(.15,.3,.5)*line(at.z-(z+50.*(1.-k)),.6);
   c*=exp(-t*.023);

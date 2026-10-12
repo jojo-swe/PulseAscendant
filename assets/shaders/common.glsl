@@ -3,10 +3,14 @@ uniform float uDrive,uBass,uHit,uProgress,uCut,uTheme;
 uniform int uShot;
 uniform int uVariant;
 uniform float uChapterProgress,uChapterTime,uEvent,uAction;
+uniform float uTravelTime,uCameraProgress;
 uniform float uAccentTime,uChapterDuration;
 // Independent 100Hz measured low/mid/high attacks and low-onset phase.
 uniform vec4 uPulse;
 uniform float uSpectrum[24];
+// Optical push on measured bass/mid attacks, with no artificial beat or shake.
+// Applied to the scene camera, so silhouettes and parallax respond before bloom.
+float musicLens(float focal){return focal*(1.+uPulse.x*.14+uPulse.y*.045);}
 float frequencyBand(float index){return uSpectrum[int(clamp(floor(index),0.,23.))];}
 float midrange(){return (uSpectrum[10]+uSpectrum[12]+uSpectrum[14])*.333333;}
 float treble(){return (uSpectrum[18]+uSpectrum[20]+uSpectrum[22])*.333333;}

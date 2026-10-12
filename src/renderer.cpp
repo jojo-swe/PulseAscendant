@@ -109,6 +109,8 @@ void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  gl::Uniform1f(gl::GetUniformLocation(p,"uProgress"),frame_.progress);
  gl::Uniform1f(gl::GetUniformLocation(p,"uChapterProgress"),frame_.chapterProgress);
  gl::Uniform1f(gl::GetUniformLocation(p,"uChapterTime"),float(frame_.localSeconds));
+ gl::Uniform1f(gl::GetUniformLocation(p,"uTravelTime"),float(frame_.travelSeconds));
+ gl::Uniform1f(gl::GetUniformLocation(p,"uCameraProgress"),frame_.cameraProgress);
  gl::Uniform1f(gl::GetUniformLocation(p,"uAccentTime"),float(frame_.accentSeconds));
  gl::Uniform1f(gl::GetUniformLocation(p,"uChapterDuration"),float(frame_.chapterDuration));
  gl::Uniform1f(gl::GetUniformLocation(p,"uEvent"),frame_.event);

@@ -44,7 +44,10 @@ double musicalMotion(int act,double t){
    auto& values=out[a-1];values.resize(count+1);double previous=0;
    for(int i=0;i<=count;++i){
     const double at=double(i)/reactivity_data::rate;
-    const double speed=.5*envelope(a,at,0)+.8*pulse(a,at,0)+.35*pulse(a,at,1);
+    const double low=pulse(a,at,0),mid=pulse(a,at,1);
+    // Sustained loudness establishes momentum. Squared attacks give distinct
+    // acceleration/decay on each hit instead of a permanently elevated plateau.
+    const double speed=.9*envelope(a,at,0)+4.0*low*low+1.4*mid*mid;
     if(i)values[i]=values[i-1]+(speed+previous)*.5/reactivity_data::rate;
     previous=speed;
    }
@@ -113,7 +116,13 @@ TimelineFrame sampleTimeline(double seconds){
  for(int band=0;band<24;++band)f.spectrum[band]=(track.spectrum[i*24+band]*(1-blend)+track.spectrum[j*24+band]*blend)/255.f;
  f.drive=std::clamp(c.drive*.65f+.2f*f.energy+.2f*f.kick+.1f*f.snare,0.f,1.f);
  const double actOffset=f.actSeconds-local;
- f.motionSeconds=direction.motionStart+local*(1.3+c.drive*1.65)+musicalMotion(f.act,f.actSeconds)-musicalMotion(f.act,actOffset);
+ const double musicalDelta=musicalMotion(f.act,f.actSeconds)-musicalMotion(f.act,actOffset);
+ f.motionSeconds=direction.motionStart+local*(1.3+c.drive*1.65)+musicalDelta;
+ // Local machinery/fly-through clock: no absolute-time multiplication or jumps.
+ // Camera paths still arrive at their authored endpoint exactly on the cut.
+ f.travelSeconds=local*1.25+musicalDelta;
+ const double travelEnd=direction.duration*1.25+musicalMotion(f.act,actOffset+direction.duration)-musicalMotion(f.act,actOffset);
+ f.cameraProgress=float(std::clamp(f.travelSeconds/travelEnd,0.,1.));
  f.cut=float(std::exp(-local*8.));
  f.transition=float(std::clamp(std::min(f.actSeconds,actDuration(f.act)-f.actSeconds),0.,1.));return f;
 }

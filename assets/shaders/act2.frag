@@ -82,7 +82,7 @@ vec2 surroundings(vec3 pos){
  return h;
 }
 vec2 map(vec3 pos){
- int world=uScene-8,v=uVariant;float p=uChapterProgress,a=uAction,lt=uChapterTime;
+ int world=uScene-8,v=uVariant;float p=uChapterProgress,a=uAction,lt=uTravelTime;
  vec2 h=vec2(world==2&&v==3?200.:pos.y+1.1,0.);
  if(world==0){
   if(v==0){
@@ -168,19 +168,19 @@ vec2 map(vec3 pos){
    vec2 nearest=clamp(floor(pos.xz/1.7+.5),vec2(-7),vec2(7));
    for(int dx=-1;dx<=1;dx++)for(int dz=-1;dz<=1;dz++){
     vec2 cell=nearest+vec2(float(dx),float(dz));if(any(lessThan(cell,vec2(-7)))||any(greaterThan(cell,vec2(7))))continue;
-    float wave=sin(cell.x*.4+cell.y*.28-lt*2.9),height=4.+wave*(.6+a*3.)+uPulse.x*.8;
+    float wave=sin(cell.x*.4+cell.y*.28-lt*2.9),height=4.+wave*(.6+a*3.)+uPulse.x*1.76;
     take(h,box(unrotate(pos-vec3(cell.x*1.7,height,cell.y*1.7),.08*cell.x,a*wave*.25),vec3(.72,.12,.72)),mod(cell.x+cell.y,3.)<.5?2.:1.);if(mod(cell.x+cell.y,3.)<.5)take(h,box(pos-vec3(cell.x*1.7,height+.15,cell.y*1.7),vec3(.55,.025,.55)),3.);
    }
    // All rotated plate corners lie inside radius sqrt(2*.72^2+.12^2)<1.04.
    h.x=min(h.x,unseenGridDistance(pos.xz,nearest,vec2(-7),vec2(7),1.7,1.04));
    for(int x=-1;x<=1;x+=2)for(int z=-1;z<=1;z+=2)take(h,bar(pos,vec3(float(x)*14.,-1,float(z)*14.),vec3(float(x)*14.,12,float(z)*14.),.25),1.);
   }else if(v==2){
-   float j=clamp(floor(pos.z/2.4+2.5),0.,4.),z=(j-2.)*2.4,stroke=(.5+.5*sin(lt*2.7+j*.7))*(.7+frequencyBand(int(j)*4)*2.8)+uPulse.x*.7;
+   float j=clamp(floor(pos.z/2.4+2.5),0.,4.),z=(j-2.)*2.4,stroke=(.5+.5*sin(lt*2.7+j*.7))*(.7+frequencyBand(int(j)*4)*2.8)+uPulse.x*1.54;
    for(int side=-1;side<=1;side+=2){float s=float(side);take(h,bar(pos,vec3(s*10.,3,z),vec3(s*(4.+stroke),3,z),.55),1.);take(h,box(pos-vec3(s*(3.2+a*3.),3,z),vec3(.6,2.6,.8)),2.);for(int zs=-1;zs<=1;zs+=2)take(h,box(unrotate(pos-vec3(s*(1.9+a*3.),3,float(zs)*1.9),s*a*.15,0.),vec3(1.65,3,1.65)),1.);}
-   take(h,bar(pos,vec3(0,-.7,0),vec3(0,8.+a*7.,0),.14+uEvent*.18+uPulse.x*.35),3.);
+   take(h,bar(pos,vec3(0,-.7,0),vec3(0,8.+a*7.,0),.14+uEvent*.18+uPulse.x*.77),3.);
   }else if(v==3){
    float accent=max(.01,uAccentTime),duration=uChapterDuration;
-   float collide=eased(lt/accent),burst=eased((lt-accent)/max(.25,duration-accent));
+   float collide=eased(uChapterTime/accent),burst=eased((uChapterTime-accent)/max(.25,duration-accent));
    for(int side=-1;side<=1;side+=2)for(int j=0;j<36;j++){float jf=float(j),s=float(side);vec3 formation=vec3(s*(17.-(17.-1.905)*collide)+(mod(jf,6.)-2.5)*.65,3.+(mod(floor(jf/6.),3.)-1.)*.75,(floor(jf/18.)-.5)*.85),scatter=vec3(sin(jf*2.13+s)*25.,7.+cos(jf*1.37)*16.,sin(jf*3.71)*22.);
     take(h,box(unrotate(pos-formation-scatter*burst,burst*jf*.31,burst*jf*.18),vec3(.28,.3,.35)),side<0?1.:2.);
    }
@@ -192,11 +192,11 @@ vec2 map(vec3 pos){
  }else{
   if(v==0){
    for(int x=-1;x<=1;x+=2)for(int y=-1;y<=1;y+=2)for(int z=-1;z<=1;z+=2){vec3 q=unrotate(pos-vec3(float(x)*(1.6+a*2.6),4.+float(y)*(1.6+a*.5),float(z)*(1.6+a*2.6)),a*float(x)*.15+sin(lt*.9+float(x))*.12,a*float(z)*.1);take(h,box(q,vec3(1.55)),5.);}
-   take(h,octa(unrotate(pos-vec3(0,4,0),.3,0.),vec3(.65+uPulse.x*.35,2.8+uPulse.x,.65+uPulse.x*.35)),6.);take(h,bar(pos,vec3(-12,4,-4),vec3(12,4,4),.045),3.);
+   take(h,octa(unrotate(pos-vec3(0,4,0),.3,0.),vec3(.65+uPulse.x*.77,2.8+uPulse.x*2.2,.65+uPulse.x*.77)),6.);take(h,bar(pos,vec3(-12,4,-4),vec3(12,4,4),.045),3.);
   }else if(v==1){
    for(int j=0;j<9;j++){float jf=float(j),z=(jf-4.)*2.4;take(h,box(unrotate(pos-vec3(0,3,z),(jf-4.)*.13+a*.4,0.),vec3(1.8,3.5,.24)),5.);take(h,bar(pos,vec3(0,3,z),vec3(12.+a*6.,3.+(jf-4.)*(.7+a*.7),z+(jf-4.)*2.),.055),j%3==0?4.:(j%3==1?3.:6.));}take(h,bar(pos,vec3(-18,3,0),vec3(0,3,0),.08),6.);
   }else if(v==2){
-   for(int j=0;j<14;j++){float jf=float(j),angle=(jf-6.5)*.085*(.1+a),x=(jf-6.5)*.45;take(h,box(unrotate(pos-vec3(x,3.7+abs(jf-6.5)*a*.28,0),angle+uPulse.y*.08,-angle),vec3(.16,3.2,3.5)),5.);take(h,bar(pos,vec3(x,1,0),vec3(x,5.+a*2.,0),.035),6.);}take(h,box(pos-vec3(0,-.8,0),vec3(7,.2,6)),1.);
+   for(int j=0;j<14;j++){float jf=float(j),angle=(jf-6.5)*.085*(.1+a),x=(jf-6.5)*.45;take(h,box(unrotate(pos-vec3(x,3.7+abs(jf-6.5)*a*.28,0),angle+uPulse.y*.12,-angle),vec3(.16,3.2,3.5)),5.);take(h,bar(pos,vec3(x,1,0),vec3(x,5.+a*2.,0),.035),6.);}take(h,box(pos-vec3(0,-.8,0),vec3(7,.2,6)),1.);
   }else if(v==3){
    float burst=a*eased((p-.25)/.75);for(int j=0;j<48;j++){float jf=float(j),angle=jf*2.399963,y=1.-2.*(jf+.5)/48.,r=sqrt(max(0.,1.-y*y)),shell=2.5+burst*(10.+mod(jf,7.)*.8);vec3 direction=vec3(cos(angle)*r,y,sin(angle)*r);take(h,octa(unrotate(pos-vec3(0,4,0)-direction*shell,angle+burst*jf*.07,burst*jf*.12),vec3(.45,1.,.4)),5.);}
    if(a<.98)take(h,octa(unrotate(pos-vec3(0,4,0),.3,0.),vec3(2.8*(1.-a)+.05,4.*(1.-a)+.05,2.8*(1.-a)+.05)),5.);
@@ -207,7 +207,7 @@ vec2 map(vec3 pos){
  }
  // Native scene activity: real geometry, with analytic indexing for the
  // moving lanes so ray cost is independent of the number of distant packets.
- float transport=uTime+uChapterTime*.8;
+ float transport=uTime+uTravelTime*.8;
  if(world==0){
   float x=v==3?14.:11.;
   // The three closest z rows plus a bound for the omitted rows preserve thin
@@ -269,16 +269,16 @@ vec3 traceScene(vec3 eye,vec3 ray){
  if(id<.5){vec2 grid=abs(fract(p.xz*.22)-.5);float line=1.-smoothstep(.018,.045,min(grid.x,grid.y));c+=vec3(.015,.12,.19)*line*(.4+midrange());}return mix(sky(ray),c,exp(-distance*(uScene==9?.018:.006)));
 }
 void main(){
- float p=uChapterProgress,a=uAction;int v=uVariant,world=uScene-8;vec3 eye=vec3(0),target=vec3(0,2,0);
+ float p=uCameraProgress,a=uAction;int v=uVariant,world=uScene-8;vec3 eye=vec3(0),target=vec3(0,2,0);
  if(world==0){
   if(v==0){eye=mix(vec3(16,10,-29),vec3(-16,12,-25),p);target=mix(vec3(0,1,0),vec3(0,3,0),p);}else if(v==1){eye=vec3(-1.7+3.4*p,1.8+4.5*p,-24.+32.*p);target=eye+vec3(0,2,13);}else if(v==2){eye=mix(vec3(15,5,-22),vec3(9,9,-9),p);target=vec3(0,2,1);}else if(v==3){eye=mix(vec3(27,12,-38),vec3(34,46,-48),p);target=mix(vec3(0,6,0),vec3(0,16,0),p);}else if(v==4){eye=mix(vec3(-22,11,-28),vec3(-24,16,-38),p);target=vec3(0,2.8,0);}else{eye=vec3(18.*(1.-eased(p*1.6)),10.-5.*p,-34.+42.*p);target=vec3(0,5,6.+30.*p);}
  }else if(world==1){
   if(v==0){eye=vec3(1.4,1.4+.5*p,-35.+57.*p);target=eye+vec3(0,1,22);}else if(v==1){eye=vec3(1.4,2.1+1.5*a,-40.+94.*p);target=eye+vec3(-.3,.3,20);}else if(v==2){eye=mix(vec3(0,34,-28),vec3(0,30,-2),p);target=vec3(0,3.+4.*a,14);}else if(v==3){eye=mix(vec3(0,48,-44),vec3(0,54,-9),p);target=vec3(0,18,15.+20.*p);}else{eye=mix(vec3(0,3,-24),vec3(0,20,-35),p);target=vec3(0,9.+a*15.,18);}
  }else if(world==2){
-  if(v==0){eye=mix(vec3(18,9,-22),vec3(13,6,-14),p);target=vec3(0,2,0);}else if(v==1){eye=mix(vec3(24,20,-29),vec3(18,14,-25),p);target=vec3(0,4,0);}else if(v==2){eye=mix(vec3(20,10,-27),vec3(18,13,-24),p);target=vec3(0,4.5,0);}else if(v==3){eye=mix(vec3(8,8,-37),vec3(-5,13,-43),p);target=vec3(0,3,0);}else{float height=3.+a*eased((p-.25)/.75)*36.;eye=vec3(18.+(height-3.)/36.*5.,10.+height*.65,-26);target=vec3(0,height,0);}
+  if(v==0){eye=mix(vec3(18,9,-22),vec3(13,6,-14),p);target=vec3(0,2,0);}else if(v==1){eye=mix(vec3(24,20,-29),vec3(18,14,-25),p);target=vec3(0,4,0);}else if(v==2){eye=mix(vec3(20,10,-27),vec3(18,13,-24),p);target=vec3(0,4.5,0);}else if(v==3){eye=mix(vec3(8,8,-37),vec3(-5,13,-43),p);target=vec3(0,3,0);}else{float height=3.+a*eased((uChapterProgress-.25)/.75)*36.;eye=vec3(18.+(height-3.)/36.*5.,10.+height*.65,-26);target=vec3(0,height,0);}
  }else{
   if(v==0){eye=mix(vec3(13,7,-19),vec3(9,9,-17),p);target=vec3(0,4,0);}else if(v==1){eye=mix(vec3(-19,12,-25),vec3(-14,10,-20),p);target=vec3(3,3,0);}else if(v==2){eye=mix(vec3(-14,8,-19),vec3(-11,6,-16),p);target=vec3(0,4,0);}else if(v==3){eye=mix(vec3(7,7,-25),vec3(-3,10,-31),p);target=vec3(0,4,0);}else{eye=vec3(0,2.2+2.3*p,-28.+66.*p);target=eye+vec3(0,.8,20);}
  }
  if(world!=1 && !(world==0&&(v==1||v==5)) && !(world==3&&v==4))eye+=sin(p*PI)*vec3(v%2==0?3.5:-3.5,1.5,2.);
- vec2 uv=(vUV-.5)*vec2(uResolution.x/uResolution.y,1.);vec3 ray=cameraBasis(eye,target)*normalize(vec3(uv,1.55));color=vec4(traceScene(eye,ray),1);
+ vec2 uv=(vUV-.5)*vec2(uResolution.x/uResolution.y,1.);vec3 ray=cameraBasis(eye,target)*normalize(vec3(uv,musicLens(1.55)));color=vec4(traceScene(eye,ray),1);
 }

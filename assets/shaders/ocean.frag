@@ -66,11 +66,11 @@ vec2 scene(vec3 p){
 }
 vec3 normalAt(vec3 p){vec2 e=vec2(.012,0);return normalize(vec3(scene(p+e.xyy).x-scene(p-e.xyy).x,scene(p+e.yxy).x-scene(p-e.yxy).x,scene(p+e.yyx).x-scene(p-e.yyx).x));}
 void main(){
- vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uChapterProgress,0.,1.);
+ vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  // Each return has a different dominant composition and a clear, finite camera path.
  vec3 ro,target;float lens=1.5;
  if(uVariant==0){
-  ro=vec3(sin(k*PI)*.8,2.3+k*.65,uChapterTime*8.+4.);
+  ro=vec3(sin(k*PI)*.8,2.3+k*.65,uTravelTime*8.+4.);
   target=ro+vec3(1.5,-.8,20.);
  }else if(uVariant==1){
   // Safely above all island geometry, looking down across a large central split island.
@@ -81,7 +81,7 @@ void main(){
   ro=vec3(8.-k*14.,3.4+k*.5,13.-k*2.);
   target=vec3(0,6.9+uAction*.6,-1.);lens=1.35;
  }
- vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(lens)));
  float t=.02;vec2 h;bool found=false;
  for(int i=0;i<112;i++){h=scene(ro+rd*t);if(h.x<.006){found=true;break;}t+=clamp(h.x,.008,2.);if(t>160.)break;}
  vec3 c=sky(rd);
@@ -91,7 +91,7 @@ void main(){
    vec3 l=normalize(vec3(-.3,.8,.5));float edge=pow(1.-max(dot(n,-rd),0.),3.);
    c=vec3(.035,.12,.15)*(.35+max(dot(n,l),0.))+sky(reflect(rd,n))*.7;
    c+=mix(vec3(.03,.6,.8),vec3(.4,.8,.2),float(uVariant==2))*(edge*.5+uEvent*.2+uPulse.y*.7);
-   float veins=pow(.5+.5*sin(at.y*6.-uChapterTime*4.+at.x*2.),24.);
+   float veins=pow(.5+.5*sin(at.y*6.-uTravelTime*4.+at.x*2.),24.);
    c+=vec3(.035,.55,.75)*veins*(.25+uPulse.x*1.3);
    if(uVariant==0)c+=vec3(.03,.3,.55)*line(at.y-(uChapterProgress*7.),.08);
   }else{

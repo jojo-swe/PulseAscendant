@@ -33,8 +33,8 @@ vec3 radialCell(vec3 p,float count,float radius,float phase){
 float development(){return smoothstep(0.,.72,uChapterProgress);}
 // Transients articulate local mechanisms and light; they never reset the camera
 // or replace the irreversible chapter action. The final horizon keeps its calm.
-float kickResponse(){return clamp(uPulse.x,0.,1.);}
-float snapResponse(){return clamp(uPulse.y,0.,1.);}
+float kickResponse(){return 2.4*clamp(uPulse.x,0.,1.);}
+float snapResponse(){return 1.7*clamp(uPulse.y,0.,1.);}
 float highResponse(){return clamp(uPulse.z,0.,1.);}
 float responseScale(){return uScene==15&&uVariant>=6?.22:(uScene==13&&uVariant==3?.45:1.);}
 float desertHeight(vec2 p){return -2.+.34*sin(p.x*.12+p.y*.035)+.23*sin(p.y*.17-p.x*.04);}
@@ -79,7 +79,7 @@ vec2 desertWorld(vec3 p){
   // One low tracking shot beside an actual articulated giant, then a leap.
   float leap=sin(PI*clamp((progress-.55)/.4,0.,1.))*action*2.5;
   vec3 center=vec3(0,-1.8+leap,-progress*7.);
-  vec2 giant=walker(p,center,1.3,uChapterTime*2.7);
+  vec2 giant=walker(p,center,1.3,uTravelTime*2.7);
   if(giant.x<h.x)h=giant;
   vec3 monolith=p;monolith.z=mod(monolith.z+10.,20.)-10.;
   monolith.x=abs(monolith.x)-15.;
@@ -110,11 +110,11 @@ vec2 desertWorld(vec3 p){
  }else if(uVariant==4){
   // A levitating solar train overtakes the camera on an elevated causeway.
   vec3 track=p;track.x=abs(track.x)-1.65;
-  h=nearer(h,solidBox(track-vec3(0,1.,0),vec3(.12,.12,100.)),3.);
+  h=nearer(h,solidBox(vec3(track.xy-vec2(0,1.),0.),vec3(.12,.12,1.)),3.);
   vec3 pier=p;pier.z=mod(p.z+6.,12.)-6.;
   h=nearer(h,solidBox(pier-vec3(0,-.4,0),vec3(2.8,1.4,.65)),1.);
-  vec3 car=p;car.z=mod(p.z+uChapterTime*9.+9.,18.)-9.;
-  car.y-=2.7+action*(.8+.15*sin(uChapterTime*1.5));
+  vec3 car=p;car.z=mod(p.z+uTravelTime*9.+9.,18.)-9.;
+  car.y-=2.7+action*(.8+.15*sin(uTravelTime*1.5));
   h=nearer(h,solidBox(car,vec3(2.5,.8,5.8))-.3,1.);
   h=nearer(h,solidBox(car-vec3(0,.87,0),vec3(1.65,.07,4.4)),2.);
   h=nearer(h,solidBox(vec3(abs(car.x)-2.63,car.y,car.z),vec3(.035,.15,4.9)),3.);
@@ -161,7 +161,7 @@ vec2 gardenWorld(vec3 p){
   h=nearer(h,capsule(root,vec3(0,-1.7,0),vec3(5.*action,-1.65,0),.07),3.);
  }else if(uVariant==1){
   // Walk up a gigantic double helix; the ladder unzips on the accent.
-  vec3 q=p;q.xz=rot(q.y*.47+uChapterTime*.23)*q.xz;
+  vec3 q=p;q.xz=rot(q.y*.47+uTravelTime*.23)*q.xz;
   float spread=2.6+action*1.9;
   vec3 helix=q;helix.x=abs(helix.x)-spread;
   float poles=length(helix.xz)-.24;
@@ -182,7 +182,7 @@ vec2 gardenWorld(vec3 p){
   h=nearer(h,ringShape(vec3(q.x,q.z,q.y),3.1+action*2.7,.055),3.);
   // The flying seed has a long, readable luminous tail in the open passage.
   vec3 mote=p-vec3(sin(p.z*.17)*1.3,cos(p.z*.13)*.7,0.);
-  mote.z=mod(p.z+uChapterTime*12.+6.,12.)-6.;
+  mote.z=mod(p.z+uTravelTime*12.+6.,12.)-6.;
   h=nearer(h,ellipsoid(mote,vec3(.08,.08,.65)),3.);
  }else if(uVariant==3){
   // A breathing pause: one floating lotus opens over a quiet pool.
@@ -296,10 +296,10 @@ vec2 finaleWorld(vec3 p){
   h=nearer(h,arc,1.);
   vec3 seam=q;seam.z-=.48;
   h=nearer(h,max(abs(length(vec2(seam.x*.75,seam.y+2.))-7.)-.065,abs(seam.z)-.04),3.);
-  h=nearer(h,solidBox(p-vec3(0,-1.5,0),vec3(2.7,.35,100.)),2.);
+  h=nearer(h,solidBox(vec3(p.x,p.y+1.5,0.),vec3(2.7,.35,1.)),2.);
  }else if(uVariant==1){
   // A crystal moth spreads enormous wings. Its silhouette fills the screen.
-  vec3 q=p-vec3(0,3.,0);q.yz=rot(.08*sin(uChapterTime*.8))*q.yz;
+  vec3 q=p-vec3(0,3.,0);q.yz=rot(.08*sin(uTravelTime*.8))*q.yz;
   h=nearer(h,ellipsoid(q,vec3(.65,1.1,3.)),1.);
   vec3 wing=q;wing.x=abs(wing.x)-.5;
   wing.xy=rot(mix(-1.15,.08,action)+kickResponse()*.075)*wing.xy;
@@ -321,7 +321,7 @@ vec2 finaleWorld(vec3 p){
    h=nearer(h,ringShape(q,3.2,.23),1.);
    h=nearer(h,ringShape(q,2.85,.055),3.);
   }
-  vec3 heart=p-vec3(0,4.,0);heart.xz=rot(uChapterTime*.4)*heart.xz;
+  vec3 heart=p-vec3(0,4.,0);heart.xz=rot(uTravelTime*.4)*heart.xz;
   h=nearer(h,octahedron(heart,.15+action*2.8),2.);
  }else if(uVariant==3){
   // A flat array stands up into a crystalline city, row after row.
@@ -591,7 +591,7 @@ vec3 renderWorld(vec3 eye,vec3 ray,out float visibleDistance){
   // Traveling energy has a visible path across the architecture, rather than
   // uniformly flashing the frame. Kick lights the power bus, snare launches a
   // short bright packet and high frequencies reveal fine conductive detail.
-  float scan=.5+.5*sin(p.y*1.15+p.z*.28-uChapterTime*7.);
+  float scan=.5+.5*sin(p.y*1.15+p.z*.28-uTravelTime*7.);
   float packet=pow(scan,12.);
   float pulse=responseScale()*(kickResponse()*1.35+snapResponse()*.65);
   if(hitData.y>2.5)c=emissionColor()*(1.1+pulse+packet*(.45+highResponse()*.7)+uEvent*.6);
@@ -618,7 +618,7 @@ vec3 renderWorld(vec3 eye,vec3 ray,out float visibleDistance){
    c+=emissionColor()*fault*(.1+packet*.45+pulse*.35);
   }
   if(hitData.y<.5&&(uScene==15&&uVariant>=6||uScene==13&&uVariant==3)){
-   float ripple=.5+.5*sin(length(p.xz)*2.5-uChapterTime*1.7);
+   float ripple=.5+.5*sin(length(p.xz)*2.5-uTravelTime*1.7);
    c+=reflected*fresnel*.4+emissionColor()*.03*ripple;
   }
   float density=uScene==13?.018:(uScene==14?.005:.011);
@@ -650,7 +650,7 @@ vec3 motionLayers(vec3 eye,vec3 ray,float visibleDistance){
   }else if(uScene==13){
    // A luminous pollen current spirals upward between leaves and seed gates.
    seed=vec3(hash(vec2(index+3.,7.)),hash(vec2(index+3.,13.)),hash(vec2(index+3.,23.)));
-   source=seed*extent+vec3(sin(uChapterTime*.8+index)*1.4,0.,cos(uChapterTime*.65+index));
+   source=seed*extent+vec3(sin(uTravelTime*.8+index)*1.4,0.,cos(uTravelTime*.65+index));
    velocity=vec3(.7,2.4,-2.);tailLength=.22;width=.085;
   }else if(uScene==14){
    // Counter-moving material fragments make the vertical gravity reversal legible.
@@ -666,7 +666,7 @@ vec3 motionLayers(vec3 eye,vec3 ray,float visibleDistance){
    velocity=uVariant==5?vec3(0.,-12.,0.):vec3(.8,7.,-3.);
    tailLength=uVariant==5?3.2:1.15;width=.055;
   }
-  vec3 relative=mod(source+velocity*uChapterTime-eye+extent*.5,extent)-extent*.5;
+  vec3 relative=mod(source+velocity*uTravelTime-eye+extent*.5,extent)-extent*.5;
   float boundary=min(min(.5-abs(relative.x)/extent.x,.5-abs(relative.y)/extent.y),.5-abs(relative.z)/extent.z);
   float fade=smoothstep(0.,.1,boundary);
   vec3 head=eye+relative;
@@ -690,19 +690,19 @@ vec3 motionLayers(vec3 eye,vec3 ray,float visibleDistance){
 }
 
 void cameraDirection(out vec3 eye,out vec3 target,out float focal){
- float progress=uChapterProgress;
+ float progress=uCameraProgress;
  focal=1.55;target=vec3(0,2.,0);
  if(uScene==12){
   if(uVariant==0){eye=vec3(13.-progress*6.,2.4+progress*3.,20.-progress*5.);target=vec3(0,2.5+progress*2.,0);}
   else if(uVariant==1){eye=vec3(11.5,1.1+progress*2.,9.-progress*9.);target=vec3(0,2.3,-progress*7.);focal=1.45;}
-  else if(uVariant==2){float z=8.-uChapterTime*15.;eye=vec3(sin(z*.075)*2.2,1.05,z);target=vec3(sin((z-12.)*.075)*2.2,1.5,z-12.);focal=1.2;}
+  else if(uVariant==2){float z=8.-uTravelTime*15.;eye=vec3(sin(z*.075)*2.2,1.05,z);target=vec3(sin((z-12.)*.075)*2.2,1.5,z-12.);focal=1.2;}
   else if(uVariant==3){eye=vec3(14.-progress*5.,5.+progress*5.,20.-progress*3.);target=vec3(0,3.5,0);}
-  else if(uVariant==4){eye=vec3(10.-progress*4.,2.5+progress*2.,12.-uChapterTime*8.);target=vec3(0,2.8,eye.z-8.);focal=1.4;}
+  else if(uVariant==4){eye=vec3(10.-progress*4.,2.5+progress*2.,12.-uTravelTime*8.);target=vec3(0,2.8,eye.z-8.);focal=1.4;}
   else{float launch=smoothstep(.15,.9,uAction);eye=vec3(19.-progress*4.,7.+progress*13.,24.-progress*10.);target=vec3(0,3.+launch*launch*30.,0);focal=1.3;}
  }else if(uScene==13){
   if(uVariant==0){eye=vec3(7.-progress*2.,2.2+progress*3.,12.-progress*3.);target=vec3(0,.3+development()*3.,0);}
   else if(uVariant==1){eye=vec3(8.-progress*2.,2.+progress*8.,11.-progress*3.);target=vec3(0,1.+progress*9.,0);focal=1.4;}
-  else if(uVariant==2){float z=8.-uChapterTime*17.;eye=vec3(sin(z*.1)*.6,0.,z);target=vec3(0,0.,z-12.);focal=1.2;}
+  else if(uVariant==2){float z=8.-uTravelTime*17.;eye=vec3(sin(z*.1)*.6,0.,z);target=vec3(0,0.,z-12.);focal=1.2;}
   else if(uVariant==3){eye=vec3(1.8-progress*.9,3.4,12.-progress*1.5);target=vec3(0,0.,0);focal=1.8;}
   else if(uVariant==4){eye=vec3(20.-progress*10.,16.+progress*3.,22.-progress*8.);target=vec3(0,2.,0);focal=1.45;}
   else{eye=vec3(3.,8.-progress*2.,18.+progress*4.);target=vec3(0,3.4,0);focal=1.45;}
@@ -713,7 +713,7 @@ void cameraDirection(out vec3 eye,out vec3 target,out float focal){
   else if(uVariant==3){eye=vec3(18.-progress*5.,6.+progress*10.,25.-progress*4.);target=vec3(0,3.+uAction*8.,0);focal=1.45;}
   else{eye=vec3(sin(progress*PI)*1.5,2.,17.-progress*15.);target=vec3(0,2.,-25.);focal=1.25;}
  }else{
-  if(uVariant==0){eye=vec3(sin(progress*PI)*1.5,1.2+progress*1.3,22.-uChapterTime*7.5);target=eye+vec3(0,1.,-12.);focal=1.3;}
+  if(uVariant==0){eye=vec3(sin(progress*PI)*1.5,1.2+progress*1.3,22.-uTravelTime*7.5);target=eye+vec3(0,1.,-12.);focal=1.3;}
   else if(uVariant==1){eye=vec3(3.-progress*3.,10.-progress*4.,18.-progress*3.);target=vec3(0,3.,0);focal=1.55;}
   else if(uVariant==2){eye=vec3(4.-progress*4.,5.+progress*3.,24.-progress*6.);target=vec3(0,4.,0);focal=1.5;}
   else if(uVariant==3){eye=vec3(26.-progress*12.,20.+progress*5.,28.-progress*10.);target=vec3(0,3.,0);focal=1.25;}
@@ -728,8 +728,8 @@ void main(){
  bool quiet=uScene==13&&uVariant==3||uScene==15&&uVariant>=6;
  float shake=quiet?0.:.0012;
  p+=vec2(sin(uTime*29.),cos(uTime*23.))*uHit*shake;
- if(uScene==12&&uVariant==2||uScene==13&&uVariant==2)p=rot(sin(uChapterTime*.45)*.1)*p;
- vec3 ray=cameraBasis(eye,target)*normalize(vec3(p,focal));
+ if(uScene==12&&uVariant==2||uScene==13&&uVariant==2)p=rot(sin(uTravelTime*.45)*.1)*p;
+ vec3 ray=cameraBasis(eye,target)*normalize(vec3(p,musicLens(focal)));
  float visibleDistance;
  vec3 c=renderWorld(eye,ray,visibleDistance)*(1.+.025*uCut);
  c+=motionLayers(eye,ray,visibleDistance);

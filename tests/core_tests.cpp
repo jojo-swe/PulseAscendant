@@ -53,16 +53,27 @@ int main() {
   // must accelerate with music without reversing or depending on seek history.
   for(int act=1;act<=3;++act){
    std::array<int,3> strong{},quiet{};double lowSpeed=100,highSpeed=0;
+   double strongTravel=0,quietTravel=0;int strongTravelCount=0,quietTravelCount=0;
    for(double t=actStart(act)+1;t<actStart(act)+actDuration(act)-1;t+=.01){
     const auto f=sampleTimeline(t),next=sampleTimeline(t+.001);
     const float channels[]={f.kick,f.snare,f.treble};
     for(int lane=0;lane<3;++lane){CHECK(channels[lane]>=0&&channels[lane]<=1);strong[lane]+=channels[lane]>.6f;quiet[lane]+=channels[lane]<.15f;}
     CHECK(f.pulsePhase>=0&&f.pulsePhase<=1);
-    if(f.chapter==next.chapter){double speed=(next.motionSeconds-f.motionSeconds)/.001;lowSpeed=std::min(lowSpeed,speed);highSpeed=std::max(highSpeed,speed);CHECK(speed>1&&speed<5);}
+    if(f.chapter==next.chapter){double speed=(next.motionSeconds-f.motionSeconds)/.001;lowSpeed=std::min(lowSpeed,speed);highSpeed=std::max(highSpeed,speed);CHECK(speed>1&&speed<10);CHECK(next.travelSeconds>f.travelSeconds&&next.cameraProgress>f.cameraProgress);}
+    if(f.chapter==next.chapter){
+     const double travelSpeed=(next.travelSeconds-f.travelSeconds)/.001;
+     if(f.kick>.8f){strongTravel+=travelSpeed;++strongTravelCount;}
+     if(f.kick<.1f){quietTravel+=travelSpeed;++quietTravelCount;}
+    }
     CHECK(sampleTimeline(t).motionSeconds==f.motionSeconds);
    }
    for(int lane=0;lane<3;++lane)CHECK(strong[lane]>50&&quiet[lane]>50);
-   CHECK(highSpeed-lowSpeed>.5);
+   // A measurable surge, rather than an almost constant camera/transport speed.
+   CHECK(highSpeed-lowSpeed>3.0);
+   CHECK(strongTravelCount>50&&quietTravelCount>50);
+   CHECK(strongTravel/strongTravelCount>quietTravel/quietTravelCount+2.0);
+   std::cout<<"Act "<<act<<" travel speed: quiet="<<quietTravel/quietTravelCount
+            <<", strong bass="<<strongTravel/strongTravelCount<<"; global range="<<lowSpeed<<".."<<highSpeed<<'\n';
   }
   auto bandsBefore=sampleTimeline(100).spectrum,bandsAfter=sampleTimeline(100.05).spectrum,bandsMiddle=sampleTimeline(100.025).spectrum;
   for(size_t i=0;i<24;++i)CHECK(std::abs(bandsMiddle[i]-(bandsBefore[i]+bandsAfter[i])*.5f)<.0001f);
@@ -80,6 +91,8 @@ int main() {
    CHECK(accent.chapter==chapter&&accent.event>.9999&&std::abs(accent.action-.5f)<.0001f);
    CHECK(first.action==0&&last.action==1);
    CHECK(first.chapterProgress<.001&&last.chapterProgress>.999);
+   CHECK(first.cameraProgress<.001&&last.cameraProgress>.999);
+   CHECK(first.travelSeconds<.01&&last.travelSeconds>last.localSeconds*1.25);
    auto previousFrame=first;float peakEvent=0;
    for(int sample=1;sample<200;++sample){
     const auto frame=sampleTimeline(start+sample*(end-start)/200);
@@ -91,7 +104,7 @@ int main() {
    CHECK(peakEvent>.75f);
    if(chapter>0){
     const double before=sampleTimeline(start-.0001).motionSeconds,after=sampleTimeline(start+.0001).motionSeconds;
-    CHECK(after>before&&after-before<.001); // no rewind at chapter or act cuts
+    CHECK(after>before&&after-before<.002); // no rewind at chapter or act cuts
    }
   }
   for(double t=0;t<showDuration();t+=.05) {

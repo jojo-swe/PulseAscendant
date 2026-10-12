@@ -7,14 +7,14 @@ float blockS(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.))+min(max(q.x
 float shell(vec3 p){
  float k=clamp(uChapterProgress,0.,1.),a=uAction;
  if(uVariant==0){
-  vec3 q=p;q.xy=rot(k*.35+uChapterTime*.26)*q.xy;
-  q.xz=rot(uChapterTime*.17)*q.xz;
-  float radius=1.65-a*.9-k*.12+uPulse.x*.055;
-  vec3 g=q*3.3+vec3(0,uChapterTime*.65,0);float gyroid=(abs(dot(sin(g),cos(g.zxy)))-.24)/6.7;
+  vec3 q=p;q.xy=rot(k*.35+uTravelTime*.26)*q.xy;
+  q.xz=rot(uTravelTime*.17)*q.xz;
+  float radius=1.65-a*.9-k*.12+uPulse.x*.32;
+  vec3 g=q*3.3+vec3(0,uTravelTime*.65,0);float gyroid=(abs(dot(sin(g),cos(g.zxy)))-.24)/6.7;
   float d=max(gyroid,length(q)-radius);
   for(int i=0;i<6;i++){
    float angle=float(i)*PI/3.;vec3 offset=vec3(cos(angle),.4*sin(angle*2.),sin(angle))*(1.3+a*1.5);
-   vec3 shard=q-offset;shard.xy=rot(angle+a+uChapterTime*.65)*shard.xy;
+   vec3 shard=q-offset;shard.xy=rot(angle+a+uTravelTime*.65)*shard.xy;
    float size=.12+a*.2;d=min(d,blockS(shard,vec3(size,.33+a*.18,size)));
   }
   return d;
@@ -28,7 +28,7 @@ float shell(vec3 p){
    q.xz=rot(angle*.3)*q.xz;
    float spire=blockS(q,vec3(.23+fi*.035,h*.5,.28));
    // Horizontal gaps distinguish rebuilt slabs from the collapsing porous sphere.
-   spire=max(spire,-(abs(mod(q.y+.23,.46)-.23)-(.045+uPulse.y*.028)));d=min(d,spire);
+   spire=max(spire,-(abs(mod(q.y+.23,.46)-.23)-(.045+uPulse.y*.095)));d=min(d,spire);
   }
   return d;
  }
@@ -84,9 +84,9 @@ vec3 reflection(vec3 ro,vec3 rd) {
 }
 void main() {
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);
- float k=clamp(uChapterProgress,0.,1.);
+ float k=clamp(uCameraProgress,0.,1.);
  vec3 ro=uVariant==0?vec3(3.7-k*.8,1.5+k*.5,4.2):vec3(4.7-k*1.3,2.6+k,5.2);
- vec3 rd=cameraBasis(ro,vec3(0,uVariant==1?.1:0.,0))*normalize(vec3(p,1.7));
+ vec3 rd=cameraBasis(ro,vec3(0,uVariant==1?.1:0.,0))*normalize(vec3(p,musicLens(1.7)));
  float t=0,glow=0;bool found=false;vec2 hit;
  for(int i=0;i<128;i++) {
   vec3 pos=ro+rd*t;hit=mapS(pos);

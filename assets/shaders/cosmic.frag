@@ -5,12 +5,12 @@ uniform vec2 uResolution;uniform float uTime;uniform int uRetro;
 // Single-use astrophysical events: ignition, collision, blast, filaments, warp.
 vec2 field(vec3 p){
  float k=clamp(uChapterProgress,0.,1.),d=0.,hot=0.;
- float flow=uChapterTime*.85;
+ float flow=uTravelTime*.85;
  // Plasma advection remains continuous; attacks excite the core, never the camera.
  p.xy=rot(flow*.12)*p.xy;
  if(uVariant==0){
   float r=length(p),a=atan(p.y,p.x);
-  float core=exp(-abs(r-(.42+smoothstep(.02,.45,k)*.45+uPulse.x*.085))*18.);
+  float core=exp(-abs(r-(.42+smoothstep(.02,.45,k)*.45+uPulse.x*.32))*18.);
   float ring=exp(-length(vec2(length(p.xy)-(1.4+k*2.7),p.z*2.))*10.);
   float spokes=pow(.5+.5*cos(a*6.-flow*2.),45.)*exp(-abs(p.z)*7.)*exp(-abs(r-(1.+k*2.))*2.);
   d=core+ring*.65+spokes*(1.-smoothstep(.35,.8,k))*.7;
@@ -19,7 +19,7 @@ vec2 field(vec3 p){
   // Two solid stars and an asymmetric tidal bridge. Sparse ejecta preserve dark space.
   float separation=2.5*(1.-clamp(k*.15+uAction*.7,0.,1.))+.28;
   vec3 q=p-vec3(separation,.42,.5),q2=p+vec3(separation,.42,.5);
-  float r1=length(q),r2=length(q2),radius=.86+uPulse.x*.055;
+  float r1=length(q),r2=length(q2),radius=.86+uPulse.x*.24;
   float suns=exp(-pow(r1/radius,4.))+exp(-pow(r2/(radius*.83),4.));
   float corona=exp(-r1*1.6)*.15+exp(-r2*1.6)*.15;
   float bridge=exp(-length(vec2(p.y-.27*sin(p.x*1.7+flow),p.z-.25*p.x))*5.)*exp(-abs(p.x)*.8)*(.2+uAction*.6);
@@ -60,7 +60,7 @@ vec2 field(vec3 p){
  }else{
   // Longitudinal coils read as an actual departure rather than another orbit.
   float radius=length(p.xy),a=atan(p.y,p.x);
-  float z=p.z+uChapterTime*(5.+k*10.);
+  float z=p.z+uTravelTime*(5.+k*10.);
   float coil=length(vec2(radius-(1.7+.2*sin(z*.7)),sin(z*2.-a)*.65));
   d=exp(-coil*13.)*.8;
   d+=pow(.5+.5*cos(a*9.+z*.3),32.)*exp(-abs(radius-2.4)*12.)*.5;
@@ -71,14 +71,14 @@ vec2 field(vec3 p){
  return vec2(d*filament,hot);
 }
 void main(){
- vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uChapterProgress,0.,1.);
+ vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  vec3 ro,target=vec3(0);
  if(uVariant==0)ro=vec3(.3-k*.6,.2,6.6-k*1.8);
  else if(uVariant==1){ro=vec3(-1.5+k*2.5,1.8,8.3);target=vec3(.15,.1,0.);}
  else if(uVariant==2){ro=vec3(5.3-k*1.2,2.2,4.8);p=rot(-.22)*p;}
  else if(uVariant==3)ro=vec3(.8,5.8-k*1.3,5.7);
  else{ro=vec3(sin(k*PI)*.23,cos(k*PI)*.23,5.);target=ro+vec3(0,0,-12.);p=rot(k*.35)*p;}
- vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,uVariant==4?1.15:1.65));
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(uVariant==4?1.15:1.65)));
  vec3 c=vec3(.001,.003,.011);float transmission=1.;
  int count=uRetro==1?48:96;
  float jitter=hash(gl_FragCoord.xy)-.5;
@@ -95,12 +95,12 @@ void main(){
   transmission*=1.-opacity*.85;
  }
  vec2 q=rd.xy/max(.18,abs(rd.z));
- float clouds=fbm(q*2.+vec2(uChapterTime*.015,0.))*fbm(q*5.);
+ float clouds=fbm(q*2.+vec2(uTravelTime*.015,0.))*fbm(q*5.);
  c+=mix(vec3(.035,.08,.17),vec3(.18,.07,.035),clouds)*clouds*.16*transmission;
  // Two parallax star layers keep the void alive without covering the hero plasma.
  for(int layer=0;layer<2;layer++){
   float fl=float(layer),scale=110.+fl*95.;
-  vec2 stars=q*scale+vec2(uChapterTime*(1.+fl*2.),uChapterTime*.3);
+  vec2 stars=q*scale+vec2(uTravelTime*(1.+fl*2.),uTravelTime*.3);
   vec2 cell=floor(stars),f=fract(stars)-.5;float h=hash(cell+fl*19.);
   float point=exp(-dot(f,f)*180.)*step(.983,h);
   c+=vec3(.32,.55,.9)*point*(.6+uPulse.z*.9)*transmission;
@@ -108,8 +108,8 @@ void main(){
  // Hot ejecta follow actual 3D tracks around the binary/remnant, with parallax.
  if(uVariant==1||uVariant==2){
   for(int i=0;i<18;i++){
-   float fi=float(i),phase=fi*2.39996+uChapterTime*.48;
-   float r=1.6+mod(fi*.73+uChapterTime*.28,3.0);
+   float fi=float(i),phase=fi*2.39996+uTravelTime*.48;
+   float r=1.6+mod(fi*.73+uTravelTime*.28,3.0);
    vec3 spark=vec3(cos(phase)*r,sin(phase)*r*.65,sin(phase*1.7)*r*.6);
    float along=dot(spark-ro,rd),miss=length(ro+rd*along-spark);
    if(along>0.)c+=mix(vec3(.12,.65,1.2),vec3(1.1,.45,.10),mod(fi,2.))*exp(-miss*36.)*(.45+uPulse.z*.7);

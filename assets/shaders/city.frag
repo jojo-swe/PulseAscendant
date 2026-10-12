@@ -9,7 +9,7 @@ vec2 city(vec3 p){
  float lane=abs(cell.x)<1.?0.:1.;
  if(uVariant==0){
   // Street-level neon towers grow in a wave ahead of the ascending camera.
-  float build=smoothstep(.0,.8,k*.25+uAction*.75+(p.z-uChapterTime*24.)*.006);
+  float build=smoothstep(.0,.8,k*.25+uAction*.75+(p.z-uTravelTime*24.)*.006);
   h*=.65+build*.5;b=box(vec3(q.x,p.y-h*.5,q.y),vec3(2.3,h*.5,2.4));
   float crown=box(vec3(q.x,p.y-h-.65,q.y),vec3(1.6,.65,1.7));b=min(b,crown);
  }else if(uVariant==1){
@@ -79,10 +79,10 @@ vec2 city(vec3 p){
 }
 vec3 normalAt(vec3 p){vec2 e=vec2(.007,0);return normalize(vec3(city(p+e.xyy).x-city(p-e.xyy).x,city(p+e.yxy).x-city(p-e.yxy).x,city(p+e.yyx).x-city(p-e.yyx).x));}
 void main(){
- vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uChapterProgress,0.,1.);
+ vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  vec3 ro,target;float lens=1.35;
  if(uVariant==0){
-  float travel=uChapterTime*24.;
+  float travel=uTravelTime*24.;
   ro=vec3(sin(k*PI)*1.2,1.5+smoothstep(.35,.95,k)*8.,travel);
   target=ro+vec3(-sin(k*PI)*.6,1.2,22.);
  }else if(uVariant==1){
@@ -94,10 +94,10 @@ void main(){
   ro=vec3(-24.+k*48.,6.2+k*1.4,4.);
   target=vec3(0,15.+uAction*2.,27.);lens=1.25;
  }else{
-  float travel=uChapterTime*29.;ro=vec3(sin(k*PI)*1.2,16.+k*12.,travel);
+  float travel=uTravelTime*29.;ro=vec3(sin(k*PI)*1.2,16.+k*12.,travel);
   target=ro+vec3(-sin(k*PI)*.6,-1.5,22.);
  }
- vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(lens)));
  vec3 sky=mix(vec3(.005,.009,.025),uVariant==1?vec3(.14,.085,.045):vec3(.07,.015,.11),exp(-abs(rd.y)*3.));
  if(uVariant==3)sky+=vec3(.02,.07,.1)*max(rd.y+.3,0.);
  sky+=accent(.6)*pow(max(dot(rd,normalize(vec3(.2,.08,1.))),0.),100.)*.25;
@@ -123,7 +123,7 @@ void main(){
    c*=landmark?vec3(1.6,1.3,.9):vec3(.9,1.,1.1);
    c+=warm*window*occupied*(.23+band*.16+uPulse.y*.30);
    c+=vec3(.025,.09,.14)*fres*facade;
-   float scan=pow(.5+.5*cos(at.y*.58-uChapterTime*4.+floor(at.z/8.)),20.);
+   float scan=pow(.5+.5*cos(at.y*.58-uTravelTime*4.+floor(at.z/8.)),20.);
    c+=neon*window*occupied*scan*(.06+uPulse.x*.22);
    if(landmark){
     vec3 local=at-vec3(0,0,28.);
@@ -136,7 +136,7 @@ void main(){
    float lane=line(abs(at.x)-.1,.035)*step(.6,fract(at.z*.08));
    float grid=line(min(abs(mod(at.x+.5,1.)-.5),abs(mod(at.z+2.,4.)-2.)),.018);
    float wet=pow(max(dot(reflect(rd,n),normalize(vec3(.1,.08,1.))),0.),18.);
-   float stream=pow(.5+.5*cos(at.z*.4-uChapterTime*13.),18.);
+   float stream=pow(.5+.5*cos(at.z*.4-uTravelTime*13.),18.);
    c+=neon*(lane*1.8+grid*.08+exp(-abs(abs(at.x)-3.2)*2.)*(.35+stream*.7+uPulse.x*.55));
    c+=vec3(.2,.3,.45)*wet*.2;
   }
@@ -146,7 +146,7 @@ void main(){
  for(int i=0;i<10;i++){
   float fi=float(i),side=mod(fi,2.)*2.-1.;
   float centreZ=uVariant==0||uVariant>=3?ro.z:24.;
-  float tz=centreZ+mod(fi*17.+uChapterTime*(side*23.-9.),150.)-35.;
+  float tz=centreZ+mod(fi*17.+uTravelTime*(side*23.-9.),150.)-35.;
   vec3 traffic=vec3(side*(2.1+mod(fi,3.)*.45),uVariant>=3?24.:3.4+mod(fi,3.)*2.2,tz);
   float along=dot(traffic-ro,rd),miss=length(ro+rd*along-traffic);
   if(along>0.&&(!hit||along<t))c+=mix(vec3(.04,.6,1.5),vec3(1.7,.25,.035),step(0.,side))*exp(-miss*14.)*(1.+uPulse.z*.6);

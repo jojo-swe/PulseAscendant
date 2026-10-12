@@ -35,11 +35,11 @@ vec2 fighter(vec3 q,float wing){
  float ship=min(min(body,wings),cockpit);
  vec3 fin=q-vec3(0,.35,-.75);fin.yz=rot(-.25)*fin.yz;
  ship=min(ship,box(fin,vec3(.04,.35,.35)));
- float engine=max(length(q.xy)-(.10+uPulse.x*.04),abs(q.z+2.25)-(.65+uPulse.x*.5));
+ float engine=max(length(q.xy)-(.10+uPulse.x*.12),abs(q.z+2.25)-(.65+uPulse.x*1.8));
  return engine<ship?vec2(engine,2.):vec2(ship,1.);
 }
-vec3 flagshipTarget(){return vec3(1.8*sin(uChapterProgress*PI),-4.+uChapterProgress*1.5,uChapterTime*9.+34.-uChapterProgress*9.);}
-vec3 pursuitTarget(){return vec3(sin(uChapterProgress*PI)*2.,.5+uAction*1.8,uChapterTime*23.+13.);}
+vec3 flagshipTarget(){return vec3(1.8*sin(uChapterProgress*PI),-4.+uChapterProgress*1.5,uTravelTime*9.+34.-uChapterProgress*9.);}
+vec3 pursuitTarget(){return vec3(sin(uChapterProgress*PI)*2.,.5+uAction*1.8,uTravelTime*23.+13.);}
 vec3 fleetCell(vec3 p){
  if(uVariant==3)return p-pursuitTarget();
  if(uVariant==1)return p-vec3(0,0,28.);
@@ -47,8 +47,8 @@ vec3 fleetCell(vec3 p){
  p.z=mod(p.z+spacing*.5,spacing)-spacing*.5;
  p.x=abs(mod(p.x+14.,28.)-14.)-(uVariant==2?4.5:7.+uAction*2.);
  p.y=mod(p.y+10.,20.)-10.;
- p.y-=sin(uChapterTime*1.25+p.z*.12)*.16;
- p.x-=sin(uChapterTime*.9+p.z*.14)*.18;return p;
+ p.y-=sin(uTravelTime*1.25+p.z*.12)*.16;
+ p.x-=sin(uTravelTime*.9+p.z*.14)*.18;return p;
 }
 vec2 fleet(vec3 p){
  float k=clamp(uChapterProgress,0.,1.);vec2 hit=vec2(100.,1.);
@@ -66,7 +66,7 @@ vec2 fleet(vec3 p){
   // Two close escorts overtake the tracked flagship throughout the reveal.
   for(int i=0;i<2;i++){
    float side=i==0?-1.:1.;
-   vec3 escort=p-flagshipTarget()-vec3(side*(8.5-uAction*1.3),5.+sin(uChapterTime*.8+side)*.5,-8.+k*13.);
+   vec3 escort=p-flagshipTarget()-vec3(side*(8.5-uAction*1.3),5.+sin(uTravelTime*.8+side)*.5,-8.+k*13.);
    vec2 small=fighter(escort,.75);if(small.x<hit.x)hit=small;
   }
  }else if(uVariant==1){
@@ -77,7 +77,7 @@ vec2 fleet(vec3 p){
   vec3 exhaust=vec3(abs(q.x)-5.3,q.y+.2,q.z+17.);
   float thrust=max(length(exhaust.xy)-.78,abs(exhaust.z)-(1.4+uPulse.x*1.3));
   if(thrust<hit.x)hit=vec2(thrust,2.);
-  vec3 escort=p-vec3(11.+uAction*3.,4.+sin(uChapterTime*1.2)*.4,24.+k*25.);
+  vec3 escort=p-vec3(11.+uAction*3.,4.+sin(uTravelTime*1.2)*.4,24.+k*25.);
   vec2 small=fighter(escort,.7);if(small.x<hit.x)hit=small;
  }else if(uVariant==2){
   // Hangar launch: walls slide aside and fighters leave a physical interior.
@@ -95,7 +95,7 @@ vec2 fleet(vec3 p){
   if(escort.x<hit.x)hit=escort;
   vec3 debris=p;float cell=floor((p.z+10.)/20.);debris.z=mod(p.z+10.,20.)-10.;
   debris.xy-=vec2(sin(cell*2.3),cos(cell*1.7))*(5.+uAction*2.);
-  debris.xy=rot(cell*.8+k+uChapterTime*.8)*debris.xy;
+  debris.xy=rot(cell*.8+k+uTravelTime*.8)*debris.xy;
   float block=box(debris,vec3(.5,.7,1.1));if(block<hit.x)hit=vec2(block,3.);
   // A volley is fired once on the musical action; the bolts travel out of view.
   vec3 bolt=p-pursuitTarget()-vec3(2.,-.6,-8.+uAction*60.);
@@ -106,13 +106,13 @@ vec2 fleet(vec3 p){
 }
 vec3 normalAt(vec3 p){vec2 e=vec2(.005,0);return normalize(vec3(fleet(p+e.xyy).x-fleet(p-e.xyy).x,fleet(p+e.yxy).x-fleet(p-e.yxy).x,fleet(p+e.yyx).x-fleet(p-e.yyx).x));}
 void main(){
- vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uChapterProgress,0.,1.);
+ vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);float k=clamp(uCameraProgress,0.,1.);
  vec3 ro,target;
- if(uVariant==0){ro=vec3(-3.+k*6.,2.8,uChapterTime*9.);target=flagshipTarget()+vec3(0,2.,2.);}
+ if(uVariant==0){ro=vec3(-3.+k*6.,2.8,uTravelTime*9.);target=flagshipTarget()+vec3(0,2.,2.);}
  else if(uVariant==1){ro=vec3(21.-k*4.,9.-k*2.,-9.+k*36.);target=vec3(0,1.,26.+k*5.);}
- else if(uVariant==2){ro=vec3(0,.7,uChapterTime*16.);target=ro+vec3(0,.3,20.);}
+ else if(uVariant==2){ro=vec3(0,.7,uTravelTime*16.);target=ro+vec3(0,.3,20.);}
  else{ro=pursuitTarget()+vec3(1.2-k*.4,.8,-6.);target=pursuitTarget()+vec3(0,0,3.);p=rot(sin(k*PI)*.12)*p;}
- vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,1.35));
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,musicLens(1.35)));
  float t=.03,glow=0.;vec2 h;bool found=false;
  for(int i=0;i<128;i++){h=fleet(ro+rd*t);float ds=clamp(h.x*.75,.008,1.5);if(h.y>1.5&&h.y<2.5)glow+=exp(-abs(h.x)*12.)*ds;if(h.x<.004){found=true;break;}t+=ds;if(t>125.)break;}
  vec3 neon=vec3(.035,.40,.70);
@@ -137,7 +137,7 @@ void main(){
    c+=vec3(.6,.38,.16)*windows*(.15+uPulse.y*.28);
    float deckLine=line(abs(q.x)-2.6,.07)*step(.5,fract(q.z*.6))*max(n.y,0.);
    c+=vec3(.06,.48,.65)*deckLine*(.4+uPulse.x*.6);
-   float beacon=pow(.5+.5*cos(at.z*1.2-uChapterTime*5.),16.);
+   float beacon=pow(.5+.5*cos(at.z*1.2-uTravelTime*5.),16.);
    c+=vec3(1.,.26,.035)*line(abs(q.x)-5.3,.055)*beacon*(.15+uPulse.z*.3);
 
   }
@@ -146,10 +146,10 @@ void main(){
  }
  // World-space tracer lanes give moving foreground scale and remain depth occluded.
  for(int i=0;i<8;i++){
-  float fi=float(i),depth=mod(fi*13.+uChapterTime*28.,104.);
+  float fi=float(i),depth=mod(fi*13.+uTravelTime*28.,104.);
   vec3 streak=vec3(ro.x+(mod(fi,2.)*2.-1.)*(3.5+mod(fi,3.)*1.5),ro.y+sin(fi*2.4)*3.,ro.z+depth);
   float along=dot(streak-ro,rd),miss=length(ro+rd*along-streak);
   if(along>0.&&(!found||along<t))c+=vec3(.12,.35,.65)*exp(-miss*22.)*(.25+uPulse.z*.7);
  }
- c+=neon*glow*(.10+uPulse.x*.10);color=vec4(c,1.);
+ c+=neon*glow*(.10+uPulse.x*.40);color=vec4(c,1.);
 }

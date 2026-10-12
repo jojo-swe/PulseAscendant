@@ -201,11 +201,11 @@ struct HardwareRT::Impl {
   // Each occurrence is a directed set piece. The music accent advances an
   // irreversible action; the chapter clock never cycles the camera or set.
   const int variant=f.variant;
-  const float p=f.chapterProgress,action=f.action,impact=f.event;
-  const float kick=std::clamp(f.kick,0.f,1.f),snare=std::clamp(f.snare,0.f,1.f),treble=std::clamp(f.treble,0.f,1.f);
+  const float p=f.chapterProgress,cp=f.cameraProgress,action=f.action,impact=f.event;
+  const float kick=2.2f*std::clamp(f.kick,0.f,1.f),snare=1.5f*std::clamp(f.snare,0.f,1.f),treble=std::clamp(f.treble,0.f,1.f);
   // Continuous transport uses an integrated clock. Onsets only change physical
   // size/deflection/light, never multiply time (which would teleport geometry).
-  const float transport=float(f.motionSeconds)+float(f.localSeconds)*.8f;
+  const float transport=float(f.motionSeconds)+float(f.travelSeconds)*.8f;
   // GLSL-style positive modulo remains in range after arbitrarily many laps,
   // including negative transport. No finite offset can make fmod equivalent.
   auto wrap=[](float x,float period){return x-period*std::floor(x/period);};
@@ -226,7 +226,7 @@ struct HardwareRT::Impl {
      add(0,{std::sin(j*.3f)*1.2f,height-1,z},{2.7f,height,.16f},j*.025f,(-.3f+.6f*grow)*std::sin(j*.27f),steel,.98f,.08f);
      beam({-2.7f,height*2-1.02f,z},{2.7f,height*2-1.02f,z},.035f,cyan,0,.2f,cyan*(1.2f+f.spectrum[j%24]));
     }
-    eye=mix({16,10,-29},{-16,12,-25},p);target=mix({0,1,0},{0,3,0},p);
+    eye=mix({16,10,-29},{-16,12,-25},cp);target=mix({0,1,0},{0,3,0},cp);
    }else if(variant==1){
     // A monumental vaulted gallery unfolds overhead; the central aisle stays open.
     for(int j=0;j<12;++j){float z=(j-5.5f)*4.6f,open=ease(action+j*.025f),height=9+open*5;
@@ -237,22 +237,22 @@ struct HardwareRT::Impl {
       add(0,{side*9.1f,3,z},{.18f,4,1.6f},0,side*-.08f,steel,.95f,.08f);
      }
     }
-    eye={-1.7f+3.4f*p,1.8f+4.5f*p,-24+32*p};target=eye+V3{0,2,13};
+    eye={-1.7f+3.4f*cp,1.8f+4.5f*cp,-24+32*cp};target=eye+V3{0,2,13};
    }else if(variant==2){
     // Four flowing metal ribbons resolve from a liquid sheet into a rising wave.
-    for(int lane=0;lane<4;++lane)for(int j=0;j<56;++j){float z=(j-27.5f)*.52f,phase=z*.3f+float(f.localSeconds)*1.9f+lane*.7f;
+    for(int lane=0;lane<4;++lane)for(int j=0;j<56;++j){float z=(j-27.5f)*.52f,phase=z*.3f+float(f.travelSeconds)*1.9f+lane*.7f;
      float height=1.3f+(1+action*2.4f+bass*.9f)*std::sin(phase),x=(lane-1.5f)*2.4f+std::sin(phase*.7f)*action*1.5f;
      add(0,{x,height,z},{.9f,.065f,.3f},.06f*std::cos(phase),.35f*std::cos(phase),lane%2?gold:steel,.99f,.055f);
      if(j%7==0)beam({x-.85f,height+.08f,z},{x+.85f,height+.08f,z},.025f,cyan,0,.2f,cyan*(1.3f+bass));
     }
-    eye=mix({15,5,-22},{9,9,-9},p);target={0,2,1};
+    eye=mix({15,5,-22},{9,9,-9},cp);target={0,2,1};
    }else if(variant==3){
     // A staggered gold skyline is extruded from the mirror floor as we ascend.
     for(int x=-4;x<=4;++x)for(int z=-3;z<=3;++z){float seed=.5f+.5f*std::sin(float(x*13+z*7)),grow=ease(p*2.f-.28f*seed),height=.15f+grow*(3+15*seed);
      add(0,{x*2.4f,height-1,z*2.4f},{.7f,height,.7f},.1f*x,0,gold,.95f,.12f);
      add(0,{x*2.4f,height*2-.94f,z*2.4f},{.72f,.035f,.72f},.1f*x,0,cyan,0,.2f,cyan*(1.4f+bass));
     }
-    eye=mix({27,12,-38},{34,46,-48},p);target=mix({0,6,0},{0,16,0},p);
+    eye=mix({27,12,-38},{34,46,-48},cp);target=mix({0,6,0},{0,16,0},cp);
    }else if(variant==4){
     // A single mirror book fans into a long, asymmetrical staircase of light.
     for(int j=0;j<36;++j){float spread=ease(action+.015f*j),a=(-.65f+j*.038f)*spread;
@@ -260,7 +260,7 @@ struct HardwareRT::Impl {
      add(0,base,{4.5f,.08f,2.4f},a,-.6f*spread+j*.025f,steel,.98f,.065f);
      beam(base+V3{-4.5f,.15f,0},base+V3{4.5f,.15f,0},.045f,j%3?cyan:gold,0,.2f,(j%3?cyan:gold)*(1.5f+f.spectrum[j%24]*2));
     }
-    eye=mix({-22,11,-28},{-24,16,-38},p);target={0,2.8f,0};
+    eye=mix({-22,11,-28},{-24,16,-38},cp);target={0,2.8f,0};
    }else{
     // The final cathedral is a pair of massive folded doors, then a clear flight out.
     float open=action;
@@ -270,11 +270,11 @@ struct HardwareRT::Impl {
     }
     for(int side:{-1,1})beam({side*9.f,-1,-18},{side*9.f,-1,35},.08f,cyan,0,.2f,cyan*(2+bass));
     add(2,{0,8,36},{2.4f,7,2.4f},.3f,0,gold,.92f,.1f);
-    eye={18*(1-ease(p*1.6f)),10-5*p,-34+42*p};target={0,5,6+30*p};
+    eye={18*(1-ease(cp*1.6f)),10-5*cp,-34+42*cp};target={0,5,6+30*cp};
    }
   }else if(world==1){
    floor(100,.07f);
-   const float local=float(f.localSeconds)*1.65f;
+   const float local=float(f.travelSeconds)*1.65f;
    // The city is rebuilt for each visit: avenue, rail chase, folded circuit,
    // aerial canyon, then an evacuation into the horizon.
    for(int side:{-1,1})for(int j=0;j<22;++j){float seed=.5f+.5f*std::sin(j*7.1f+side),z=(j-10.5f)*7.f,height=4+seed*(variant==3?24:14);
@@ -296,7 +296,7 @@ struct HardwareRT::Impl {
      add(0,{x,8.7f,14},{1.45f,.4f,.8f},0,0,steel,.9f,.11f);
      add(0,{x,8.7f,13.17f},{1.25f,.07f,.02f},0,0,pink,0,.2f,pink*3);
     }
-    eye={1.4f,1.4f+.5f*p,-35+57*p};target=eye+V3{0,1,22};
+    eye={1.4f,1.4f+.5f*cp,-35+57*cp};target=eye+V3{0,1,22};
    }else if(variant==1){
     // A long maglev overtakes at the left, with an open road ahead of the camera.
     beam({-5.8f,.25f,-90},{-5.8f,.25f,90},.1f,steel,.85f,.13f);
@@ -309,7 +309,7 @@ struct HardwareRT::Impl {
      add(0,{j%2?2.1f:.1f,.2f,z},{.65f,.25f,1.2f},0,0,gold,.9f,.12f);
      add(0,{j%2?2.1f:.1f,.22f,z-1.23f},{.5f,.04f,.025f},0,0,pink,0,.2f,pink*4);
     }
-    eye={1.4f,2.1f+1.5f*action,-40+94*p};target=eye+V3{-.3f,.3f,20};
+    eye={1.4f,2.1f+1.5f*action,-40+94*cp};target=eye+V3{-.3f,.3f,20};
    }else if(variant==2){
     // The street is a suspended diamond circuit; its two banks peel apart.
     for(int j=0;j<18;++j){float z=(j-8.5f)*5.5f;
@@ -318,7 +318,7 @@ struct HardwareRT::Impl {
       beam({side*1.2f,y+.3f,z-2.3f},{side*8.f,y+.3f,z+2.3f},.05f,pink,0,.2f,pink*(1.4f+bass));
      }
     }
-    eye=mix({0,34,-28},{0,30,-2},p);target={0,3+4*action,14};
+    eye=mix({0,34,-28},{0,30,-2},cp);target={0,3+4*action,14};
    }else if(variant==3){
     // Aerial scale replaces the previous street shots; traffic streams cross below.
     for(int level=0;level<3;++level)for(int j=0;j<24;++j){float z=(j-11.5f)*5-local*(7+level*2),x=-8+level*8.f,y=9+level*9.f;
@@ -326,7 +326,7 @@ struct HardwareRT::Impl {
      add(0,{x,y,z-1.65f},{.28f,.06f,.04f},0,0,level%2?pink:cyan,0,.2f,(level%2?pink:cyan)*4);
     }
     for(int level=0;level<3;++level)beam({-17,10+level*9.f,10+level*14.f},{17,10+level*9.f,10+level*14.f},.12f,steel,.85f,.18f);
-    eye=mix({0,48,-44},{0,54,-9},p);target={0,18,15+20*p};
+    eye=mix({0,48,-44},{0,54,-9},cp);target={0,18,15+20*cp};
    }else{
     // An entire fleet lifts once from the wet roofs; the camera reveals the horizon.
     for(int j=0;j<70;++j){float x=(j%10-4.5f)*4,z=(j/10-3.f)*8+5,launch=ease(action-(j%7)*.04f),y=4+launch*(20+(j%5)*4);
@@ -334,7 +334,7 @@ struct HardwareRT::Impl {
      if(launch>.01f)beam({x,y-.4f,z},{x,y-.4f-launch*4,z},.055f,cyan,0,.2f,cyan*(3+bass));
     }
     add(2,{0,17,70},{17,22,12},.2f,0,gold,.8f,.14f);
-    eye=mix({0,3,-24},{0,20,-35},p);target={0,9+action*15,18};
+    eye=mix({0,3,-24},{0,20,-35},cp);target={0,9+action*15,18};
    }
    // Rain only belongs to the ground-level opening and pursuit, not every city view.
    if(variant<2)for(int j=0;j<90;++j){float y=std::fmod(j*2.3f-local*15,23.f);if(y<0)y+=23;
@@ -355,24 +355,24 @@ struct HardwareRT::Impl {
      add(0,{x,2+(j%3)*.3f,(j-4.5f)*.7f},{2,.17f,.32f},side*attach*.4f,side*(1-attach)*.4f,steel,.95f,.1f);
     }
     add(2,{0,2,0},{1.2f,1.1f,5},0,0,gold,.9f,.12f);
-    eye=mix({18,9,-22},{13,6,-14},p);target={0,2,0};
+    eye=mix({18,9,-22},{13,6,-14},cp);target={0,2,0};
    }else if(variant==1){
     // A suspended square matrix buckles into a travelling saddle wave.
-    for(int x=-7;x<=7;++x)for(int z=-7;z<=7;++z){float wave=std::sin(x*.4f+z*.28f-float(f.localSeconds)*2.9f),height=4+wave*(.6f+action*3)+kick*.8f;
+    for(int x=-7;x<=7;++x)for(int z=-7;z<=7;++z){float wave=std::sin(x*.4f+z*.28f-float(f.travelSeconds)*2.9f),height=4+wave*(.6f+action*3)+kick*.8f;
      add(0,{x*1.7f,height,z*1.7f},{.72f,.12f,.72f},.08f*x,action*wave*.25f,(x+z)%3?steel:gold,.94f,.12f);
      if((x+z)%3==0)add(0,{x*1.7f,height+.15f,z*1.7f},{.55f,.025f,.55f},0,0,cyan,0,.2f,cyan*(.8f+f.spectrum[(x+z+24)%24]*2));
     }
     for(int side:{-1,1})for(int z:{-1,1})beam({side*14.f,-1,z*14.f},{side*14.f,12,z*14.f},.25f,steel,.9f,.2f);
-    eye=mix({24,20,-29},{18,14,-25},p);target={0,4,0};
+    eye=mix({24,20,-29},{18,14,-25},cp);target={0,4,0};
    }else if(variant==2){
     // Ten industrial pistons part a block to reveal a vertical energy heart.
-    for(int side:{-1,1})for(int j=0;j<5;++j){float z=(j-2.f)*2.4f,stroke=(.5f+.5f*std::sin(float(f.localSeconds)*2.7f+j*.7f))*(.7f+f.spectrum[j*4]*2.8f)+kick*.7f;
+    for(int side:{-1,1})for(int j=0;j<5;++j){float z=(j-2.f)*2.4f,stroke=(.5f+.5f*std::sin(float(f.travelSeconds)*2.7f+j*.7f))*(.7f+f.spectrum[j*4]*2.8f)+kick*.7f;
      beam({side*10.f,3,z},{side*(4+stroke),3,z},.55f,steel,.97f,.1f);
      add(0,{side*(3.2f+action*3),3,z},{.6f,2.6f,.8f},0,0,gold,.9f,.13f);
     }
     for(int side:{-1,1})for(int z:{-1,1})add(0,{side*(1.9f+action*3),3,z*1.9f},{1.65f,3,1.65f},side*action*.15f,0,steel,.96f,.09f);
     beam({0,-.7f,0},{0,8+action*7,0},.14f+impact*.18f+kick*.35f,cyan,0,.25f,cyan*(2+action*3+bass));
-    eye=mix({20,10,-27},{18,13,-24},p);target={0,4.5f,0};
+    eye=mix({20,10,-27},{18,13,-24},cp);target={0,4.5f,0};
    }else if(variant==3){
     // Two cargo formations collide once, then their fragments keep separating.
     const float accent=std::max(.01f,float(f.accentSeconds));
@@ -391,7 +391,7 @@ struct HardwareRT::Impl {
     if(impact>.01f||burst>.001f)for(int j=0;j<18;++j){float a=j*2*pi/18;
      beam({std::cos(a)*(1+burst*15),3+std::sin(a)*(1+burst*15),1},{std::cos(a)*(2+burst*24),3+std::sin(a)*(2+burst*24),1},.035f,cyan,0,.2f,cyan*(impact*6+burst*.4f));
     }
-    eye=mix({8,8,-37},{-5,13,-43},p);target={0,3,0};
+    eye=mix({8,8,-37},{-5,13,-43},cp);target={0,3,0};
    }else{
     // The completed engine launches; a withdrawing gantry gives a readable silhouette.
     float launch=action*ease((p-.25f)/.75f),height=3+launch*36;
@@ -412,11 +412,11 @@ struct HardwareRT::Impl {
    if(variant==0){
     // A monolithic glass cube separates into eight refracting corners.
     for(int x:{-1,1})for(int y:{-1,1})for(int z:{-1,1}){
-     add(0,{x*(1.6f+action*2.6f),4+y*(1.6f+action*.5f),z*(1.6f+action*2.6f)},{1.55f,1.55f,1.55f},action*x*.15f+std::sin(float(f.localSeconds)*.9f+x)*.12f,action*z*.1f,{.65f,.88f,1},.08f,.025f,{},.95f);
+     add(0,{x*(1.6f+action*2.6f),4+y*(1.6f+action*.5f),z*(1.6f+action*2.6f)},{1.55f,1.55f,1.55f},action*x*.15f+std::sin(float(f.travelSeconds)*.9f+x)*.12f,action*z*.1f,{.65f,.88f,1},.08f,.025f,{},.95f);
     }
     add(2,{0,4,0},{.65f+kick*.35f,2.8f+kick,.65f+kick*.35f},.3f,0,gold,.1f,.03f,gold*(.4f+impact));
     beam({-12,4,-4},{12,4,4},.045f,cyan,0,.2f,cyan*(2+bass));
-    eye=mix({13,7,-19},{9,9,-17},p);target={0,4,0};
+    eye=mix({13,7,-19},{9,9,-17},cp);target={0,4,0};
    }else if(variant==1){
     // A line of angled glass monoliths turns one incident beam into a rainbow fan.
     for(int j=0;j<9;++j){float z=(j-4.f)*2.4f,yaw=(j-4.f)*.13f+action*.4f;
@@ -425,7 +425,7 @@ struct HardwareRT::Impl {
      beam({0,3,z},{12+action*6,3+(j-4)*(.7f+action*.7f),z+(j-4)*2},.055f,e,0,.2f,e*(2.1f+f.spectrum[j*2]*2));
     }
     beam({-18,3,0},{0,3,0},.08f,{1,1,1},0,.2f,{2.3f,2.3f,2.3f});
-    eye=mix({-19,12,-25},{-14,10,-20},p);target={3,3,0};
+    eye=mix({-19,12,-25},{-14,10,-20},cp);target={3,3,0};
    }else if(variant==2){
     // A quieter floating book of glass opens into a sparse wing of interior light.
     for(int j=0;j<14;++j){float a=(j-6.5f)*.085f*(.1f+action),x=(j-6.5f)*.45f;
@@ -433,7 +433,7 @@ struct HardwareRT::Impl {
      beam({x,1,0},{x,5+action*2,0},.035f,gold,0,.2f,gold*(.7f+bass*.5f));
     }
     add(0,{0,-.8f,0},{7,.2f,6},0,0,{.05f,.12f,.17f},.8f,.1f);
-    eye=mix({-14,8,-19},{-11,6,-16},p);target={0,4,0};
+    eye=mix({-14,8,-19},{-11,6,-16},cp);target={0,4,0};
    }else if(variant==3){
     // A huge faceted prism breaks once into a shell of tumbling glass shards.
     float burst=action*ease((p-.25f)/.75f);
@@ -443,7 +443,7 @@ struct HardwareRT::Impl {
     }
     if(action<.98f)add(2,{0,4,0},{2.8f*(1-action)+.05f,4*(1-action)+.05f,2.8f*(1-action)+.05f},.3f,0,{.65f,.85f,1},.05f,.025f,{},.97f);
     for(int j=0;j<9;++j){float a=j*2*pi/9;beam({0,4,0},{std::cos(a)*20,4+std::sin(a)*14,7},.035f,j%2?cyan:gold,0,.2f,(j%2?cyan:gold)*(.5f+impact*4));}
-    eye=mix({7,7,-25},{-3,10,-31},p);target={0,4,0};
+    eye=mix({7,7,-25},{-3,10,-31},cp);target={0,4,0};
    }else{
     // An angular glass avenue opens into a bright, unobstructed exit to Act III.
     for(int j=0;j<16;++j)for(int side:{-1,1}){float z=(j-7.5f)*4.8f,open=ease(action-j*.012f),x=side*(5+open*5);
@@ -455,7 +455,7 @@ struct HardwareRT::Impl {
      beam({0,5,76},{std::cos(a)*32,5+std::sin(a)*28,82},.08f,j%2?gold:cyan,0,.2f,(j%2?gold:cyan)*(2+bass));
     }
     add(2,{0,5,76},{2.2f,5,2.2f},.4f,0,gold,.6f,.1f,gold*.8f);
-    eye={0,2.2f+2.3f*p,-28+66*p};target=eye+V3{0,.8f,20};
+    eye={0,2.2f+2.3f*cp,-28+66*cp};target=eye+V3{0,.8f,20};
    }
   }
   // Secondary activity has a different physical role in each world. These
@@ -481,7 +481,7 @@ struct HardwareRT::Impl {
    // Hot industrial material races along the side conveyors, clear of the hero.
    for(int side:{-1,1})for(int j=0;j<16;++j){
     float z=wrap(j*3.8f-transport*12,60.f)-30;
-    float y=.3f+std::abs(std::sin(j*2.3f+float(f.localSeconds)*2.f))*(.8f+snare*2);
+    float y=.3f+std::abs(std::sin(j*2.3f+float(f.travelSeconds)*2.f))*(.8f+snare*2);
     V3 e=j%3?gold:pink;
     add(2,{side*10.f,y,z},{.11f,.18f,.5f},0,.3f*j,e,.25f,.2f,e*(1.2f+treble*2));
    }
@@ -624,14 +624,14 @@ struct HardwareRT::Impl {
   }
   if(world<4){
    // A continuous lateral arc reveals depth around the hero; fly-throughs keep
-   // their clear aisle. No periodic orbit and no camera shake on drum hits.
+   // their clear aisle. Measured attacks drive optical push, without camera shake.
    if(world!=1 && !(world==0&&(variant==1||variant==5)) && !(world==3&&variant==4)){
-    const float arc=std::sin(p*pi);
+    const float arc=std::sin(cp*pi);
     eye=eye+V3{arc*(variant%2?-3.5f:3.5f),arc*1.5f,arc*2.f};
    }
   }
   V3 forward=norm(target-eye),right=norm(cross(forward,{0,1,0})),up=cross(right,forward);
-  Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;result.pulse[0]=kick;result.pulse[1]=snare;result.pulse[2]=treble;result.pulse[3]=f.pulsePhase;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
+  Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;result.pulse[0]=f.kick;result.pulse[1]=f.snare;result.pulse[2]=treble;result.pulse[3]=f.pulsePhase;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
  }
  const float* render(const TimelineFrame& f,int w,int h){
   if(!rtViewportFits(uint32_t(w),uint32_t(h),maxOutputBytes))throw std::runtime_error("RT viewport exceeds this device's storage buffer range; reduce window size");
