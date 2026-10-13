@@ -90,3 +90,16 @@ before the separate related-video feature can be used.
 YouTube reports a melody/lyrics copyright claim for "Watching the Waves
 (Cedric Paul Remix)" with no effect on the video's reach and no copyright strike.
 No dispute or soundtrack alteration was submitted.
+
+## v0.7 Short
+
+[Watch the new Short](https://youtube.com/shorts/cZMAWPHVVCQ): 28 seconds,
+1080x1920 at 60fps, seven native portrait camera excerpts. The source shots start
+at 48.5, 168.5, 396.5, 412.5, 605, 664 and 685 seconds. Cuts follow measured
+attacks in the 110-138s excerpt of Rigid Arpeggios. The complete 1680-frame decode
+passed; all four audio correlation windows passed with zero measured offset.
+The full movie's URL is saved at the top of the Short's description and its
+on-screen call to action points viewers to the full demo on the channel.
+The separate clickable related-video feature remains blocked by YouTube's
+channel-verification requirement. The Short is public and YouTube's initial
+copyright check reports no problems.

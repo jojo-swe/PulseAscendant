@@ -13,6 +13,7 @@ Procedural worlds. Moving machinery. Stellar storms. Hardware ray tracing.
 [![Code license MIT](https://img.shields.io/badge/code_license-MIT-a6b4d0?style=for-the-badge&labelColor=101827)](LICENSE)
 
 **[▶ Watch the complete v0.7 demo in 4K60](https://youtu.be/TmI1FHAdJao)**
+&nbsp; · &nbsp; **[▶ Watch the v0.7 Short](https://youtube.com/shorts/cZMAWPHVVCQ)**
 &nbsp; · &nbsp; **[↓ Download the demo](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0)**
 &nbsp; · &nbsp; **[Svenska](docs/README.sv.md)**
 
@@ -141,7 +142,7 @@ Chapter cuts consider measured attacks and persistent spectral changes within ±
 
 These checks cover the documented builds and samples; physical Linux hardware RT and full-show audience retention remain unverified. See the [verification report](docs/VERIFICATION.md), [independent review](docs/QUALITY_REVIEW.md) and [release checksums](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/SHA256SUMS.txt).
 
-> **Film status:** the v0.5 1080p60 preview is available now. The full v0.5 4K60 export is complete and verified; YouTube publication is pending the earlier upload limit. Earlier YouTube videos show earlier versions: [v0.4 Short](https://youtube.com/shorts/uOhjmoLY6DI) · [v0.3 full film](https://youtu.be/b5ShsKNC7KM).
+> **Film status:** the complete [v0.7 demo in 4K60](https://youtu.be/TmI1FHAdJao) and its [1080x1920/60 Short](https://youtube.com/shorts/cZMAWPHVVCQ) are public. The Short contains seven native portrait excerpts with music-directed cuts and points viewers to the full movie. Earlier versions remain archived; the previous main film is unlisted.
 
 ## Make it your own
 
