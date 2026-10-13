@@ -12,7 +12,7 @@ Procedural worlds. Moving machinery. Stellar storms. Hardware ray tracing.
 [![Vulkan ray queries](https://img.shields.io/badge/Act_II-Vulkan_Ray_Queries-f7b84e?style=for-the-badge&labelColor=101827)](#inside-the-renderer)
 [![Code license MIT](https://img.shields.io/badge/code_license-MIT-a6b4d0?style=for-the-badge&labelColor=101827)](LICENSE)
 
-**[▶ Watch the 1080p60 preview](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4)**
+**[▶ Watch the complete v0.7 demo in 4K60](https://youtu.be/TmI1FHAdJao)**
 &nbsp; · &nbsp; **[↓ Download the demo](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0)**
 &nbsp; · &nbsp; **[Svenska](docs/README.sv.md)**
 

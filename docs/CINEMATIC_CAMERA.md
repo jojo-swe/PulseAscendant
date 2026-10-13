@@ -55,9 +55,10 @@ unchanged total length. Silence remains silent.
 
 Native builds and visual preview evidence are recorded under
 `build/cinematic-v07/`; packages and preview are under `dist/cinematic-v07/`.
-Human viewing/listening acceptance is pending. The delivery automation remains
-paused; this camera revision does not authorize a new 4K export, YouTube
-publication or a GitHub release.
+The owner authorized the complete 4K export on October 13, 2026, then requested
+immediate YouTube upload and publication. The verified full movie is now public;
+the obsolete scheduled upload has been paused. Artistic acceptance remains a
+separate human judgment. No new GitHub release was published during this delivery.
 
 | Verification | Result |
 | --- | --- |
@@ -68,9 +69,24 @@ publication or a GitHub release.
 | Independent code review after corrections | 8.5/10; artistic acceptance remains pending |
 | Review montage | 72s, 1280x720, 60fps, HEVC Main10; all 4320 frames decoded |
 | Montage audio verification | 18/18 windows passed, measured offset 0ms |
+| Complete native movie | 3840x2160, 60fps, HEVC Main10, 53321 frames, 888.68s |
+| Full movie verification | Complete video/audio decode passed; 18/18 audio windows, offset 0ms |
+| YouTube delivery | Public; 2160p60 available in the public player's quality menu |
 
 The montage includes selected shots from all three acts and both song boundaries.
 It is a short review preview, not a new export of the full show.
 [Watch the camera preview on Google Drive](https://drive.google.com/file/d/1AtgxFt1vrdq-h1k2Ac2zxc7NA12V44n0/view).
 The Windows executable is `dist/cinematic-v07/Windows-x64/PulseAscendant.exe`;
 the Linux executable is `dist/cinematic-v07/Linux-x64/PulseAscendant`.
+
+[Watch the complete v0.7 demo on YouTube](https://youtu.be/TmI1FHAdJao).
+[Full 4K60 HEVC file on Google Drive](https://drive.google.com/file/d/1j7Gf5cSpOPfJArDOzx5OYohipGma1S9q/view).
+The full file is 3143777229 bytes, SHA256
+`ec8d89441c0055f224cfb2bcdab1805daea0400f8a4f36d6fa282e1519244fbe`.
+The previous main video is unlisted and points to this version. The existing
+Short's description also points to it; YouTube requires channel verification
+before the separate related-video feature can be used.
+
+YouTube reports a melody/lyrics copyright claim for "Watching the Waves
+(Cedric Paul Remix)" with no effect on the video's reach and no copyright strike.
+No dispute or soundtrack alteration was submitted.
