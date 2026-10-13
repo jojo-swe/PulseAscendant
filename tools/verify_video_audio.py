@@ -14,7 +14,8 @@ import numpy as np
 def decode(path, start, duration):
     data = subprocess.check_output([
         'ffmpeg', '-v', 'error', '-nostdin', '-ss', str(start), '-i', str(path),
-        '-t', str(duration), '-vn', '-ac', '1', '-ar', '8000', '-f', 'f32le', 'pipe:1'])
+        '-t', str(duration), '-vn', '-ac', '1', '-ar', '8000', '-f', 'f32le', 'pipe:1'],
+        **({'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}))
     return np.frombuffer(data, dtype='<f4').astype(np.float64)
 
 
