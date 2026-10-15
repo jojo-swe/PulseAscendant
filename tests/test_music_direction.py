@@ -18,6 +18,15 @@ class DirectionTests(unittest.TestCase):
     def test_silence_remains_finite_and_uses_editorial_targets(self):
         starts,_=direct(np.zeros((601,3),dtype=np.uint8),np.zeros((601,24),dtype=np.uint8),[0,10,20],30)
         self.assertEqual(starts,[0,10,20])
+    def test_cuts_land_on_tracked_beats(self):
+        data=np.zeros((801,3),dtype=np.uint8)
+        beats=[round(i*.5+.13,3) for i in range(80)]
+        for t in (10.13,20.63):
+            data[round(t*20),2]=255
+        starts,report=direct(data,np.zeros((801,24),dtype=np.uint8),[0,10,20,30],40,beats[::4],beats[::16],beats)
+        self.assertTrue(all(s in beats for s in starts[1:]))
+        self.assertEqual(starts[1:3],[10.13,20.63])
+        self.assertTrue(all(c['on_beat'] for c in report[1:]))
     def test_impossible_edit_rejected(self):
         with self.assertRaises(ValueError):
             direct(np.zeros((201,3),dtype=np.uint8),np.zeros((201,24),dtype=np.uint8),[0,2,4],10)

@@ -9,5 +9,5 @@ struct Extent { int width,height; };
 std::vector<Particle> makeTunnel(double seconds);
 Mesh glenzMesh();
 std::vector<Plane> glenzPlanes();
-Extent renderExtent(int width,int height,bool retro);
+Extent renderExtent(int width,int height,bool retro,float scale=1);
 }

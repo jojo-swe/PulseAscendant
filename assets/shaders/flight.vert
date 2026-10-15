@@ -1,6 +1,7 @@
 #version 330 core
 uniform vec2 uResolution;uniform float uTime;
 out vec3 vColor;
+uniform int uRetro;
 #include "common.glsl"
 void main(){
  float id=float(gl_VertexID/2),tail=float(gl_VertexID%2),h=hash(vec2(id,1));

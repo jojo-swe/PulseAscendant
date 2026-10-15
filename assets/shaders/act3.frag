@@ -729,11 +729,14 @@ void main(){
  float shake=quiet?0.:.0012;
  p+=vec2(sin(uTime*29.),cos(uTime*23.))*uHit*shake;
  if(uScene==12&&uVariant==2||uScene==13&&uVariant==2)p=rot(sin(uChapterTime*.45)*.1)*p;
+ bool travel=uScene==12&&(uVariant==2||uVariant==4)||uScene==13&&uVariant==2||uScene==14&&(uVariant==1||uVariant==4)||uScene==15&&(uVariant==0||uVariant==5);
+ cinematicRig(eye,target,p,focal,quiet?.35:(travel?.1:.9),quiet?.2:(travel?.9:.6));
  vec3 ray=cameraBasis(eye,target)*normalize(vec3(p,focal));
  float visibleDistance;
  vec3 c=renderWorld(eye,ray,visibleDistance)*(1.+.025*uCut);
  c+=motionLayers(eye,ray,visibleDistance);
  // One accent flash announces the irreversible action, without washing out it.
  c+=emissionColor()*uEvent*.025;
+ if(travel)c+=speedDust(p,focal,emissionColor()*.5+.15);
  color=vec4(max(c,vec3(0)),1.);
 }

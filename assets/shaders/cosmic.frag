@@ -78,7 +78,9 @@ void main(){
  else if(uVariant==2){ro=vec3(5.3-k*1.2,2.2,4.8);p=rot(-.22)*p;}
  else if(uVariant==3)ro=vec3(.8,5.8-k*1.3,5.7);
  else{ro=vec3(sin(k*PI)*.23,cos(k*PI)*.23,5.);target=ro+vec3(0,0,-12.);p=rot(k*.35)*p;}
- vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,uVariant==4?1.15:1.65));
+ float lens=uVariant==4?1.15:1.65;
+ cinematicRig(ro,target,p,lens,uVariant==4?0.:1.,uVariant==4?1.:.6);
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
  vec3 c=vec3(.001,.003,.011);float transmission=1.;
  int count=uRetro==1?48:96;
  float jitter=hash(gl_FragCoord.xy)-.5;
@@ -119,5 +121,6 @@ void main(){
   // An expanding full-frame halo is the opening action, with a visible start and finish.
   float wave=length(p)-(.2+k*2.3);c+=vec3(.14,.5,1.)*line(wave,.025)*sin(k*PI)*.45;
  }
+ if(uVariant==4)c+=speedDust(p,lens,vec3(.6,.75,1.3));
  color=vec4(c,1.);
 }

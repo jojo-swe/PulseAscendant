@@ -81,6 +81,7 @@ void main(){
   ro=vec3(8.-k*14.,3.4+k*.5,13.-k*2.);
   target=vec3(0,6.9+uAction*.6,-1.);lens=1.35;
  }
+ cinematicRig(ro,target,p,lens,uVariant==0?.12:.85,.5);
  vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
  float t=.02;vec2 h;bool found=false;
  for(int i=0;i<112;i++){h=scene(ro+rd*t);if(h.x<.006){found=true;break;}t+=clamp(h.x,.008,2.);if(t>160.)break;}

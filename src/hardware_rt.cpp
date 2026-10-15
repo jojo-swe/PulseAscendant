@@ -630,7 +630,30 @@ struct HardwareRT::Impl {
     eye=eye+V3{arc*(variant%2?-3.5f:3.5f),arc*1.5f,arc*2.f};
    }
   }
-  V3 forward=norm(target-eye),right=norm(cross(forward,{0,1,0})),up=cross(right,forward);
+  // Beat-synced cinematic rig, matching cinematicRig() in common.glsl: each
+  // downbeat shot circles to a new side/height of the set piece, then keeps
+  // circling with a push-in. Lane flights keep their aisle and only bank.
+  const bool travel=(world==1&&variant<2)||(world==0&&(variant==1||variant==5))||(world==3&&variant==4);
+  const float orbit=travel?.12f:.9f,roll=travel?.9f:.6f;
+  const float shot=float(f.shotIndex),st=float(f.shotSeconds),cutShot=f.shotIndex>0?1.f:0.f;
+  auto shotHash=[&](float salt){float x=std::sin((shot+1)*12.9898f+salt*78.233f+float(f.chapter%6)*3.71f+float(variant)*1.37f)*43758.5453f;return x-std::floor(x);};
+  const float h1=shotHash(1),h2=shotHash(2),h3=shotHash(3),side=h1<.5f?-1.f:1.f;
+  {
+   V3 arm=eye-target;
+   const float swing=side*(cutShot*(.45f+.85f*h2)+st*(.16f+.2f*f.drive))*orbit,lift=cutShot*(h3-.35f)*.55f*orbit;
+   arm={arm.x*std::cos(swing)+arm.z*std::sin(swing),arm.y,-arm.x*std::sin(swing)+arm.z*std::cos(swing)};
+   const V3 axis=norm(cross({0,1,0},arm)+V3{1e-4f,0,0});
+   arm=arm*std::cos(lift)-cross(axis,arm)*std::sin(lift);
+   const float push=1-orbit*(.16f*(1-std::exp(-st*.7f))+cutShot*.22f*(h3-.5f));
+   V3 rigged=target+arm*push;rigged.y=std::max(rigged.y,std::min(eye.y,target.y)+.15f*(eye.y-target.y));
+   eye=mix(eye,rigged,orbit);
+  }
+  float bank=roll*(side*(.07f+.06f*h3)*cutShot+.1f*std::sin(st*.9f+h2*6.283f)*f.drive);
+  float beatPunch=std::exp(-f.beatPhase*f.beatSeconds*7.f);
+  float lens=(1-.04f*beatPunch*(.3f+f.drive)-.035f*kick)*(1+.2f*cutShot*std::exp(-st*7.f));
+  V3 forward=norm(target-eye),flatRight=norm(cross(forward,{0,1,0})),flatUp=cross(flatRight,forward);
+  V3 right=flatRight*std::cos(bank)+flatUp*std::sin(bank),up=flatUp*std::cos(bank)-flatRight*std::sin(bank);
+  forward=forward*lens;
   Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;result.pulse[0]=kick;result.pulse[1]=snare;result.pulse[2]=treble;result.pulse[3]=f.pulsePhase;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
  }
  const float* render(const TimelineFrame& f,int w,int h){

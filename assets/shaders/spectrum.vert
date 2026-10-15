@@ -1,6 +1,7 @@
 #version 330 core
 uniform vec2 uResolution;uniform float uTime;uniform int uScene;
 out vec3 vColor;
+uniform int uRetro;
 #include "common.glsl"
 // Four radial crowns of 24 wireframe columns. Each column has its own FFT band.
 const ivec2 edges[12]=ivec2[12](ivec2(0,1),ivec2(1,3),ivec2(3,2),ivec2(2,0),

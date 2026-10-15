@@ -97,6 +97,7 @@ void main(){
   float travel=uChapterTime*29.;ro=vec3(sin(k*PI)*1.2,16.+k*12.,travel);
   target=ro+vec3(-sin(k*PI)*.6,-1.5,22.);
  }
+ cinematicRig(ro,target,p,lens,uVariant==1?.85:(uVariant==3?.3:(uVariant==2?.2:0.)),uVariant==0?.9:.6);
  vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
  vec3 sky=mix(vec3(.005,.009,.025),uVariant==1?vec3(.14,.085,.045):vec3(.07,.015,.11),exp(-abs(rd.y)*3.));
  if(uVariant==3)sky+=vec3(.02,.07,.1)*max(rd.y+.3,0.);
@@ -109,6 +110,8 @@ void main(){
   vec3 sun=normalize(vec3(-1,2,-1));
   float metalSpec=pow(max(dot(reflect(-sun,n),-rd),0.),70.);
   c=vec3(.025,.035,.055)*(.6+max(dot(n,sun),0.));
+  // Distance-field ambient occlusion seats towers in their streets.
+  float ao=clamp(city(at+n*.6).x/.6*.6+city(at+n*2.).x/2.*.4,.2,1.);c*=ao;
   c+=vec3(.36,.46,.57)*metalSpec*.75;
   if((h.y>1.5&&h.y<2.5)||h.y>4.5){
    float facade=1.-abs(n.y);
@@ -151,5 +154,6 @@ void main(){
   float along=dot(traffic-ro,rd),miss=length(ro+rd*along-traffic);
   if(along>0.&&(!hit||along<t))c+=mix(vec3(.04,.6,1.5),vec3(1.7,.25,.035),step(0.,side))*exp(-miss*14.)*(1.+uPulse.z*.6);
  }
+ c+=speedDust(p,lens,vec3(.9,.5,1.1)*.6);
  color=vec4(c,1.);
 }

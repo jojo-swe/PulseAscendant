@@ -4,6 +4,7 @@ layout(location=1) in vec3 aNormal;
 layout(location=2) in vec3 aBary;
 uniform float uTime;uniform vec2 uResolution;uniform int uMirror;
 out vec3 vNormal;out vec3 vPosition;out vec3 vBary;
+uniform int uRetro;
 #include "common.glsl"
 mat3 rotateX(float a) {float c=cos(a),s=sin(a);return mat3(1,0,0,0,c,s,0,-s,c);}
 mat3 rotateY(float a) {float c=cos(a),s=sin(a);return mat3(c,0,-s,0,1,0,s,0,c);}

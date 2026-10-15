@@ -31,7 +31,9 @@ int runApp(const AppOptions& o) {
  auto assets=o.assets.empty()?findAssets(SDL_GetBasePath()):o.assets;
  if(auto* icon=SDL_LoadBMP((assets/"branding"/"pulse-ascendant.bmp").string().c_str())){SDL_SetWindowIcon(raw,icon);SDL_DestroySurface(icon);}
  Renderer renderer(assets);renderer.initialize(!o.noRT,o.requireRT,o.rtValidation);renderer.resize(o.width,o.height);
- renderer.setPulseGain(o.pulseGain);
+ renderer.setPulseGain(o.pulseGain);renderer.setRenderScale(o.renderScale);renderer.setLetterbox(!o.openMatte);
+ // Exported films carry no interactive keyboard hints.
+ renderer.setControlHints(!o.renderStream);
  (o.renderStream?std::cerr:std::cout)<<"Video: "<<SDL_GetCurrentVideoDriver()<<" | GPU: "<<renderer.diagnostics()<<'\n';
  if(o.renderStream) {
 #ifdef _WIN32

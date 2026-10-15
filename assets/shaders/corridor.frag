@@ -60,7 +60,7 @@ void main(){
  float z=uChapterTime*(uVariant==2?16.:21.)+k*k*24.;
  vec3 ro=vec3(centre(z)+vec2(sin(k*PI)*.32,cos(k*PI)*.16),z);
  p=rot(sin(k*PI*2.)*(uVariant==3?.22:.09))*p;
- vec3 target=vec3(centre(z+24.),z+24.);vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,1.32));
+ vec3 target=vec3(centre(z+24.),z+24.);float lens=1.32;cinematicRig(ro,target,p,lens,0.,1.);vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
  float t=.03,volume=0.;bool found=false;vec2 h=vec2(0.);
  for(int i=0;i<104;i++){
   vec3 at=ro+rd*t;h=corridor(at);float ds=clamp(h.x,.012,1.5);
@@ -97,5 +97,6 @@ void main(){
  }
  c+=accent(float(uVariant))*volume*(.35+uPulse.x*.35);
  c+=vec3(.08,.3,.45)*pow(max(dot(rd,normalize(target-ro)),0.),90.)*(.15+.8*k*k);
+ c+=speedDust(p,lens,accent(float(uVariant))*.5+.2);
  color=vec4(c,1.);
 }
