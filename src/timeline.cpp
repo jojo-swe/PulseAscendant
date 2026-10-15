@@ -7,6 +7,7 @@
 #include "act3.hpp"
 #include "cue_data.hpp"
 #include "music_reactivity.hpp"
+#include "beat_data.hpp"
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -54,6 +55,16 @@ double musicalMotion(int act,double t){
  const auto& values=integrals[act-1];const double at=std::clamp(t*reactivity_data::rate,0.,double(values.size()-1));
  const size_t i=size_t(at),j=std::min(i+1,values.size()-1);return values[i]+(values[j]-values[i])*(at-i);
 }
+struct Beats {const double* times;const unsigned char* bar;int count;};
+constexpr Beats beatGrids[]={
+ {beat_data::act1_times.data(),beat_data::act1_bar.data(),int(beat_data::act1_times.size())},
+ {beat_data::act2_times.data(),beat_data::act2_bar.data(),int(beat_data::act2_times.size())},
+ {beat_data::act3_times.data(),beat_data::act3_bar.data(),int(beat_data::act3_times.size())}};
+// Index of the last tracked beat at or before act time t (-1 before the first beat).
+int beatAt(int act,double t){const auto& g=beatGrids[act-1];return int(std::upper_bound(g.times,g.times+g.count,t+1e-9)-g.times)-1;}
+// Bars per camera shot: high-drive chapters cut every bar, others every two bars,
+// calm chapters hold a single continuous shot. Never cut in a chapter's first bar.
+int barsPerShot(float drive){return drive>=.9f?1:(drive>=.55f?2:0);}
 struct Direction {int variant=0;double motionStart=0,duration=0,accent=0;};
 const auto& directions(){
  // Seeking samples the same integrated motion and one-time stage action.
@@ -84,6 +95,18 @@ const char* showMusic(){return "music/second-reality-three-acts.wav";}
 double wrapShowTime(double seconds){return std::isfinite(seconds)&&seconds>0?std::fmod(seconds,showDuration()):0;}
 int chapterCount(){return int(act1::cues.size()+act2::cues.size()+act3::cues.size());}
 double chapterStart(int chapter){chapter=std::clamp(chapter,0,chapterCount()-1);int act=chapterAct(chapter);return actStart(act+1)+tracks[act].starts[localChapter(chapter,act)];}
+std::vector<double> shotCuts(int chapter){
+ std::vector<double> out;chapter=std::clamp(chapter,0,chapterCount()-1);
+ const int act=chapterAct(chapter)+1,every=barsPerShot(cue(chapter).drive);if(!every)return out;
+ const double start=chapterStart(chapter)-actStart(act),end=(chapter+1<chapterCount()?chapterStart(chapter+1):showDuration())-actStart(act);
+ const auto& g=beatGrids[act-1];int bars=0;
+ for(int i=std::max(0,beatAt(act,start)+1);i<g.count&&g.times[i]<end-.75;++i){
+  if(g.bar[i]!=0||g.times[i]<start+.9)continue;
+  if(++bars%every==0)out.push_back(g.times[i]+actStart(act));
+ }
+ return out;
+}
+int shotCount(int chapter){return int(shotCuts(chapter).size())+1;}
 double sceneStart(int scene){scene=std::clamp(scene,0,15);for(int i=0;i<chapterCount();++i)if(cue(i).scene==scene)return chapterStart(i);return 0;}
 std::string showInfoJson(){
  std::ostringstream out;out<<std::setprecision(12);
@@ -91,7 +114,7 @@ std::string showInfoJson(){
     <<"\",\"planned_acts\":3,\"act2_available\":true,\"act3_available\":true,\"acts\":[";
  for(int i=0;i<3;++i){if(i)out<<',';out<<"{\"number\":"<<i+1<<",\"start\":"<<actStart(i+1)<<",\"duration\":"<<actDuration(i+1)<<",\"frames\":"<<tracks[i].frames<<",\"title\":\""<<tracks[i].title<<"\",\"music\":\""<<tracks[i].music<<"\"}";}
  out<<"],\"chapters\":[";
- for(int i=0;i<chapterCount();++i){if(i)out<<',';const auto& d=directions()[i];out<<"{\"start\":"<<chapterStart(i)<<",\"duration\":"<<d.duration<<",\"accent\":"<<chapterStart(i)+d.accent<<",\"act\":"<<chapterAct(i)+1<<",\"scene\":"<<cue(i).scene<<",\"variant\":"<<d.variant<<",\"title\":\""<<cue(i).title<<"\"}";}
+ for(int i=0;i<chapterCount();++i){if(i)out<<',';const auto& d=directions()[i];out<<"{\"start\":"<<chapterStart(i)<<",\"duration\":"<<d.duration<<",\"accent\":"<<chapterStart(i)+d.accent<<",\"act\":"<<chapterAct(i)+1<<",\"scene\":"<<cue(i).scene<<",\"variant\":"<<d.variant<<",\"shots\":"<<shotCount(i)<<",\"title\":\""<<cue(i).title<<"\"}";}
  out<<"]}\n";return out.str();
 }
 TimelineFrame sampleTimeline(double seconds){
@@ -115,6 +138,18 @@ TimelineFrame sampleTimeline(double seconds){
  const double actOffset=f.actSeconds-local;
  f.motionSeconds=direction.motionStart+local*(1.3+c.drive*1.65)+musicalMotion(f.act,f.actSeconds)-musicalMotion(f.act,actOffset);
  f.cut=float(std::exp(-local*8.));
+ {
+  const auto& g=beatGrids[f.act-1];const int i=beatAt(f.act,f.actSeconds);
+  const double previous=i>=0?g.times[i]:0.,next=i+1<g.count?g.times[i+1]:previous+(i>0?g.times[i]-g.times[i-1]:.5);
+  f.beatIndex=std::max(i,0);f.beatSeconds=float(std::max(.2,next-previous));
+  f.beatPhase=i>=0?float(std::clamp((f.actSeconds-previous)/(next-previous),0.,1.)):0.f;
+  f.barPhase=i>=0?(float(g.bar[i])+f.beatPhase)*.25f:0.f;
+  // Cache per chapter: cuts are fixed data and seeking must stay exact.
+  static std::vector<std::vector<double>> cuts=[](){std::vector<std::vector<double>> all;for(int k=0;k<chapterCount();++k)all.push_back(shotCuts(k));return all;}();
+  const auto& mine=cuts[index];int shot=int(std::upper_bound(mine.begin(),mine.end(),t+1e-9)-mine.begin());
+  f.shotIndex=shot;f.shotSeconds=shot?t-mine[shot-1]:local;
+  f.shotCut=shot?float(std::exp(-f.shotSeconds*10.)):0.f;
+ }
  f.transition=float(std::clamp(std::min(f.actSeconds,actDuration(f.act)-f.actSeconds),0.,1.));return f;
 }
 }

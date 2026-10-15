@@ -2,6 +2,7 @@
 uniform vec2 uResolution;uniform float uTime;
 uniform int uScene;
 out vec3 vColor;
+uniform int uRetro;
 #include "common.glsl"
 void main(){
  float id=float(gl_VertexID/2),tail=float(gl_VertexID%2);

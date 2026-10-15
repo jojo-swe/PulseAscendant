@@ -57,7 +57,9 @@ Each return to a world has its own staging and transformation. Read the [Act II 
 
 The music drives geometry, light, surfaces and moving mechanisms. **24 frequency bands** provide sustained motion and color; a separate **100 Hz attack layer** responds to low, mid and high frequency transients. Both interactive playback and export follow the same saved analysis and audio clock.
 
-**New in v0.5:** faster authored cameras, travelling energy, working machinery, fleet escorts, articulated vegetation and stronger city/fleet/stellar compositions. The transient response now stays distinct from sustained loudness. [Read the rework notes →](docs/ENERGY_REWORK.md)
+**New in v0.6:** every scene change lands on a tracked beat, and high-energy chapters cut to a new camera angle on each downbeat (346 shots). A flying camera rig circles the action, crash-zooms on cuts, barrel-rolls through tunnels and punches on the beat, with parallax speed dust. The image gains a 2.39:1 scope frame, anamorphic streaks, speed blur, a blockbuster grade and darker, glossier Act II materials. [Read the v0.6 notes →](docs/CINEMATIC_V0.6.md)
+
+**v0.5:** faster authored cameras, travelling energy, working machinery, fleet escorts, articulated vegetation and stronger city/fleet/stellar compositions. The transient response now stays distinct from sustained loudness. [Read the rework notes →](docs/ENERGY_REWORK.md)
 
 Turn up the response when launching the executable:
 
@@ -105,9 +107,10 @@ Keep the complete `assets/` directory beside the executable. The demo starts at 
 | **OpenGL 3.3** | Procedural worlds in Acts I and III, plus a separate SDF/analytic fallback for Act II. |
 | **Vulkan KHR ray queries** | Triangle BLAS/TLAS, animated instances, traced shadows, reflections and refraction in Act II. |
 | **Music analysis** | 24 logarithmic FFT bands from 35 Hz–18 kHz at 20 Hz, plus independent low/mid/high attacks at 100 Hz. |
-| **Direction** | 76 authored chapters, with cuts adjusted to measured attacks and persistent spectral changes. No assumed BPM. |
+| **Direction** | 76 authored chapters cut on tracked beats (measured tempo, drift-following beat tracker), plus beat-synced camera shots on downbeats. |
 | **Motion** | A deterministic, forward-moving musical clock for selected secondary animation; separately authored camera paths. |
-| **Presentation** | HDR composition, bloom, grading, captions and an optional retro rendering mode. |
+| **Camera** | Shared cinematic rig: beat-synced orbit setups, crash-zooms, banking and barrel rolls, lens punches, parallax speed dust. |
+| **Presentation** | HDR composition, 2.39:1 scope frame, bloom, anamorphic streaks, speed blur, split-tone grading, film grain, captions and an optional retro rendering mode. |
 
 Use `--no-rt` to select the fallback, `--require-rt` to require hardware tracing, or `--rt-validation` for diagnostics when Vulkan validation layers are installed.
 
@@ -120,7 +123,7 @@ The renderer is not a full path tracer and does not provide general global illum
 
 All music plays at its original speed. Act I preserves the first 299 decoded seconds sample for sample, then fades for one second to its exact 300-second boundary. Acts II and III retain every decoded sample. A combined stereo 48 kHz PCM16 WAV supplies a continuous audio clock with sample-exact joins.
 
-Chapter cuts consider measured attacks and persistent spectral changes within ±2.5 seconds of editorial targets, with 5–18 second chapter bounds. Subjective musical synchronization still needs listening.
+Chapter cuts land on tracked beats within ±2.5 seconds of editorial targets, preferring strong measured attacks, bar lines and phrase starts, with 5–18 second chapter bounds. Subjective musical synchronization still needs listening.
 
 </details>
 
@@ -215,6 +218,8 @@ python tests/test_show.py --app build/windows/Release/PulseAscendant.exe
 python tests/test_music_analysis.py
 python tests/test_music_direction.py
 ```
+
+Without NVENC, `tools/render_chunked.py --app <executable> --work <dir> --output <new.mp4>` renders resumable 30-second x264 chunks (default 3840×2160/60, `--render-scale 0.5`) and verifies the concatenated film. Add `--open-matte` to the executable for 16:9 instead of 2.39:1.
 
 The exporter reads `--show-info`, checks the combined music's format and sample count, rejects ranges outside 888.68 seconds, and validates the encoded resolution, frame count, frame rate and audio duration. It needs Python, ffmpeg/ffprobe and NVIDIA H.264 NVENC. A short preview can add `--start 589.92 --duration 5`. Existing outputs are protected; choose a new filename for another render. Packages are written under `dist/three-acts/`.
 

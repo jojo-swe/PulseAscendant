@@ -86,7 +86,9 @@ void main() {
  vec2 p=(vUV*2.-1.)*vec2(uResolution.x/uResolution.y,1.);
  float k=clamp(uChapterProgress,0.,1.);
  vec3 ro=uVariant==0?vec3(3.7-k*.8,1.5+k*.5,4.2):vec3(4.7-k*1.3,2.6+k,5.2);
- vec3 rd=cameraBasis(ro,vec3(0,uVariant==1?.1:0.,0))*normalize(vec3(p,1.7));
+ vec3 target=vec3(0,uVariant==1?.1:0.,0);float lens=1.7;
+ cinematicRig(ro,target,p,lens,1.,.6);
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
  float t=0,glow=0;bool found=false;vec2 hit;
  for(int i=0;i<128;i++) {
   vec3 pos=ro+rd*t;hit=mapS(pos);

@@ -53,7 +53,10 @@ def main():
     direction=json.loads((root/'music/direction.json').read_text())
     assert len(direction['acts'])==3
     for act in direction['acts']:
-        assert act['mean_attack']>act['nominal_mean_attack']*2
+        # Every cut sits on a tracked beat; the beats chosen carry clearly stronger
+        # attacks (+/-50 ms) than the editorial targets they replace.
+        assert act['on_beat']==len(act['chapters'])-1,act['on_beat']
+        assert act['mean_attack']>act['nominal_mean_attack']*1.5
     print('THREE ACTS PASS: 888.68 s, 76 chapters, 16 worlds, original source hashes, complete tracks II/III, sample-exact joins and bounded export')
 
 if __name__=='__main__':

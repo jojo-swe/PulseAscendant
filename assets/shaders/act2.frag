@@ -249,13 +249,23 @@ vec2 map(vec3 pos){
  return h;
 }
 vec3 normal(vec3 p){vec2 e=vec2(.003,0);return normalize(vec3(map(p+e.xyy).x-map(p-e.xyy).x,map(p+e.yxy).x-map(p-e.yxy).x,map(p+e.yyx).x-map(p-e.yyx).x));}
-vec3 sky(vec3 ray){vec3 top=uScene==8?vec3(.12,.23,.4):(uScene==9?vec3(.018,.04,.09):(uScene==10?vec3(.15,.035,.22):vec3(.22,.28,.4)));vec3 c=mix(vec3(.015,.018,.03),top,clamp(ray.y*.5+.5,0.,1.));c+=vec3(1.3,.5,.13)*pow(max(dot(ray,normalize(vec3(-.5,.4,.7))),0.),160.);c+=vec3(.35,.65,1.1)*pow(max(0.,1.-abs(ray.y-.35)*5.),10.)*pow(abs(ray.x),3.);return c;}
+vec3 sky(vec3 ray){vec3 top=uScene==8?vec3(.05,.1,.2):(uScene==9?vec3(.012,.028,.07):(uScene==10?vec3(.09,.02,.14):vec3(.1,.13,.22)));
+ // Moody gradient with a hot horizon band: silhouettes read against light.
+ vec3 c=mix(vec3(.006,.008,.016),top,clamp(ray.y*.8+.35,0.,1.));
+ vec3 horizon=uScene==10?vec3(.9,.25,.12):(uScene==9?vec3(.1,.25,.5):vec3(.75,.35,.15));
+ c+=horizon*exp(-abs(ray.y+.02)*14.)*.3;
+ c*=.7;c+=vec3(1.3,.5,.13)*pow(max(dot(ray,normalize(vec3(-.5,.4,.7))),0.),160.);c+=vec3(.35,.65,1.1)*pow(max(0.,1.-abs(ray.y-.35)*5.),10.)*pow(abs(ray.x),3.);return c;}
 vec3 traceScene(vec3 eye,vec3 ray){
- float distance=0.;vec2 hit=vec2(0.);for(int i=0;i<144;i++){hit=map(eye+ray*distance);if(hit.x<.0025||distance>190.)break;distance+=max(.001,hit.x*.66);}
+ float distance=0.;vec2 hit=vec2(0.);for(int i=0;i<128;i++){hit=map(eye+ray*distance);if(hit.x<.0025*(1.+distance*.02)||distance>190.)break;distance+=max(.001,hit.x*.78);}
  if(distance>190.||hit.x>.06)return sky(ray);vec3 p=eye+ray*distance,n=normal(p),reflected=reflect(ray,n);float id=hit.y;
- vec3 albedo=id<.5?vec3(.25,.3,.38):(id<1.5?vec3(.65,.73,.85):(id<2.5?vec3(.95,.72,.25):(id<3.5?vec3(.035,.55,.8):(id<4.5?vec3(.8,.035,.22):(id<5.5?vec3(.65,.88,1):vec3(.95,.72,.25))))));
+ vec3 albedo=id<.5?vec3(.045,.052,.07):(id<1.5?vec3(.3,.34,.4):(id<2.5?vec3(.95,.72,.25):(id<3.5?vec3(.035,.55,.8):(id<4.5?vec3(.8,.035,.22):(id<5.5?vec3(.18,.3,.42):vec3(.95,.72,.25))))));
  if(id>6.5)albedo=id<7.5?vec3(.085,.13,.19):vec3(.22,.27,.32);
- float diffuse=max(dot(n,normalize(vec3(1,2,-3))),0.),fresnel=pow(1.-max(0.,dot(n,-ray)),5.);vec3 c=albedo*(.12+diffuse*.45)+sky(reflected)*albedo*(.75+fresnel*.4);c+=vec3(1.2,.65,.3)*pow(max(0.,dot(reflected,normalize(vec3(-.6,.7,-.3)))),48.);
+ // Two-tap distance-field ambient occlusion grounds every set piece.
+ float ao=clamp(map(p+n*.3).x/.3*.55+map(p+n*.9).x/.9*.45,.15,1.);
+ float diffuse=max(dot(n,normalize(vec3(1,2,-3))),0.),fresnel=pow(1.-max(0.,dot(n,-ray)),5.);// Glossy dielectric: dark base, reflections rise sharply at grazing angles (wet floor, chrome).
+ vec3 c=(albedo*(.1+diffuse*.7*vec3(1.1,.95,.8))+sky(reflected)*(albedo*.7+mix(.03,.5,fresnel)*(id<.5?1.:.7)))*ao;
+ // Cool rim light separates silhouettes from the haze.
+ c+=vec3(.25,.55,1.)*pow(1.-max(0.,dot(n,-ray)),3.)*.35*ao;c+=vec3(1.2,.65,.3)*pow(max(0.,dot(reflected,normalize(vec3(-.6,.7,-.3)))),48.);
  if(id>.5&&id<1.5&&uScene==9){
   c*=.32;vec2 face=abs(n.x)>.5?p.zy:p.xy,cell=fract(face*vec2(.65,1.1));
   float window=step(.18,cell.x)*step(cell.x,.76)*step(.22,cell.y)*step(cell.y,.68)*step(.35,hash(floor(face*vec2(.65,1.1))));
@@ -264,9 +274,9 @@ vec3 traceScene(vec3 eye,vec3 ray){
  float spectral=frequencyBand(mod(floor(abs(p.z)*.6+abs(p.x)*.35),24.));
  float packet=pow(max(0.,sin(p.z*.35-uTime*3.2)),10.);
  if(id>2.5&&id<4.5)c=albedo*(.9+spectral*2.6+uPulse.x*.9+uPulse.y+packet*.6+uEvent);if(id>5.5&&id<6.5)c=albedo*(.8+spectral*2.+uPulse.x*.6+uPulse.y*.8+packet*.5+uEvent);if(id>7.5)c=albedo*(.25+diffuse*.8)+sky(reflected)*.1;
- if(id>4.5&&id<5.5){vec3 bent=refract(ray,n,.69);vec3 through=sky(length(bent)>.01?bent:reflected);float checker=.5+.5*sin((p.x+p.z)*1.4+ray.x*12.);c=mix(through*vec3(.65,.9,1.)+albedo*.12,c,.2+fresnel*.7)+vec3(.08,.12,.16)*checker;}
+ if(id>4.5&&id<5.5){vec3 bent=refract(ray,n,.69);vec3 through=sky(length(bent)>.01?bent:reflected);float checker=.5+.5*sin((p.x+p.z)*1.4+ray.x*12.);c=mix(through*vec3(.3,.45,.6)+albedo*.06,c,.2+fresnel*.7)+vec3(.08,.12,.16)*checker;}
  if(uScene==10 && id<2.5)c*=.88+.12*(.5+.5*sin(dot(p,vec3(0,45,3))));
- if(id<.5){vec2 grid=abs(fract(p.xz*.22)-.5);float line=1.-smoothstep(.018,.045,min(grid.x,grid.y));c+=vec3(.015,.12,.19)*line*(.4+midrange());}return mix(sky(ray),c,exp(-distance*(uScene==9?.018:.006)));
+ if(id<.5){vec2 grid=abs(fract(p.xz*.22)-.5);float line=1.-smoothstep(.018,.045,min(grid.x,grid.y));c+=vec3(.015,.12,.19)*line*(.4+midrange());}float fog=exp(-distance*(uScene==9?.018:.007))*mix(1.,.8,exp(-max(p.y+1.,0.)*.2));return mix(sky(ray),c,fog);
 }
 void main(){
  float p=uChapterProgress,a=uAction;int v=uVariant,world=uScene-8;vec3 eye=vec3(0),target=vec3(0,2,0);
@@ -280,5 +290,11 @@ void main(){
   if(v==0){eye=mix(vec3(13,7,-19),vec3(9,9,-17),p);target=vec3(0,4,0);}else if(v==1){eye=mix(vec3(-19,12,-25),vec3(-14,10,-20),p);target=vec3(3,3,0);}else if(v==2){eye=mix(vec3(-14,8,-19),vec3(-11,6,-16),p);target=vec3(0,4,0);}else if(v==3){eye=mix(vec3(7,7,-25),vec3(-3,10,-31),p);target=vec3(0,4,0);}else{eye=vec3(0,2.2+2.3*p,-28.+66.*p);target=eye+vec3(0,.8,20);}
  }
  if(world!=1 && !(world==0&&(v==1||v==5)) && !(world==3&&v==4))eye+=sin(p*PI)*vec3(v%2==0?3.5:-3.5,1.5,2.);
- vec2 uv=(vUV-.5)*vec2(uResolution.x/uResolution.y,1.);vec3 ray=cameraBasis(eye,target)*normalize(vec3(uv,1.55));color=vec4(traceScene(eye,ray),1);
+ vec2 uv=(vUV-.5)*vec2(uResolution.x/uResolution.y,1.);float lens=1.55;
+ // Street and causeway flights keep their lanes; set pieces are circled.
+ bool travel=world==1&&v<2||world==0&&(v==1||v==5)||world==3&&v==4;
+ cinematicRig(eye,target,uv,lens,travel?.12:.9,travel?.9:.6);
+ vec3 ray=cameraBasis(eye,target)*normalize(vec3(uv,lens));vec3 c=traceScene(eye,ray);
+ if(travel)c+=speedDust(uv*2.,lens*2.,vec3(.5,.7,1.1)*.7);
+ color=vec4(c,1);
 }

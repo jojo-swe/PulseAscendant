@@ -76,7 +76,7 @@ void Renderer::release(Target& t) {
 }
 Renderer::~Renderer() {
  if(!gl::DeleteFramebuffers) return;
- release(scene_);release(blur_[0]);release(blur_[1]);release(output_);
+ release(scene_);release(blur_[0]);release(blur_[1]);release(streak_[0]);release(streak_[1]);release(output_);
  for(GLuint p:{background_,engine_,plasma_,particle_,glenz_,blurProgram_,composite_,text_,city_,structure_,cosmic_,ocean_,armada_,swarm_,flight_,spectrum_,act2_,act3_}) if(p)gl::DeleteProgram(p);
  if(buffer_)gl::DeleteBuffers(1,&buffer_);if(meshBuffer_)gl::DeleteBuffers(1,&meshBuffer_);
  if(vao_)gl::DeleteVertexArrays(1,&vao_);if(meshVao_)gl::DeleteVertexArrays(1,&meshVao_);
@@ -96,7 +96,7 @@ void Renderer::target(Target& t,int w,int h,bool nearest) {
 }
 void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  gl::UseProgram(p);gl::Uniform1f(gl::GetUniformLocation(p,"uTime"),float(frame_.motionSeconds));
- gl::Uniform2f(gl::GetUniformLocation(p,"uResolution"),float(width_),float(height_));
+ gl::Uniform2f(gl::GetUniformLocation(p,"uResolution"),float(uniformW_?uniformW_:width_),float(uniformH_?uniformH_:height_));
  gl::Uniform1i(gl::GetUniformLocation(p,"uScene"),scene);gl::Uniform1i(gl::GetUniformLocation(p,"uRetro"),retro);
  // Use the same exact musical clock in interactive playback and offline export.
  // Callback RMS is diagnostic only; mixing it here held loud tracks near1.
@@ -118,6 +118,10 @@ void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  gl::Uniform1f(gl::GetUniformLocation(p,"uTheme"),float(frame_.chapter%6));
  gl::Uniform1i(gl::GetUniformLocation(p,"uShot"),frame_.shot);
  gl::Uniform1fv(gl::GetUniformLocation(p,"uSpectrum[0]"),24,frame_.spectrum.data());
+ // Tracked beat grid and beat-synced camera shots (see timeline.cpp).
+ const float beat[]={frame_.beatPhase,frame_.barPhase,float(frame_.shotIndex),float(frame_.shotSeconds)};
+ gl::Uniform4fv(gl::GetUniformLocation(p,"uBeat"),1,beat);
+ gl::Uniform2f(gl::GetUniformLocation(p,"uBeatInfo"),frame_.beatSeconds,frame_.shotCut);
 }
 void Renderer::quad(GLuint p) {gl::UseProgram(p);gl::BindVertexArray(vao_);glDrawArrays(GL_TRIANGLES,0,3);}
 void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
@@ -128,10 +132,20 @@ void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
  frame_.bass=std::clamp(input.bass+.72f*(frame_.kick-input.kick),0.f,1.f);
  frame_.hit=std::clamp(input.hit*pulseGain_,0.f,1.f);
  const auto& frame=frame_;
- auto extent=renderExtent(width_,height_,retro);target(scene_,extent.width,extent.height,retro);
+ auto extent=renderExtent(width_,height_,retro,renderScale_);target(scene_,extent.width,extent.height,retro);
  target(output_,width_,height_,false);
- if(!retro) {target(blur_[0],std::max(1,width_/2),std::max(1,height_/2),false);target(blur_[1],std::max(1,width_/2),std::max(1,height_/2),false);}
+ if(!retro) {
+  // Bloom from the scene's resolution; the anamorphic streak chain is wide and short.
+  const int bw=std::max(1,scene_.w/2),bh=std::max(1,scene_.h/2);
+  target(blur_[0],bw,bh,false);target(blur_[1],bw,bh,false);
+  target(streak_[0],std::max(1,scene_.w/4),std::max(1,scene_.h/8),false);target(streak_[1],std::max(1,scene_.w/4),std::max(1,scene_.h/8),false);
+ }
  gl::BindFramebuffer(GL_FRAMEBUFFER,scene_.fbo);glViewport(0,0,scene_.w,scene_.h);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+ // Modern scenes render at the scene target's size. A 2.39:1 letterbox is
+ // cropped from the 16:9 frame, so the bars are never shaded at all.
+ const bool matte=letterbox_&&!retro;
+ if(!retro){uniformW_=scene_.w;uniformH_=scene_.h;}
+ if(matte){const int visible=std::min(scene_.h,int(std::ceil(scene_.w/2.39))+4);glEnable(GL_SCISSOR_TEST);glScissor(0,(scene_.h-visible)/2,scene_.w,visible);}
  const GLuint worlds[]={background_,plasma_,engine_,city_,structure_,cosmic_,ocean_,armada_};
  GLuint p=frame.scene>=12?act3_:(frame.scene>=8?act2_:worlds[std::clamp(frame.scene,0,7)]);
  if(frame.act==2&&rt_){
@@ -159,6 +173,7 @@ void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
  glDrawArrays(GL_LINES,0,retro?600:1800);
  glDisable(GL_BLEND);
  }
+ glDisable(GL_SCISSOR_TEST);uniformW_=uniformH_=0;
  if(!retro) {
   for(int i=0;i<6;++i) {
    Target& dst=blur_[i%2];gl::BindFramebuffer(GL_FRAMEBUFFER,dst.fbo);glViewport(0,0,dst.w,dst.h);
@@ -166,11 +181,20 @@ void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
    gl::Uniform1i(gl::GetUniformLocation(blurProgram_,"uImage"),0);gl::Uniform1i(gl::GetUniformLocation(blurProgram_,"uExtract"),i==0);
    gl::Uniform2f(gl::GetUniformLocation(blurProgram_,"uDirection"),i%2==0?1.f/dst.w:0,i%2?1.f/dst.h:0);quad(blurProgram_);
   }
+  // Anamorphic lens streaks: bright light smeared horizontally at growing radii.
+  for(int i=0;i<4;++i) {
+   Target& dst=streak_[i%2];gl::BindFramebuffer(GL_FRAMEBUFFER,dst.fbo);glViewport(0,0,dst.w,dst.h);
+   gl::UseProgram(blurProgram_);gl::ActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,i==0?scene_.texture:streak_[(i-1)%2].texture);
+   gl::Uniform1i(gl::GetUniformLocation(blurProgram_,"uImage"),0);gl::Uniform1i(gl::GetUniformLocation(blurProgram_,"uExtract"),i==0?2:0);
+   gl::Uniform2f(gl::GetUniformLocation(blurProgram_,"uDirection"),float(1<<(i*2))/dst.w,0.f);quad(blurProgram_);
+  }
  }
  gl::BindFramebuffer(GL_FRAMEBUFFER,output_.fbo);glViewport(0,0,width_,height_);uniforms(composite_,seconds,frame.scene,retro);
  gl::ActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,scene_.texture);
  gl::ActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,retro?scene_.texture:blur_[1].texture);
+ gl::ActiveTexture(GL_TEXTURE2);glBindTexture(GL_TEXTURE_2D,retro?scene_.texture:streak_[1].texture);gl::ActiveTexture(GL_TEXTURE0);
  gl::Uniform1i(gl::GetUniformLocation(composite_,"uImage"),0);gl::Uniform1i(gl::GetUniformLocation(composite_,"uBloom"),1);
+ gl::Uniform1i(gl::GetUniformLocation(composite_,"uStreak"),2);gl::Uniform1f(gl::GetUniformLocation(composite_,"uMatte"),matte?1.f:0.f);
  gl::Uniform1f(gl::GetUniformLocation(composite_,"uFade"),frame.transition);quad(composite_);
  float scale=std::max(1.f,width_/640.f);
  double clock=frame.actSeconds,duration=actDuration(frame.act);
@@ -187,7 +211,7 @@ void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
  if(caption>0)label(std::to_string(frame.chapter+1)+" / "+frame.title,width_*.045f,height_*.86f,scale*1.1f,.65f,.9f,1.f,caption);
  if(retro)label("RETRO",width_*.86f,height_*.07f,scale,.7f,.9f,1.f);
  if(frame.act==2)label(rt_?"VULKAN / HARDWARE RAY TRACING":"OPENGL / RAYMARCH FALLBACK",width_*.045f,height_*.91f,scale*.65f,.45f,.7f,.85f);
- if(clock<8.||silent_)label(silent_?"SILENT MODE / AUDIO UNAVAILABLE":"F1 F2 F3 ACT   1-8 9 0 - = WORLD   ARROWS CHAPTER   TAB RETRO   F11 FULLSCREEN",width_*.045f,height_*.94f,scale*.65f,.45f,.6f,.7f);
+ if((clock<8.&&hints_)||silent_)label(silent_?"SILENT MODE / AUDIO UNAVAILABLE":"F1 F2 F3 ACT   1-8 9 0 - = WORLD   ARROWS CHAPTER   TAB RETRO   F11 FULLSCREEN",width_*.045f,height_*.94f,scale*.65f,.45f,.6f,.7f);
  gl::BindFramebuffer(GL_READ_FRAMEBUFFER,output_.fbo);gl::BindFramebuffer(GL_DRAW_FRAMEBUFFER,0);
  gl::BlitFramebuffer(0,0,width_,height_,0,0,width_,height_,GL_COLOR_BUFFER_BIT,GL_NEAREST);
  gl::BindFramebuffer(GL_FRAMEBUFFER,0);

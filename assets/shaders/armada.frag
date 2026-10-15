@@ -112,7 +112,9 @@ void main(){
  else if(uVariant==1){ro=vec3(21.-k*4.,9.-k*2.,-9.+k*36.);target=vec3(0,1.,26.+k*5.);}
  else if(uVariant==2){ro=vec3(0,.7,uChapterTime*16.);target=ro+vec3(0,.3,20.);}
  else{ro=pursuitTarget()+vec3(1.2-k*.4,.8,-6.);target=pursuitTarget()+vec3(0,0,3.);p=rot(sin(k*PI)*.12)*p;}
- vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,1.35));
+ float lens=1.35;
+ cinematicRig(ro,target,p,lens,uVariant==2?.25:.85,.8);
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
  float t=.03,glow=0.;vec2 h;bool found=false;
  for(int i=0;i<128;i++){h=fleet(ro+rd*t);float ds=clamp(h.x*.75,.008,1.5);if(h.y>1.5&&h.y<2.5)glow+=exp(-abs(h.x)*12.)*ds;if(h.x<.004){found=true;break;}t+=ds;if(t>125.)break;}
  vec3 neon=vec3(.035,.40,.70);
@@ -127,6 +129,9 @@ void main(){
   float plates=step(.035,fract(at.x*1.6))*step(.035,fract(at.z*.6));
   float machining=.93+.07*sin(at.z*100.+at.x*65.);
   c=vec3(.10,.16,.24)*(.3+max(dot(n,l),0.))*(.55+.45*plates)*machining+vec3(.4,.7,1.)*spec;
+  // Hull occlusion and a cool rim light give the fleet mass against space.
+  float ao=clamp(fleet(at+n*.25).x/.25*.6+fleet(at+n*.8).x/.8*.4,.2,1.);c*=ao;
+  c+=vec3(.2,.45,.9)*pow(1.-max(dot(n,-rd),0.),4.)*.45;
   c+=neon*(edge*.16+line(abs(q.x)-.3,.015)*.3+line(q.z-.8,.02)*.3);
   if(h.y>2.5){
    vec2 uv=abs(n.y)>.5?at.xz:vec2(abs(n.x)>.5?at.z:at.x,at.y);
@@ -151,5 +156,5 @@ void main(){
   float along=dot(streak-ro,rd),miss=length(ro+rd*along-streak);
   if(along>0.&&(!found||along<t))c+=vec3(.12,.35,.65)*exp(-miss*22.)*(.25+uPulse.z*.7);
  }
- c+=neon*glow*(.10+uPulse.x*.10);color=vec4(c,1.);
+ c+=neon*glow*(.10+uPulse.x*.10);c+=speedDust(p,lens,vec3(.45,.65,1.));color=vec4(c,1.);
 }

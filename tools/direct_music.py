@@ -1,8 +1,13 @@
-"""Place editorial scene changes on actual musical attacks/phrase changes, not a fixed BPM."""
+"""Place editorial scene changes on tracked beats, preferring strong attacks, bar lines and phrase changes.
+
+With a beat grid (tools/beat_grid.py) every chapter cut lands exactly on a tracked
+beat, preferring strong attacks, bar lines and 4-bar phrase starts. Without one, the original attack-only
+direction is used."""
 import json
 from pathlib import Path
 import numpy as np
 from analyze_music import analyze
+import beat_grid
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = [[0,8,18,28,38,46,56,66,76,86,96,106,116,126,136,146,156,166,178,188,198,208,218,228,238,248,258,268,278,286,294],
@@ -10,7 +15,7 @@ TARGETS = [[0,8,18,28,38,46,56,66,76,86,96,106,116,126,136,146,156,166,178,188,1
            [0,10,22,34,46,58,70,82,94,106,118,130,142,154,166,178,190,202,214,226,238,250,266,282]]
 
 
-def direct(data, spectrum, targets, duration):
+def direct(data, spectrum, targets, duration, downbeats=None, phrases=None, beats=None):
     spectrum = spectrum.astype(float)/255
     # Persistent spectral changes favor phrase entrances over a random loud note.
     change = np.zeros(len(data))
@@ -23,12 +28,20 @@ def direct(data, spectrum, targets, duration):
     states = [(0, 0., [])]
     for cue, target in enumerate(targets[1:], 1):
         low, high = max(0, int((target-2.5)*20)), min(len(data)-1, int((target+2.5)*20))
-        candidates = list(peaks[(peaks >= low) & (peaks <= high)])
-        # A phrase entrance may have no percussive attack. Include its strongest spectral change.
-        candidates += [int(target*20), low+int(np.argmax(salience[low:high+1]))]
+        grid = beats if beats is not None else downbeats
+        on_beat = [] if grid is None else [d for d in grid if low <= d*20 <= high]
+        if on_beat:
+            # Cut exactly on a tracked beat. Times stay in seconds; salience is read at the nearest 20 Hz frame.
+            candidates = on_beat
+        else:
+            candidates = list(peaks[(peaks >= low) & (peaks <= high)])
+            # A phrase entrance may have no percussive attack. Include its strongest spectral change.
+            candidates += [int(target*20), low+int(np.argmax(salience[low:high+1]))]
+            candidates = [c/20 for c in candidates]
         next_states = []
-        for point in sorted(set(candidates)):
-            time = point/20
+        phrase_set, bar_set = set(phrases or []), set(downbeats or [])
+        for time in sorted(set(candidates)):
+            point = min(len(data)-1, int(round(time*20)))
             if duration-time < 5*(len(targets)-cue):
                 continue
             if cue == len(targets)-1 and duration-time > 18:
@@ -37,14 +50,20 @@ def direct(data, spectrum, targets, duration):
             if not eligible:
                 continue
             previous = max(eligible, key=lambda s:s[1])
-            score = float(salience[point])-.09*abs(time-target)
+            # Look slightly ahead of the bar line: an attack lands within ~50 ms of the tracked beat.
+            local = float(salience[max(0,point-1):point+2].max())
+            # Strong attacks first; bar lines and 4-bar phrase starts break ties.
+            score = local-.09*abs(time-target)+(.15 if time in bar_set else 0.)+(.15 if time in phrase_set else 0.)
             next_states.append((time, previous[1]+score, previous[2]+[time]))
         if not next_states:
             raise ValueError(f'No valid musical edit for cue {cue}')
         states = next_states
     starts = [0.] + max(states, key=lambda s:s[1])[2]
-    report = [dict(nominal=target, start=time, shift=round(time-target, 3), attack=round(float(hit[round(time*20)]),3),
-                   nominal_attack=round(float(hit[round(target*20)]),3)) for target,time in zip(targets, starts)]
+    # Attack within +/-50 ms (one 20 Hz frame) of a time, applied equally to cuts and nominal targets.
+    peak = lambda t: float(hit[max(0, round(t*20)-1):round(t*20)+2].max())
+    report = [dict(nominal=target, start=round(time*400)/400, shift=round(round(time*400)/400-target, 4), attack=round(peak(time),3),
+                   on_beat=beats is not None and time in set(beats), on_downbeat=downbeats is not None and time in set(downbeats), phrase=time in set(phrases or []),
+                   nominal_attack=round(peak(target),3)) for target,time in zip(targets, starts)]
     return starts, report
 
 
@@ -53,14 +72,18 @@ def main():
     reports = []
     for index, stem in enumerate(('luminous-flow-act1', 'adventurous-uplift', 'rigid-arpeggios')):
         frames,data,spectrum = analyze(ROOT / f'assets/music/{stem}.wav')
-        starts, report = direct(data,spectrum,TARGETS[index],frames/48000)
-        header.append(f'inline constexpr std::array<double,{len(starts)}> act{index+1} = {{'+','.join(f'{s:.2f}' for s in starts)+'};')
+        grid = beat_grid.analyze(ROOT / f'assets/music/{stem}.wav')
+        downbeats = [t for t,b in zip(grid['times'],grid['bar_position']) if b == 0]
+        phrases = downbeats[::4]
+        starts, report = direct(data,spectrum,TARGETS[index],frames/48000,downbeats,phrases,grid['times'])
+        header.append(f'inline constexpr std::array<double,{len(starts)}> act{index+1} = {{'+','.join(f'{round(s*400)/400:.4f}' for s in starts)+'};')
         reports.append(dict(act=index+1, window_seconds=2.5, chapters=report,
                             mean_attack=float(np.mean([c['attack'] for c in report[1:]])),
+                            on_beat=sum(c['on_beat'] for c in report[1:]), on_downbeat=sum(c['on_downbeat'] for c in report[1:]), phrase_starts=sum(c['phrase'] for c in report[1:]),
                             nominal_mean_attack=float(np.mean([c['nominal_attack'] for c in report[1:]]))))
     header.append('}')
     (ROOT / 'src/cue_data.hpp').write_text('\n'.join(header)+'\n', encoding='utf-8')
-    (ROOT / 'music/direction.json').write_text(json.dumps(dict(method='Dynamic programming over measured attacks and persistent spectral changes; +/-2.5 s; 5-18 s chapter bounds; no assumed BPM',acts=reports),indent=2)+'\n',encoding='utf-8')
+    (ROOT / 'music/direction.json').write_text(json.dumps(dict(method='Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes with bar-line and 4-bar phrase bonuses; +/-2.5 s; 5-18 s chapter bounds',acts=reports),indent=2)+'\n',encoding='utf-8')
     print(json.dumps([{k:v for k,v in r.items() if k!='chapters'} for r in reports]))
 
 

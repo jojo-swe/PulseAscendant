@@ -39,7 +39,8 @@ std::vector<Plane> glenzPlanes() {
  }
  return out;
 }
-Extent renderExtent(int width,int height,bool retro) {
- return retro?Extent{320,200}:Extent{std::clamp(width,1,8192),std::clamp(height,1,8192)};
+Extent renderExtent(int width,int height,bool retro,float scale) {
+ scale=std::isfinite(scale)?std::clamp(scale,.25f,1.f):1.f;
+ return retro?Extent{320,200}:Extent{std::clamp(int(std::lround(width*scale)),1,8192),std::clamp(int(std::lround(height*scale)),1,8192)};
 }
 }

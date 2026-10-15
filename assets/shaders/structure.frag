@@ -52,7 +52,9 @@ void main(){
  float speed=uVariant==1?19.:25.,z=uChapterTime*speed;
  float bank=uVariant==3?k*.35:sin(k*PI)*.08;
  p=rot(bank)*p;vec3 ro=vec3(sin(k*PI)*.5,uVariant==1?-.8:0.,z);
- vec3 rd=cameraBasis(ro,ro+vec3(-sin(k*PI)*.2,uVariant==2?sin(k*PI)*.4:0.,20.))*normalize(vec3(p,1.3));
+ vec3 target=ro+vec3(-sin(k*PI)*.2,uVariant==2?sin(k*PI)*.4:0.,20.);float lens=1.3;
+ cinematicRig(ro,target,p,lens,0.,1.);
+ vec3 rd=cameraBasis(ro,target)*normalize(vec3(p,lens));
  float t=.03,glow=0.;vec2 h;bool hit=false;
  for(int i=0;i<112;i++){
   h=structure(ro+rd*t);float ds=clamp(h.x*.65,.006,1.1);
@@ -71,5 +73,6 @@ void main(){
   c*=exp(-t*.023);
  }
  c+=neon*glow*(.07+uPulse.y*.10);c+=neon*.025*pow(max(rd.z,0.),50.);
+ c+=speedDust(p,lens,neon*.6+.25);
  color=vec4(c,1.);
 }
