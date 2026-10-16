@@ -14,7 +14,7 @@ void main() {
  p.y+=sin(uTime*.55)*.1;
  if(uMirror==1)p.y=-p.y-3.3;
  vec3 eye=orbitEye(uTime,4.9),view=transpose(cameraBasis(eye,vec3(0)))*(p-eye);
- view.xy=rot(-sin(uTime*.19)*.12*uDrive)*view.xy;
- gl_Position=vec4(view.x*(1.8-uHit*.08)*uResolution.y/uResolution.x,view.y*(1.8-uHit*.08),0.,view.z);
+ view.xy=rot(-sin(uTime*.19)*.12*uCamera.x)*view.xy;
+ gl_Position=vec4(view.x*1.8*uResolution.y/uResolution.x,view.y*1.8,0.,view.z);
  vNormal=m*aNormal;vPosition=p;vBary=aBary;
 }

@@ -8,9 +8,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-# Collision, aerial skyline, refracting monoliths, one-time impact, canyon chase,
-# seed tunnel, assembled monuments. Only clips 2 and 3 are Act II hardware RT.
-TIMES = (77.8, 58.6, 409.5, 500.6, 647., 710.5, 846.)
+# Revision 5 showcases the v0.6.1 models: carrier and fleet, fighter pursuit,
+# refracting monoliths and one-time impact (clips 2 and 3, Act II hardware RT),
+# the walking colossus, the crystal moth opening its wings and the rocket launch.
+TIMES = (105., 279.5, 409.5, 500.6, 603., 687., 808.)
 
 
 def directed_cuts(hits, music_start, duration, count):
@@ -42,7 +43,7 @@ def main():
     app, output, font = args.app.resolve(), args.output.resolve(), args.font.resolve()
     if output.exists() or not font.is_file():
         parser.error('Choose a new output filename and an existing font')
-    identity = hashlib.sha256(b'1080x1920@60; five-second native clips; v1')
+    identity = hashlib.sha256(b'1080x1920@60; five-second open-matte native clips; v3')
     sources = [app] + sorted(p for p in (app.parent/'assets').rglob('*') if p.is_file())
     for source in sources:
         identity.update(source.relative_to(app.parent).as_posix().encode())
@@ -69,7 +70,7 @@ def main():
         clip = work / f'clip-{round(start*100):06d}.mp4'
         if not clip.exists():
             subprocess.run([sys.executable, str(ROOT/'tools/render_video.py'), '--app', str(app),
-                            '--require-rt', '--width', '1080', '--height', '1920', '--start', str(start),
+                            '--require-rt', '--open-matte', '--width', '1080', '--height', '1920', '--start', str(start),
                             '--duration', '5', '--output', str(clip)], check=True)
         probe = json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(clip)]))
         video = next(s for s in probe['streams'] if s['codec_type']=='video')
@@ -82,8 +83,8 @@ def main():
     for i,(a,b) in enumerate(zip(cuts,cuts[1:])):
         filters.append(f'[{i}:v]trim=duration={b-a:.9f},setpts=PTS-STARTPTS[v{i}]')
     filters.append(''.join(f'[v{i}]' for i in range(len(TIMES)))+f'concat=n={len(TIMES)}:v=1:a=0[montage]')
-    captions = [('BUILT FROM CODE','MUSIC SETS IT IN MOTION',cuts[0],cuts[2]),('HARDWARE RAY TRACING','ACT II / REFLECTIONS + IMPACT',cuts[2],cuts[4]),
-                ('THREE ACTS','76 CHAPTERS / 16 WORLDS',cuts[4],cuts[6]),('PULSE ASCENDANT','RUN IT. GET THE SOURCE.',cuts[6],cuts[7])]
+    captions = [('EVERY FRAME IS CODE','NO ENGINE / NO 3D FILES / ONE PULSE',cuts[0],cuts[2]),('HARDWARE RAY TRACING','ACT II / REFLECTIONS + IMPACT',cuts[2],cuts[4]),
+                ('MATH THAT WALKS','16 WORLDS / 76 CHAPTERS',cuts[4],cuts[6]),('PULSE ASCENDANT','RUN IT. GET THE SOURCE.',cuts[6],cuts[7])]
     overlay = "drawbox=x=0:y=120:w=iw:h=220:color=black@0.55:t=fill"
     for title,subtitle,a,b in captions:
         enable = f"between(t,{a},{b-.001})"
@@ -112,7 +113,7 @@ def main():
     assert (video['width'],video['height'],int(video['nb_frames']),video['avg_frame_rate']) == (1080,1920,1920,'60/1')
     assert abs(float(audio['duration'])-duration)<.05
     partial.rename(output)
-    manifest = dict(title='PULSE ASCENDANT',trailer_revision=4,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo (Suno)',
+    manifest = dict(title='PULSE ASCENDANT',trailer_revision=5,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo (Suno)',
                     music_start=music_start,cuts=cuts,source_times=TIMES,probe=probe)
     output.with_suffix('.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
     print(f'SHORT PASS: {output}, 1080x1920, 60 fps, 1920 frames, 32 seconds',flush=True)

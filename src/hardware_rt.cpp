@@ -630,9 +630,10 @@ struct HardwareRT::Impl {
     eye=eye+V3{arc*(variant%2?-3.5f:3.5f),arc*1.5f,arc*2.f};
    }
   }
-  // Beat-synced cinematic rig, matching cinematicRig() in common.glsl: each
-  // downbeat shot circles to a new side/height of the set piece, then keeps
-  // circling with a push-in. Lane flights keep their aisle and only bank.
+  // Cinematic rig, matching cinematicRig() in common.glsl: each downbeat shot
+  // circles to a new side/height of the set piece, then glides at a rate fixed
+  // for the whole shot, with a slow push-in. Lane flights keep their aisle and
+  // only bank. The camera reads transient-free drive only: no kick zoom or shake.
   const bool travel=(world==1&&variant<2)||(world==0&&(variant==1||variant==5))||(world==3&&variant==4);
   const float orbit=travel?.12f:.9f,roll=travel?.9f:.6f;
   const float shot=float(f.shotIndex),st=float(f.shotSeconds),cutShot=f.shotIndex>0?1.f:0.f;
@@ -640,20 +641,26 @@ struct HardwareRT::Impl {
   const float h1=shotHash(1),h2=shotHash(2),h3=shotHash(3),side=h1<.5f?-1.f:1.f;
   {
    V3 arm=eye-target;
-   const float swing=side*(cutShot*(.45f+.85f*h2)+st*(.16f+.2f*f.drive))*orbit,lift=cutShot*(h3-.35f)*.55f*orbit;
+   const float rate=.08f+.05f*h3+.1f*f.shotDrive;
+   const float swing=side*(cutShot*(.45f+.85f*h2)+st*rate)*orbit,lift=cutShot*(h3-.35f)*.55f*orbit;
    arm={arm.x*std::cos(swing)+arm.z*std::sin(swing),arm.y,-arm.x*std::sin(swing)+arm.z*std::cos(swing)};
    const V3 axis=norm(cross({0,1,0},arm)+V3{1e-4f,0,0});
    arm=arm*std::cos(lift)-cross(axis,arm)*std::sin(lift);
-   const float push=1-orbit*(.16f*(1-std::exp(-st*.7f))+cutShot*.22f*(h3-.5f));
+   const float push=1-orbit*(.12f*(1-std::exp(-st*.5f))+cutShot*.22f*(h3-.5f));
    V3 rigged=target+arm*push;rigged.y=std::max(rigged.y,std::min(eye.y,target.y)+.15f*(eye.y-target.y));
    eye=mix(eye,rigged,orbit);
   }
-  float bank=roll*(side*(.07f+.06f*h3)*cutShot+.1f*std::sin(st*.9f+h2*6.283f)*f.drive);
-  float beatPunch=std::exp(-f.beatPhase*f.beatSeconds*7.f);
-  float lens=(1-.04f*beatPunch*(.3f+f.drive)-.035f*kick)*(1+.2f*cutShot*std::exp(-st*7.f));
+  const float bank=roll*(side*(.05f+.05f*h3)*cutShot+.05f*std::sin(st*.45f+h2*6.283f)*(.4f+f.cameraDrive));
+  const float since=f.beatPhase*f.beatSeconds;float swell=std::clamp(since/.06f,0.f,1.f);swell=swell*swell*(3-2*swell)*std::exp(-since*3.5f);
+  const float lens=(1-.01f*swell*(.3f+f.cameraDrive))*(1+.05f*cutShot*std::exp(-st*3.5f));
   V3 forward=norm(target-eye),flatRight=norm(cross(forward,{0,1,0})),flatUp=cross(flatRight,forward);
   V3 right=flatRight*std::cos(bank)+flatUp*std::sin(bank),up=flatUp*std::cos(bank)-flatRight*std::sin(bank);
-  forward=forward*lens;
+  // Handheld float: the same slow value-noise drift as the OpenGL rig.
+  auto hash2=[](float x,float y){const float v=std::sin(x*127.1f+y*311.7f)*43758.5453f;return v-std::floor(v);};
+  auto noise2=[&](float x,float y){const float ix=std::floor(x),iy=std::floor(y);float fx=x-ix,fy=y-iy;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
+   const float a=hash2(ix,iy)+(hash2(ix+1,iy)-hash2(ix,iy))*fx,b=hash2(ix,iy+1)+(hash2(ix+1,iy+1)-hash2(ix,iy+1))*fx;return a+(b-a)*fy;};
+  const float chapterTime=float(f.localSeconds),drift=.007f*(.4f+f.cameraDrive)/1.55f;
+  forward=forward*lens+right*((noise2(chapterTime*.55f,3)-.5f)*drift)+up*((noise2(7,chapterTime*.47f)-.5f)*drift);
   Parameters result{};auto put=[](float* p,V3 v){p[0]=v.x;p[1]=v.y;p[2]=v.z;};put(result.eye,eye);put(result.forward,forward);put(result.right,right);put(result.up,up);result.clock[0]=float(w);result.clock[1]=float(h);result.clock[2]=t;result.clock[3]=float(world);result.music[0]=bass;result.music[1]=f.hit;result.music[2]=f.energy;result.music[3]=f.drive;result.pulse[0]=kick;result.pulse[1]=snare;result.pulse[2]=treble;result.pulse[3]=f.pulsePhase;std::copy(f.spectrum.begin(),f.spectrum.end(),result.bands);return result;
  }
  const float* render(const TimelineFrame& f,int w,int h){

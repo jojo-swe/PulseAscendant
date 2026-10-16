@@ -122,6 +122,9 @@ void Renderer::uniforms(GLuint p,double time,int scene,bool retro) {
  const float beat[]={frame_.beatPhase,frame_.barPhase,float(frame_.shotIndex),float(frame_.shotSeconds)};
  gl::Uniform4fv(gl::GetUniformLocation(p,"uBeat"),1,beat);
  gl::Uniform2f(gl::GetUniformLocation(p,"uBeatInfo"),frame_.beatSeconds,frame_.shotCut);
+ // Transient-free camera signals (see timeline.hpp): cameras never read kicks.
+ gl::Uniform2f(gl::GetUniformLocation(p,"uCamera"),frame_.cameraDrive,frame_.shotDrive);
+ gl::Uniform1f(gl::GetUniformLocation(p,"uFlowTime"),float(frame_.flowSeconds));
 }
 void Renderer::quad(GLuint p) {gl::UseProgram(p);gl::BindVertexArray(vao_);glDrawArrays(GL_TRIANGLES,0,3);}
 void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
@@ -153,7 +156,7 @@ void Renderer::render(const TimelineFrame& input,double seconds,bool retro) {
   catch(const std::exception& e){if(rtRequired_)throw;rtStatus_=e.what();std::cerr<<"RT stopped; OpenGL fallback: "<<rtStatus_<<'\n';rt_.reset();uniforms(p,seconds,frame.scene,retro);quad(p);}
  }else{uniforms(p,seconds,frame.scene,retro);quad(p);}
  if(frame.scene==0&&frame.variant>=3) {
-  auto dots=makeTunnel(frame.motionSeconds);uniforms(particle_,seconds,0,retro);
+  auto dots=makeTunnel(frame.flowSeconds);uniforms(particle_,seconds,0,retro);
   gl::BindVertexArray(vao_);gl::BindBuffer(GL_ARRAY_BUFFER,buffer_);
   gl::BufferData(GL_ARRAY_BUFFER,dots.size()*sizeof(Particle),dots.data(),GL_STREAM_DRAW);
   gl::EnableVertexAttribArray(0);gl::VertexAttribPointer(0,4,GL_FLOAT,GL_FALSE,sizeof(Particle),nullptr);
