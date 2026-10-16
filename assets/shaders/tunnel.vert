@@ -5,7 +5,8 @@ out vec3 vColor; out float vAlpha;
 #include "common.glsl"
 void main() {
  float z=aParticle.z;
- vec2 p=rot(-flightBank(uTime))*(aParticle.xy-flightOffset(uTime))/z*(1.65-uDrive*.5-uHit*.04);
+ // The tunnel banks and drifts on the smooth flow clock; its lens never pulses.
+ vec2 p=rot(-flightBank(uFlowTime))*(aParticle.xy-flightOffset(uFlowTime))/z*(1.65-uCamera.x*.5);
  p.x*=uResolution.y/uResolution.x;
  gl_Position=vec4(p,0.,1.);
  gl_PointSize=clamp(uResolution.y*.028/z*(uRetro==1?.7:1.4),1.,32.);

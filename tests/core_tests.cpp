@@ -64,6 +64,29 @@ int main() {
    for(int lane=0;lane<3;++lane)CHECK(strong[lane]>50&&quiet[lane]>50);
    CHECK(highSpeed-lowSpeed>.5);
   }
+  // Camera signals must glide: no per-kick steps in the camera drive, a constant
+  // per-chapter shot rate, and a flow clock whose speed changes far more slowly
+  // than the transient-driven motion clock.
+  for(int act=1;act<=3;++act){
+   double flowJerk=0,motionJerk=0;int samples=0;
+   auto previous=sampleTimeline(actStart(act)+1);double previousFlowSpeed=-1,previousMotionSpeed=-1;
+   for(double t=actStart(act)+1+1./60;t<actStart(act)+actDuration(act)-1;t+=1./60){
+    const auto f=sampleTimeline(t);
+    CHECK(f.cameraDrive>=0&&f.cameraDrive<=1&&f.shotDrive>=0&&f.shotDrive<=1);
+    CHECK(sampleTimeline(t).flowSeconds==f.flowSeconds);
+    if(f.chapter!=previous.chapter){previous=f;previousFlowSpeed=previousMotionSpeed=-1;continue;}
+    CHECK(std::abs(f.cameraDrive-previous.cameraDrive)<.004f);
+    CHECK(f.shotDrive==previous.shotDrive);
+    const double flowSpeed=(f.flowSeconds-previous.flowSeconds)*60,motionSpeed=(f.motionSeconds-previous.motionSeconds)*60;
+    CHECK(flowSpeed>1&&flowSpeed<5);
+    if(previousFlowSpeed>0){flowJerk+=std::abs(flowSpeed-previousFlowSpeed);motionJerk+=std::abs(motionSpeed-previousMotionSpeed);++samples;}
+    previousFlowSpeed=flowSpeed;previousMotionSpeed=motionSpeed;previous=f;
+   }
+   CHECK(samples>1000&&flowJerk<motionJerk*.1);
+  }
+  // Beat-synced shots last at least two bars; calm chapters hold one shot.
+  int shots=0;for(int chapter=0;chapter<chapterCount();++chapter)shots+=shotCount(chapter);
+  CHECK(shots>chapterCount()&&shots<210);
   auto bandsBefore=sampleTimeline(100).spectrum,bandsAfter=sampleTimeline(100.05).spectrum,bandsMiddle=sampleTimeline(100.025).spectrum;
   for(size_t i=0;i<24;++i)CHECK(std::abs(bandsMiddle[i]-(bandsBefore[i]+bandsAfter[i])*.5f)<.0001f);
   for(int scene=0;scene<16;++scene)CHECK(sampleTimeline(sceneStart(scene)+.001).scene==scene);

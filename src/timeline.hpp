@@ -10,6 +10,11 @@ struct TimelineFrame {
  // Tracked musical grid: beat/bar phase and beat-synced camera shots within a chapter.
  float beatPhase=0,barPhase=0,beatSeconds=.5,shotCut=0;
  int beatIndex=0,shotIndex=0;double shotSeconds=0;
+ // Camera-only signals, deliberately free of transients: cameraDrive is the
+ // drive smoothed over ~1.5 s, shotDrive its chapter mean (constant in a
+ // chapter) and flowSeconds a motion clock integrated from smoothed speed, so
+ // camera paths, speed dust and passing streams glide instead of surging per kick.
+ float cameraDrive=0,shotDrive=0;double flowSeconds=0;
  std::array<float,24> spectrum{};
  const char* title="";
 };

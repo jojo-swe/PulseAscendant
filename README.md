@@ -57,7 +57,9 @@ Each return to a world has its own staging and transformation. Read the [Act II 
 
 The music drives geometry, light, surfaces and moving mechanisms. **24 frequency bands** provide sustained motion and color; a separate **100 Hz attack layer** responds to low, mid and high frequency transients. Both interactive playback and export follow the same saved analysis and audio clock.
 
-**New in v0.6:** every scene change lands on a tracked beat, and high-energy chapters cut to a new camera angle on each downbeat (346 shots). A flying camera rig circles the action, crash-zooms on cuts, barrel-rolls through tunnels and punches on the beat, with parallax speed dust. The image gains a 2.39:1 scope frame, anamorphic streaks, speed blur, a blockbuster grade and darker, glossier Act II materials. [Read the v0.6 notes →](docs/CINEMATIC_V0.6.md)
+**New in v0.6.1:** a calmer camera — shots glide at constant rates on transient-free drive (no kick shake or zoom snaps), cuts land every two or four bars (196 shots), and rebuilt fighters, carrier, walking colossus, crystal moth and launch rockets. [Read the notes →](docs/CAMERA_AND_MODELS_V0.6.1.md)
+
+**v0.6:** every scene change lands on a tracked beat, and high-energy chapters cut to a new camera angle on each downbeat (346 shots). A flying camera rig circles the action, crash-zooms on cuts, barrel-rolls through tunnels and punches on the beat, with parallax speed dust. The image gains a 2.39:1 scope frame, anamorphic streaks, speed blur, a blockbuster grade and darker, glossier Act II materials. [Read the v0.6 notes →](docs/CINEMATIC_V0.6.md)
 
 **v0.5:** faster authored cameras, travelling energy, working machinery, fleet escorts, articulated vegetation and stronger city/fleet/stellar compositions. The transient response now stays distinct from sustained loudness. [Read the rework notes →](docs/ENERGY_REWORK.md)
 

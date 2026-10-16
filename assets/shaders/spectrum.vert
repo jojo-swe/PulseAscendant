@@ -16,8 +16,8 @@ void main(){
  point.y+=(crown%2==0?-1.:1.)*(.65+float(crown)*.25);
  if(crown%2==1)point.y-=float((corner>>1)&1)*(.24+level*3.6);
  vec3 eye=orbitEye(uTime,uScene==5?7.2:4.9),view=transpose(cameraBasis(eye,vec3(0)))*(point-eye);
- view.xy=rot(-sin(uTime*.19)*.12*uDrive)*view.xy;
- vec2 p=view.xy/max(.1,view.z)*(1.8-uHit*.08);p.x*=uResolution.y/uResolution.x;
+ view.xy=rot(-sin(uTime*.19)*.12*uCamera.x)*view.xy;
+ vec2 p=view.xy/max(.1,view.z)*1.8;p.x*=uResolution.y/uResolution.x;
  gl_Position=view.z>.15?vec4(p,0,1):vec4(3,3,3,1);
  vColor=accent(float(band)*.25)*(.035+level*.2)*(float((corner>>1)&1)*.65+.35);
 }

@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--fps', type=int, default=60)
     parser.add_argument('--start', type=float, default=0)
     parser.add_argument('--duration', type=float, help='Default: remainder of the playable show')
+    parser.add_argument('--open-matte', action='store_true', help='Full frame instead of the 2.39:1 letterbox (vertical formats)')
     args = parser.parse_args()
     if not 0 <= args.pulse_gain <= 2 or not math.isfinite(args.pulse_gain):
         parser.error('Pulse gain must be from0 to2')
@@ -54,6 +55,8 @@ def main():
         producer_args.append('--require-rt')
     if args.no_rt:
         producer_args.append('--no-rt')
+    if args.open_matte:
+        producer_args.append('--open-matte')
     producer_args.extend(['--pulse-gain', str(args.pulse_gain)])
     maxrate, bufsize = ('64M', '128M') if args.width*args.height >= 3840*2160 else ('28M', '56M')
     encoder_args = ['ffmpeg', '-hide_banner', '-nostdin', '-f', 'rawvideo', '-pixel_format', 'rgb24',

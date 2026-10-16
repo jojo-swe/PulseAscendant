@@ -24,6 +24,23 @@ float ellipsoid(vec3 p,vec3 radii){
  return k0*(k0-1.)/max(k1,.00001);
 }
 vec2 nearer(vec2 a,float distanceValue,float material){return distanceValue<a.x?vec2(distanceValue,material):a;}
+float smin(float a,float b,float k){float h=clamp(.5+.5*(b-a)/k,0.,1.);return mix(b,a,h)-k*h*(1.-h);}
+// Tapered capsule between two points; conservative for gentle tapers.
+float roundCone(vec3 p,vec3 a,vec3 b,float ra,float rb){
+ vec3 ab=b-a;float f=clamp(dot(p-a,ab)/max(dot(ab,ab),.0001),0.,1.);
+ return (length(p-a-ab*f)-mix(ra,rb,f))*.9;
+}
+// A 2D outline extruded into a plate of half thickness t.
+float extrudePlate(float outline,float y,float t){vec2 w=vec2(outline,abs(y)-t);return min(max(w.x,w.y),0.)+length(max(w,0.));}
+float ellipse2(vec2 p,vec2 r){return (length(p/r)-1.)*min(r.x,r.y);}
+// Two-bone limb: the knee solves both segment lengths in the plane holding the
+// hip, the foot and a preferred bend direction.
+vec3 limbKnee(vec3 hip,vec3 foot,float upper,float lower,vec3 bend){
+ vec3 d=foot-hip;float len=clamp(length(d),.001,upper+lower-.001);vec3 dir=d/max(length(d),.001);
+ float along=(upper*upper-lower*lower+len*len)/(2.*len);
+ vec3 side=normalize(bend-dir*dot(bend,dir));
+ return hip+dir*along+side*sqrt(max(upper*upper-along*along,0.));
+}
 vec3 radialCell(vec3 p,float count,float radius,float phase){
  float sector=2.*PI/count;
  float angle=atan(p.z,abs(p.x)+abs(p.z)>.00001?p.x:.00001)-phase;
@@ -40,25 +57,64 @@ float responseScale(){return uScene==15&&uVariant>=6?.22:(uScene==13&&uVariant==
 float desertHeight(vec2 p){return -2.+.34*sin(p.x*.12+p.y*.035)+.23*sin(p.y*.17-p.x*.04);}
 vec2 desertFloor(vec3 p){return vec2((p.y-desertHeight(p.xz))*.8,0.);}
 
+// The dune colossus: an armoured quadruped walking machine. A rounded chassis
+// with dorsal plates and a sloped command head, side vents that recoil with the
+// kick, four inverse-kinematic legs (hip housings, pistons, knee joints, tapered
+// shins with power lines, clawed foot pads) in a four-beat walk whose stance feet
+// travel with the ground. Material 1.4 is smooth machined armour, 2 dark
+// mechanism, 3 light. Faces -z, the direction of travel.
 vec2 walker(vec3 p,vec3 center,float size,float stride){
  vec3 q=(p-center)/size;
- vec2 h=vec2(solidBox(q-vec3(0,2.8,0),vec3(2.25,.75,1.15))-.12,1.);
- h=nearer(h,solidBox(q-vec3(0,4.05,.2),vec3(.85,.55,.75))-.1,1.);
- h=nearer(h,solidBox(q-vec3(0,4.12,.98),vec3(.67,.07,.035)),3.);
- h=nearer(h,solidBox(q-vec3(0,2.85,1.27),vec3(1.6,.42,.08)),2.);
- // Exposed engine shutters recoil with the kick, clearly visible from the side.
- vec3 vent=q;vent.x=mod(vent.x+.32,.64)-.32;
- float ventShape=solidBox(vent-vec3(0,3.,1.4+kickResponse()*.16),vec3(.12,.28,.065));
- h=nearer(h,max(ventShape,abs(q.x)-1.65),3.);
+ float bound=length((q-vec3(0,2.3,0))*vec3(.85,1.,.85))-3.6;
+ if(bound>.6)return vec2(bound*size*.8,1.4);
+ q.y-=.06*sin(stride*2.+.6);
+ vec3 b=q-vec3(0,2.85,0);
+ float hull=solidBox(b,vec3(1.7,.42,.95))-.32;
+ hull=smin(hull,ellipsoid(b+vec3(0,.42,0),vec3(1.85,.5,1.05)),.35);
+ hull=max(hull,(abs(b.z)*.8+b.y-1.12)*.78);
+ vec2 h=vec2(hull,1.4);
+ vec3 plate=b-vec3(0,.66,0);plate.x=mod(plate.x+.33,.66)-.33;
+ h=nearer(h,max(solidBox(plate,vec3(.25,.09,.62))-.04,abs(b.x)-1.62),1.4);
+ h=nearer(h,solidBox(b-vec3(0,.6,0),vec3(1.72,.06,.2)),2.);
+ // Command head: a sloped cab with a light slit and twin chin cannons.
+ vec3 head=q-vec3(0,3.0,-1.38);
+ float cab=solidBox(head,vec3(.62,.36,.52))-.12;
+ cab=max(cab,(head.y-head.z*.6-.36)*.8);
+ h.x=smin(h.x,cab,.2);
+ h=nearer(h,solidBox(head-vec3(0,.08,-.62),vec3(.44,.05,.05)),3.);
+ vec3 gun=vec3(abs(head.x)-.36,head.y+.28,head.z);
+ h=nearer(h,capsule(gun,vec3(0,0,-.3),vec3(0,-.05,-1.25),.075),2.);
+ // Side cooling grilles recoil outward on the kick.
+ vec3 vent=vec3(abs(b.x)-1.98-kickResponse()*.07,b.y-.02,b.z);
+ vent.z=mod(vent.z+.2,.4)-.2;
+ h=nearer(h,max(solidBox(vent,vec3(.05,.2,.11)),abs(b.z)-.7),3.);
+ // Sensor mast at the rear.
+ h=nearer(h,capsule(q,vec3(.4,3.4,1.),vec3(.55,4.6,1.6),.045),2.);
+ h=nearer(h,length(q-vec3(.55,4.65,1.6))-.09,3.);
  for(int i=0;i<4;++i){
   float side=i<2?-1.:1.,front=(i==0||i==2)?-1.:1.;
-  float phase=stride+float(i)*PI*.5;
-  vec3 hip=vec3(side*1.8,2.25,front*.8);
-  vec3 knee=vec3(side*(2.3+.16*sin(phase)),.8,front*.8+.42*sin(phase));
-  vec3 foot=vec3(side*2.5,.06+.35*max(sin(phase),0.),front*.8+.65*cos(phase));
-  h=nearer(h,capsule(q,hip,knee,.23),1.);
-  h=nearer(h,capsule(q,knee,foot,.18),2.);
-  h=nearer(h,solidBox(q-foot,vec3(.33,.15,.52))-.04,1.);
+  // Four-beat walk: left hind, left fore, right hind, right fore.
+  float offset=i==1?0.:(i==0?.25:(i==3?.5:.75));
+  float phase=stride+offset*2.*PI;
+  float lift=.5*pow(max(sin(phase),0.),1.3);
+  vec3 hip=vec3(side*1.6,2.5,front*.92);
+  vec3 foot=vec3(side*2.4,.06+lift,front*1.02+.3*cos(phase));
+  vec3 ankle=foot+vec3(0,.34,0);
+  vec3 knee=limbKnee(hip,ankle,1.55,1.75,vec3(side,.95,front*.3));
+  h=nearer(h,length(q-hip)-.42,2.);
+  h=nearer(h,solidBox(q-hip-vec3(side*.12,.38,0),vec3(.48,.12,.5))-.08,1.4);
+  h=nearer(h,roundCone(q,hip,knee,.3,.22),1.4);
+  h=nearer(h,capsule(q,hip+vec3(0,.36,0),mix(hip,knee,.78)+vec3(0,.24,0),.065),2.);
+  h=nearer(h,length(q-knee)-.27,2.);
+  h=nearer(h,roundCone(q,knee,ankle,.24,.14),1.4);
+  h=nearer(h,capsule(q,knee+vec3(side*.2,0,0),ankle+vec3(side*.15,.1,0),.035),3.);
+  h=nearer(h,length(q-ankle)-.17,2.);
+  vec3 f=q-foot;
+  float pad=max(length(f.xz*vec2(1.,.85))-.4,abs(f.y)-.1)-.04;
+  vec3 toe=vec3(abs(f.x),f.y,f.z);
+  pad=min(pad,capsule(toe,vec3(.24,-.02,-.28),vec3(.3,-.08,-.6),.075));
+  pad=min(pad,capsule(f,vec3(0,-.02,-.3),vec3(0,-.08,-.68),.08));
+  h=nearer(h,pad,2.);
  }
  h.x*=size;return h;
 }
@@ -128,9 +184,18 @@ vec2 desertWorld(vec3 p){
   float lift=1.+launch*launch*32.;
   if(max(abs(cell.x),abs(cell.y))<2.5){
    h=nearer(h,solidBox(q-vec3(0,-1.1,0),vec3(3.4,.55,3.4))-.08,2.);
-   vec3 ship=q-vec3(0,lift,0);
-   h=nearer(h,octahedron(ship/vec3(.65,2.8,.65),1.7)*.65,1.);
-   h=nearer(h,solidBox(ship-vec3(0,-3.3,0),vec3(.08,.8+launch*2.5,.08)),3.);
+   // A slender launcher: tapered hull and needle nose, three swept fins,
+   // a nozzle bell, a light band and the exhaust column once it lifts.
+   vec3 ship=(q-vec3(0,lift+2.6,0))/1.35;
+   float hull=roundCone(ship,vec3(0,-2.4,0),vec3(0,2.,0),.62,.22);
+   hull=smin(hull,roundCone(ship,vec3(0,2.,0),vec3(0,3.5,0),.22,.015),.12);
+   h=nearer(h,hull*1.35,1.4);
+   vec3 fin=radialCell(ship,3.,0.,seed*6.);
+   float fins=max(solidBox(fin-vec3(.72,-1.85,0),vec3(.5,.78,.035)),(fin.x+fin.y*.8+.55)*.7);
+   h=nearer(h,fins*1.35,2.);
+   h=nearer(h,roundCone(ship,vec3(0,-2.95,0),vec3(0,-2.4,0),.5,.36)*1.35,2.);
+   h=nearer(h,(length(vec2(length(ship.xz)-.33,ship.y-.9))-.045)*1.35,3.);
+   h=nearer(h,solidBox(ship+vec3(0,3.+.8+launch*2.5,0),vec3(.1,.8+launch*2.5,.1))*1.35,3.);
   }
  }
  return h;
@@ -298,19 +363,52 @@ vec2 finaleWorld(vec3 p){
   h=nearer(h,max(abs(length(vec2(seam.x*.75,seam.y+2.))-7.)-.065,abs(seam.z)-.04),3.);
   h=nearer(h,solidBox(p-vec3(0,-1.5,0),vec3(2.7,.35,100.)),2.);
  }else if(uVariant==1){
-  // A crystal moth spreads enormous wings. Its silhouette fills the screen.
+  // A crystal moth spreads enormous wings: a head with compound eyes, a
+  // furred thorax and segmented abdomen, six folded legs, glowing feathered
+  // antennae, and moth-shaped forewings and swallowtail hindwings with light
+  // veins, rims and eyespots. Wings hinge open at the musical action.
   vec3 q=p-vec3(0,3.,0);q.yz=rot(.08*sin(uChapterTime*.8))*q.yz;
-  h=nearer(h,ellipsoid(q,vec3(.65,1.1,3.)),1.);
-  vec3 wing=q;wing.x=abs(wing.x)-.5;
-  wing.xy=rot(mix(-1.15,.08,action)+kickResponse()*.075)*wing.xy;
-  for(int i=0;i<3;++i){
-   float l=float(i);vec3 panel=wing-vec3(3.6-l*.65,.25,l*1.7-1.7);
-   panel.xz=rot(.25-l*.18)*panel.xz;
-   h=nearer(h,ellipsoid(panel,vec3(3.3-l*.35,.13,1.1)),2.);
-   h=nearer(h,capsule(panel,vec3(-2.9+l*.3,.16,0),vec3(2.9-l*.3,.16,0),.035),3.);
+  float bound=length(q*vec3(.62,1.2,.8))-5.2;
+  if(bound>1.){h=nearer(h,bound*.62,1.4);}
+  else{
+   float body=length(q-vec3(0,.05,-2.45))-.48;
+   body=smin(body,ellipsoid(q-vec3(0,.12,-1.25),vec3(.82,.74,1.05)),.25);
+   for(int i=0;i<6;++i){float f=float(i);
+    body=smin(body,ellipsoid(q-vec3(0,.02-f*.05,.2+f*.56),vec3(.7-f*.085,.6-f*.07,.4)),.1);}
+   h=nearer(h,body,1.4);
+   vec3 a=vec3(abs(q.x),q.y,q.z);
+   h=nearer(h,length(a-vec3(.36,.16,-2.72))-.27,2.);
+   vec3 s0=vec3(.18,.42,-2.8),s1=vec3(1.3,1.5,-4.35),ab=s1-s0;
+   float t=clamp(dot(a-s0,ab)/dot(ab,ab),0.,1.);vec3 axisPoint=s0+ab*t;
+   float radial=length(a-axisPoint);
+   float comb=max(abs(mod(t*length(ab),.13)-.065)-.013,radial-.3*(1.-t*.75));
+   comb=max(comb,max(dot(a-s1,normalize(ab)),-dot(a-s0,normalize(ab))));
+   h=nearer(h,min(radial-.045,comb*.8),3.);
+   for(int i=0;i<3;++i){float f=float(i);
+    vec3 hip=vec3(.42,-.35,-1.65+f*.5),knee=vec3(1.2,-.2+f*.05,-1.95+f*.8),foot=vec3(1.5,-1.,-2.25+f*1.1);
+    h=nearer(h,min(capsule(a,hip,knee,.075),capsule(a,knee,foot,.05)),1.4);
+   }
+   vec3 w=q;w.x=abs(w.x)-.55;
+   float hinge=mix(-1.15,.08,action)+.05*sin(uChapterTime*2.1)+kickResponse()*.05;
+   w.xy=rot(hinge)*w.xy;
+   float wy=w.y-.012*w.x*w.x;
+   vec2 u=w.xz;
+   float fore=ellipse2(rot(.38)*(u-vec2(2.7,-.95)),vec2(2.95,1.1));
+   fore=smin(fore,ellipse2(u-vec2(4.9,-2.),vec2(1.15,.8)),.5);
+   fore=smin(fore,ellipse2(u-vec2(.9,-.55),vec2(1.,.9)),.4);
+   float hind=ellipse2(rot(-.5)*(u-vec2(2.1,1.25)),vec2(2.2,1.4));
+   hind=smin(hind,ellipse2(u-vec2(2.9,2.85),vec2(.55,1.05)),.45);
+   float wings=min(extrudePlate(fore,wy-.06,.035),extrudePlate(hind,wy+.06,.035));
+   h=nearer(h,wings*.85,2.4);
+   // Light inlaid in each membrane: veins fanning from the hinge, a rim inside
+   // each edge and an eyespot per wing.
+   float veins=100.;
+   for(int i=0;i<5;++i){float an=-.95+float(i)*.42;vec2 dir=vec2(cos(an),sin(an));
+    float along=clamp(dot(u,dir),0.,6.);veins=min(veins,length(u-dir*along)-.028);}
+   float foreLight=max(min(min(veins,abs(fore+.09)-.03),abs(length(u-vec2(3.15,-1.05))-.5)-.05),fore);
+   float hindLight=max(min(min(veins,abs(hind+.09)-.03),length(u-vec2(2.3,1.45))-.22),hind);
+   h=nearer(h,min(extrudePlate(foreLight,wy-.06,.05),extrudePlate(hindLight,wy+.06,.05))*.85,3.);
   }
-  h=nearer(h,capsule(q,vec3(.3,.6,-2.3),vec3(1.5,1.8,-3.8),.05),3.);
-  h=nearer(h,capsule(q,vec3(-.3,.6,-2.3),vec3(-1.5,1.8,-3.8),.05),3.);
  }else if(uVariant==2){
   // Three separate portals converge into one triangular impossible machine.
   for(int i=0;i<3;++i){
@@ -524,6 +622,8 @@ vec3 surfaceColor(vec3 p,vec3 n,float material,float footprint){
  float panel=etchedGrid(uv,2.,.025,footprint);
  if(uScene==12){
   if(material<.5)return mix(vec3(.22,.085,.025),vec3(.57,.3,.1),weather)*grain;
+  // Machined armour (1.4): smooth plating without the monument tile grid.
+  if(material>1.2&&material<1.5)return vec3(.6,.55,.45)*(.76+.32*weather)*grain;
   vec3 ceramic=vec3(.58,.53,.42)*(.7+.4*weather)*grain;
   vec3 basalt=vec3(.075,.042,.023)*(.55+.7*weather);
   return mix(material<1.5?ceramic:basalt,vec3(.018,.025,.028),panel*.72);
@@ -544,6 +644,10 @@ vec3 surfaceColor(vec3 p,vec3 n,float material,float footprint){
   if(uVariant>=6)return vec3(.018,.05,.095)*(.85+.2*weather);
   return mix(vec3(.012,.024,.04),vec3(.065,.105,.13),weather)*(1.-panel*.6)*grain;
  }
+ // Wing membrane (2.4): iridescent bands radiating from the body, no tiles.
+ if(material>2.2&&material<2.5)return mix(vec3(.06,.32,.52),vec3(.55,.08,.36),.5+.5*sin(length(p.xz)*1.25+weather*2.))*(.7+.45*weather)*grain;
+ // Smoky chitin (1.4) for the finale's living forms.
+ if(material>1.2&&material<1.5)return mix(vec3(.05,.045,.075),vec3(.16,.13,.2),weather)*grain;
  if(material<1.5)return mix(vec3(.48,.54,.65)*(.75+.35*weather),vec3(.02,.07,.1),panel*.8)*grain;
  vec3 glass=mix(vec3(.075,.3,.47),vec3(.48,.085,.14),.5+.5*sin(p.y*.35+float(uVariant)));
  return glass*(.7+.5*weather)*grain*(1.-panel*.45);
@@ -606,7 +710,7 @@ vec3 renderWorld(vec3 eye,vec3 ray,out float visibleDistance){
    float transmitted=pow(max(dot(-n,lightDirection),0.),2.)*(.4+.6*max(dot(ray,-lightDirection),0.));
    if(hitData.y>1.5)c+=albedo*vec3(.65,1.2,.55)*transmitted*.75;
   }
-  if((uScene==12||uScene==15)&&hitData.y>.5&&hitData.y<1.5){
+  if((uScene==12||uScene==15)&&hitData.y>.5&&hitData.y<1.2){
    // Fine conductive seams and inset fasteners give white masses readable scale.
    float seam=etchedGrid(uv,2.,.012,footprint);
    vec2 bolt=abs(fract(uv*.5+.5)-.5)*2.-vec2(.16);
@@ -726,8 +830,6 @@ void main(){
  vec2 p=(vUV-.5)*vec2(uResolution.x/max(uResolution.y,1.),1.);
  vec3 eye,target;float focal;cameraDirection(eye,target,focal);
  bool quiet=uScene==13&&uVariant==3||uScene==15&&uVariant>=6;
- float shake=quiet?0.:.0012;
- p+=vec2(sin(uTime*29.),cos(uTime*23.))*uHit*shake;
  if(uScene==12&&uVariant==2||uScene==13&&uVariant==2)p=rot(sin(uChapterTime*.45)*.1)*p;
  bool travel=uScene==12&&(uVariant==2||uVariant==4)||uScene==13&&uVariant==2||uScene==14&&(uVariant==1||uVariant==4)||uScene==15&&(uVariant==0||uVariant==5);
  cinematicRig(eye,target,p,focal,quiet?.35:(travel?.1:.9),quiet?.2:(travel?.9:.6));

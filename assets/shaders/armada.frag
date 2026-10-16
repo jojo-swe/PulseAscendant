@@ -3,21 +3,65 @@ in vec2 vUV;out vec4 color;
 uniform vec2 uResolution;uniform float uTime;uniform int uRetro;
 #include "common.glsl"
 float box(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.);}
-// Chamfered wedge hull, stepped flight deck, recessed hangar and twin engine pods.
+float smin(float a,float b,float k){float h=clamp(.5+.5*(b-a)/k,0.,1.);return mix(b,a,h)-k*h*(1.-h);}
+float capsule(vec3 p,vec3 a,vec3 b,float r){vec3 ab=b-a;float f=clamp(dot(p-a,ab)/dot(ab,ab),0.,1.);return length(p-a-ab*f)-r;}
+// Tapered capsule between two points; conservative for gentle tapers.
+float roundCone(vec3 p,vec3 a,vec3 b,float ra,float rb){vec3 ab=b-a;float f=clamp(dot(p-a,ab)/dot(ab,ab),0.,1.);return (length(p-a-ab*f)-mix(ra,rb,f))*.9;}
+float ellipsoid(vec3 p,vec3 r){return (length(p/r)-1.)*min(r.x,min(r.y,r.z));}
+// Two exhaust pairs: outboard pods and an inner pair under the flight deck.
+float carrierExhaust(vec3 q,float radius,float length_){
+ vec3 outer=vec3(abs(q.x)-5.3,q.y+.2,q.z+17.),inner=vec3(abs(q.x)-2.1,q.y+.55,q.z+16.6);
+ return min(max(length(outer.xy)-radius,abs(outer.z)-length_),max(length(inner.xy)-radius*.62,abs(inner.z)-length_*.7));
+}
+// Capital ship: chamfered wedge hull with a split ram prow, armour belts and
+// recessed trenches, a stepped flight deck with turret rows, a layered command
+// tower with sensor dish and masts, and four engine housings with nozzle rings.
 float carrierHull(vec3 q){
+ float bound=box(q,vec3(7.6,7.2,18.5));if(bound>1.)return bound;
  float hull=box(q,vec3(6.2,1.15,15.));
  hull=max(hull,(abs(q.x)+max(q.z,0.)*.32-6.2)*.9);
  hull=max(hull,(abs(q.x)*.45-q.y-3.4)*.9);
+ // Ventral keel and a notched ram prow.
+ hull=smin(hull,max(box(q-vec3(0,-1.25,1.),vec3(2.2,.5,12.5)),(abs(q.x)+max(q.z-4.,0.)*.25-2.2)*.9),.3);
+ hull=max(hull,-box(vec3(q.x,q.y+.1,q.z-15.),vec3(.35,.5,2.4)));
+ // Armour belts along both flanks with recessed trenches between them.
+ vec3 belt=vec3(abs(q.x)-6.,q.y+.15,q.z+2.);
+ hull=min(hull,max(box(belt,vec3(.35,.38,11.)),(abs(q.x)+max(q.z,0.)*.32-6.45)*.9));
+ vec3 trench=vec3(abs(q.x)-6.2,q.y-.62,mod(q.z+1.5,3.)-1.5);
+ hull=max(hull,-box(trench,vec3(.22,.12,1.25)));
  float deck=box(q-vec3(0,1.4,-1.8),vec3(4.7,.28,10.8));
  deck=max(deck,(abs(q.x)+max(q.z-3.,0.)*.38-4.7)*.9);
  hull=min(hull,deck);
- hull=min(hull,box(q-vec3(-2.3,2.5,-5.),vec3(1.3,.85,3.7)));
- hull=min(hull,box(q-vec3(-2.3,3.7,-5.8),vec3(.95,.40,1.8)));
- hull=min(hull,box(q-vec3(-2.3,5.,-6.3),vec3(.075,1.,.075)));
- hull=min(hull,box(q-vec3(-2.3,4.8,-6.3),vec3(.9,.055,.06)));
+ // Second deck tier and runway spine.
+ hull=min(hull,max(box(q-vec3(1.2,1.82,-4.5),vec3(2.4,.16,6.5)),(abs(q.x-1.2)+max(q.z+1.,0.)*.5-2.4)*.9));
+ // Turret rows on the deck edges: domes with twin barrels.
+ vec3 t=vec3(abs(q.x)-4.1,q.y-1.82,q.z+1.);t.z-=4.*clamp(floor(t.z/4.+.5),-2.,1.);
+ float turret=ellipsoid(t,vec3(.5,.32,.5));
+ vec3 barrel=vec3(abs(t.x)-.13,t.y-.12,t.z-.55);
+ turret=min(turret,box(barrel,vec3(.045,.045,.5)));
+ hull=min(hull,turret);
+ // Layered command tower, bridge band, mast and sensor dish.
+ vec3 tower=q-vec3(-2.3,0,-5.);
+ hull=min(hull,box(tower-vec3(0,2.5,0),vec3(1.3,.85,3.7))-.05);
+ hull=min(hull,box(tower-vec3(0,3.55,-.5),vec3(1.05,.3,2.6))-.05);
+ hull=min(hull,box(tower-vec3(0,4.15,-.8),vec3(.85,.32,1.6))-.05);
+ hull=min(hull,max(box(tower-vec3(0,4.55,-.3),vec3(.7,.12,1.25)),(tower.z+tower.y*.6-3.2)));
+ hull=min(hull,box(tower-vec3(0,5.6,-1.3),vec3(.06,1.15,.06)));
+ hull=min(hull,box(tower-vec3(0,5.9,-1.3),vec3(.9,.045,.05)));
+ hull=min(hull,box(tower-vec3(.5,5.2,-1.3),vec3(.04,.7,.04)));
+ vec3 dish=tower-vec3(0,5.05,1.15);
+ hull=min(hull,max(abs(length(dish)-.72)-.035,dish.y+.32));
+ hull=min(hull,capsule(dish,vec3(0,-.75,0),vec3(0,-.1,0),.05));
+ // Side hangar bays.
  vec3 bay=vec3(abs(q.x)-5.9,q.y-.05,q.z+1.5);
  hull=max(hull,-box(bay,vec3(1.5,.62,4.0)));
+ // Engine housings: outboard pods with ribs and nozzle bells, inner pair below.
  float pod=max(length(vec2(abs(q.x)-5.3,q.y+.2))-1.2,abs(q.z+11.5)-4.0);
+ float bell=max(abs(length(vec2(abs(q.x)-5.3,q.y+.2))-.95+(q.z+15.5)*.18)-.08,abs(q.z+15.9)-.45);
+ pod=min(pod,bell);
+ vec3 inner=vec3(abs(q.x)-2.1,q.y+.55,q.z+12.5);
+ pod=smin(pod,max(length(inner.xy)-.75,abs(inner.z)-3.6),.25);
+ pod=min(pod,max(abs(length(inner.xy)-.62+(inner.z+3.6)*.1)-.06,abs(inner.z+3.95)-.35));
  hull=min(hull,pod);
  // Large ribs around the pods establish readable industrial scale.
  float ribZ=mod(q.z+12.,2.5)-1.25;
@@ -25,18 +69,37 @@ float carrierHull(vec3 q){
  ribs=max(ribs,abs(q.z+11.5)-3.7);hull=min(hull,ribs);
  return hull;
 }
+// Interceptor: blended fuselage with a needle nose and dorsal spine, side
+// intakes, swept anhedral wings with wingtip cannons, canted twin fins, twin
+// nacelles with recessed nozzles and a glass canopy. Materials: 1 hull,
+// 2 engine light, 4 canopy.
 vec2 fighter(vec3 q,float wing){
- float body=box(q,vec3(.32,.19,1.45));
- body=max(body,(abs(q.x)+max(q.z,0.)*.19-.32)*.97);
- vec3 w=q+vec3(0,.07,.2);w.xy=rot(sign(w.x)*wing*.25)*w.xy;
- float wings=box(w,vec3(.8+wing*.65,.055,.65));
- wings=max(wings,(abs(w.x)*.5+w.z-.95)*.85);
- float cockpit=length((q-vec3(0,.22,.4))*vec3(1,1,.65))-.25;
- float ship=min(min(body,wings),cockpit);
- vec3 fin=q-vec3(0,.35,-.75);fin.yz=rot(-.25)*fin.yz;
- ship=min(ship,box(fin,vec3(.04,.35,.35)));
- float engine=max(length(q.xy)-(.10+uPulse.x*.04),abs(q.z+2.25)-(.65+uPulse.x*.5));
- return engine<ship?vec2(engine,2.):vec2(ship,1.);
+ float bound=length(q)-3.6;if(bound>.5)return vec2(bound,1.);
+ float body=roundCone(q,vec3(0,0,-1.25),vec3(0,.03,1.1),.3,.14);
+ body=smin(body,roundCone(q,vec3(0,.03,1.1),vec3(0,-.02,2.1),.14,.012),.08);
+ body=smin(body,box(q-vec3(0,.17,-.45),vec3(.07,.08,.95))-.03,.07);
+ body=max(body,-q.y-.27);
+ vec3 iq=vec3(abs(q.x)-.3,q.y,q.z-.05);
+ float intake=box(iq,vec3(.085,.12,.6))-.03;
+ intake=max(intake,-box(iq-vec3(0,0,.6),vec3(.055,.085,.1)));
+ body=smin(body,intake,.07);
+ vec3 w=q-vec3(0,-.03,-.35);w.x=abs(w.x);w.y+=w.x*(.07-wing*.05);
+ float span=1.05+wing*.6;
+ float lead=w.z-(.78-w.x*.6),trail=-(w.z+.58-w.x*.16);
+ float wings=max(max(lead,trail)*.8,max(w.x-span,abs(w.y)-.05*(1.-.55*w.x/span)));
+ float gun=capsule(w,vec3(span-.04,0,-.55+span*.16),vec3(span-.04,0,.95-span*.45),.045);
+ vec3 f=vec3(abs(q.x)-.22,q.y-.14,q.z+1.);f.xy=rot(-.38)*f.xy;
+ float fins=max(box(f-vec3(0,.3,0),vec3(.022,.32,.36)),(f.z+f.y*.9-.36)*.7);
+ vec3 e=vec3(abs(q.x)-.25,q.y+.03,q.z+1.08);
+ float nacelle=max(length(e.xy)-.15,abs(e.z)-.5)-.02;
+ nacelle=max(nacelle,-max(length(e.xy)-.1,abs(e.z+.55)-.12));
+ float ship=min(min(min(body,wings),min(gun,fins)),nacelle);
+ float canopy=ellipsoid(q-vec3(0,.21,.45),vec3(.13,.12,.42));
+ float plume=.42+uPulse.x*.35;
+ float along=clamp(-(e.z+.52)/(2.*plume),0.,1.);
+ float engine=max(length(e.xy)-(.08+uPulse.x*.025)*(1.-.7*along),abs(e.z+.52+plume)-plume)*.9;
+ if(engine<ship&&engine<canopy)return vec2(engine,2.);
+ return canopy<ship?vec2(canopy,4.):vec2(ship,1.);
 }
 vec3 flagshipTarget(){return vec3(1.8*sin(uChapterProgress*PI),-4.+uChapterProgress*1.5,uChapterTime*9.+34.-uChapterProgress*9.);}
 vec3 pursuitTarget(){return vec3(sin(uChapterProgress*PI)*2.,.5+uAction*1.8,uChapterTime*23.+13.);}
@@ -60,8 +123,7 @@ vec2 fleet(vec3 p){
   vec3 q=p-flagshipTarget();
   float carrier=carrierHull(q);
   if(carrier<hit.x)hit=vec2(carrier,3.);
-  vec3 exhaust=vec3(abs(q.x)-5.3,q.y+.2,q.z+17.);
-  float thrust=max(length(exhaust.xy)-.7,abs(exhaust.z)-(1.1+uPulse.x));
+  float thrust=carrierExhaust(q,.7,1.1+uPulse.x);
   if(thrust<hit.x)hit=vec2(thrust,2.);
   // Two close escorts overtake the tracked flagship throughout the reveal.
   for(int i=0;i<2;i++){
@@ -74,8 +136,7 @@ vec2 fleet(vec3 p){
   vec3 q=p-vec3(0,0,28.);
   float carrier=carrierHull(q);
   hit=vec2(carrier,3.);
-  vec3 exhaust=vec3(abs(q.x)-5.3,q.y+.2,q.z+17.);
-  float thrust=max(length(exhaust.xy)-.78,abs(exhaust.z)-(1.4+uPulse.x*1.3));
+  float thrust=carrierExhaust(q,.78,1.4+uPulse.x*1.3);
   if(thrust<hit.x)hit=vec2(thrust,2.);
   vec3 escort=p-vec3(11.+uAction*3.,4.+sin(uChapterTime*1.2)*.4,24.+k*25.);
   vec2 small=fighter(escort,.7);if(small.x<hit.x)hit=small;
@@ -133,7 +194,11 @@ void main(){
   float ao=clamp(fleet(at+n*.25).x/.25*.6+fleet(at+n*.8).x/.8*.4,.2,1.);c*=ao;
   c+=vec3(.2,.45,.9)*pow(1.-max(dot(n,-rd),0.),4.)*.45;
   c+=neon*(edge*.16+line(abs(q.x)-.3,.015)*.3+line(q.z-.8,.02)*.3);
-  if(h.y>2.5){
+  if(h.y>3.5){
+   // Tinted canopy glass: dark body, sharp sky reflection and an amber HUD glint.
+   c=vec3(.01,.02,.035)+vec3(.35,.6,1.)*pow(1.-max(dot(n,-rd),0.),3.)*.8+vec3(.6,.8,1.)*spec*1.6;
+   c+=vec3(1.,.55,.15)*.12*(.5+.5*sin(at.z*9.));
+  }else if(h.y>2.5){
    vec2 uv=abs(n.y)>.5?at.xz:vec2(abs(n.x)>.5?at.z:at.x,at.y);
    vec2 panel=abs(fract(uv*.8)-.5);
    c*=.7+.3*smoothstep(.015,.06,min(panel.x,panel.y));

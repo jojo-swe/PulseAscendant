@@ -62,19 +62,56 @@ constexpr Beats beatGrids[]={
  {beat_data::act3_times.data(),beat_data::act3_bar.data(),int(beat_data::act3_times.size())}};
 // Index of the last tracked beat at or before act time t (-1 before the first beat).
 int beatAt(int act,double t){const auto& g=beatGrids[act-1];return int(std::upper_bound(g.times,g.times+g.count,t+1e-9)-g.times)-1;}
-// Bars per camera shot: high-drive chapters cut every bar, others every two bars,
-// calm chapters hold a single continuous shot. Never cut in a chapter's first bar.
-int barsPerShot(float drive){return drive>=.9f?1:(drive>=.55f?2:0);}
-struct Direction {int variant=0;double motionStart=0,duration=0,accent=0;};
+// Bars per camera shot: high-drive chapters cut every two bars, mid-drive every
+// four, calm chapters hold a single continuous shot. Cutting on every downbeat
+// read as a stutter; a shot now lasts long enough for its glide to register.
+// Never cut in a chapter's first bar.
+int barsPerShot(float drive){return drive>=.9f?2:(drive>=.55f?4:0);}
+// Camera-only series at the reactivity rate. Transient drive and motion speed are
+// smoothed with zero-phase exponential passes (two forward, two backward; ~0.7 s
+// effective width), so the camera follows phrases and sections, never single
+// kicks. Identical values on seeking and export.
+struct CameraSeries {std::vector<float> drive;std::vector<double> flow;};
+const CameraSeries& cameraSeries(int act){
+ static const auto series=[](){
+  std::array<CameraSeries,3> out;
+  for(int a=1;a<=3;++a){
+   const int count=reactivity_data::offsets[a]-reactivity_data::offsets[a-1];
+   std::vector<double> drive(count),speed(count);
+   for(int i=0;i<count;++i){
+    const double at=double(i)/reactivity_data::rate;
+    drive[i]=.2*envelope(a,at,0)+.2*pulse(a,at,0)+.1*pulse(a,at,1);
+    speed[i]=.5*envelope(a,at,0)+.8*pulse(a,at,0)+.35*pulse(a,at,1);
+   }
+   const double k=1-std::exp(-1./(.35*reactivity_data::rate));
+   for(auto* v:{&drive,&speed})for(int pass=0;pass<2;++pass){
+    for(int i=1;i<count;++i)(*v)[i]=(*v)[i-1]+k*((*v)[i]-(*v)[i-1]);
+    for(int i=count-2;i>=0;--i)(*v)[i]=(*v)[i+1]+k*((*v)[i]-(*v)[i+1]);
+   }
+   auto& result=out[a-1];result.drive.resize(count);result.flow.resize(count);
+   for(int i=0;i<count;++i)result.drive[i]=float(drive[i]);
+   for(int i=1;i<count;++i)result.flow[i]=result.flow[i-1]+(speed[i]+speed[i-1])*.5/reactivity_data::rate;
+  }
+  return out;
+ }();
+ return series[std::clamp(act,1,3)-1];
+}
+template<class T> double sampleSeries(const std::vector<T>& values,double t){
+ const double at=std::clamp(t*reactivity_data::rate,0.,double(values.size()-1));
+ const size_t i=size_t(at),j=std::min(i+1,values.size()-1);return values[i]+(values[j]-values[i])*(at-double(i));
+}
+float smoothDrive(int act,double t){return float(sampleSeries(cameraSeries(act).drive,t));}
+double smoothMotion(int act,double t){return sampleSeries(cameraSeries(act).flow,t);}
+struct Direction {int variant=0;double motionStart=0,flowStart=0,duration=0,accent=0;float shotDrive=0;};
 const auto& directions(){
  // Seeking samples the same integrated motion and one-time stage action.
  static const auto result=[](){
   std::array<Direction,act1::cues.size()+act2::cues.size()+act3::cues.size()> result{};
-  std::array<int,16> visits{};double motion=0;
+  std::array<int,16> visits{};double motion=0,flow=0;
   for(int chapter=0;chapter<chapterCount();++chapter){
    const int act=chapterAct(chapter)+1;const auto& c=cue(chapter);
    const double start=chapterStart(chapter),end=chapter+1<chapterCount()?chapterStart(chapter+1):showDuration();
-   auto& d=result[chapter];d.variant=visits[c.scene]++;d.motionStart=motion;d.duration=end-start;d.accent=d.duration*.5;
+   auto& d=result[chapter];d.variant=visits[c.scene]++;d.motionStart=motion;d.flowStart=flow;d.duration=end-start;d.accent=d.duration*.5;
    float best=-1;const double actOffset=start-actStart(act);
    for(double at=std::ceil(d.duration*.28*20)/20;at<=d.duration*.76;at+=.05){
     const float onset=std::max(0.f,envelope(act,actOffset+at,1)-envelope(act,actOffset+at-.1,1));
@@ -82,6 +119,10 @@ const auto& directions(){
     if(score>best){best=score;d.accent=at;}
    }
    motion+=d.duration*(1.3+c.drive*1.65)+musicalMotion(act,actOffset+d.duration)-musicalMotion(act,actOffset);
+   flow+=d.duration*(1.3+c.drive*1.65)+smoothMotion(act,actOffset+d.duration)-smoothMotion(act,actOffset);
+   // The chapter's mean camera drive sets per-shot rates, which never change mid-shot.
+   double mean=0;int samples=0;for(double at=0;at<d.duration;at+=.05,++samples)mean+=smoothDrive(act,actOffset+at);
+   d.shotDrive=std::clamp(c.drive*.65f+float(mean/std::max(samples,1)),0.f,1.f);
   }
   return result;
  }();
@@ -137,6 +178,9 @@ TimelineFrame sampleTimeline(double seconds){
  f.drive=std::clamp(c.drive*.65f+.2f*f.energy+.2f*f.kick+.1f*f.snare,0.f,1.f);
  const double actOffset=f.actSeconds-local;
  f.motionSeconds=direction.motionStart+local*(1.3+c.drive*1.65)+musicalMotion(f.act,f.actSeconds)-musicalMotion(f.act,actOffset);
+ f.flowSeconds=direction.flowStart+local*(1.3+c.drive*1.65)+smoothMotion(f.act,f.actSeconds)-smoothMotion(f.act,actOffset);
+ f.cameraDrive=std::clamp(c.drive*.65f+smoothDrive(f.act,f.actSeconds),0.f,1.f);
+ f.shotDrive=direction.shotDrive;
  f.cut=float(std::exp(-local*8.));
  {
   const auto& g=beatGrids[f.act-1];const int i=beatAt(f.act,f.actSeconds);

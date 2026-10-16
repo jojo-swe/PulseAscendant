@@ -27,16 +27,16 @@ void main() {
  if(uMatte>.5&&uRetro==0&&abs(centre.y)>half_){color=vec4(0,0,0,1);return;}
  vec3 c;
  if(uRetro==0){
-  // Radial speed blur: velocity, beat-synced cuts and kick drums smear the frame
-  // outward from the vanishing point for a sense of speed.
+  // Radial speed blur: smoothed velocity and cuts smear the frame outward from
+  // the vanishing point. Kicks barely touch it: a per-kick smear read as a jolt.
   float cutKick=max(uCut,uBeatInfo.y);
-  float speed=uEvent*.004+cutKick*.035+uPulse.x*.008+uDrive*uDrive*.006;
+  float speed=uEvent*.004+cutKick*.02+uPulse.x*.0015+uCamera.x*uCamera.x*.006;
   vec3 radial=vec3(0);float r2=dot(centre,centre);
   for(int i=0;i<8;i++){float f=float(i)/7.;radial+=texture(uImage,vUV-centre*speed*f*(.4+r2*2.4)).rgb;}
   radial/=8.;
   c=mix(radial,antialias(vUV),.55-.45*clamp(speed*16.,0.,1.));
   // Lens chromatic aberration grows toward the frame edge and on hits.
-  float ca=(.0016+.004*uPulse.x+.006*cutKick)*r2*4.;
+  float ca=(.0016+.0012*uPulse.x+.004*cutKick)*r2*4.;
   c.r=mix(c.r,texture(uImage,vUV+centre*ca).r,.7);
   c.b=mix(c.b,texture(uImage,vUV-centre*ca).b,.7);
   vec3 bloom=texture(uBloom,vUV).rgb;
@@ -44,9 +44,10 @@ void main() {
   c+=bloom*(.42+uPulse.x*.22+uPulse.y*.1+uEvent*.12);
   // Anamorphic streaks carry a cool blue cast, as through a scope lens.
   c+=streak*vec3(.45,.65,1.25)*(.55+uPulse.x*.5);
-  // Exposure punch on every beat, scaled by drive; a hard white flash on the cut.
-  c*=1.+.16*beatPunch()*uDrive+.18*uPulse.x;
-  c+=vec3(.9,.95,1.)*(uCut*.3+uBeatInfo.y*.12)*exp(-dot(c,vec3(.33))*.3);
+  // Exposure lifts on beats and kicks; a white flash marks chapter cuts and a
+  // faint one beat-synced shot cuts.
+  c*=1.+.1*beatPunch()*uDrive+.12*uPulse.x;
+  c+=vec3(.9,.95,1.)*(uCut*.3+uBeatInfo.y*.05)*exp(-dot(c,vec3(.33))*.3);
  }else c=texture(uImage,vUV).rgb;
  float vig=pow(16.*vUV.x*vUV.y*(1.-vUV.x)*(1.-vUV.y),.22);
  c*=mix(.32,1.,vig);
