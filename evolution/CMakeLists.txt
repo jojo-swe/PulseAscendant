@@ -57,6 +57,16 @@ add_library(evo_core STATIC
     src/image/png.cpp)
 target_include_directories(evo_core PUBLIC src)
 
+add_library(evo_gfx STATIC
+    src/gfx/context.cpp
+    src/gfx/vk_check.hpp
+    src/gfx/vma_impl.cpp)
+target_include_directories(evo_gfx PUBLIC src)
+target_link_libraries(evo_gfx PUBLIC volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core)
+target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
+set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
+    COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
+
 add_executable(Evolution
     src/main.cpp)
 target_link_libraries(Evolution PRIVATE evo_core)
@@ -77,3 +87,7 @@ add_test(NAME png COMMAND png_test)
 add_test(NAME png_decode
     COMMAND python3 ${CMAKE_SOURCE_DIR}/tests/check_png.py ${CMAKE_BINARY_DIR}/build-out/png/nested/dir/test.png)
 set_tests_properties(png_decode PROPERTIES PASS_REGULAR_EXPRESSION "3x2 ff0000 ffffff" DEPENDS png)
+
+add_executable(context_test tests/context_test.cpp)
+target_link_libraries(context_test PRIVATE evo_gfx)
+add_test(NAME context COMMAND context_test)
