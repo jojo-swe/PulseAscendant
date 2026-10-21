@@ -33,4 +33,26 @@ Bygg: `cd evolution && cmake --preset linux && cmake --build --preset linux && c
 
 ## Taskstatus
 
-(fylls i nedan)
+| Task | Status | Commit |
+|---|---|---|
+| 1. CMake, pinnade beroenden, CLI-options | **klar**, granskad och godkänd | 34df257 |
+| 2. PNG-writer utan beroenden | implementerad, tester gröna; **granskning pågick när sessionen stängdes** — kör en reviewer på diffen 34df257..c0c9683 först i nästa session | c0c9683 |
+| 3. Vulkan-context med RT-krav | ej påbörjad | |
+| 4. Offscreen compute + readback | ej påbörjad | |
+| 5. Fönster, swapchain, loop, render-stream | ej påbörjad | |
+| 6. PNG-capture-läge + README | ej påbörjad | |
+
+## Uppskjutna minor-fynd (till slutgranskningen av steg 0)
+
+- `cmake/Shaders.cmake`: kopieringen av `.spv` bredvid exe är ett `POST_BUILD`-steg på målet; en ren shaderändring uppdaterar inte kopian. Härda genom att kopiera inuti `<target>_shaders` eller med stamp-fil. `copy_directory` raderar inte borttagna `.spv`.
+- `options.cpp`: sökvägsflaggor accepterar värden som börjar med `--`; `options_test` saknar övre gränser, icke-numeriskt och saknat värde.
+- `Shaders.cmake`: tomma `VULKAN_SDK`-hints när variabeln är osatt.
+- `png.cpp`: flerblocksvägen (>65535 byte) är otestad.
+- SDL varnar om saknad libdecor vid configure (miljö).
+
+## Så här återupptas arbetet
+
+1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (3 tester).
+2. Granska Task 2 (reviewer-subagent, diffen ovan). Åtgärda ev. Important-fynd.
+3. Fortsätt med Task 3 enligt `2026-10-21-step0-skeleton.md`: `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief evolution/docs/plans/2026-10-21-step0-skeleton.md 3`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
+4. När steg 0 är klart: slutgranskning av hela branchen, sedan steg 1 (ljud + timeline + placeholder-låt) får sin egen plan.
