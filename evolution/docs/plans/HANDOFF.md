@@ -37,7 +37,7 @@ Bygg: `cd evolution && cmake --preset linux && cmake --build --preset linux && c
 |---|---|---|
 | 1. CMake, pinnade beroenden, CLI-options | **klar**, granskad och godkänd | 34df257 |
 | 2. PNG-writer utan beroenden | **klar**, granskad och godkänd (PNG/zlib-detaljer verifierade, flerblocksfall bekräftat av granskaren) | c0c9683 |
-| 3. Vulkan-context med RT-krav | ej påbörjad | |
+| 3. Vulkan-context med RT-krav | implementerad, 4/4 tester gröna på lavapipe (`"rayTracing":true`); **ej granskad** — kör reviewer på diffen c0c9683..a9b7e0e först i nästa session. Avvikelse: VMA-makron sätts även på context.cpp (anropar vmaImportVulkanFunctionsFromVolk) | a9b7e0e |
 | 4. Offscreen compute + readback | ej påbörjad | |
 | 5. Fönster, swapchain, loop, render-stream | ej påbörjad | |
 | 6. PNG-capture-läge + README | ej påbörjad | |
@@ -53,5 +53,6 @@ Bygg: `cd evolution && cmake --preset linux && cmake --build --preset linux && c
 ## Så här återupptas arbetet
 
 1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (3 tester).
-2. Fortsätt med Task 3 enligt `2026-10-21-step0-skeleton.md`: `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief evolution/docs/plans/2026-10-21-step0-skeleton.md 3`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
-3. När steg 0 är klart: slutgranskning av hela branchen, sedan steg 1 (ljud + timeline + placeholder-låt) får sin egen plan.
+2. Granska Task 3 (reviewer-subagent, Opus). Åtgärda ev. Important-fynd.
+3. Fortsätt med Task 4 enligt `2026-10-21-step0-skeleton.md`: `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief evolution/docs/plans/2026-10-21-step0-skeleton.md 3`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
+4. När steg 0 är klart: slutgranskning av hela branchen, sedan steg 1 (ljud + timeline + placeholder-låt) får sin egen plan.
