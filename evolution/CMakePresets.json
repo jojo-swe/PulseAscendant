@@ -1,0 +1,59 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "linux",
+            "displayName": "Linux (Ninja, Release)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "windows",
+            "displayName": "Windows (Visual Studio 2026, x64)",
+            "generator": "Visual Studio 18 2026",
+            "architecture": "x64",
+            "binaryDir": "${sourceDir}/build/windows",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "linux",
+            "configurePreset": "linux"
+        },
+        {
+            "name": "windows",
+            "configurePreset": "windows",
+            "configuration": "Release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "linux",
+            "configurePreset": "linux",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "windows",
+            "configurePreset": "windows",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

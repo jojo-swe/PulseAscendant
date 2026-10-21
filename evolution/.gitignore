@@ -1,0 +1,4 @@
+build/
+dist/
+assets/music/*.wav
+__pycache__/
