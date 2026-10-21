@@ -53,7 +53,8 @@ add_compile_definitions(VK_NO_PROTOTYPES)
 # --- Project targets --------------------------------------------------------------------------------------
 
 add_library(evo_core STATIC
-    src/app/options.cpp)
+    src/app/options.cpp
+    src/image/png.cpp)
 target_include_directories(evo_core PUBLIC src)
 
 add_executable(Evolution
@@ -68,3 +69,11 @@ enable_testing()
 add_executable(options_test tests/options_test.cpp)
 target_link_libraries(options_test PRIVATE evo_core)
 add_test(NAME options COMMAND options_test)
+
+add_executable(png_test tests/png_test.cpp)
+target_link_libraries(png_test PRIVATE evo_core)
+target_compile_definitions(png_test PRIVATE EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+add_test(NAME png COMMAND png_test)
+add_test(NAME png_decode
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/tests/check_png.py ${CMAKE_BINARY_DIR}/build-out/png/nested/dir/test.png)
+set_tests_properties(png_decode PROPERTIES PASS_REGULAR_EXPRESSION "3x2 ff0000 ffffff" DEPENDS png)
