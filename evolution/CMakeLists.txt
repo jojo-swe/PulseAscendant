@@ -73,6 +73,12 @@ target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
 set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
     COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
 
+# Music: the WAV reader and the sample-exact transport that loops it. No SDL here; playback comes later.
+add_library(evo_audio STATIC
+    src/audio/transport.cpp
+    src/audio/wav.cpp)
+target_include_directories(evo_audio PUBLIC src)
+
 # The run modes (windowed, render stream, capture, device info); SDL3 provides the window and the Vulkan
 # surface.
 add_library(evo_app STATIC
@@ -106,6 +112,11 @@ add_test(NAME png_decode
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/check_png.py
             ${CMAKE_BINARY_DIR}/build-out/png/nested/dir/test.png)
 set_tests_properties(png_decode PROPERTIES PASS_REGULAR_EXPRESSION "3x2 ff0000 ffffff" DEPENDS png)
+
+add_executable(audio_transport_test tests/audio_transport_test.cpp)
+target_link_libraries(audio_transport_test PRIVATE evo_audio)
+target_compile_definitions(audio_transport_test PRIVATE EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+add_test(NAME audio_transport COMMAND audio_transport_test)
 
 add_executable(context_test tests/context_test.cpp)
 target_link_libraries(context_test PRIVATE evo_gfx)
