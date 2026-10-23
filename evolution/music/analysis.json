@@ -32,16 +32,25 @@
   "method": "RMS, 35-180 Hz bass, positive spectral flux; 2048 sample Hann / 16 kHz; no assumed beat grid",
   "envelope_offsets": [
     0,
-    5400
+    5799,
+    11775
   ],
   "tracks": [
     {
-      "source": "placeholder.wav",
-      "frames": 12960000,
-      "duration": 270.0,
-      "envelope_samples": 5400,
-      "transient_peaks": 497,
-      "runtime_sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604"
+      "source": "Adventurous Uplift.wav",
+      "frames": 13916160,
+      "duration": 289.92,
+      "envelope_samples": 5799,
+      "transient_peaks": 837,
+      "runtime_sha256": "3fd1d9156eb7ff1f724ec53e73e33d86463eacdf43baccc5b10cc9d8ef2cf0d5"
+    },
+    {
+      "source": "Rigid Arpeggios.wav",
+      "frames": 14340480,
+      "duration": 298.76,
+      "envelope_samples": 5976,
+      "transient_peaks": 791,
+      "runtime_sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335"
     }
   ]
 }

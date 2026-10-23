@@ -1,17 +1,27 @@
 {
   "method": "100 Hz log spectral flux; autocorrelation + comb tempo with 120 BPM log-normal prior; DP beat tracking; +/-6 beat local linear smoothing (follows tempo drift); 4/4 bar position from bass onset and harmonic change in +/-24 beat windows",
   "meter": 4,
-  "bpm_median": 134.018,
+  "bpm_median": 92.081,
   "tracks": [
     {
-      "source": "placeholder.wav",
-      "sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604",
-      "frames": 12960000,
-      "bpm_median": 134.021,
-      "beats": 601,
-      "downbeats": 153,
+      "source": "Adventurous Uplift.wav",
+      "sha256": "3fd1d9156eb7ff1f724ec53e73e33d86463eacdf43baccc5b10cc9d8ef2cf0d5",
+      "frames": 13916160,
+      "bpm_median": 91.873,
+      "beats": 441,
+      "downbeats": 113,
       "tracker_jitter_ms_median": 2.31,
-      "tracker_jitter_ms_p90": 4.62
+      "tracker_jitter_ms_p90": 5.38
+    },
+    {
+      "source": "Rigid Arpeggios.wav",
+      "sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335",
+      "frames": 14340480,
+      "bpm_median": 92.199,
+      "beats": 458,
+      "downbeats": 116,
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 5.38
     }
   ]
 }

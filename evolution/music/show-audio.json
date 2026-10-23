@@ -1,20 +1,27 @@
 {
-  "frames": 12960000,
-  "duration": 270.0,
+  "frames": 28256640,
+  "duration": 588.68,
   "sample_rate": 48000,
   "channels": 2,
   "encoding": "PCM signed 16 bit",
   "track_start_frames": [
-    0
+    0,
+    13916160
   ],
   "tracks": [
     {
-      "source": "placeholder.wav",
-      "runtime_file": "assets/music/placeholder.wav",
-      "frames": 12960000,
-      "sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604"
+      "source": "Adventurous Uplift.mp3",
+      "runtime_file": "assets/music/Adventurous Uplift.wav",
+      "frames": 13916160,
+      "sha256": "3fd1d9156eb7ff1f724ec53e73e33d86463eacdf43baccc5b10cc9d8ef2cf0d5"
+    },
+    {
+      "source": "Rigid Arpeggios.mp3",
+      "runtime_file": "assets/music/Rigid Arpeggios.wav",
+      "frames": 14340480,
+      "sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335"
     }
   ],
-  "sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604",
+  "sha256": "94c4eb1ca7bf5508282f34b230cb42405210e00df94606e30662b30453bb7a37",
   "runtime_file": "assets/music/show.wav"
 }

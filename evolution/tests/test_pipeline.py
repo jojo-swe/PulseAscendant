@@ -27,12 +27,13 @@ class PipelineTests(unittest.TestCase):
         wav.parent.mkdir(parents=True)
         subprocess.run([sys.executable, str(ROOT / 'tools/make_placeholder.py'), str(wav)],
                        check=True, capture_output=True)
+        targets = ROOT / 'tools/show_targets_placeholder.json'
         result = subprocess.run([sys.executable, str(ROOT / 'tools/prepare_show.py'), '--root', str(cls.root),
-                                 str(wav)], check=True, capture_output=True, text=True)
+                                 '--targets', str(targets), str(wav)], check=True, capture_output=True, text=True)
         cls.output = result.stdout
         generated = cls.root / 'src/show/generated'
         cls.headers = {name: (generated / f'{name}.hpp') for name in HEADERS}
-        cls.targets = json.loads((ROOT / 'tools/show_targets.json').read_text())
+        cls.targets = json.loads(targets.read_text())
 
     @classmethod
     def tearDownClass(cls):

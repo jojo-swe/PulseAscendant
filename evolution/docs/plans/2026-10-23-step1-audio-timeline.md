@@ -10,6 +10,25 @@
 
 **Spec:** `evolution/docs/plans/2026-10-21-evolution-design.md` (sections 2.2–2.3, 3.7, 3.9, 4, 5, 6; step 1 of section 7). Step 0 code is on the same branch; read `evolution/src/gfx/offscreen.hpp` and `evolution/src/app/options.hpp` for what exists.
 
+## Amendment 2026-10-23: the real music arrived (binding; overrides the text below where they differ)
+
+The owner supplied the two Suno tracks before step 1 finished. From Task 3 on, the show is **two acts**:
+
+| Act | Track | Frames | Show start | Length |
+|---|---|---|---|---|
+| I | Adventurous Uplift (≈91.9 BPM) | 13 916 160 | 0 | 289.92 s |
+| II | Rigid Arpeggios (≈92.2 BPM) | 14 340 480 | 289.92 s | 298.76 s |
+
+Show length **588.68 s** = 28 256 640 frames; `assets/music/show.wav` (git-ignored; regenerate with `tools/prepare_show.py "music/source/Adventurous Uplift.mp3" "music/source/Rigid Arpeggios.mp3"`). The generated headers under `src/show/generated/` already hold this show (`chapterCount = 21`). The placeholder song is now only used by the Python tests (`tools/show_targets_placeholder.json`).
+
+**21 chapters**, `Effect` enum in chapter order (one effect per chapter): `Boot, Flyby, Dots, Plasma, Tunnel, Glenz, Lens, Raytrace, City, Finale, Portal, StudioNight, Ascent, CityNight, Nebula, Cathedral, Ocean, SphereStorm, Singularity, Return, Credits`. Act I (chapters 0–10) carries the 1993/2026 pairs; Act II (11–20) is 2026 only, a deeper journey that starts in the Studio at night and returns to it.
+
+Authored targets (show seconds, verbatim from `tools/show_targets.json`): Boot 0, Flyby 10, Dots 34, Plasma 58, Tunnel 82, Glenz 108, Lens 134, Raytrace 162, City 194, Finale 226, Portal 258, StudioNight 289.92, Ascent 313.92, CityNight 341.92, Nebula 373.92, Cathedral 405.92, Ocean 437.92, SphereStorm 469.92, Singularity 501.92, Return 531.92, Credits 559.92. The directed starts are in `cue_data.hpp` (`chapterStarts[21]`, `chapterTargets[21]`), each on a tracked beat within ±2.2 s of its target; chapter 11 starts exactly at 289.92.
+
+`Cue` gains `float eraFixed` (0 or 1), used only by `Transition::Cut`: the chapter holds that era throughout. Cue sheet (transition, drive, eraFixed where Cut): Boot Cut/.2/0 · Flyby Portal/.6 · Dots BeatSwap/.8 · Plasma Wipe/.7 · Tunnel Portal/.8 · Glenz BeatSwap/.9 · Lens Wipe/.7 · Raytrace BeatSwap/1 · City Wipe/.9 · Finale BeatSwap/1 · Portal Portal/.7 (the pull-back into the Studio; era reaches 1 and Act I ends in 2026) · StudioNight Cut/.4/1 · Ascent Cut/.7/1 · CityNight Cut/.8/1 · Nebula Cut/.6/1 · Cathedral Cut/.8/1 · Ocean Cut/.9/1 · SphereStorm Cut/1/1 · Singularity Cut/.9/1 · Return Cut/.5/1 · Credits Cut/.4/0. Then/now cards for Act I as in Task 3; Act II chapters have an empty thenCard and a nowCard such as `2026 · THE STUDIO · PATH TRACED`, `2026 · ASCENT · VOLUMETRIC LIGHT`, `2026 · CITY NIGHT · WET STREETS`, `2026 · NEBULA · VOLUMETRIC`, `2026 · GLASS CATHEDRAL · REFRACTION`, `2026 · PARTICLE OCEAN · 2,097,152 PARTICLES`, `2026 · SPHERE STORM · PATH TRACED`, `2026 · SINGULARITY`, `2026 · RETURN · THE STUDIO`, `1993 → 2026 · CREDITS`.
+
+Test values change accordingly: `showDuration() == 588.68`; `chapterCount() == 21`; `chapterStart(11) == 289.92` exactly; `sampleTimeline(289.92).effect == Effect::StudioNight` and `.chapter == 11`; `sampleTimeline(588.679).chapter == 20`; `sampleTimeline(588.68).chapter == 0`; era tests use Flyby (Portal), Plasma (Wipe), Raytrace (BeatSwap), Boot (Cut → 0), StudioNight (Cut → 1), Credits (Cut → 0); `--show-info` regex `"duration":588.68`; Task 6 captures at `--time 165` (Raytrace) and `--time 300` (StudioNight) must differ. The `BeatGridView` for a chapter is the view of that chapter's track, with times in track seconds; `sampleTimeline` converts show seconds to track seconds by subtracting the track start.
+
 ## Global Constraints
 
 - Everything lives under `evolution/`; nothing outside it is modified.
