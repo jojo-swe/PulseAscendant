@@ -3,7 +3,9 @@
 #include "gfx/vk_check.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <utility>
@@ -13,6 +15,13 @@ namespace evo::gfx {
 namespace {
 
 const char* const kValidationLayer = "VK_LAYER_KHRONOS_validation";
+
+// volk loads instance and device functions into process-wide globals, so a second Context would silently
+// repoint the first one's calls at its own device. create() refuses while one is alive.
+std::atomic<int> liveContexts{0};
+
+// Counted by debugMessage(); a process-wide count, so main() can still read it after the Context is gone.
+std::atomic<unsigned> validationMessages{0};
 
 const std::vector<const char*> kRequiredDeviceExtensions = {
     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
@@ -47,6 +56,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugMessage(VkDebugUtilsMessageSeverityFlagBitsE
                                             VkDebugUtilsMessageTypeFlagsEXT /*types*/,
                                             const VkDebugUtilsMessengerCallbackDataEXT* data,
                                             void* /*user*/) {
+    ++validationMessages; // the messenger only subscribes to warnings and errors
     std::fprintf(stderr, "[vulkan] %s: %s\n", severityName(severity),
                  data && data->pMessage ? data->pMessage : "");
     return VK_FALSE; // never abort the call that triggered the message
@@ -202,13 +212,23 @@ std::string jsonEscape(const std::string& text) {
 MissingRequirements::MissingRequirements(std::vector<std::string> missingNames)
     : std::runtime_error(joinNames(missingNames)), missing(std::move(missingNames)) {}
 
+unsigned validationMessagesReported() {
+    return validationMessages.load();
+}
+
 Context Context::create(const ContextOptions& options) {
+    if (liveContexts.fetch_add(1) != 0) {
+        --liveContexts;
+        throw std::logic_error("only one evo::gfx::Context may be alive at a time");
+    }
+    Context ctx;
+    ctx.live_ = true; // from here on, ctx's destructor gives the slot back, even if create() throws
+    ctx.validationMessagesBefore_ = validationMessages.load();
+
     if (options.loader)
         volkInitializeCustom(options.loader);
-    else
-        vkCheck(volkInitialize(), "volkInitialize");
-
-    Context ctx;
+    else if (volkInitialize() != VK_SUCCESS)
+        throw MissingRequirements({"Vulkan loader (vulkan-1.dll / libvulkan.so.1)"});
 
     // --- Instance ---
     std::vector<const char*> layers;
@@ -261,7 +281,10 @@ Context Context::create(const ContextOptions& options) {
     instanceInfo.ppEnabledLayerNames = layers.data();
     instanceInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
     instanceInfo.ppEnabledExtensionNames = instanceExtensions.data();
-    vkCheck(vkCreateInstance(&instanceInfo, nullptr, &ctx.instance_), "vkCreateInstance");
+    const VkResult instanceResult = vkCreateInstance(&instanceInfo, nullptr, &ctx.instance_);
+    if (instanceResult == VK_ERROR_INCOMPATIBLE_DRIVER)
+        throw MissingRequirements({"Vulkan 1.3 capable loader/driver"});
+    vkCheck(instanceResult, "vkCreateInstance");
     volkLoadInstance(ctx.instance_);
     if (useMessenger) {
         vkCheck(vkCreateDebugUtilsMessengerEXT(ctx.instance_, &debugInfo, nullptr, &ctx.messenger_),
@@ -272,13 +295,19 @@ Context Context::create(const ContextOptions& options) {
     std::vector<const char*> extensions = kRequiredDeviceExtensions;
     extensions.insert(extensions.end(), options.extraDeviceExtensions.begin(),
                       options.extraDeviceExtensions.end());
+    // Test-only hook (see context.hpp); copied because a later setenv may free getenv's string.
+    std::string extensionRequiredByTest;
+    if (const char* name = std::getenv("EVO_TEST_REQUIRE_DEVICE_EXTENSION"); name && *name) {
+        extensionRequiredByTest = name;
+        extensions.push_back(extensionRequiredByTest.c_str());
+    }
 
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(ctx.instance_, &deviceCount, nullptr);
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(ctx.instance_, &deviceCount, devices.data());
     if (devices.empty())
-        throw std::runtime_error("no Vulkan physical devices found");
+        throw MissingRequirements({"a Vulkan physical device"});
 
     std::vector<Candidate> candidates;
     for (VkPhysicalDevice device : devices)
@@ -352,7 +381,8 @@ Context::Context(Context&& other) noexcept
       physicalDevice_(std::exchange(other.physicalDevice_, VK_NULL_HANDLE)),
       device_(std::exchange(other.device_, VK_NULL_HANDLE)), queue_(std::exchange(other.queue_, VK_NULL_HANDLE)),
       queueFamily_(other.queueFamily_), allocator_(std::exchange(other.allocator_, VK_NULL_HANDLE)),
-      commandPool_(std::exchange(other.commandPool_, VK_NULL_HANDLE)), validation_(other.validation_) {}
+      commandPool_(std::exchange(other.commandPool_, VK_NULL_HANDLE)), validation_(other.validation_),
+      validationMessagesBefore_(other.validationMessagesBefore_), live_(std::exchange(other.live_, false)) {}
 
 Context& Context::operator=(Context&& other) noexcept {
     if (this != &other) {
@@ -366,6 +396,8 @@ Context& Context::operator=(Context&& other) noexcept {
         allocator_ = std::exchange(other.allocator_, VK_NULL_HANDLE);
         commandPool_ = std::exchange(other.commandPool_, VK_NULL_HANDLE);
         validation_ = other.validation_;
+        validationMessagesBefore_ = other.validationMessagesBefore_;
+        live_ = std::exchange(other.live_, false);
     }
     return *this;
 }
@@ -388,6 +420,14 @@ void Context::destroy() noexcept {
     device_ = VK_NULL_HANDLE;
     commandPool_ = VK_NULL_HANDLE;
     allocator_ = VK_NULL_HANDLE;
+    if (live_) {
+        live_ = false;
+        --liveContexts;
+    }
+}
+
+unsigned Context::validationMessageCount() const {
+    return validationMessages.load() - validationMessagesBefore_;
 }
 
 std::string Context::deviceName() const {

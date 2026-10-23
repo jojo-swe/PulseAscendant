@@ -20,14 +20,26 @@ struct ContextOptions {
     PFN_vkGetInstanceProcAddr loader = nullptr;     // nullptr -> volkInitialize()
 };
 
-// Thrown when no device offers every required extension and feature; names each missing one.
+// Thrown when the machine cannot run EVOLUTION: no Vulkan loader, no Vulkan 1.3 driver, no physical device,
+// or no device offering every required extension and feature. Names each missing one.
 struct MissingRequirements : std::runtime_error {
     explicit MissingRequirements(std::vector<std::string> missingNames);
     std::vector<std::string> missing;
 };
 
+// Every validation warning and error reported in this process so far, including those from destroying a
+// Context. Zero unless a Context was created with validation and the layer was present.
+unsigned validationMessagesReported();
+
+// The Vulkan instance, device, queue and allocator. Only one may be alive at a time, because volk keeps the
+// function pointers it loads for the instance and device in globals.
+//
+// Test-only: when the environment variable EVO_TEST_REQUIRE_DEVICE_EXTENSION is set, create() also
+// requires the device extension it names, so a test can make any machine look unsupported.
 class Context {
 public:
+    // Throws MissingRequirements when the machine cannot run EVOLUTION, and std::logic_error while another
+    // Context is alive.
     static Context create(const ContextOptions& options);
 
     ~Context();
@@ -48,6 +60,11 @@ public:
     uint32_t apiVersion() const;
     std::string deviceInfoJson() const;
 
+    // Whether the validation layer was requested and found.
+    bool validationEnabled() const { return validation_; }
+    // Validation warnings and errors reported since this Context was created.
+    unsigned validationMessageCount() const;
+
     // Records on a fresh primary command buffer, submits, waits idle, frees.
     void immediate(const std::function<void(VkCommandBuffer)>& record) const;
 
@@ -64,6 +81,8 @@ private:
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
     bool validation_ = false;
+    unsigned validationMessagesBefore_ = 0; // validationMessagesReported() when this Context was created
+    bool live_ = false;                     // holds the one-live-Context slot
 };
 
 } // namespace evo::gfx

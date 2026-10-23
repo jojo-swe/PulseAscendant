@@ -209,16 +209,11 @@ int runRenderStream(const Options& options) {
 }
 
 int runDeviceInfo(const Options& options) {
-    try {
-        gfx::ContextOptions contextOptions;
-        contextOptions.validation = options.validation;
-        const gfx::Context ctx = gfx::Context::create(contextOptions);
-        std::printf("%s\n", ctx.deviceInfoJson().c_str());
-        return 0;
-    } catch (const gfx::MissingRequirements& missing) {
-        std::fprintf(stderr, "%s\n", missingRequirementsMessage(missing).c_str());
-        return 2;
-    }
+    gfx::ContextOptions contextOptions;
+    contextOptions.validation = options.validation;
+    const gfx::Context ctx = gfx::Context::create(contextOptions);
+    std::printf("%s\n", ctx.deviceInfoJson().c_str());
+    return 0;
 }
 
 } // namespace evo

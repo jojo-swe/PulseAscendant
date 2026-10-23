@@ -103,3 +103,7 @@ Evolution --device-info
 3 bytes per pixel, with progress on stderr. `--capture-dir` creates missing directories and overwrites
 an existing file of the same name. With `--validation`, validation messages go to stderr, so they never
 mix with streamed frames.
+
+Exit codes: 0 on success, 1 for bad usage or a runtime error, 2 when the machine cannot run EVOLUTION
+(no Vulkan loader, no Vulkan 1.3 driver, no GPU, or a missing extension or feature; stderr names what is
+missing), and 3 when `--validation` reported any warning or error during an otherwise successful run.

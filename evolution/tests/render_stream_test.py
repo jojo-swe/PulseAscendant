@@ -1,5 +1,6 @@
 """Run Evolution headless: --render-stream must emit exactly the expected raw RGB frames, and
---device-info must print JSON that reports ray tracing."""
+--device-info must print JSON that reports ray tracing. Arguments after the executable (e.g. --validation)
+are passed to every run."""
 
 import json
 import subprocess
@@ -9,9 +10,9 @@ WIDTH, HEIGHT, FPS, DURATION = 64, 36, 10, 1.05
 FRAMES = 11  # ceil(1.05 * 10): frames at t = 0.0, 0.1, ..., 1.0
 
 
-def main(exe):
+def main(exe, extra):
     stream = subprocess.run(
-        [exe, "--render-stream", "--width", str(WIDTH), "--height", str(HEIGHT), "--fps", str(FPS),
+        [exe, *extra, "--render-stream", "--width", str(WIDTH), "--height", str(HEIGHT), "--fps", str(FPS),
          "--duration", str(DURATION)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
     sys.stderr.write(stream.stderr.decode(errors="replace"))
@@ -28,7 +29,7 @@ def main(exe):
         sys.exit("frame 0 and frame 10 are identical; time is not advancing")
     print(f"render-stream: {FRAMES} frames of {WIDTH}x{HEIGHT}, frame 0 != frame 10")
 
-    info = subprocess.run([exe, "--device-info"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    info = subprocess.run([exe, *extra, "--device-info"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
     sys.stderr.write(info.stderr.decode(errors="replace"))
     if info.returncode != 0:
         sys.exit(f"--device-info exited with {info.returncode}")
@@ -39,6 +40,6 @@ def main(exe):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("usage: render_stream_test.py <Evolution executable>")
-    main(sys.argv[1])
+    if len(sys.argv) < 2:
+        sys.exit("usage: render_stream_test.py <Evolution executable> [Evolution options...]")
+    main(sys.argv[1], sys.argv[2:])

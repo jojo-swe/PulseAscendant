@@ -8,20 +8,10 @@
 #include <string>
 #include <vector>
 
-int main(int argc, char** argv) {
-    evo::Options options;
-    try {
-        options = evo::parseOptions(std::vector<std::string>(argv + 1, argv + argc));
-    } catch (const std::exception& error) {
-        std::fprintf(stderr, "Evolution: %s\nRun 'Evolution --help' for usage.\n", error.what());
-        return 1;
-    }
+namespace {
 
-    if (options.help) {
-        std::fputs(evo::helpText().c_str(), stdout);
-        return 0;
-    }
-
+// Exit codes: 0 success, 1 error, 2 the machine cannot run EVOLUTION. main() adds 3.
+int run(const evo::Options& options) {
     try {
         if (options.deviceInfo)
             return evo::runDeviceInfo(options);
@@ -41,4 +31,35 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "Evolution: %s\n", error.what());
         return 1;
     }
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    evo::Options options;
+    try {
+        options = evo::parseOptions(std::vector<std::string>(argv + 1, argv + argc));
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "Evolution: %s\nRun 'Evolution --help' for usage.\n", error.what());
+        return 1;
+    }
+
+    if (options.help) {
+        std::fputs(evo::helpText().c_str(), stdout);
+        return 0;
+    }
+
+    int code = run(options);
+
+    // Read after the Context is gone, so problems found while destroying it count too. With --validation
+    // any warning or error fails an otherwise successful run (exit code 3), so tests cannot miss one.
+    if (options.validation) {
+        const unsigned messages = evo::gfx::validationMessagesReported();
+        if (messages > 0) {
+            std::fprintf(stderr, "Evolution: %u validation messages\n", messages);
+            if (code == 0)
+                code = 3;
+        }
+    }
+    return code;
 }

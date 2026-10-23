@@ -123,15 +123,22 @@ add_executable(swapchain_test tests/swapchain_test.cpp)
 target_link_libraries(swapchain_test PRIVATE evo_gfx)
 add_test(NAME swapchain COMMAND swapchain_test)
 
-# Runs the real executable, which finds its shaders in <exe dir>/shaders.
+# These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
+# validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked).
 add_test(NAME render_stream
-    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_stream_test.py $<TARGET_FILE:Evolution>)
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_stream_test.py $<TARGET_FILE:Evolution>
+            --validation)
 set_tests_properties(render_stream PROPERTIES TIMEOUT 300)
 
 add_test(NAME capture
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/capture_test.py $<TARGET_FILE:Evolution>
-            ${CMAKE_BINARY_DIR}/build-out/capture)
+            ${CMAKE_BINARY_DIR}/build-out/capture --validation)
 set_tests_properties(capture PROPERTIES TIMEOUT 120)
+
+# The process-level exit codes: 0 on success, 1 for bad usage, 2 when the GPU lacks a requirement.
+add_test(NAME exit_codes
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/exit_code_test.py $<TARGET_FILE:Evolution>)
+set_tests_properties(exit_codes PROPERTIES TIMEOUT 120)
 
 # The Python music pipeline: beat tracker, placeholder song and the end-to-end header generation.
 add_test(NAME python_tools
@@ -140,6 +147,7 @@ add_test(NAME python_tools
 # Opens a real window, so it needs an X server; off by default and run under Xvfb.
 option(EVO_RUNTIME_TESTS "Run tests that open a window (needs xvfb-run)" OFF)
 if(EVO_RUNTIME_TESTS)
-    add_test(NAME windowed COMMAND xvfb-run -a $<TARGET_FILE:Evolution> --duration 1 --width 320 --height 200)
+    add_test(NAME windowed
+        COMMAND xvfb-run -a $<TARGET_FILE:Evolution> --validation --duration 1 --width 320 --height 200)
     set_tests_properties(windowed PROPERTIES TIMEOUT 120)
 endif()

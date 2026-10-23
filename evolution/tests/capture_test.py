@@ -1,6 +1,7 @@
 """Run Evolution with --capture-dir: it must create the nested directory, write frame-001.500.png at
 96x54, print the path, and succeed again when the file already exists. "--time -0" must name its file
-frame-000.000.png, not frame--00.000.png."""
+frame-000.000.png, not frame--00.000.png. Arguments after <tmpdir> (e.g. --validation) are passed to every
+run."""
 
 import os
 import shutil
@@ -11,9 +12,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WIDTH, HEIGHT = 96, 54
 
 
-def capture(exe, capture_dir, time="1.5"):
+def capture(exe, extra, capture_dir, time="1.5"):
     result = subprocess.run(
-        [exe, "--capture-dir", capture_dir, "--time", time, "--width", str(WIDTH), "--height", str(HEIGHT)],
+        [exe, *extra, "--capture-dir", capture_dir, "--time", time, "--width", str(WIDTH), "--height",
+         str(HEIGHT)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
     sys.stderr.write(result.stderr.decode(errors="replace"))
     if result.returncode != 0:
@@ -21,12 +23,12 @@ def capture(exe, capture_dir, time="1.5"):
     return result.stdout.decode().strip()
 
 
-def main(exe, tmpdir):
+def main(exe, tmpdir, extra):
     shutil.rmtree(tmpdir, ignore_errors=True)  # the nested directory must not exist beforehand
     capture_dir = os.path.join(tmpdir, "a", "b")
     expected = os.path.join(capture_dir, "frame-001.500.png")
 
-    printed = capture(exe, capture_dir)
+    printed = capture(exe, extra, capture_dir)
     if not os.path.isfile(expected):
         sys.exit(f"{expected} was not written")
     if os.path.normpath(printed) != os.path.normpath(expected):
@@ -39,16 +41,16 @@ def main(exe, tmpdir):
         sys.exit(f"check_png.py: expected {WIDTH}x{HEIGHT}, got '{summary}'")
     print(f"capture: {expected} decodes as {summary}")
 
-    capture(exe, capture_dir)  # captures are diagnostics: an existing file is overwritten
+    capture(exe, extra, capture_dir)  # captures are diagnostics: an existing file is overwritten
     print("capture: second run overwrote the file")
 
-    printed = capture(exe, capture_dir, time="-0")
+    printed = capture(exe, extra, capture_dir, time="-0")
     if os.path.basename(printed) != "frame-000.000.png":
         sys.exit(f"--time -0: expected frame-000.000.png, got '{printed}'")
     print("capture: --time -0 wrote frame-000.000.png")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit("usage: capture_test.py <Evolution executable> <tmpdir>")
-    main(sys.argv[1], sys.argv[2])
+    if len(sys.argv) < 3:
+        sys.exit("usage: capture_test.py <Evolution executable> <tmpdir> [Evolution options...]")
+    main(sys.argv[1], sys.argv[2], sys.argv[3:])

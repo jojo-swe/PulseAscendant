@@ -10,6 +10,9 @@ struct MissingRequirements;
 
 namespace evo {
 
+// Each run function returns the process exit code and lets gfx::MissingRequirements escape; main() turns
+// that into exit code 2 with missingRequirementsMessage() on stderr.
+
 // Opens an SDL3 window (Vulkan, resizable) and presents the test pattern until Esc, the window closes, or
 // --duration elapses. F11 toggles fullscreen. Returns the process exit code.
 int runWindowed(const Options& options);
@@ -18,8 +21,7 @@ int runWindowed(const Options& options);
 // to stdout. Progress goes to stderr.
 int runRenderStream(const Options& options);
 
-// Prints Context::deviceInfoJson() and a newline. Returns 2 (with the message on stderr) when the GPU
-// lacks a requirement.
+// Prints Context::deviceInfoJson() and a newline.
 int runDeviceInfo(const Options& options);
 
 // "EVOLUTION needs a Vulkan 1.3 GPU with ray tracing. Missing: a, b"
