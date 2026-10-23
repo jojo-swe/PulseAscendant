@@ -59,10 +59,15 @@ target_include_directories(evo_core PUBLIC src)
 
 add_library(evo_gfx STATIC
     src/gfx/context.cpp
+    src/gfx/offscreen.cpp
+    src/gfx/paths.cpp
+    src/gfx/shader.cpp
     src/gfx/vk_check.hpp
     src/gfx/vma_impl.cpp)
 target_include_directories(evo_gfx PUBLIC src)
-target_link_libraries(evo_gfx PUBLIC volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core)
+# SDL3 provides SDL_GetBasePath() for locating the shaders beside the executable.
+target_link_libraries(evo_gfx PUBLIC
+    volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core SDL3::SDL3-static)
 target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
 set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
     COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
@@ -91,3 +96,11 @@ set_tests_properties(png_decode PROPERTIES PASS_REGULAR_EXPRESSION "3x2 ff0000 f
 add_executable(context_test tests/context_test.cpp)
 target_link_libraries(context_test PRIVATE evo_gfx)
 add_test(NAME context COMMAND context_test)
+
+add_executable(offscreen_test tests/offscreen_test.cpp)
+target_link_libraries(offscreen_test PRIVATE evo_gfx)
+target_compile_definitions(offscreen_test PRIVATE
+    EVO_TEST_SHADER_DIR="${CMAKE_BINARY_DIR}/shaders"
+    EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+add_dependencies(offscreen_test Evolution_shaders) # the test loads fill.comp.spv from <build>/shaders
+add_test(NAME offscreen COMMAND offscreen_test)
