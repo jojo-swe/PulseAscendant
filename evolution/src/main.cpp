@@ -1,4 +1,5 @@
 #include "app/app.hpp"
+#include "app/capture.hpp"
 #include "app/options.hpp"
 #include "gfx/context.hpp"
 
@@ -26,7 +27,8 @@ int main(int argc, char** argv) {
             return evo::runDeviceInfo(options);
         if (options.renderStream)
             return evo::runRenderStream(options);
-        // Task 6: route --capture-dir here (runCapture), before the headless check below.
+        if (!options.captureDir.empty())
+            return evo::runCapture(options);
         if (options.headless) {
             std::fputs("Evolution: --headless needs an output: --render-stream or --capture-dir.\n", stderr);
             return 1;

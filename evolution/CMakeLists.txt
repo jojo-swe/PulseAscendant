@@ -73,9 +73,11 @@ target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
 set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
     COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
 
-# The run modes (windowed, render stream, device info); SDL3 provides the window and the Vulkan surface.
+# The run modes (windowed, render stream, capture, device info); SDL3 provides the window and the Vulkan
+# surface.
 add_library(evo_app STATIC
-    src/app/app.cpp)
+    src/app/app.cpp
+    src/app/capture.cpp)
 target_link_libraries(evo_app PUBLIC evo_gfx SDL3::SDL3-static)
 
 add_executable(Evolution
@@ -87,6 +89,10 @@ evo_add_shaders(Evolution shaders/fill.comp)
 
 enable_testing()
 
+# The script tests run Python 3. Found rather than called as "python3", which python.org installs on
+# Windows do not provide.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 add_executable(options_test tests/options_test.cpp)
 target_link_libraries(options_test PRIVATE evo_core)
 add_test(NAME options COMMAND options_test)
@@ -96,7 +102,8 @@ target_link_libraries(png_test PRIVATE evo_core)
 target_compile_definitions(png_test PRIVATE EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_test(NAME png COMMAND png_test)
 add_test(NAME png_decode
-    COMMAND python3 ${CMAKE_SOURCE_DIR}/tests/check_png.py ${CMAKE_BINARY_DIR}/build-out/png/nested/dir/test.png)
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/check_png.py
+            ${CMAKE_BINARY_DIR}/build-out/png/nested/dir/test.png)
 set_tests_properties(png_decode PROPERTIES PASS_REGULAR_EXPRESSION "3x2 ff0000 ffffff" DEPENDS png)
 
 add_executable(context_test tests/context_test.cpp)
@@ -117,8 +124,13 @@ add_test(NAME swapchain COMMAND swapchain_test)
 
 # Runs the real executable, which finds its shaders in <exe dir>/shaders.
 add_test(NAME render_stream
-    COMMAND python3 ${CMAKE_SOURCE_DIR}/tests/render_stream_test.py $<TARGET_FILE:Evolution>)
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_stream_test.py $<TARGET_FILE:Evolution>)
 set_tests_properties(render_stream PROPERTIES TIMEOUT 300)
+
+add_test(NAME capture
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/capture_test.py $<TARGET_FILE:Evolution>
+            ${CMAKE_BINARY_DIR}/build-out/capture)
+set_tests_properties(capture PROPERTIES TIMEOUT 120)
 
 # Opens a real window, so it needs an X server; off by default and run under Xvfb.
 option(EVO_RUNTIME_TESTS "Run tests that open a window (needs xvfb-run)" OFF)
