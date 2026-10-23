@@ -34,7 +34,7 @@ cmake --build --preset linux
 ctest --preset linux
 ```
 
-The executable is `build/linux/Evolution`, with its shaders in `build/linux/shaders/`. The tests run
+The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/bin/shaders/`. The tests run
 headless (they also pass on lavapipe) and need Python 3, which configure looks for. Tests that open a
 window are off by default; configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
 
@@ -58,7 +58,9 @@ cmake --build --preset windows
 ctest --preset windows
 ```
 
-The preset builds Release into `build\windows\`; the executable lands in `build\windows\Release\`.
+The preset builds Release into `build\windows\`; the executable is `build\windows\bin\Evolution.exe`,
+with its shaders in `build\windows\bin\shaders\` (no per-configuration subdirectory, so a Debug build
+replaces the Release one).
 
 ## Usage
 

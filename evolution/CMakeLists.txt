@@ -83,6 +83,7 @@ target_link_libraries(evo_app PUBLIC evo_gfx SDL3::SDL3-static)
 add_executable(Evolution
     src/main.cpp)
 target_link_libraries(Evolution PRIVATE evo_app SDL3::SDL3-static)
+# Places Evolution in <build>/bin with its compiled shaders in <build>/bin/shaders.
 evo_add_shaders(Evolution shaders/fill.comp)
 
 # --- Tests ------------------------------------------------------------------------------------------------
@@ -113,9 +114,9 @@ add_test(NAME context COMMAND context_test)
 add_executable(offscreen_test tests/offscreen_test.cpp)
 target_link_libraries(offscreen_test PRIVATE evo_gfx)
 target_compile_definitions(offscreen_test PRIVATE
-    EVO_TEST_SHADER_DIR="${CMAKE_BINARY_DIR}/shaders"
+    EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
-add_dependencies(offscreen_test Evolution_shaders) # the test loads fill.comp.spv from <build>/shaders
+add_dependencies(offscreen_test Evolution_shaders) # the test loads fill.comp.spv from <build>/bin/shaders
 add_test(NAME offscreen COMMAND offscreen_test)
 
 add_executable(swapchain_test tests/swapchain_test.cpp)
