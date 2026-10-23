@@ -1,5 +1,6 @@
 """Run Evolution with --capture-dir: it must create the nested directory, write frame-001.500.png at
-96x54, print the path, and succeed again when the file already exists."""
+96x54, print the path, and succeed again when the file already exists. "--time -0" must name its file
+frame-000.000.png, not frame--00.000.png."""
 
 import os
 import shutil
@@ -10,9 +11,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WIDTH, HEIGHT = 96, 54
 
 
-def capture(exe, capture_dir):
+def capture(exe, capture_dir, time="1.5"):
     result = subprocess.run(
-        [exe, "--capture-dir", capture_dir, "--time", "1.5", "--width", str(WIDTH), "--height", str(HEIGHT)],
+        [exe, "--capture-dir", capture_dir, "--time", time, "--width", str(WIDTH), "--height", str(HEIGHT)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
     sys.stderr.write(result.stderr.decode(errors="replace"))
     if result.returncode != 0:
@@ -40,6 +41,11 @@ def main(exe, tmpdir):
 
     capture(exe, capture_dir)  # captures are diagnostics: an existing file is overwritten
     print("capture: second run overwrote the file")
+
+    printed = capture(exe, capture_dir, time="-0")
+    if os.path.basename(printed) != "frame-000.000.png":
+        sys.exit(f"--time -0: expected frame-000.000.png, got '{printed}'")
+    print("capture: --time -0 wrote frame-000.000.png")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ constexpr int kMinSize = 16; // tiny frames keep the headless tests fast
 constexpr int kMaxSize = 8192;
 constexpr int kMinFps = 1;
 constexpr int kMaxFps = 240;
+constexpr int kMaxTime = 86400; // a day, in seconds: far past any timeline
 
 int parseInt(const std::string& flag, const std::string& text, int min, int max) {
     int value = 0;
@@ -62,7 +63,12 @@ Options parseOptions(const std::vector<std::string>& args) {
         } else if (flag == "--fps") {
             options.fps = parseInt(flag, nextValue(), kMinFps, kMaxFps);
         } else if (flag == "--time") {
-            options.time = parseSeconds(flag, nextValue());
+            const std::string& text = nextValue();
+            options.time = parseSeconds(flag, text);
+            if (options.time > kMaxTime) {
+                throw std::runtime_error(flag + " must be at most " + std::to_string(kMaxTime) +
+                                         " seconds, got " + text);
+            }
         } else if (flag == "--duration") {
             options.duration = parseSeconds(flag, nextValue());
         } else if (flag == "--headless") {
@@ -91,6 +97,10 @@ Options parseOptions(const std::vector<std::string>& args) {
     if (options.renderStream && !options.captureDir.empty()) {
         throw std::runtime_error("--render-stream and --capture-dir cannot be combined");
     }
+    // A stream has no Esc to end it, so "run until Esc" would write nothing.
+    if (options.renderStream && options.duration <= 0.0) {
+        throw std::runtime_error("--render-stream needs --duration greater than 0");
+    }
     // Streaming and capturing never open a window.
     if (options.renderStream || !options.captureDir.empty()) {
         options.headless = true;
@@ -106,11 +116,12 @@ std::string helpText() {
            "  --width N            Render width in pixels, 16..8192 (default 1280)\n"
            "  --height N           Render height in pixels, 16..8192 (default 720)\n"
            "  --fps N              Frames per second for headless output, 1..240 (default 60)\n"
-           "  --time S             Start time on the timeline in seconds (default 0)\n"
-           "  --duration S         Seconds to run; 0 runs until Esc (default 0)\n"
+           "  --time S             Start time on the timeline in seconds, 0..86400 (default 0)\n"
+           "  --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream\n"
+           "                       needs a duration greater than 0\n"
            "  --headless           Render without opening a window\n"
            "  --render-stream      Write raw RGB frames to stdout (implies --headless)\n"
-           "  --capture-dir PATH   Write PNG frames to PATH (implies --headless)\n"
+           "  --capture-dir PATH   Write one PNG frame, at --time, to PATH (implies --headless)\n"
            "  --validation         Enable the Vulkan validation layers\n"
            "  --device-info        Print information about the selected GPU and exit\n"
            "  --fullscreen         Start the window in fullscreen\n"

@@ -73,11 +73,12 @@ Options:
   --width N            Render width in pixels, 16..8192 (default 1280)
   --height N           Render height in pixels, 16..8192 (default 720)
   --fps N              Frames per second for headless output, 1..240 (default 60)
-  --time S             Start time on the timeline in seconds (default 0)
-  --duration S         Seconds to run; 0 runs until Esc (default 0)
+  --time S             Start time on the timeline in seconds, 0..86400 (default 0)
+  --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
+                       needs a duration greater than 0
   --headless           Render without opening a window
   --render-stream      Write raw RGB frames to stdout (implies --headless)
-  --capture-dir PATH   Write PNG frames to PATH (implies --headless)
+  --capture-dir PATH   Write one PNG frame, at --time, to PATH (implies --headless)
   --validation         Enable the Vulkan validation layers
   --device-info        Print information about the selected GPU and exit
   --fullscreen         Start the window in fullscreen

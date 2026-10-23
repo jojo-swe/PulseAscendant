@@ -32,7 +32,9 @@ public:
     Frame readback() const;
 
     VkImage image() const { return image_; }
-    VkImageLayout layout() const { return layout_; } // TRANSFER_SRC_OPTIMAL after render()
+    // The image's layout right after render(): TRANSFER_SRC_OPTIMAL. The swapchain's blit reads the image
+    // in this layout without transitioning it, so render() must keep leaving it there.
+    VkImageLayout layout() const { return layout_; }
     int width() const { return width_; }
     int height() const { return height_; }
 

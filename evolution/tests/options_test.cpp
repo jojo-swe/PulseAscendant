@@ -41,9 +41,13 @@ int main() {
         CHECK(uhd.width == 3840);
         CHECK(uhd.height == 2160);
 
-        const evo::Options stream = evo::parseOptions({"--render-stream"});
+        const evo::Options stream = evo::parseOptions({"--render-stream", "--duration", "1"});
         CHECK(stream.renderStream);
         CHECK(stream.headless);
+        // "Until Esc" means nothing for a stream: it would write no frames at all.
+        CHECK(parseError({"--render-stream"}) == "--render-stream needs --duration greater than 0");
+        CHECK(parseError({"--render-stream", "--duration", "0"}) ==
+              "--render-stream needs --duration greater than 0");
 
         const evo::Options capture = evo::parseOptions({"--capture-dir", "out/x"});
         CHECK(capture.captureDir == "out/x");
@@ -60,6 +64,10 @@ int main() {
         CHECK(!parseError({"--width", "8193"}).empty());
         CHECK(parseError({"--bogus"}).find("--bogus") != std::string::npos);
         CHECK(!parseError({"--render-stream", "--capture-dir", "x"}).empty());
+
+        // --time is capped at a day.
+        CHECK(evo::parseOptions({"--time", "86400"}).time == 86400.0);
+        CHECK(parseError({"--time", "86400.5"}).find("at most 86400") != std::string::npos);
 
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
     } catch (const std::exception& error) {

@@ -13,7 +13,8 @@ namespace {
 
 std::filesystem::path captureFileName(double seconds) {
     char name[64];
-    std::snprintf(name, sizeof(name), "frame-%07.3f.png", seconds);
+    // Adding 0.0 turns the -0.0 that "--time -0" parses to into 0.0, which prints without a sign.
+    std::snprintf(name, sizeof(name), "frame-%07.3f.png", seconds + 0.0);
     return name;
 }
 

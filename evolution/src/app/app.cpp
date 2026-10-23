@@ -193,6 +193,8 @@ int runRenderStream(const Options& options) {
 
     // The epsilon keeps products like 0.7 * 10 = 7.000000000000001 from adding a frame.
     const long frames = static_cast<long>(std::ceil(options.duration * options.fps - 1e-9));
+    if (frames < 1)
+        throw std::runtime_error("--duration is shorter than one frame"); // parseOptions rejects only 0
     for (long i = 0; i < frames; ++i) {
         offscreen.render(options.time + static_cast<double>(i) / options.fps);
         const gfx::Frame frame = offscreen.readback();
