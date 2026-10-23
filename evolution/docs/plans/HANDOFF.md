@@ -10,6 +10,10 @@ Läs detta först i nästa session. Specen och planerna ligger bredvid.
 - **Musik:** ägaren levererar Suno-låtar senare. Bygg mot syntetisk placeholder tills dess (steg 1).
 - **Arbetssätt ägaren vill ha:** denna session är hjärnan/kontrollern; Opus-subagenter gör de enklare tasks (implementation och granskning). Processen: superpowers:subagent-driven-development med en implementer + en reviewer per task.
 
+## Slutleverans (ägarens beställning 2026-10-23)
+
+När demot är klart: rendera **4K60** med exportkedjan och publicera **privat på YouTube** via vidIQ-kopplingen (`vidiq_video_upload`, privacy private). Containern kör Vulkan i mjukvara (lavapipe), så den fulla 4K60-renderingen görs på ägarens RTX-maskin med `tools/render_video.py`; ägaren laddar upp filen, sessionen publicerar. Kortare/lägre förhandsvisningar kan renderas här.
+
 ## Miljö (måste göras om i en ny container)
 
 ```sh
