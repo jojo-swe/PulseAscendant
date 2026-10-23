@@ -13,7 +13,8 @@
 namespace evo::gfx {
 
 struct ContextOptions {
-    bool validation = false;                        // enable VK_LAYER_KHRONOS_validation if present
+    bool validation = false;                        // enable VK_LAYER_KHRONOS_validation if present, and
+                                                    // route its messages to stderr via VK_EXT_debug_utils
     std::vector<const char*> instanceExtensions;    // from SDL when windowed; empty headless
     std::vector<const char*> extraDeviceExtensions; // appended to the required list (swapchain, tests)
     PFN_vkGetInstanceProcAddr loader = nullptr;     // nullptr -> volkInitialize()
@@ -55,6 +56,7 @@ private:
     void destroy() noexcept;
 
     VkInstance instance_ = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT messenger_ = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
     VkDevice device_ = VK_NULL_HANDLE;
     VkQueue queue_ = VK_NULL_HANDLE;

@@ -21,6 +21,48 @@ const std::vector<const char*> kRequiredDeviceExtensions = {
     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 };
 
+bool hasInstanceExtension(const char* layer, const char* name) {
+    uint32_t count = 0;
+    if (vkEnumerateInstanceExtensionProperties(layer, &count, nullptr) != VK_SUCCESS)
+        return false;
+    std::vector<VkExtensionProperties> available(count);
+    vkEnumerateInstanceExtensionProperties(layer, &count, available.data());
+    return std::any_of(available.begin(), available.end(), [name](const VkExtensionProperties& p) {
+        return std::strcmp(p.extensionName, name) == 0;
+    });
+}
+
+const char* severityName(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+        return "error";
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        return "warning";
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+        return "info";
+    return "verbose";
+}
+
+// Without a messenger the validation layer prints to stdout, which would corrupt --render-stream output.
+VKAPI_ATTR VkBool32 VKAPI_CALL debugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                                            VkDebugUtilsMessageTypeFlagsEXT /*types*/,
+                                            const VkDebugUtilsMessengerCallbackDataEXT* data,
+                                            void* /*user*/) {
+    std::fprintf(stderr, "[vulkan] %s: %s\n", severityName(severity),
+                 data && data->pMessage ? data->pMessage : "");
+    return VK_FALSE; // never abort the call that triggered the message
+}
+
+VkDebugUtilsMessengerCreateInfoEXT messengerInfo() {
+    VkDebugUtilsMessengerCreateInfoEXT info{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+    info.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    info.pfnUserCallback = debugMessage;
+    return info;
+}
+
 std::string joinNames(const std::vector<std::string>& names) {
     std::string message = "missing Vulkan requirements:";
     for (const auto& name : names)
@@ -186,6 +228,25 @@ Context Context::create(const ContextOptions& options) {
         }
     }
 
+    std::vector<const char*> instanceExtensions = options.instanceExtensions;
+    bool useMessenger = false;
+    if (options.validation) {
+        // The validation layer itself provides VK_EXT_debug_utils, so ask it as well as the loader.
+        const char* name = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+        useMessenger = hasInstanceExtension(nullptr, name) ||
+                       (ctx.validation_ && hasInstanceExtension(kValidationLayer, name));
+        if (useMessenger) {
+            const bool listed =
+                std::any_of(instanceExtensions.begin(), instanceExtensions.end(),
+                            [name](const char* extension) { return std::strcmp(extension, name) == 0; });
+            if (!listed)
+                instanceExtensions.push_back(name);
+        } else if (ctx.validation_) {
+            std::fprintf(stderr, "warning: %s unavailable; validation messages go to stdout\n", name);
+        }
+    }
+    const VkDebugUtilsMessengerCreateInfoEXT debugInfo = messengerInfo();
+
     VkApplicationInfo appInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     appInfo.pApplicationName = "Evolution";
     appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
@@ -193,13 +254,19 @@ Context Context::create(const ContextOptions& options) {
     appInfo.apiVersion = VK_API_VERSION_1_3;
 
     VkInstanceCreateInfo instanceInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    // Chained here, the messenger also reports problems in vkCreateInstance and vkDestroyInstance.
+    instanceInfo.pNext = useMessenger ? &debugInfo : nullptr;
     instanceInfo.pApplicationInfo = &appInfo;
     instanceInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
     instanceInfo.ppEnabledLayerNames = layers.data();
-    instanceInfo.enabledExtensionCount = static_cast<uint32_t>(options.instanceExtensions.size());
-    instanceInfo.ppEnabledExtensionNames = options.instanceExtensions.data();
+    instanceInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
+    instanceInfo.ppEnabledExtensionNames = instanceExtensions.data();
     vkCheck(vkCreateInstance(&instanceInfo, nullptr, &ctx.instance_), "vkCreateInstance");
     volkLoadInstance(ctx.instance_);
+    if (useMessenger) {
+        vkCheck(vkCreateDebugUtilsMessengerEXT(ctx.instance_, &debugInfo, nullptr, &ctx.messenger_),
+                "vkCreateDebugUtilsMessengerEXT");
+    }
 
     // --- Physical device ---
     std::vector<const char*> extensions = kRequiredDeviceExtensions;
@@ -281,6 +348,7 @@ Context::~Context() { destroy(); }
 
 Context::Context(Context&& other) noexcept
     : instance_(std::exchange(other.instance_, VK_NULL_HANDLE)),
+      messenger_(std::exchange(other.messenger_, VK_NULL_HANDLE)),
       physicalDevice_(std::exchange(other.physicalDevice_, VK_NULL_HANDLE)),
       device_(std::exchange(other.device_, VK_NULL_HANDLE)), queue_(std::exchange(other.queue_, VK_NULL_HANDLE)),
       queueFamily_(other.queueFamily_), allocator_(std::exchange(other.allocator_, VK_NULL_HANDLE)),
@@ -290,6 +358,7 @@ Context& Context::operator=(Context&& other) noexcept {
     if (this != &other) {
         destroy();
         instance_ = std::exchange(other.instance_, VK_NULL_HANDLE);
+        messenger_ = std::exchange(other.messenger_, VK_NULL_HANDLE);
         physicalDevice_ = std::exchange(other.physicalDevice_, VK_NULL_HANDLE);
         device_ = std::exchange(other.device_, VK_NULL_HANDLE);
         queue_ = std::exchange(other.queue_, VK_NULL_HANDLE);
@@ -310,9 +379,12 @@ void Context::destroy() noexcept {
             vmaDestroyAllocator(allocator_);
         vkDestroyDevice(device_, nullptr);
     }
+    if (messenger_)
+        vkDestroyDebugUtilsMessengerEXT(instance_, messenger_, nullptr);
     if (instance_)
         vkDestroyInstance(instance_, nullptr);
     instance_ = VK_NULL_HANDLE;
+    messenger_ = VK_NULL_HANDLE;
     device_ = VK_NULL_HANDLE;
     commandPool_ = VK_NULL_HANDLE;
     allocator_ = VK_NULL_HANDLE;
