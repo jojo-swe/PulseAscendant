@@ -1,0 +1,153 @@
+{
+  "method": "Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes with bar-line and 4-bar phrase bonuses; +/-2.5 s; 5-40 s chapter bounds (max_chapter_seconds = 40 from tools/show_targets.json; the parent used 18); each track's first chapter pinned to the track start; starts are exact tracked beat times",
+  "window_seconds": 2.5,
+  "min_chapter_seconds": 5,
+  "max_chapter_seconds": 40.0,
+  "source_sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604",
+  "chapters": [
+    {
+      "title": "BOOT",
+      "track": 0,
+      "target": 0,
+      "start": 0.0,
+      "shift": 0.0,
+      "attack": 0.0,
+      "on_beat": false,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.0
+    },
+    {
+      "title": "FLYBY",
+      "track": 0,
+      "target": 10,
+      "start": 9.3923,
+      "shift": -0.6077,
+      "attack": 0.29,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.129
+    },
+    {
+      "title": "DOTS",
+      "track": 0,
+      "target": 34,
+      "start": 32.6754,
+      "shift": -1.3246,
+      "attack": 0.988,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.482
+    },
+    {
+      "title": "PLASMA",
+      "track": 0,
+      "target": 58,
+      "start": 58.6462,
+      "shift": 0.6462,
+      "attack": 0.965,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.18
+    },
+    {
+      "title": "TUNNEL",
+      "track": 0,
+      "target": 82,
+      "start": 82.8246,
+      "shift": 0.8246,
+      "attack": 1.0,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 1.0
+    },
+    {
+      "title": "GLENZ",
+      "track": 0,
+      "target": 106,
+      "start": 104.3177,
+      "shift": -1.6823,
+      "attack": 0.843,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.055
+    },
+    {
+      "title": "LENS",
+      "track": 0,
+      "target": 130,
+      "start": 130.2877,
+      "shift": 0.2877,
+      "attack": 1.0,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.384
+    },
+    {
+      "title": "RAYTRACE",
+      "track": 0,
+      "target": 158,
+      "start": 158.0462,
+      "shift": 0.0462,
+      "attack": 1.0,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 1.0
+    },
+    {
+      "title": "CITY",
+      "track": 0,
+      "target": 190,
+      "start": 191.1831,
+      "shift": 1.1831,
+      "attack": 1.0,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.424
+    },
+    {
+      "title": "FINALE",
+      "track": 0,
+      "target": 222,
+      "start": 220.7362,
+      "shift": -1.2638,
+      "attack": 0.961,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.094
+    },
+    {
+      "title": "CREDITS",
+      "track": 0,
+      "target": 246,
+      "start": 243.5746,
+      "shift": -2.4254,
+      "attack": 0.055,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.0
+    }
+  ],
+  "tracks": [
+    {
+      "track": 0,
+      "source": "placeholder.wav",
+      "start_seconds": 0.0,
+      "mean_attack": 0.8102,
+      "on_beat": 10,
+      "on_downbeat": 7,
+      "phrase_starts": 3,
+      "nominal_mean_attack": 0.37479999999999997
+    }
+  ]
+}

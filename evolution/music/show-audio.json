@@ -1,0 +1,20 @@
+{
+  "frames": 12960000,
+  "duration": 270.0,
+  "sample_rate": 48000,
+  "channels": 2,
+  "encoding": "PCM signed 16 bit",
+  "track_start_frames": [
+    0
+  ],
+  "tracks": [
+    {
+      "source": "placeholder.wav",
+      "runtime_file": "assets/music/placeholder.wav",
+      "frames": 12960000,
+      "sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604"
+    }
+  ],
+  "sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604",
+  "runtime_file": "assets/music/show.wav"
+}

@@ -1,0 +1,17 @@
+{
+  "method": "100 Hz log spectral flux; autocorrelation + comb tempo with 120 BPM log-normal prior; DP beat tracking; +/-6 beat local linear smoothing (follows tempo drift); 4/4 bar position from bass onset and harmonic change in +/-24 beat windows",
+  "meter": 4,
+  "bpm_median": 134.018,
+  "tracks": [
+    {
+      "source": "placeholder.wav",
+      "sha256": "b24dd22248adb5d7814ffd6a4bffa44f8deef7aaf479ee0419bd9deb16d45604",
+      "frames": 12960000,
+      "bpm_median": 134.021,
+      "beats": 601,
+      "downbeats": 153,
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 4.62
+    }
+  ]
+}

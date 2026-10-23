@@ -132,6 +132,10 @@ add_test(NAME capture
             ${CMAKE_BINARY_DIR}/build-out/capture)
 set_tests_properties(capture PROPERTIES TIMEOUT 120)
 
+# The Python music pipeline: beat tracker, placeholder song and the end-to-end header generation.
+add_test(NAME python_tools
+    COMMAND Python3::Interpreter -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests -p "test_*.py")
+
 # Opens a real window, so it needs an X server; off by default and run under Xvfb.
 option(EVO_RUNTIME_TESTS "Run tests that open a window (needs xvfb-run)" OFF)
 if(EVO_RUNTIME_TESTS)
