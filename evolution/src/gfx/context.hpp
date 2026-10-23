@@ -15,7 +15,7 @@ namespace evo::gfx {
 struct ContextOptions {
     bool validation = false;                        // enable VK_LAYER_KHRONOS_validation if present
     std::vector<const char*> instanceExtensions;    // from SDL when windowed; empty headless
-    std::vector<const char*> extraDeviceExtensions; // test hook; appended to the required list
+    std::vector<const char*> extraDeviceExtensions; // appended to the required list (swapchain, tests)
     PFN_vkGetInstanceProcAddr loader = nullptr;     // nullptr -> volkInitialize()
 };
 

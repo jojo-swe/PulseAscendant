@@ -50,7 +50,14 @@ int main() {
         CHECK(capture.headless);
 
         CHECK(!parseError({"--fps", "0"}).empty());
-        CHECK(!parseError({"--width", "32"}).empty());
+        // Tiny frames keep the headless tests fast: 16 is the floor, 8192 the ceiling.
+        const evo::Options tiny = evo::parseOptions({"--width", "32", "--height", "18"});
+        CHECK(tiny.width == 32);
+        CHECK(tiny.height == 18);
+        CHECK(evo::parseOptions({"--width", "16", "--height", "16"}).width == 16);
+        CHECK(!parseError({"--width", "8"}).empty());
+        CHECK(!parseError({"--height", "15"}).empty());
+        CHECK(!parseError({"--width", "8193"}).empty());
         CHECK(parseError({"--bogus"}).find("--bogus") != std::string::npos);
         CHECK(!parseError({"--render-stream", "--capture-dir", "x"}).empty());
 

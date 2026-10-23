@@ -1,4 +1,6 @@
+#include "app/app.hpp"
 #include "app/options.hpp"
+#include "gfx/context.hpp"
 
 #include <cstdio>
 #include <exception>
@@ -19,6 +21,22 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    std::fputs("Evolution: rendering is not implemented yet. Run 'Evolution --help' for usage.\n", stderr);
-    return 0;
+    try {
+        if (options.deviceInfo)
+            return evo::runDeviceInfo(options);
+        if (options.renderStream)
+            return evo::runRenderStream(options);
+        // Task 6: route --capture-dir here (runCapture), before the headless check below.
+        if (options.headless) {
+            std::fputs("Evolution: --headless needs an output: --render-stream or --capture-dir.\n", stderr);
+            return 1;
+        }
+        return evo::runWindowed(options);
+    } catch (const evo::gfx::MissingRequirements& missing) {
+        std::fprintf(stderr, "%s\n", evo::missingRequirementsMessage(missing).c_str());
+        return 2;
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "Evolution: %s\n", error.what());
+        return 1;
+    }
 }

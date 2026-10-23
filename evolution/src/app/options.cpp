@@ -8,7 +8,7 @@ namespace evo {
 
 namespace {
 
-constexpr int kMinSize = 64;
+constexpr int kMinSize = 16; // tiny frames keep the headless tests fast
 constexpr int kMaxSize = 8192;
 constexpr int kMinFps = 1;
 constexpr int kMaxFps = 240;
@@ -103,8 +103,8 @@ std::string helpText() {
     return "Usage: Evolution [options]\n"
            "\n"
            "Options:\n"
-           "  --width N            Render width in pixels, 64..8192 (default 1280)\n"
-           "  --height N           Render height in pixels, 64..8192 (default 720)\n"
+           "  --width N            Render width in pixels, 16..8192 (default 1280)\n"
+           "  --height N           Render height in pixels, 16..8192 (default 720)\n"
            "  --fps N              Frames per second for headless output, 1..240 (default 60)\n"
            "  --time S             Start time on the timeline in seconds (default 0)\n"
            "  --duration S         Seconds to run; 0 runs until Esc (default 0)\n"

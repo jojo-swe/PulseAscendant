@@ -62,6 +62,7 @@ add_library(evo_gfx STATIC
     src/gfx/offscreen.cpp
     src/gfx/paths.cpp
     src/gfx/shader.cpp
+    src/gfx/swapchain.cpp
     src/gfx/vk_check.hpp
     src/gfx/vma_impl.cpp)
 target_include_directories(evo_gfx PUBLIC src)
@@ -72,9 +73,14 @@ target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
 set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
     COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
 
+# The run modes (windowed, render stream, device info); SDL3 provides the window and the Vulkan surface.
+add_library(evo_app STATIC
+    src/app/app.cpp)
+target_link_libraries(evo_app PUBLIC evo_gfx SDL3::SDL3-static)
+
 add_executable(Evolution
     src/main.cpp)
-target_link_libraries(Evolution PRIVATE evo_core)
+target_link_libraries(Evolution PRIVATE evo_app SDL3::SDL3-static)
 evo_add_shaders(Evolution shaders/fill.comp)
 
 # --- Tests ------------------------------------------------------------------------------------------------
@@ -104,3 +110,19 @@ target_compile_definitions(offscreen_test PRIVATE
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(offscreen_test Evolution_shaders) # the test loads fill.comp.spv from <build>/shaders
 add_test(NAME offscreen COMMAND offscreen_test)
+
+add_executable(swapchain_test tests/swapchain_test.cpp)
+target_link_libraries(swapchain_test PRIVATE evo_gfx)
+add_test(NAME swapchain COMMAND swapchain_test)
+
+# Runs the real executable, which finds its shaders in <exe dir>/shaders.
+add_test(NAME render_stream
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/tests/render_stream_test.py $<TARGET_FILE:Evolution>)
+set_tests_properties(render_stream PROPERTIES TIMEOUT 300)
+
+# Opens a real window, so it needs an X server; off by default and run under Xvfb.
+option(EVO_RUNTIME_TESTS "Run tests that open a window (needs xvfb-run)" OFF)
+if(EVO_RUNTIME_TESTS)
+    add_test(NAME windowed COMMAND xvfb-run -a $<TARGET_FILE:Evolution> --duration 1 --width 320 --height 200)
+    set_tests_properties(windowed PROPERTIES TIMEOUT 120)
+endif()
