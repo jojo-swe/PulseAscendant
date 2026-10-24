@@ -8,5 +8,5 @@ inline constexpr double chapterStarts[chapterCount] = {0.0000,7.1731,27.1138,44.
 // The authored targets from tools/show_targets.json, in show seconds.
 inline constexpr double chapterTargets[chapterCount] = {0.0000,8.0000,26.0000,44.0000,62.0000,80.0000,98.0000,116.0000,150.0000,168.0000,182.0000,194.0000,214.0000,238.0000,264.0000,292.0000,322.0000,344.0000,368.0000,390.0000,412.4000,430.4000,458.4000,486.4000,514.4000,542.4000,570.4000,602.4000,634.4000,666.4000,696.4000};
 // SHA-256 of assets/music/show.wav, the audio this data was measured from.
-inline constexpr const char* sourceSha256 = "5d338c7d376e9f6974053ef1350b3a792055e50aa9895b8c0edaffb060029b91";
+inline constexpr const char* sourceSha256 = "39db88573e32440e6f0d57e1c646ab4d594833472af719acf61421924b9bc585";
 }

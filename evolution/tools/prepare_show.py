@@ -7,10 +7,11 @@ already stereo 48 kHz PCM16 WAV (e.g. MP3).
     python3 tools/prepare_show.py [--root DIR] <track1.(wav|mp3)> [<track2> ...]
 
 For each track (in show order): convert or copy to <root>/assets/music/<stem>.wav, then concatenate the
-tracks with no gap into <root>/assets/music/show.wav. The analysis, reactivity, beat grid and direction
-run over the per-track WAVs and write <root>/src/show/generated/{music_data,reactivity_data,beat_data,
-cue_data}.hpp and <root>/music/{analysis,reactivity,beats,direction,show-audio}.json. <root> defaults to
-evolution/; the chapter targets always come from tools/show_targets.json beside this script.
+tracks with no gap into <root>/assets/music/show.wav, with a 3 ms raised-cosine fade at each join. The
+analysis, reactivity, beat grid and direction run over the per-track WAVs and write
+<root>/src/show/generated/{music_data,reactivity_data,beat_data,cue_data}.hpp and
+<root>/music/{analysis,reactivity,beats,direction,show-audio}.json. <root> defaults to evolution/; the
+chapter targets always come from tools/show_targets.json beside this script.
 """
 import argparse
 import hashlib
@@ -20,6 +21,8 @@ import subprocess
 import wave
 from pathlib import Path
 
+import numpy as np
+
 import analyze_music
 import analyze_reactivity
 import beat_grid
@@ -27,6 +30,7 @@ import direct_music
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = (48000, 2, 2)  # sample rate, channels, bytes per sample
+JOIN_FADE_FRAMES = 144  # 3 ms at 48 kHz
 
 
 def is_show_format(path):
@@ -53,13 +57,29 @@ def runtime_track(source, music_dir):
     return destination
 
 
+def raised_cosine(frames):
+    """Gain rising from 0 towards 1 over frames samples, shaped (1 - cos) / 2, one column per channel."""
+    return (0.5 - 0.5 * np.cos(np.pi * np.arange(frames) / frames))[:, None]
+
+
 def concatenate(tracks, destination):
+    """Join the tracks with no gap. Each act join gets a short raised-cosine fade-out and fade-in so the
+    waveform passes through zero instead of stepping (an audible click); the show's first and last
+    samples, the frame count and the per-track WAVs are unchanged."""
     with wave.open(str(destination), 'wb') as output:
         output.setparams((2, 2, 48000, 0, 'NONE', 'not compressed'))
-        for track in tracks:
+        for index, track in enumerate(tracks):
             with wave.open(str(track), 'rb') as audio:
-                while data := audio.readframes(48000):
-                    output.writeframesraw(data)
+                samples = np.frombuffer(audio.readframes(audio.getnframes()), dtype='<i2').reshape(-1, 2)
+            fade = min(JOIN_FADE_FRAMES, len(samples) // 2)
+            if fade and len(tracks) > 1:
+                samples = samples.copy()
+                gain = raised_cosine(fade)
+                if index > 0:
+                    samples[:fade] = np.round(samples[:fade] * gain)
+                if index < len(tracks) - 1:
+                    samples[-fade:] = np.round(samples[-fade:] * gain[::-1])
+            output.writeframesraw(samples.astype('<i2').tobytes())
 
 
 def main():

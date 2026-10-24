@@ -15,9 +15,9 @@ https://suno.com/terms-of-service
 Amiga Trance Demo (3:14; styles techno, trance, chiptune) and Guitar Trance (3:38;
 techno, trance, demo-scene) were created on 11 October 2026.
 
-All three complete songs are used at their original speed, with no fades,
-concatenated without silence into `assets/music/show.wav` (34 135 680 frames,
-711.16 s). Exact frame counts, per-track start frames and SHA-256 digests are
+All three are used as complete songs at original speed; a 3 ms raised-cosine
+fade at each act join (inaudible), otherwise no fades. They are concatenated
+without silence into `assets/music/show.wav` (34 135 680 frames, 711.16 s). Exact frame counts, per-track start frames and SHA-256 digests are
 recorded in `music/show-audio.json`; the analysis receipts are the other JSON files
 in `music/`.
 

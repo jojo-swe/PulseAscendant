@@ -1,14 +1,37 @@
-"""End to end: the placeholder through prepare_show.py into the four generated headers and receipts."""
+"""End to end: the placeholder through prepare_show.py into the four generated headers and receipts; the
+fade at the act joins of show.wav."""
 import json
 import re
 import subprocess
 import sys
 import tempfile
 import unittest
+import wave
 from pathlib import Path
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADERS = ('music_data', 'reactivity_data', 'beat_data', 'cue_data')
+RATE = 48000
+
+sys.path.insert(0, str(ROOT / 'tools'))
+import prepare_show  # noqa: E402
+
+
+def write_wav(path, samples):
+    """samples: float array (frames, 2) in full-scale units, written as stereo 48 kHz PCM16."""
+    pcm = np.clip(np.round(np.asarray(samples) * 32767), -32768, 32767).astype('<i2')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), 'wb') as out:
+        out.setparams((2, 2, RATE, 0, 'NONE', 'not compressed'))
+        out.writeframes(pcm.tobytes())
+
+
+def read_wav(path):
+    with wave.open(str(path), 'rb') as audio:
+        return np.frombuffer(audio.readframes(audio.getnframes()), dtype='<i2').reshape(-1, 2) / 32768
+
 
 
 def array(text, name):
@@ -94,6 +117,30 @@ class PipelineTests(unittest.TestCase):
         offsets = array(beat, 'beatOffsets')
         self.assertEqual(len(array(beat, 'beatTimes')), offsets[-1])
         self.assertEqual(len(array(beat, 'beatBar')), offsets[-1])
+
+
+class JoinFadeTests(unittest.TestCase):
+    """concatenate() fades each act join so show.wav does not click where one track meets the next."""
+
+    def test_the_join_no_longer_steps_and_the_length_is_kept(self):
+        t = np.arange(RATE // 2) / RATE
+        hum = .05 * np.sin(2 * np.pi * 100 * t)[:, None]
+        first, second = .2 + hum, -.2 + hum  # meeting head to tail they would jump by about 0.4
+        self.assertGreaterEqual(abs(first[-1, 0] - second[0, 0]), .2)
+        with tempfile.TemporaryDirectory() as temp:
+            paths = [Path(temp) / 'first.wav', Path(temp) / 'second.wav', Path(temp) / 'show.wav']
+            write_wav(paths[0], np.repeat(first, 2, axis=1))
+            write_wav(paths[1], np.repeat(second, 2, axis=1))
+            prepare_show.concatenate(paths[:2], paths[2])
+            show, originals = read_wav(paths[2]), [read_wav(p) for p in paths[:2]]
+        join, window = len(originals[0]), int(.005 * RATE)
+        self.assertEqual(len(show), len(originals[0]) + len(originals[1]))
+        steps = np.abs(np.diff(show[join - window:join + window], axis=0))
+        self.assertLess(steps.max(), .02)
+        # Only the 3 ms either side of the join changes: the show still starts and ends as the tracks do.
+        fade = prepare_show.JOIN_FADE_FRAMES
+        np.testing.assert_array_equal(show[:join - fade], originals[0][:-fade])
+        np.testing.assert_array_equal(show[join + fade:], originals[1][fade:])
 
 
 if __name__ == '__main__':
