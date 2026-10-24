@@ -6,10 +6,10 @@ as a hard requirement. It is a standalone project inside PulseAscendant; the des
 implementation plans live in [`docs/plans/`](docs/plans/), starting with
 [`2026-10-21-evolution-design.md`](docs/plans/2026-10-21-evolution-design.md).
 
-> **Status:** step 2 of the plan is complete. The music drives a timeline of 31 chapters in three acts, and
-> the 1993 side renders through its own pipeline (below): BOOT, PLASMA and the CREDITS sine scroller are
-> finished on the 1993 side, the other effects show a grey test pattern there, and the 2026 side is still a
-> placeholder gradient. Step 3 brings the rest of Act I's 1993 effects.
+> **Status:** step 3 of the plan (the 1993 effects) is under way. The music drives a timeline of 31 chapters
+> in three acts, and the 1993 side renders through its own pipeline (below): BOOT, FLYBY, DOTS, PLASMA,
+> TUNNEL and the CREDITS sine scroller are finished on the 1993 side, the other effects still show a grey
+> test pattern there, and the 2026 side is still a placeholder gradient.
 
 ## Requirements
 
@@ -126,10 +126,15 @@ The effects so far:
 
 - **BOOT** (chapter 0): a DOS prompt types the demo's start-up in light grey on black, 40 columns, with a
   blinking cursor, and cuts to FLYBY with two white frames.
+- **FLYBY** (chapter 1): a flat-shaded low-poly ship over a streaming starfield, the camera swooping from
+  below and behind to a side view, with its greeting scrolling along the bottom.
+- **DOTS** (chapter 2): 512 depth-shaded points morphing cube → sphere → torus → "1993" and back.
 - **PLASMA** (chapter 3): the classic plasma, sine waves in three octaves folded round a 224-colour ring that
   the palette rotates one entry per retro frame, until the wipe brings 2026 in.
+- **TUNNEL** (chapter 4): a twisting tunnel of 96 dot rings along a winding path, which turns into a solid
+  checkered tube halfway through.
 - **Scrollers**: CREDITS (chapter 29, now a 1993 chapter) rolls the credits on a sine wave over deep blue
-  under a static EVOLUTION title; FLYBY scrolls its greeting over the test pattern.
+  under a static EVOLUTION title; FLYBY's greeting is the other.
 
 ## Storyboard
 
@@ -146,9 +151,10 @@ python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/bu
 # --no-crt (the 1993 picture without the CRT look)
 ```
 
-The forcing is the diagnostic environment variable `EVO_FORCE_ERA`: set to `0` or `1`, it renders a
-`--capture-dir` frame wholly in 1993 or 2026 (era 0 or 1, a wipe not started or finished, no cut flash).
-Any other value is ignored, and the window and `--render-stream` never read it.
+The forcing is the diagnostic environment variable `EVO_FORCE_ERA`: set to `0` or `1`, it renders
+`--capture-dir` and `--render-stream` frames wholly in 1993 or 2026 (era 0 or 1, a wipe not started or
+finished, no cut flash); a forced `--render-stream` says so once on stderr
+(`render-stream: EVO_FORCE_ERA=1 (2026 only)`). Any other value is ignored, and the window never reads it.
 
 ```sh
 EVO_FORCE_ERA=1 Evolution --capture-dir out --time 50   # PLASMA's chapter, its 2026 side
@@ -192,8 +198,8 @@ Options:
 Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,
 C CRT look, H HUD, M mute, F11 fullscreen, Esc quit
 
-Environment (diagnostic): EVO_FORCE_ERA=0 or 1 renders a --capture-dir frame wholly in
-1993 or 2026 (no wipe split, no cut flash); other values are ignored
+Environment (diagnostic): EVO_FORCE_ERA=0 or 1 renders --capture-dir and --render-stream
+frames wholly in 1993 or 2026 (no wipe split, no cut flash); other values are ignored
 ```
 
 Examples:

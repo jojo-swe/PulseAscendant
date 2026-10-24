@@ -296,7 +296,10 @@ int runRenderStream(const Options& options) {
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();
         show::TimelineFrame frame = show::sampleTimeline(options.time + static_cast<double>(i) / options.fps);
-        applyForcedEra(frame);
+        // An export forced into one era says so once, so a forced file is never mistaken for the show.
+        if (applyForcedEra(frame) && i == 0)
+            std::fprintf(stderr, "render-stream: EVO_FORCE_ERA=%s (%s only)\n", frame.era > .5f ? "1" : "0",
+                         frame.era > .5f ? "2026" : "1993");
         renderer.render(cmd, frame);
         readback.record(cmd, renderer.output());
         ring.wait(ring.submit()); // the readback is complete: rgb() may read it

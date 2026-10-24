@@ -147,11 +147,12 @@ void save(const Picture& picture, const char* name) {
     std::printf("wrote %s\n", path.c_str());
 }
 
-// A frame of an effect that keeps the test pattern after step 2, with nothing of 2026 in it.
+// A frame of an effect with no retro entry (a 2026-only chapter), so its 1993 side is the test pattern; held
+// in 1993, with nothing of 2026 in it.
 TimelineFrame retroFrame(int chapter, double localSeconds) {
     TimelineFrame frame;
     frame.chapter = chapter;
-    frame.effect = Effect::StudioNight; // Act II: its 1993 side stays the test pattern
+    frame.effect = Effect::StudioNight; // Act II, 2026 only
     frame.transition = Transition::Cut;
     frame.localSeconds = localSeconds;
     frame.showSeconds = 30.0 + localSeconds;

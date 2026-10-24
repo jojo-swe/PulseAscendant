@@ -53,6 +53,13 @@ inline constexpr double kDotsYearForward = 0.7;
 inline constexpr double kDotsYearLayer = 0.12;
 inline constexpr const char* kDotsYearText = "1993";
 
+// The fixed camera kDotsCameraDistance in front of the origin; the view depths where the shade ramp ends
+// (kDotsNear: shade 31, kDotsFar: shade 0) and below which a point is drawn 2x2 (kDotsBig).
+inline constexpr double kDotsCameraDistance = 6.0;
+inline constexpr double kDotsNear = kDotsCameraDistance - 1.3;
+inline constexpr double kDotsFar = kDotsCameraDistance + 1.3;
+inline constexpr double kDotsBig = kDotsCameraDistance - 0.35;
+
 using DotsPoints = std::array<std::array<double, 3>, kDotsPoints>;
 
 // A shape's model points (built once).
@@ -70,6 +77,14 @@ struct DotsMorph {
 };
 DotsMorph dotsMorph(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
+// The schedule in retro frames: morph m (the m-th of cube -> sphere -> torus -> year -> torus -> sphere ->
+// cube) blends over first < f < arrival; the next morph never starts before this one's arrival (a short
+// chapter gives short or empty morphs).
+struct DotsStep {
+    std::uint32_t first, arrival;
+};
+std::array<DotsStep, 6> dotsSchedule(const show::TimelineFrame& frame);
+
 // The world positions of the 512 points at a retro frame. A morph pairs the two shapes' points by rank under
 // a common key, computed at the morph's first frame (the points sorted by height into 8 bands of 64, each
 // band by angle round the y axis seen from the camera), so each point flows to a nearby one instead of
@@ -84,10 +99,5 @@ void dotsPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32
 // The 512 points projected through dotsCamera(), back to front; shade 31 at view depth kDotsNear and 0 at
 // kDotsFar (clamped), size 2 nearer than kDotsBig, else 1.
 void dotsScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame);
-
-inline constexpr double kDotsCameraDistance = 6.0;
-inline constexpr double kDotsNear = kDotsCameraDistance - 1.3;
-inline constexpr double kDotsFar = kDotsCameraDistance + 1.3;
-inline constexpr double kDotsBig = kDotsCameraDistance - 0.35;
 
 } // namespace evo::retro

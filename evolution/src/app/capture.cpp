@@ -28,14 +28,15 @@ std::filesystem::path captureFileName(double seconds) {
 
 } // namespace
 
-void applyForcedEra(show::TimelineFrame& frame) {
+bool applyForcedEra(show::TimelineFrame& frame) {
     const char* value = std::getenv("EVO_FORCE_ERA");
     if (value == nullptr || (std::strcmp(value, "0") != 0 && std::strcmp(value, "1") != 0))
-        return;
+        return false;
     const float era = value[0] == '1' ? 1.f : 0.f;
     frame.era = era;
     frame.wipe = era;
     frame.eraCut = 0.f;
+    return true;
 }
 
 int runCapture(const Options& options) {

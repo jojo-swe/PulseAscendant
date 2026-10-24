@@ -4,18 +4,14 @@
 // frame, with many depth shades and a sensible coverage. Runs with the validation layer on and fails on any
 // message it reports.
 
-#include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
-#include "gfx/frame_ring.hpp"
-#include "gfx/sync.hpp"
-#include "render/retro_stage.hpp"
 #include "retro/dots.hpp"
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
 #include "show/timeline.hpp"
+#include "retro_stage_fixture.hpp"
 #include "text/font8x8.hpp"
-#include "text/text_pass.hpp"
 
 #include <algorithm>
 #include <climits>
@@ -24,7 +20,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
-#include <random>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -32,13 +27,13 @@
 
 namespace {
 
-using evo::render::RetroStage;
 using evo::retro::DotsPoints;
 using evo::retro::DotsShape;
 using evo::retro::Palette;
 using evo::retro::RetroScene;
 using evo::show::Effect;
 using evo::show::TimelineFrame;
+using evo::test::RetroStageFixture;
 
 int checksPassed = 0;
 
@@ -57,11 +52,12 @@ void setEnv(const char* name, const char* value) {
 #endif
 }
 
-constexpr std::uint32_t kWidth = RetroStage::kWidth, kHeight = RetroStage::kHeight;
-constexpr std::size_t kPixels = std::size_t{kWidth} * kHeight;
 constexpr int kDotsChapter = 2;
 constexpr std::uint32_t kRate = evo::retro::kDotsRetroRate;
 constexpr std::size_t kCount = evo::retro::kDotsPoints;
+// The flow bounds: a morph's mean pair distance over a random pairing's (measured 0.33..0.46 between solids,
+// 0.71..0.75 to and from the year).
+constexpr double kSolidFlow = 0.48, kYearFlow = 0.78;
 
 // A DOTS frame at `local` seconds into the chapter.
 TimelineFrame dots(double local) {
@@ -273,7 +269,7 @@ void testSchedule() {
     const std::uint32_t count = frameCount();
     const TimelineFrame start = dots(0);
     std::map<DotsShape, int> held;
-    std::size_t morphFrames = 0, sizeTwo = 0;
+    std::size_t morphFrames = 0, sizeTwo = 0, nearest = 0, farthest = 0;
     DotsPoints previous{};
     double fastest = 0;
     std::vector<std::pair<std::uint32_t, std::uint32_t>> morphs; // first and last frame of each morph
@@ -289,6 +285,24 @@ void testSchedule() {
         // Back to front.
         for (std::size_t i = 1; i < scene.pointDepth.size(); ++i)
             CHECK(scene.pointDepth[i - 1] >= scene.pointDepth[i]);
+        // Shade and size from the view depth: shade 31 (white) at kDotsNear and nearer, 0 at kDotsFar and
+        // further, linear between; 2x2 nearer than kDotsBig.
+        CHECK(scene.pointDepth.size() == kCount);
+        for (std::size_t i = 0; i < kCount; ++i) {
+            const double d = scene.pointDepth[i];
+            const double nearness = std::clamp((kDotsFar - d) / (kDotsFar - kDotsNear), 0.0, 1.0);
+            const int shade = std::min(31, static_cast<int>(nearness * 32));
+            CHECK(scene.points[i].index == kDotsRamp + shade);
+            CHECK(scene.points[i].size == (d < kDotsBig ? 2 : 1));
+            if (d <= kDotsNear) {
+                CHECK(scene.points[i].index == kDotsRamp + kDotsShades - 1);
+                ++nearest;
+            }
+            if (d >= kDotsFar) {
+                CHECK(scene.points[i].index == kDotsRamp);
+                ++farthest;
+            }
+        }
 
         const DotsMorph morph = dotsMorph(frame, retroFrame);
         const DotsPoints positions = dotsPositions(frame, retroFrame);
@@ -315,6 +329,9 @@ void testSchedule() {
                 "%d; fastest point %.3f units a frame; %.0f %% of points 2x2\n",
                 count, morphFrames, morphs.size(), held[DotsShape::Cube], held[DotsShape::Sphere],
                 held[DotsShape::Torus], held[DotsShape::Year], fastest, 100.0 * sizeTwo / (count * kCount));
+    // The cube's corners reach past both ends of the ramp: the clamped ends are pinned too.
+    std::printf("dots: %zu points at or nearer than kDotsNear, %zu at or beyond kDotsFar\n", nearest, farthest);
+    CHECK(nearest > 0 && farthest > 0);
     CHECK(morphs.size() == 6);
     CHECK(held.size() == 4);
     for (const auto& [shape, frames] : held)
@@ -345,9 +362,8 @@ void testSchedule() {
 
     // Morphs flow: each point's start (on the first shape, held the frame before the morph) and end (on the
     // second, held the frame after) are found among the shapes' points; at the middle of the morph, with
-    // both shapes turned as they are there, the pairs lie much closer on average than under a random pairing
-    // of the same points.
-    std::mt19937 random(512);
+    // both shapes turned as they are there, the pairs lie much closer on average than a random pairing would:
+    // its expected distance, the mean over all 512 x 512 pairs of the two shapes' points.
     const auto labels = [](const DotsPoints& positions, const DotsPoints& shape) {
         std::map<std::array<double, 3>, std::size_t> where;
         for (std::size_t i = 0; i < kCount; ++i)
@@ -371,60 +387,69 @@ void testSchedule() {
         CHECK(std::set<std::size_t>(to.begin(), to.end()).size() == kCount);
         const std::uint32_t middle = (first + lastFrame) / 2;
         const DotsPoints a = dotsShapePoints(order[m], middle), b = dotsShapePoints(order[m + 1], middle);
-        std::vector<std::size_t> permutation(to);
-        std::shuffle(permutation.begin(), permutation.end(), random);
-        double travel = 0, shuffled = 0;
-        for (std::size_t k = 0; k < kCount; ++k) {
+        double travel = 0, random = 0;
+        for (std::size_t k = 0; k < kCount; ++k)
             travel += distance(a[from[k]], b[to[k]]);
-            shuffled += distance(a[from[k]], b[permutation[k]]);
-        }
-        std::printf("dots: morph %zu (frames %u..%u): pairs %.3f units apart on average, %.3f under a random "
-                    "pairing\n",
-                    m, first, lastFrame, travel / kCount, shuffled / kCount);
+        for (std::size_t i = 0; i < kCount; ++i)
+            for (std::size_t j = 0; j < kCount; ++j)
+                random += distance(a[i], b[j]);
+        travel /= kCount;
+        random /= static_cast<double>(kCount * kCount);
+        std::printf("dots: morph %zu (frames %u..%u): pairs %.3f units apart on average, %.3f for a random "
+                    "pairing (ratio %.3f)\n",
+                    m, first, lastFrame, travel, random, travel / random);
         // A solid flows to a solid closely; to or from the year, a flat strip about 4 units wide and 1 high,
-        // the pairs lie further apart, but still well below a shuffle.
+        // the pairs lie further apart, but still well below a random pairing.
         const bool year = order[m] == DotsShape::Year || order[m + 1] == DotsShape::Year;
-        CHECK(travel < (year ? 0.8 : 0.5) * shuffled);
+        CHECK(travel < (year ? kYearFlow : kSolidFlow) * random);
     }
 }
 
-// The stage's index image of a DOTS frame.
-class Fixture {
-public:
-    explicit Fixture(evo::gfx::Context& ctx)
-        : ring_(ctx), text_(ctx, ring_), stage_(ctx, ring_, text_),
-          buffer_(ctx, {kPixels, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "dots test index readback"}) {}
-
-    std::vector<std::uint8_t> render(const TimelineFrame& frame, bool* rendered = nullptr) {
-        VkCommandBuffer cmd = ring_.begin();
-        const bool recorded = stage_.render(cmd, frame);
-        if (rendered)
-            *rendered = recorded;
-        evo::gfx::Image& index = stage_.indexImage();
-        index.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
-                         VK_ACCESS_2_TRANSFER_READ_BIT);
-        VkBufferImageCopy region{};
-        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        region.imageExtent = {kWidth, kHeight, 1};
-        vkCmdCopyImageToBuffer(cmd, index.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer_.handle(), 1,
-                               &region);
-        evo::gfx::bufferBarrier2(cmd, buffer_.handle(), VK_PIPELINE_STAGE_2_COPY_BIT,
-                                 VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT,
-                                 VK_ACCESS_2_HOST_READ_BIT);
-        ring_.wait(ring_.submit());
-        buffer_.invalidate();
-        const auto* data = static_cast<const std::uint8_t*>(buffer_.mapped());
-        return {data, data + kPixels};
-    }
-
-    RetroStage& stage() { return stage_; }
-
-private:
-    evo::gfx::FrameRing ring_;
-    evo::text::TextPass text_;
-    RetroStage stage_;
-    evo::gfx::Buffer buffer_;
-};
+// Chapters of other lengths (synthetic frames: durations 0, 0.5, 2 and 17 s, the accent at 0, D/2 and D):
+// 512 finite points on every frame, the six morphs in order without overlapping, and the cube at the start.
+void testOtherChapters() {
+    using namespace evo::retro;
+    const DotsShape order[] = {DotsShape::Cube,  DotsShape::Sphere, DotsShape::Torus, DotsShape::Year,
+                               DotsShape::Torus, DotsShape::Sphere, DotsShape::Cube};
+    for (double length : {0.0, 0.5, 2.0, 17.0})
+        for (double accentAt : {0.0, 0.5, 1.0}) {
+            TimelineFrame frame;
+            frame.chapter = kDotsChapter;
+            frame.effect = Effect::Dots;
+            frame.chapterDuration = length;
+            frame.accentSeconds = accentAt * length;
+            const auto steps = dotsSchedule(frame);
+            std::uint32_t previousArrival = 0;
+            for (const DotsStep& step : steps) {
+                CHECK(step.first <= step.arrival && step.first >= previousArrival);
+                previousArrival = step.arrival;
+            }
+            const auto frames = static_cast<std::uint32_t>(std::ceil(length * kRate));
+            int lastMorph = -1;
+            for (std::uint32_t f = 0; f <= frames; ++f) {
+                const DotsPoints positions = dotsPositions(frame, f);
+                for (const auto& p : positions)
+                    CHECK(std::isfinite(p[0]) && std::isfinite(p[1]) && std::isfinite(p[2]));
+                RetroScene scene;
+                dotsScene(scene, frame, f);
+                CHECK(scene.points.size() == kCount);
+                const DotsMorph morph = dotsMorph(frame, f);
+                if (f == 0)
+                    CHECK(morph.from == DotsShape::Cube && morph.to == DotsShape::Cube &&
+                          matchesWithinAPixel(scene, projected(dotsShapePoints(DotsShape::Cube, 0))));
+                if (morph.from == morph.to)
+                    continue;
+                // The morph in progress is the one the schedule has at this frame, never an earlier one.
+                int m = 0;
+                while (m < 6 && !(order[m] == morph.from && order[m + 1] == morph.to))
+                    ++m;
+                CHECK(m < 6 && m >= lastMorph);
+                CHECK(f > steps[m].first && f < steps[m].arrival);
+                CHECK(morph.blend > 0 && morph.blend < 1);
+                lastMorph = m;
+            }
+        }
+}
 
 // The first retro frame at or after `local` seconds where the schedule holds `shape`.
 std::uint32_t heldFrame(DotsShape shape, double local) {
@@ -437,9 +462,9 @@ std::uint32_t heldFrame(DotsShape shape, double local) {
 }
 
 void testImages(evo::gfx::Context& ctx) {
-    Fixture fixture(ctx);
-    // A cube, a morph, the torus and the year: only black and the ramp, at least 12 shades, 400..2000 pixels
-    // lit (512 points, some 2x2, some overlapping); deterministic.
+    RetroStageFixture fixture(ctx);
+    // A cube, a morph, the torus and the year: only black and the ramp, at least 12 shades, at least 400
+    // pixels lit and at most the points' squares added up (fewer where they overlap); deterministic.
     std::uint32_t morphFrame = 0;
     for (std::uint32_t f = 0; f < frameCount(); ++f)
         if (evo::retro::dotsMorph(dots(timeIn(f)), f).blend > .45) {
@@ -461,8 +486,12 @@ void testImages(evo::gfx::Context& ctx) {
                 ++lit;
             }
         }
-        std::printf("dots: retro frame %u: %zu pixels lit in %zu shades\n", retroFrame, lit, shades.size());
-        CHECK(lit >= 400 && lit <= 2000);
+        std::size_t squares = 0;
+        for (const evo::retro::RetroPoint& p : sceneAt(retroFrame).points)
+            squares += std::size_t{p.size} * p.size;
+        std::printf("dots: retro frame %u: %zu pixels lit (of at most %zu) in %zu shades\n", retroFrame, lit,
+                    squares, shades.size());
+        CHECK(lit >= 400 && lit <= squares);
         CHECK(shades.size() >= (retroFrame == frames[3] ? 2u : 12u)); // the year stands almost flat
 
         // Deterministic: the same retro frame at another moment within it, with the music signals pushed,
@@ -477,7 +506,7 @@ void testImages(evo::gfx::Context& ctx) {
         CHECK(rendered);
     }
     // A second stage, fresh, renders the same retro frame identically.
-    Fixture other(ctx);
+    RetroStageFixture other(ctx);
     CHECK(other.render(dots(timeIn(frames[1]))) == fixture.render(dots(timeIn(frames[1], .3))));
 }
 
@@ -490,6 +519,7 @@ int main() {
         testPalette();
         testShapes();
         testSchedule();
+        testOtherChapters();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())

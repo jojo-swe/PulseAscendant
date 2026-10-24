@@ -103,10 +103,8 @@ constexpr DotsShape kOrder[] = {DotsShape::Cube,  DotsShape::Sphere, DotsShape::
                                 DotsShape::Torus, DotsShape::Sphere, DotsShape::Cube};
 constexpr std::size_t kMorphs = std::size(kOrder) - 1;
 
-// Morph m runs from kOrder[m] to kOrder[m + 1] over the retro frames first < f < arrival.
-struct Step {
-    std::uint32_t first, arrival;
-};
+using Step = DotsStep;
+static_assert(kMorphs == 6); // dotsSchedule's array
 
 std::array<Step, kMorphs> schedule(const show::TimelineFrame& frame) {
     const double duration = std::max(frame.chapterDuration, 0.0);
@@ -127,7 +125,9 @@ std::array<Step, kMorphs> schedule(const show::TimelineFrame& frame) {
     for (std::size_t m = 0; m < kMorphs; ++m) {
         const std::uint32_t from = toFrame(arrivals[m]), to = toFrame(arrivals[m + 1]);
         const std::uint32_t frames = std::max(2u, std::min(longest, (to - from) * 4 / 5));
-        steps[m] = {to > frames ? to - frames : 0, to};
+        // In a short chapter a morph may get fewer frames than it asks for, but never starts before the last
+        // one has arrived.
+        steps[m] = {std::max(from, to > frames ? to - frames : 0u), to};
     }
     return steps;
 }
@@ -138,7 +138,8 @@ double smoothstep(double s) {
 
 // The order in which the points of `world` pair up with another shape's: sorted by height (highest first)
 // into 8 bands of 64, each band by angle round the y axis from the camera's side (-z), left to right; ties
-// by model index. order[r] is the point of rank r.
+// by model index. order[r] is the point of rank r. The keys are doubles from std::sin/atan2, so near-ties may
+// break differently on another compiler or library, but always the same way within one build.
 std::array<std::size_t, kDotsPoints> pairingOrder(const DotsPoints& world) {
     std::array<std::size_t, kDotsPoints> order{};
     std::iota(order.begin(), order.end(), std::size_t{0});
@@ -203,6 +204,10 @@ DotsMorph dotsMorph(const show::TimelineFrame& frame, std::uint32_t retroFrame) 
         break;
     }
     return {held, held, 0};
+}
+
+std::array<DotsStep, 6> dotsSchedule(const show::TimelineFrame& frame) {
+    return schedule(frame);
 }
 
 DotsPoints dotsPositions(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
