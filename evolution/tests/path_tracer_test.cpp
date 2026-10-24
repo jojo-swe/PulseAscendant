@@ -31,6 +31,7 @@
 #include "gfx/sync.hpp"
 #include "image/png.hpp"
 #include "modern/path_tracer.hpp"
+#include "post/tonemap_reference.hpp"
 #include "rt/random.hpp"
 #include "rt_test_scenes.hpp"
 #include "test_env.hpp"
@@ -289,8 +290,7 @@ Vec3 pixelDirection(const Camera& camera, std::uint32_t width, std::uint32_t hei
 }
 
 std::uint8_t encode(float linear) {
-    float v = linear / (1.f + linear); // Reinhard, for looking only
-    v = v <= 0.0031308f ? 12.92f * v : 1.055f * std::pow(v, 1.f / 2.4f) - 0.055f;
+    const float v = evo::post::srgbOetf(linear / (1.f + linear)); // Reinhard, for looking only
     return static_cast<std::uint8_t>(std::clamp(v, 0.f, 1.f) * 255.f + 0.5f);
 }
 

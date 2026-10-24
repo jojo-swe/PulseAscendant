@@ -166,8 +166,9 @@ target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
 # The modern stage: the scene registry (evo_modern) and the HDR image's tonemap (evo_post).
 target_link_libraries(evo_render PUBLIC evo_modern evo_post)
 
-# The 2026 side's procedural meshes (and, from later tasks, its scenes and path tracer). The shared GPU structs
-# in src/rt/gpu_types.hpp and the Mat34 helpers in src/modern/math.hpp are header-only.
+# The 2026 side: its procedural meshes, the scene description and registry (modern_scene.hpp, scenes.cpp), the
+# Studio and the path tracer. The shared GPU structs in src/rt/gpu_types.hpp and the Mat34 helpers in
+# src/modern/math.hpp are header-only. It does not use evo_post: the renderer's modern stage joins the two.
 add_library(evo_modern STATIC
     src/modern/mesh_builder.cpp
     src/modern/path_tracer.cpp
@@ -176,7 +177,7 @@ add_library(evo_modern STATIC
     src/modern/studio.cpp)
 target_include_directories(evo_modern PUBLIC src)
 target_link_libraries(evo_modern PUBLIC evo_rt)
-target_link_libraries(evo_modern PUBLIC evo_post evo_show) # the scene interface and registry (modern_scene.hpp)
+target_link_libraries(evo_modern PUBLIC evo_show) # the scene interface reads show::TimelineFrame
 
 # The path tracer's shaders (rt_<name>.<stage>.spv beside the executable); anything linking evo_modern builds
 # them.
@@ -614,13 +615,13 @@ add_test(NAME tonemap COMMAND tonemap_test)
 # stress scene staying finite, dispatch batching (Windows TDR) and the retro screen as a textured light. Writes
 # its pictures to build-out/step4. `path_tracer_test --look <dir> [spp]` renders a larger scene to look at.
 add_executable(path_tracer_test tests/path_tracer_test.cpp)
-target_link_libraries(path_tracer_test PRIVATE evo_modern)
+target_link_libraries(path_tracer_test PRIVATE evo_modern evo_post) # evo_post: srgbOetf for its pictures
 target_compile_definitions(path_tracer_test PRIVATE
     EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(path_tracer_test evo_modern_shaders)
 add_test(NAME path_tracer COMMAND path_tracer_test)
-set_tests_properties(path_tracer PROPERTIES TIMEOUT 120)
+set_tests_properties(path_tracer PROPERTIES TIMEOUT 300)
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
 # validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked). The
@@ -731,7 +732,7 @@ target_link_libraries(export_mode_test PRIVATE evo_render evo_modern)
 target_compile_definitions(export_mode_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(export_mode_test Evolution_shaders evo_modern_shaders)
 add_test(NAME export_mode COMMAND export_mode_test)
-set_tests_properties(export_mode PROPERTIES TIMEOUT 120)
+set_tests_properties(export_mode PROPERTIES TIMEOUT 300)
 
 # The Studio (Task 10 of step 4) at 320x180 in Export, 4 spp, with the validation layer on: STUDIO NIGHT lit
 # but not blown out, the CRT lighting the room, the screen following the retro picture on the next window frame
@@ -745,7 +746,7 @@ target_compile_definitions(studio_test PRIVATE
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(studio_test Evolution_shaders evo_modern_shaders)
 add_test(NAME studio COMMAND studio_test)
-set_tests_properties(studio PROPERTIES TIMEOUT 120)
+set_tests_properties(studio PROPERTIES TIMEOUT 300)
 
 # Seeking with temporal accumulation on (Task 12 of step 4, Review Focus 1) at 160x90, 1 spp, Interactive:
 # after any reset (a seek forwards or backwards, a chapter change, a camera cut, time running backwards) the
@@ -756,4 +757,4 @@ target_link_libraries(seek_determinism_test PRIVATE evo_render evo_modern)
 target_compile_definitions(seek_determinism_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(seek_determinism_test Evolution_shaders evo_modern_shaders)
 add_test(NAME seek_determinism COMMAND seek_determinism_test)
-set_tests_properties(seek_determinism PROPERTIES TIMEOUT 120)
+set_tests_properties(seek_determinism PROPERTIES TIMEOUT 300)

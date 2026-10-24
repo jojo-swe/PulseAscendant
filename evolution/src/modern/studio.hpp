@@ -11,6 +11,7 @@
 
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "rt/sky_constants.hpp"
 #include "show/timeline.hpp"
 
 #include <array>
@@ -68,9 +69,10 @@ public:
     };
     static constexpr float kScreenWeight = 0.3f, kLampWeight = 0.45f, kWindowWeight = 0.1f,
                            kMoonWeight = 0.15f;
-    // Towards the moon (normalised), as shaders/rt/sky.glsl's kMoonDirection: its glow in the sky is centred
-    // there and the moon's emitter stands 4 m out from the window along it.
-    static constexpr Vec3 kMoonDirection{-0.6807f, 0.5327f, -0.5031f};
+    // Towards the moon (normalised): rt::kMoonDirection (rt/sky_constants.hpp), the direction
+    // shaders/rt/sky.glsl centres the moon's glow on. The moon's emitter stands 4 m out from the window along
+    // it.
+    static constexpr Vec3 kMoonDirection{rt::kMoonDirection[0], rt::kMoonDirection[1], rt::kMoonDirection[2]};
     // The screen's emissionScale: the RetroScreen light's radiance is the picture (linear light) times it.
     static constexpr float kScreenEmission = 1.2f;
     // The lamp's emitter: a warm 10 cm square, colour times intensity.

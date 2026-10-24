@@ -7,10 +7,11 @@
 
 #include "random.glsl"
 
-// Towards the moon (normalised; modern::Studio::kMoonDirection). The moon itself is not part of the sky: the
-// Studio places it as a small emitter outside its window, an area light that NEE finds (a small bright disc
-// in the sky could only be reached through the window portal's samples: fireflies). The sky keeps its glow.
-const vec3 kMoonDirection = vec3(-0.6807, 0.5327, -0.5031);
+// kMoonDirection, towards the moon (normalised), shared with the C++ side. The moon itself is not part of the
+// sky: the Studio places it as a small emitter outside its window along the same direction, an area light
+// that NEE finds (a small bright disc in the sky could only be reached through the window portal's samples:
+// fireflies). The sky keeps its glow.
+#include "../../src/rt/sky_constants.hpp"
 const uint kStarCells = 384u; // per cube face side
 
 // Stars: the direction's cell on a cube around the viewer; a cell holds a star with a small probability.

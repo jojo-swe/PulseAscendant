@@ -26,6 +26,9 @@ struct FillParams {
 // What a FillPass writes. Display: the pattern's display-encoded colours into an R8G8B8A8_UNORM image
 // (fill.comp). Hdr: the same picture as linear light into an R16G16B16A16_SFLOAT image (fill_hdr.comp), the
 // light that post/tonemap.comp at 0 EV maps back to those colours (within its dither's one step).
+// Since step 4 the app only uses Hdr (the modern stage's placeholder). Display and fill.comp are test-only
+// and kept on purpose: tonemap_test compares the tonemapped placeholder against the Display picture, and
+// gfx_foundation_test and descriptors_test use fill.comp as their compute pipeline.
 enum class FillTarget { Display, Hdr };
 
 // The fill.comp test pattern as a pass: one dispatch that writes FillParams' chapter, era, wipe, kick and

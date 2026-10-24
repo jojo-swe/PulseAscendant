@@ -3,20 +3,12 @@
 #ifndef POST_COMMON_GLSL
 #define POST_COMMON_GLSL
 
+#include "../common/color.glsl"  // luminance
+#include "../common/finite.glsl" // isFinite
+
 // Below the half-float maximum (65504): anything stored into an RGBA16F image is clamped to it, so a huge
 // sample can never round to infinity there.
 const float kHalfMax = 60000.0;
-
-// Rec. 709 luminance of linear RGB.
-float luminance(vec3 rgb) {
-    return dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-}
-
-// From the bits rather than isnan/isinf (which fast-math compilers may fold away): false for NaN and for
-// either infinity, whose exponent bits are all set.
-bool isFinite(float x) {
-    return (floatBitsToUint(x) & 0x7F800000u) != 0x7F800000u;
-}
 
 // A primary hit: positive, finite linear depth. A miss is -1; NaN or infinity counts as a miss too.
 bool isHit(float depth) {

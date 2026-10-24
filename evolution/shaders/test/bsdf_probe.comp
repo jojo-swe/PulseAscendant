@@ -39,14 +39,6 @@ layout(push_constant) uniform PushConstants {
 
 const uint kResultFloats = 17;
 
-bool finite1(float x) {
-    return !isnan(x) && !isinf(x);
-}
-
-bool finite3(vec3 v) {
-    return !any(isnan(v)) && !any(isinf(v));
-}
-
 float maxComponent(vec3 v) {
     return max(v.x, max(v.y, v.z));
 }
@@ -105,7 +97,7 @@ void main() {
             rejected += 1.0;
             continue;
         }
-        if (!finite3(wi) || !finite3(weight) || !finite1(pdf)) {
+        if (!allFinite(wi) || !allFinite(weight) || !isFinite(pdf)) {
             nonFinite += 1.0;
             continue;
         }
@@ -123,7 +115,7 @@ void main() {
         nonDelta += 1.0;
         float pdfEval;
         vec3 f = bsdfEval(s, n, wo, wi, pdfEval);
-        if (!finite3(f) || !finite1(pdfEval)) {
+        if (!allFinite(f) || !isFinite(pdfEval)) {
             nonFinite += 1.0;
             continue;
         }
@@ -136,7 +128,7 @@ void main() {
         if (dot(wi, n) * dot(wo, n) > 0.0) {
             float pdfReverse;
             vec3 fReverse = bsdfEval(s, n, wi, wo, pdfReverse);
-            if (!finite3(fReverse) || !finite1(pdfReverse)) {
+            if (!allFinite(fReverse) || !isFinite(pdfReverse)) {
                 nonFinite += 1.0;
                 continue;
             }

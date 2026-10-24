@@ -7,8 +7,9 @@
 
 namespace evo::render {
 
-// How a renderer renders: Interactive (the window) keeps temporal history between frames and traces 1 spp
-// per frame; Export (--capture-dir, --render-stream) makes every frame a pure function of the show time.
+// How a renderer renders: Interactive (the window) keeps temporal history between frames and traces --spp
+// samples per frame (1 by default); Export (--capture-dir, --render-stream) makes every frame a pure function
+// of the show time.
 enum class RenderMode { Interactive, Export };
 
 // What a frame needs. The visible flags say whether the compositor may show a stage's image at all (they may

@@ -23,6 +23,8 @@
 //
 // Directions are unit vectors pointing away from the surface; n is the unit shading normal.
 
+#include "../common/color.glsl"  // luminance
+#include "../common/finite.glsl" // isFinite
 #include "random.glsl"
 
 const float kBsdfPi = 3.14159265358979;
@@ -48,10 +50,6 @@ void orthonormalBasis(vec3 n, out vec3 t, out vec3 b) {
     float c = n.x * n.y * a;
     t = vec3(1.0 + s * n.x * n.x * a, s * c, -s * n.x);
     b = vec3(c, s + n.y * n.y * a, -n.y);
-}
-
-float bsdfLuminance(vec3 c) {
-    return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
 float ggxAlpha(float roughness) {
@@ -174,8 +172,8 @@ OpaqueLobes opaqueLobes(Surface s, float zo) {
     float fc = coatFresnel(l.coat, zo);
     vec3 fs = fresnelSchlick(l.f0, l.f90, zo);
     float wCoat = fc;
-    float wSpec = (1.0 - fc) * bsdfLuminance(fs);
-    float wDiffuse = (1.0 - fc) * (1.0 - l.metallic) * bsdfLuminance(l.baseColor * (1.0 - fs));
+    float wSpec = (1.0 - fc) * luminance(fs);
+    float wDiffuse = (1.0 - fc) * (1.0 - l.metallic) * luminance(l.baseColor * (1.0 - fs));
     float total = wCoat + wSpec + wDiffuse;
     if (total > 0.0) {
         l.pCoat = wCoat / total;
@@ -432,7 +430,7 @@ bool bsdfSample(Surface s, vec3 n, vec3 wo, vec3 u, out vec3 wi, out vec3 weight
         f = e.f;
         pdf = opaqueMixturePdf(l, e);
     }
-    if (!(pdf > 0.0) || isinf(pdf)) {
+    if (!(pdf > 0.0) || !isFinite(pdf)) {
         pdf = 0.0;
         return false;
     }

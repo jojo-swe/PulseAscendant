@@ -61,7 +61,7 @@ float rectSolidAnglePdf(RectLight l, float dist, float cosLight) {
 }
 
 float powerHeuristic(float a, float b) {
-    if (isinf(a)) {
+    if (isInfinite(a)) {
         return 1.0;
     }
     float a2 = a * a;

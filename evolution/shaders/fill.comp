@@ -13,7 +13,9 @@
 //              0.26 * height with kick and its brightness falls by half over each beat.
 //   Chapter    the hue is chapter / 31.
 //
-// This build writes the pattern as it is into an RGBA8 image (display-encoded, like the 1993 side).
+// This build writes the pattern as it is into an RGBA8 image (display-encoded, like the 1993 side). Only the
+// tests use it (tonemap_test's reference for the placeholder, gfx_foundation_test's and descriptors_test's
+// compute pipeline); the app draws the placeholder with fill_hdr.comp.
 
 layout(set = 0, binding = 0, rgba8) uniform writeonly image2D outImage;
 

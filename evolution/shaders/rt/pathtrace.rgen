@@ -159,7 +159,7 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         // strategies would not sum to one.
         lightPdf = portalPdf(origin, wi);
     }
-    if (!(lightPdf > 0.0) || isinf(lightPdf)) {
+    if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
         return vec3(0.0);
     }
     // A portal is an opening: the shadow ray goes on into the sky, which must be clear too. Other lights are

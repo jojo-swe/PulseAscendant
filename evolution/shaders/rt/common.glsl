@@ -10,6 +10,8 @@
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_GOOGLE_include_directive : require
 
+#include "../common/color.glsl"  // luminance
+#include "../common/finite.glsl" // isFinite, isInfinite, allFinite (from the bits: robust under fast-math)
 #include "types.glsl"
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
@@ -66,17 +68,9 @@ float maxComponent(vec3 v) {
     return max(v.x, max(v.y, v.z));
 }
 
-float luminance(vec3 c) {
-    return dot(c, vec3(0.2126, 0.7152, 0.0722));
-}
-
-bool allFinite(vec3 v) {
-    return !any(isnan(v)) && !any(isinf(v));
-}
-
 vec3 safeNormalize(vec3 v, vec3 fallback) {
     float len2 = dot(v, v);
-    return len2 > 1e-30 && !isinf(len2) ? v * inversesqrt(len2) : fallback;
+    return len2 > 1e-30 && isFinite(len2) ? v * inversesqrt(len2) : fallback;
 }
 
 #endif

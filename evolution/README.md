@@ -250,9 +250,13 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   a blue gradient, hashed stars, the moon's glow and a distant town's lights below the horizon.
 - **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
   after the first bounce clamped to a luminance limit (64, the Studio 2) against fireflies; a non-finite
-  sample counts as 0. The window traces at most 4 bounces, exports 6, in dispatches of 4 samples per pixel
-  (so a 4K export at 64 spp never holds the GPU for one long dispatch). Every random number is an integer
-  hash of (frame seed, pixel, sample, dimension).
+  sample counts as 0 (checked from the float's bits, so a fast-math compiler cannot fold the check away).
+  The window traces at most 4 bounces, exports 6, in dispatches of 4 samples per pixel, so no single
+  dispatch traces more than 4 spp. A whole frame is still one GPU submission of ceil(spp / 4) dispatches,
+  though: a 4K export frame at 64 spp is 16 dispatches in one submit, roughly 1–4 s on an RTX 4090 (an
+  estimate, not measured), and whether Windows' GPU timeout (TDR, 2 s by default) tolerates that has not been
+  measured yet (see the RTX checklist in HANDOFF). Every random number is an integer hash of (frame seed,
+  pixel, sample, dimension).
 - **Denoiser** (`src/post`, `shaders/post`). The tracer writes the lighting without the primary hit's
   emission, plus guides (albedo, normal, depth, motion). The lighting is divided by the albedo, reprojected
   into a temporal history (in the window only: rejected where depth or normal disagree, an exponential blend
@@ -268,7 +272,7 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
 A dark room at night (spec §2.1), all procedural: checkered linoleum, a wooden desk with a coat on brushed
 steel legs, a beige 1993 PC and CRT monitor, a 101-key keyboard (one key-cap mesh, 101 instances), a mouse,
 floppy disks, a mug, a chrome and a glass sphere on small stands, an office chair, a desk lamp, and a window in
-the back wall onto the night sky with the moon outside it (191 instances of 21 meshes, 29 materials). Four
+the back wall onto the night sky with the moon outside it (195 instances of 21 meshes, 29 materials). Four
 lights: the CRT's screen, the lamp, the window (a portal) and the moon (a small emitter outside the window).
 The CRT shows the live 1993 picture, barrel-warped with darker odd scanlines that fade out with distance, and
 lights the room; in STUDIO NIGHT and RETURN it sits at the DOS prompt the demo exited to (`C:\DEMO>` with a
@@ -286,6 +290,8 @@ in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
   1 spp, and clear within about 10 frames.
 - **Exports at 16 spp and more** are not filtered, so dark corners keep a fine grain at the 64 spp default;
   more samples (e.g. `--spp 256`) clean them up.
+- **Long 4K exports on Windows are unmeasured:** a frame's whole trace is one submission (above), seconds
+  long at 4K and 64 spp or more; measure it on the target GPU before a long export.
 - ACES pushes the CRT's brightest saturated colours towards white; the lights are picked by fixed weights
   (no spatial importance); the glass sphere's caustic is subtle, dimmed by the Studio's indirect clamp.
 
@@ -391,7 +397,9 @@ a seek, a chapter change, a camera cut, a resize or a change of settings. The ex
 of the options and its show time, so a streamed frame equals a fresh capture of the same time byte for byte.
 The random seed of a frame comes from the show time, `pcg(llround(seconds × 48000))` (the audio sample clock);
 the window adds `0x9E3779B9` per frame since its last reset, so its first frame after a reset uses the export
-seed and, at equal spp and bounces, equals the export frame byte for byte.
+seed and, at equal spp and bounces and below 16 spp (where both filter), equals the export frame byte for
+byte. The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
+equals a real export frame; only the tests, which set both, see the equality.
 
 In the window the time comes from the music: the clock is the position the listener hears (what SDL still
 has queued and the device's buffer are subtracted), and the show loops at its end. `--audio-offset` shifts
