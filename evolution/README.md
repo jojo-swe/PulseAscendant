@@ -8,8 +8,8 @@ implementation plans live in [`docs/plans/`](docs/plans/), starting with
 
 > **Status:** step 3 of the plan (the 1993 effects) is under way. The music drives a timeline of 31 chapters
 > in three acts, and the 1993 side renders through its own pipeline (below): BOOT, FLYBY, DOTS, PLASMA,
-> TUNNEL, GLENZ, LENS, RAYTRACE, PORTAL, REBOOT, the CREDITS sine scroller and THE END are finished on the
-> 1993 side, the other effects still show a grey test pattern there, and the 2026 side is still a
+> TUNNEL, GLENZ, LENS, RAYTRACE, VECTOR CITY, PORTAL, REBOOT, the CREDITS sine scroller and THE END are
+> finished on the 1993 side, the other effects still show a grey test pattern there, and the 2026 side is still a
 > placeholder gradient.
 
 ## Requirements
@@ -41,14 +41,14 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 `assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
-The 33 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
+The 34 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
 also numpy). Every GPU test runs with the validation layer on and fails on any message it reports, except the
 one `context` provokes on purpose to check that messages are counted.
 - The show and its music: `options`, `timeline`, `era`, `clock`, `audio_transport` and `show_info`.
 - The render foundation: `png`, `png_decode`, `context`, `gfx_foundation`, `renderer`, `swapchain`, `font`,
   `text_pass` and `no_wait_idle`.
 - The 1993 side: one test per effect (`boot`, `plasma`, `scroller`, `flyby`, `dots`, `tunnel`, `glenz`,
-  `rotozoom`, `raytrace`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon and point
+  `rotozoom`, `raytrace`, `city`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon and point
   rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
   frame, every scene within the rasterisers' limits).
 - The executable end to end: `render_stream`, `capture`, `stream_capture` (a frame of a stream equals a fresh
@@ -152,6 +152,10 @@ The effects so far:
 - **RAYTRACE** (chapter 7): a "precalculated" ray-traced animation at 10 fps: chrome spheres and a
   glass-coloured one bouncing round a big chrome sphere over a red and white checkerboard, hard shadows, two
   reflection bounces, one ray per pixel, dithered into a fixed 6×6×6 colour cube and 24 greys.
+- **VECTOR CITY** (chapter 8): a gouraud-shaded city at sunset, generated from a fixed seed on an endless
+  street grid. The camera flies low down the main street towards a striped sun at its vanishing point, then
+  climbs over the roofs and banks into a turn as the wipe brings 2026 in; the city fades into the haze with
+  distance, so a frame draws about 200 polygons of buildings and streets plus a few lit windows.
 - **PORTAL** (chapter 10): FLYBY's ship turns away and shrinks into the stars while a beige monitor bezel
   closes in to a 4:3 frame, `THE SCREEN` typed in its corner, before the camera pulls out of the CRT.
 - **REBOOT** (chapter 20): BOOT's prompt again with a second script, `evolution.exe /2026` and on to

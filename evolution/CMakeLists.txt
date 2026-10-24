@@ -117,6 +117,7 @@ add_library(evo_render STATIC
     src/render/retro_stage.cpp
     src/render/scene_raster.cpp
     src/retro/boot.cpp
+    src/retro/city.cpp
     src/retro/effects.cpp
     src/retro/effects.hpp
     src/retro/dots.cpp
@@ -291,6 +292,12 @@ target_link_libraries(tunnel_test PRIVATE evo_render)
 target_compile_definitions(tunnel_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(tunnel_test Evolution_shaders)
 add_test(NAME tunnel COMMAND tunnel_test)
+
+add_executable(city_test tests/city_test.cpp)
+target_link_libraries(city_test PRIVATE evo_render)
+target_compile_definitions(city_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(city_test Evolution_shaders)
+add_test(NAME city COMMAND city_test)
 
 # GLENZ: Future Crew's mesh, the beat bounce and the silhouette on the CPU, and its index image over the copper
 # bars from the retro stage (every glenz pixel against a CPU reference of the OR), with the validation layer

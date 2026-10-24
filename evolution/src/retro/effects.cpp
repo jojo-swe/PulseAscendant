@@ -4,6 +4,7 @@
 #include "retro/effects.hpp"
 
 #include "retro/boot.hpp"
+#include "retro/city.hpp"
 #include "retro/dots.hpp"
 #include "retro/flyby.hpp"
 #include "retro/glenz.hpp"
@@ -32,6 +33,8 @@ const EffectInfo& effectFor(show::Effect effect) {
                                         nullptr, nullptr,          tunnelScene};
     static constexpr EffectInfo kGlenzEffect{
         kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr, glenzScene};
+    static constexpr EffectInfo kCity{nullptr, kCityRetroRate, cityPalette,
+                                      nullptr, cityBackground, cityScene};
     static constexpr EffectInfo kLens{kRotozoomShader, kRotozoomRetroRate, rotozoomPalette, nullptr, nullptr,
                                       nullptr,         rotozoomTexture};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
@@ -55,6 +58,8 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kGlenzEffect;
     case show::Effect::Lens:
         return kLens;
+    case show::Effect::City:
+        return kCity;
     case show::Effect::Credits:
         return kCredits;
     case show::Effect::Raytrace:

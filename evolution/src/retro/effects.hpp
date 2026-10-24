@@ -67,9 +67,10 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 // Credits the sine scroller on deep blue, Flyby the flat-shaded ship over a starfield with its greeting
 // scrolling over them, Dots the 512 morphing points, Tunnel the dot-ring tunnel that turns into a solid tube,
 // Glenz Future Crew's translucent glenz vector bouncing over copper bars, Lens the rotozoomed logo texture
-// under a bouncing lens, Raytrace the dithered chrome spheres over a checkerboard at 10 fps, Portal FLYBY's
-// ship flying off inside a closing monitor bezel, Reboot the prompt's second script, TheEnd the fading end
-// screen. The other effects get their entries in later steps and show the test pattern in grey until then.
+// under a bouncing lens, Raytrace the dithered chrome spheres over a checkerboard at 10 fps, City the
+// gouraud vector city flown at sunset, Portal FLYBY's ship flying off inside a closing monitor bezel, Reboot
+// the prompt's second script, TheEnd the fading end screen. The other effects get their entries in later
+// steps and show the test pattern in grey until then.
 const EffectInfo& effectFor(show::Effect effect);
 
 } // namespace evo::retro
