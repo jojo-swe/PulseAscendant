@@ -115,6 +115,7 @@ add_library(evo_render STATIC
     src/render/renderer.cpp
     src/render/retro_stage.cpp
     src/retro/boot.cpp
+    src/retro/effects.cpp
     src/retro/effects.hpp
     src/retro/palette.cpp
     src/retro/palettes.cpp
