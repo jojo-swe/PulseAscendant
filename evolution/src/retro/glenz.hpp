@@ -5,9 +5,10 @@
 //
 // The mesh (14 vertices, 24 triangles: a cube with a pyramid raised on each face) is Future Crew's, from
 // GLENZ/MAIN.C of Second Reality (1993), released under the Unlicense
-// (https://github.com/mtuomi/SecondReality, commit 071a82eddb7a7390dbaa491a8a473e0e923a55c2). It is ported
-// through the parent project's src/scene_math.cpp: the points divided by 100, the triangle indices
-// unchanged. Credit to Future Crew; this is not an official Future Crew release.
+// (https://github.com/mtuomi/SecondReality, commit 071a82eddb7a7390dbaa491a8a473e0e923a55c2; the licence
+// text is in licenses/FUTURE-CREW-NOTICE.md). It is ported through the parent project's src/scene_math.cpp:
+// the original's points are 100 * ZZZ with ZZZ = 1, here divided by 100; the triangle indices are unchanged.
+// Credit to Future Crew; this is not an official Future Crew release.
 
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
@@ -36,7 +37,8 @@ inline constexpr const char* kGlenzCopperShader = "retro_copper.comp.spv";
 // where a front face covers it, through deep blue-violet where a back face does, and through both where they
 // overlap. A closed mesh puts a front and a back face over every pixel of its silhouette, so the code is 3
 // there; the faces alternate between two colours, as in the original, so the facets and the far side's edges
-// show through the near side.
+// show through the near side. The OR is lossy but deterministic: where two faces of one side overlap (the
+// mesh turned so a front face covers another front face), their checker bits OR to the second colour.
 inline constexpr std::uint8_t kGlenzCopperMask = 0x0f;
 inline constexpr std::uint8_t kGlenzCopperBars = 3;
 inline constexpr std::uint8_t kGlenzCopperSteps = 5;
@@ -52,7 +54,8 @@ using GlenzPoint = std::array<double, 3>;
 using GlenzVertices = std::array<GlenzPoint, kGlenzVertices>;
 
 // The mesh in model space: the cube's corners at +-1, the pyramids' tips at 1.7 on the axes. The triangles
-// keep the original's vertex order, clockwise seen from outside (x right, y up, z away from the camera).
+// keep the original's vertex order: a face turned to the camera winds clockwise on the y-down screen (its
+// right-handed normal, (b - a) x (c - a), points inward).
 struct GlenzMesh {
     GlenzVertices vertices;
     std::array<std::array<int, 3>, kGlenzTriangles> triangles;
@@ -71,6 +74,9 @@ inline constexpr double kGlenzCameraDistance = 8.0;
 // The beats are fixed data of the chapter's track (show::beatGrid), a fixed fact like chapterDuration and
 // accentSeconds: the chapter and the time alone decide the phase, never the frame's music signals.
 double glenzBeatPhase(const show::TimelineFrame& frame, double seconds);
+// The same on any beat grid at `trackSeconds` (glenzBeatPhase passes the chapter's track and time): with
+// fewer than two beats the phase is 0 throughout.
+double glenzBeatPhaseAt(const show::BeatGridView& grid, double trackSeconds);
 // The height of the bounce, 4 p (1 - p) of the beat phase p: 0 (the floor) on every beat, 1 halfway between.
 double glenzBounce(const show::TimelineFrame& frame, double seconds);
 
@@ -83,7 +89,8 @@ Camera glenzCamera();
 // The EffectInfo parts of GLENZ (see retro/effects.hpp).
 void glenzPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame);
 // Every triangle in glenz mode: the back faces first, then the front faces, each of index kGlenzBack or
-// kGlenzFront, plus kGlenzBackB / kGlenzFrontB on the odd triangles of the mesh (the checker).
+// kGlenzFront, plus kGlenzBackB / kGlenzFrontB on the odd triangles of the mesh (the checker). The order is
+// nominal, the original's: the OR is commutative, so any order gives the same picture.
 void glenzScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
 } // namespace evo::retro

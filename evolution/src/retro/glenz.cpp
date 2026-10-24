@@ -65,10 +65,12 @@ double glenzBeatPhase(const show::TimelineFrame& frame, double seconds) {
     // beats are data of the chapter alone, like chapterDuration; nothing here reads the frame's music.
     const double start = show::chapterStart(frame.chapter);
     const int track = show::trackAt(start);
-    const show::BeatGridView grid = show::beatGrid(track);
+    return glenzBeatPhaseAt(show::beatGrid(track), start - show::trackStart(track) + seconds);
+}
+
+double glenzBeatPhaseAt(const show::BeatGridView& grid, double t) {
     if (grid.count() < 2)
         return 0;
-    const double t = start - show::trackStart(track) + seconds;
     const int i = std::clamp(grid.beatAt(t), 0, grid.count() - 2);
     const double previous = grid.beatTime(i), length = grid.beatTime(i + 1) - previous;
     if (length <= 0)
@@ -151,7 +153,7 @@ void glenzScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32
             const double v[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
             const double n[3] = {u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2],
                                  u[0] * v[1] - u[1] * v[0]};
-            // The clockwise winding makes n point inwards: a front face's n points away from the eye.
+            // The original's winding makes n point inwards: a front face's n points away from the eye.
             const double toFace[3] = {a[0] - camera.eye[0], a[1] - camera.eye[1], a[2] - camera.eye[2]};
             const bool front = n[0] * toFace[0] + n[1] * toFace[1] + n[2] * toFace[2] > 0;
             if (front != frontPass)

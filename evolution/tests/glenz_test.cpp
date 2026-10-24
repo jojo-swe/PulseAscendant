@@ -132,7 +132,22 @@ void testPalette() {
         // The checker colours of a front face, and of a back face, differ.
         CHECK(palette[copper | kCodes] != palette[copper | kCodes | kGlenzFrontB]);
         CHECK(palette[copper | kCodes] != palette[copper | kCodes | kGlenzBackB]);
+        // A front face and a back face over the same copper never look alike.
+        CHECK(palette[copper | kGlenzFront] != palette[copper | kGlenzBack]);
     }
+    // Every byte the scene can produce, copper | front field | back field (the front field is none, front or
+    // front with its checker colour, and so is the back field: 16 x 3 x 3 = 144), has its own colour, so no
+    // two reachable combinations alias.
+    std::set<std::uint8_t> reachable;
+    for (int copper = 0; copper < 16; ++copper)
+        for (const int front : {0, int{kGlenzFront}, kGlenzFront | kGlenzFrontB})
+            for (const int back : {0, int{kGlenzBack}, kGlenzBack | kGlenzBackB})
+                reachable.insert(static_cast<std::uint8_t>(copper | front | back));
+    CHECK(reachable.size() == 144);
+    std::set<std::uint32_t> colours;
+    for (const std::uint8_t index : reachable)
+        colours.insert(palette[index] & 0xffffffu);
+    CHECK(colours.size() == reachable.size());
     Palette later{};
     glenzPalette(later, glenz(12), 400);
     CHECK(later == palette);
@@ -231,6 +246,74 @@ void testBounce() {
         for (const auto& p : world)
             y += p[1];
         CHECK(std::abs(y / 14 - (kGlenzFloor + kGlenzLift * h)) < 1e-9);
+    }
+}
+
+// Walks `phaseAt` (and its bounce 4 p (1 - p)) over [from, to) in 1 ms steps: every value finite and in
+// [0, 1], the bounce continuous (it lands at 0 from both sides of a beat), the phase continuous but for its
+// wrap from 1 to 0 on a beat. The bounds hold for beats at least 0.25 s apart (the steepest bounce is
+// 4 / beat length a second).
+template <typename PhaseAt> void checkSmooth(const PhaseAt& phaseAt, double from, double to) {
+    double lastPhase = phaseAt(from), lastBounce = 4 * lastPhase * (1 - lastPhase);
+    for (double t = from; t < to; t += 1e-3) {
+        const double p = phaseAt(t), h = 4 * p * (1 - p);
+        CHECK(std::isfinite(p) && p >= 0 && p <= 1);
+        CHECK(h >= 0 && h <= 1);
+        CHECK(std::abs(h - lastBounce) < 0.02);
+        const double step = std::abs(p - lastPhase);
+        CHECK(std::min(step, 1 - step) < 0.005);
+        lastPhase = p, lastBounce = h;
+    }
+}
+
+// The bounce at the edges of a track's beat grid, which FINALE reaches when it runs GLENZ elsewhere: a
+// chapter starting before its track's first tracked beat, times after its track's last beat, and grids of
+// fewer than two beats (a flat phase of 0), all smooth and in range; glenzBounce agrees with the phase.
+void testBounceEdges() {
+    using namespace evo::retro;
+    int beforeFirst = 0, afterLast = 0;
+    for (int chapter = 0; chapter < evo::show::chapterCount(); ++chapter) {
+        const TimelineFrame frame = evo::show::sampleTimeline(evo::show::chapterStart(chapter) + 1e-3);
+        CHECK(frame.chapter == chapter);
+        const double start = evo::show::chapterStart(chapter);
+        const int track = evo::show::trackAt(start);
+        const evo::show::BeatGridView grid = evo::show::beatGrid(track);
+        CHECK(grid.count() >= 2);
+        const double offset = start - evo::show::trackStart(track); // chapter start in track seconds
+        const auto phaseAt = [&](double t) { return glenzBeatPhase(frame, t); };
+        if (offset < grid.beatTime(0)) {
+            ++beforeFirst;
+            checkSmooth(phaseAt, 0, grid.beatTime(0) - offset + 2);
+            CHECK(glenzBeatPhase(frame, grid.beatTime(0) - offset) < 1e-6);
+        }
+        const double last = grid.beatTime(grid.count() - 1) - offset; // chapter-local
+        if (last < frame.chapterDuration + 4) {
+            ++afterLast;
+            checkSmooth(phaseAt, std::max(0.0, last - 2), frame.chapterDuration + 6);
+        }
+        for (double t : {0.0, frame.chapterDuration / 3, frame.chapterDuration + 3})
+            CHECK(glenzBounce(frame, t) == 4 * phaseAt(t) * (1 - phaseAt(t)));
+    }
+    std::printf("glenz: bounce edges: %d chapters start before their track's first beat, %d run past its last\n",
+                beforeFirst, afterLast);
+    CHECK(beforeFirst >= 1 && afterLast >= 1);
+
+    // Synthetic grids: none, one beat (a flat 0), two beats (their length repeats on both sides) and three.
+    const double times[] = {2.0, 2.5, 3.1};
+    const unsigned char bars[] = {0, 1, 2};
+    for (int count = 0; count <= 3; ++count) {
+        const evo::show::BeatGridView grid(times, bars, count);
+        const auto phaseAt = [&](double t) { return glenzBeatPhaseAt(grid, t); };
+        checkSmooth(phaseAt, -3, 8);
+        if (count < 2)
+            for (double t : {-1.0, 0.0, 2.0, 2.25, 9.0})
+                CHECK(phaseAt(t) == 0);
+        else {
+            CHECK(std::abs(phaseAt(1.75) - 0.5) < 1e-9); // the first beat length repeats before it
+            CHECK(std::abs(phaseAt(2.25) - 0.5) < 1e-9);
+            const double lastLength = times[count - 1] - times[count - 2];
+            CHECK(std::abs(phaseAt(times[count - 1] + 1.5 * lastLength) - 0.5) < 1e-9);
+        }
     }
 }
 
@@ -336,6 +419,7 @@ void testScene() {
         CHECK(frontCount >= 3 && frontCount <= 21);
         // Front and back faces wind opposite ways on the screen, and the front faces are the nearer ones.
         CHECK(screenWinding[0] == -screenWinding[1]);
+        std::printf("WINDING front %d back %d\n", screenWinding[1], screenWinding[0]);
         CHECK(frontDepth / static_cast<double>(frontCount) <
               backDepth / static_cast<double>(kGlenzTriangles - frontCount));
         if (f % 5 == 0)
@@ -433,6 +517,7 @@ int main() {
         testPalette();
         testMesh();
         testBounce();
+        testBounceEdges();
         testScene();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
