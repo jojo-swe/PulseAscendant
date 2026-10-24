@@ -12,11 +12,12 @@
 #include "show/timeline.hpp"
 #include "text/font8x8.hpp"
 
+#include "test_env.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <stdexcept>
@@ -42,15 +43,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-// Points shaderDir() at the build's compiled shaders.
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 // A read-back frame: top-down rows of RGB.
 struct Picture {
@@ -803,6 +795,7 @@ void testHistoryResets(evo::gfx::Context& ctx) {
     CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
     harness.render(evo::show::sampleTimeline(1.0)); // BOOT: no modern pass
     CHECK(!stats().modernRendered && stats().historyReset == HistoryReset::None);
+    CHECK(stats().framesSinceReset == 0); // zeroed while the modern stage is skipped
     harness.render(studioNight(2.0 + 2.0 / 60));
     CHECK(stats().historyReset == HistoryReset::Skipped && stats().framesSinceReset == 0);
     harness.render(studioNight(5.0));
@@ -813,6 +806,32 @@ void testHistoryResets(evo::gfx::Context& ctx) {
     harness.render(studioNight(5.0 + 2.0 / 60));
     CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
     CHECK(harness.renderer().maxBounces() == 4);
+
+    // A resize A -> B -> A with no frame in between still resets; resizing to the current size does not.
+    harness.resize(160, 90);
+    harness.resize(192, 108);
+    harness.render(studioNight(5.0 + 3.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::Resize);
+    harness.resize(192, 108);
+    harness.render(studioNight(5.0 + 4.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::None);
+}
+
+// The stats of a skipped stage are zero, not the last frame it rendered: retroFrame while the retro stage
+// does not run (STUDIO NIGHT), framesSinceReset while the modern stage does not (BOOT, in an export).
+void testSkippedStageStats(evo::gfx::Context& ctx) {
+    Harness harness(ctx, modeSettings(160, 90, RenderMode::Export));
+    const auto stats = [&] { return harness.renderer().lastStats(); };
+    harness.render(plasmaFrame(70));
+    CHECK(stats().retroRendered && stats().retroFrame == 70 && !stats().modernRendered);
+    CHECK(stats().framesSinceReset == 0);
+    harness.render(studioNight(2.0));
+    harness.render(studioNight(2.0 + 1.0 / 60));
+    CHECK(!stats().retroRendered && stats().retroFrame == 0);
+    CHECK(stats().modernRendered && stats().framesSinceReset == 1);
+    harness.render(plasmaFrame(71));
+    CHECK(stats().retroRendered && stats().retroFrame == 71);
+    CHECK(!stats().modernRendered && stats().framesSinceReset == 0);
 }
 
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
@@ -840,7 +859,7 @@ void testRejectsEmptySize(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR); // the build's compiled shaders
         testEffectRegistry();
         testHudUnit();
         testHudItems();
@@ -863,6 +882,7 @@ int main() {
             testSkippedStageNeverShows(ctx);
             testInteractiveKeepsHiddenModernWarm(ctx);
             testHistoryResets(ctx);
+            testSkippedStageStats(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

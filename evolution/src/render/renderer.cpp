@@ -109,6 +109,7 @@ void Renderer::resize(std::uint32_t width, std::uint32_t height) {
     ring_.waitAll(); // resize: the frames in flight may still read the old images
     modern_.resize(width, height);
     compositor_.resize(width, height);
+    history_.markResize(); // reported even if the size is back to the last frame's when the stage runs
 }
 
 void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
@@ -116,7 +117,7 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     const VkExtent2D size = output().extent();
 
     stats_.retroRendered = plan.retro && retro_.render(cmd, frame);
-    stats_.retroFrame = retro_.retroFrame();
+    stats_.retroFrame = plan.retro ? retro_.retroFrame() : 0u;
 
     stats_.modernRendered = plan.modern;
     stats_.historyReset = HistoryReset::None;
@@ -126,7 +127,7 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         stats_.historyReset = history_.advance(key, !modernRanLastFrame_);
         modern_.render(cmd, frame, {stats_.historyReset, history_.framesSinceReset()});
     }
-    stats_.framesSinceReset = history_.framesSinceReset();
+    stats_.framesSinceReset = plan.modern ? history_.framesSinceReset() : 0u;
     modernRanLastFrame_ = plan.modern;
 
     const std::uint32_t visible =

@@ -287,7 +287,9 @@ WAV of the wrong length, no audio device, or `--no-audio`), EVOLUTION prints `SI
 stderr and runs on the monotonic clock from `--time`; otherwise it prints `AUDIO: <file>`. If the audio
 stream fails mid-show, it prints the new `SILENT MODE` status and carries on from the music's position.
 `--show-info` needs neither a GPU nor SDL video. The headless modes never play audio and always render at
-`t = time + i / fps`.
+`t = time + i / fps`. A window that renders below 2 fps (lavapipe at a large size) steps the show more than
+0.5 s per frame, so every frame counts as a time jump and resets the 2026 side's temporal history: the
+accumulation never builds up there.
 
 `--render-stream` writes frames `0 .. ceil(duration × fps) − 1` at `t = time + i / fps`, top-down,
 3 bytes per pixel, with progress on stderr. `--capture-dir` creates missing directories and overwrites

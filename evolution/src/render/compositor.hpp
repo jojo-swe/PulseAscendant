@@ -39,6 +39,8 @@ public:
                 bool crt, std::uint32_t visible, std::span<const text::Item> overlay = {});
 
     gfx::Image& output() { return output_; }
+    // How many times the CRT pass has run; for tests that pin that it is skipped without the retro bit.
+    std::uint64_t crtDispatchCount() const { return crt_.dispatchCount(); }
 
 private:
     gfx::Context& ctx_;

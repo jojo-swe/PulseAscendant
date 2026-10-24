@@ -64,8 +64,9 @@ public:
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
-    // Waits for the frames in flight, then recreates the output-size images. Not between ring.begin() and
-    // ring.submit(). A no-op for the current size.
+    // Waits for the frames in flight, then recreates the output-size images; the modern stage's next frame
+    // resets its history (Resize), even after a resize back to the size it last rendered. Not between
+    // ring.begin() and ring.submit(). A no-op for the current size.
     void resize(std::uint32_t width, std::uint32_t height);
     // Records all passes; output() is GENERAL afterwards.
     void render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
@@ -78,11 +79,12 @@ public:
 
     struct Stats {
         bool retroRendered = false; // whether the last render() re-rendered the retro frame
-        std::uint32_t retroFrame = 0;
+        std::uint32_t retroFrame =
+            0;                       // the retro frame the last render() showed; 0 when the stage was skipped
         bool modernRendered = false; // whether the last render() ran the modern stage
-        // The modern stage's history on the last render(): None when the stage did not run.
+        // The modern stage's history on the last render(): None and 0 when the stage did not run.
         HistoryReset historyReset = HistoryReset::None;
-        std::uint32_t framesSinceReset = 0; // as of the last frame the modern stage ran
+        std::uint32_t framesSinceReset = 0;
     };
     Stats lastStats() const { return stats_; }
     RenderMode mode() const { return mode_; }

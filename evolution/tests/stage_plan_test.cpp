@@ -4,6 +4,8 @@
 #include "render/stage_plan.hpp"
 #include "show/timeline.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <stdexcept>
@@ -103,11 +105,103 @@ void testPortal() {
         CHECK(planIs(planStages(now, mode, false), false, true, false, true));
 }
 
-// EVO_FORCE_ERA=1 sets era = wipe = 1 on any chapter, BOOT included.
+// EVO_FORCE_ERA=1 sets era = wipe = 1 on any chapter, BOOT included; EVO_FORCE_ERA=0 sets era = wipe = 0,
+// a 2026-only chapter included.
 void testForcedEra() {
     const TimelineFrame forced = frameOf(0, Effect::Boot, Transition::Cut, 1.f, 1.f);
     for (RenderMode mode : kModes)
         CHECK(planIs(planStages(forced, mode, false), false, true, false, true));
+
+    // STUDIO NIGHT (Cut) held in 1993: retro only in both modes; a Cut never keeps 2026 warm.
+    const TimelineFrame night = frameOf(11, Effect::StudioNight, Transition::Cut, 0.f, 0.f);
+    for (RenderMode mode : kModes) {
+        CHECK(planIs(planStages(night, mode, false), true, false, true, false));
+        CHECK(planIs(planStages(night, mode, true), true, false, true, false));
+    }
+
+    // Portal and Wipe chapters held in either era.
+    for (const Transition transition : {Transition::Portal, Transition::Wipe, Transition::BeatSwap}) {
+        const TimelineFrame then = frameOf(1, Effect::Flyby, transition, 0.f, 0.f);
+        CHECK(planIs(planStages(then, RenderMode::Export, false), true, false, true, false));
+        CHECK(planIs(planStages(then, RenderMode::Interactive, false), true, false, true, true));
+        const TimelineFrame now = frameOf(1, Effect::Flyby, transition, 1.f, 1.f);
+        for (RenderMode mode : kModes) {
+            CHECK(planIs(planStages(now, mode, false), false, true, false, true));
+            CHECK(planIs(planStages(now, mode, true), false, true, true, true));
+        }
+    }
+}
+
+// What composite.comp reads, modelled independently of planStages: the weights the pixel centre x + 0.5 of
+// a width-pixel output gives the 1993 screen and the 2026 image (as in the shader: Wipe by column with a
+// 2-pixel seam, Portal a mix by era, Cut and BeatSwap a select at era 0.5).
+struct Weights {
+    float then, now;
+};
+
+Weights compositeWeights(const TimelineFrame& frame, std::uint32_t x, std::uint32_t width) {
+    const float centre = static_cast<float>(x) + .5f;
+    const float edge = frame.wipe * static_cast<float>(width);
+    switch (frame.transition) {
+    case Transition::Wipe: {
+        const float fromEdge = centre - edge;
+        if (frame.wipe > 0.f && frame.wipe < 1.f && fromEdge >= -1.f && fromEdge < 1.f)
+            return {0.f, 0.f}; // the white seam
+        return centre < edge ? Weights{0.f, 1.f} : Weights{1.f, 0.f};
+    }
+    case Transition::Portal: {
+        const float t = std::clamp(frame.era, 0.f, 1.f);
+        return {1.f - t, t};
+    }
+    case Transition::Cut:
+    case Transition::BeatSwap:
+        break;
+    }
+    return frame.era >= .5f ? Weights{0.f, 1.f} : Weights{1.f, 0.f};
+}
+
+// Every frame of the show at 1/60 s, as played and with either era forced: the plan never leaves out an
+// image the compositor reads at any column of a 160-, 1280- or 3840-pixel-wide output, and a stage the
+// compositor may show always runs.
+void testPlanCoversCompositeAcrossTheShow() {
+    std::size_t frames = 0;
+    const auto check = [&](const TimelineFrame& frame) {
+        bool thenRead = false, nowRead = false;
+        for (const std::uint32_t width : {160u, 1280u, 3840u}) {
+            // Cut, BeatSwap and Portal treat every column alike.
+            const std::uint32_t columns = frame.transition == Transition::Wipe ? width : 1u;
+            for (std::uint32_t x = 0; x < columns; ++x) {
+                const Weights weights = compositeWeights(frame, x, width);
+                thenRead = thenRead || weights.then > 0.f;
+                nowRead = nowRead || weights.now > 0.f;
+            }
+        }
+        for (RenderMode mode : kModes)
+            for (const bool samplesRetro : {false, true}) {
+                const StagePlan plan = planStages(frame, mode, samplesRetro);
+                if ((thenRead && !plan.retroVisible) || (nowRead && !plan.modernVisible)) {
+                    std::fprintf(stderr, "under-inclusive plan at t = %.4f (chapter %d)\n", frame.showSeconds,
+                                 frame.chapter);
+                    CHECK(false);
+                }
+                CHECK(!plan.retroVisible || plan.retro);
+                CHECK(!plan.modernVisible || plan.modern);
+                CHECK(!samplesRetro || plan.retro);
+            }
+        ++frames;
+    };
+    const double duration = evo::show::showDuration();
+    for (long i = 0; i / 60.0 < duration; ++i) {
+        TimelineFrame frame = evo::show::sampleTimeline(i / 60.0);
+        check(frame);
+        for (const float era : {0.f, 1.f}) {
+            frame.era = frame.wipe = era; // EVO_FORCE_ERA
+            frame.eraCut = 0.f;
+            check(frame);
+        }
+    }
+    std::printf("plan sweep: %zu frames\n", frames);
+    CHECK(frames > 3 * 60 * 600);
 }
 
 void testBounces() {
@@ -176,6 +270,75 @@ void testHistoryReasons() {
     }
 }
 
+// Two reasons on one frame: the earlier in the order FirstFrame, Resize, Settings, Chapter, Shot, TimeJump,
+// Skipped is reported.
+void testResetPrecedence() {
+    {
+        HistoryTracker tracker = started();
+        HistoryKey next = key(1.0);
+        next.width = 640;
+        next.chapter = 12;
+        CHECK(tracker.advance(next, false) == HistoryReset::Resize);
+    }
+    {
+        HistoryTracker tracker = started();
+        HistoryKey next = key(1.0);
+        next.chapter = 12;
+        next.shot = 3;
+        CHECK(tracker.advance(next, false) == HistoryReset::Chapter);
+    }
+    {
+        HistoryTracker tracker = started();
+        HistoryKey next = key(9.0);
+        next.shot = 1;
+        CHECK(tracker.advance(next, false) == HistoryReset::Shot);
+    }
+    {
+        HistoryTracker tracker = started();
+        CHECK(tracker.advance(key(0.5), true) == HistoryReset::TimeJump);
+    }
+    {
+        HistoryTracker tracker = started();
+        HistoryKey next = key(1.0);
+        next.spp = 4;
+        next.height = 360;
+        CHECK(tracker.advance(next, false) == HistoryReset::Resize);
+    }
+    {
+        // Everything at once on a first frame is still FirstFrame.
+        HistoryTracker tracker;
+        CHECK(tracker.advance(key(1.0), true) == HistoryReset::FirstFrame);
+    }
+}
+
+// A resize the tracker was told about counts even when the size is back to the last one when the modern
+// stage runs again (A -> B -> A with no frame in between).
+void testMarkedResize() {
+    {
+        HistoryTracker tracker = started();
+        tracker.markResize();
+        tracker.markResize();
+        CHECK(tracker.advance(key(1.0 + 1.0 / 60), false) == HistoryReset::Resize);
+        CHECK(tracker.framesSinceReset() == 0);
+        CHECK(tracker.advance(key(1.0 + 2.0 / 60), false) == HistoryReset::None); // reported once
+    }
+    {
+        // Before the first frame the reason is FirstFrame, and the mark is used up by it.
+        HistoryTracker tracker;
+        tracker.markResize();
+        CHECK(tracker.advance(key(1.0), false) == HistoryReset::FirstFrame);
+        CHECK(tracker.advance(key(1.0), false) == HistoryReset::None);
+    }
+    {
+        // invalidate() wins over a marked resize, and clears it.
+        HistoryTracker tracker = started();
+        tracker.markResize();
+        tracker.invalidate();
+        CHECK(tracker.advance(key(1.0), false) == HistoryReset::FirstFrame);
+        CHECK(tracker.advance(key(1.0), false) == HistoryReset::None);
+    }
+}
+
 // Δt = 0.5 is no jump, 0.5001 is; a repeated time (Δt = 0) is none, any step back is one.
 void testTimeJumps() {
     HistoryTracker tracker = started();
@@ -211,8 +374,11 @@ int main() {
         testWipe();
         testPortal();
         testForcedEra();
+        testPlanCoversCompositeAcrossTheShow();
         testBounces();
         testHistoryReasons();
+        testResetPrecedence();
+        testMarkedResize();
         testTimeJumps();
         testFramesSinceReset();
     } catch (const std::exception& error) {
