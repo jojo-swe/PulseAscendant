@@ -116,7 +116,8 @@ add_library(evo_render STATIC
     src/render/retro_stage.cpp
     src/retro/boot.cpp
     src/retro/effects.hpp
-    src/retro/palette.cpp)
+    src/retro/palette.cpp
+    src/retro/palettes.cpp)
 target_include_directories(evo_render PUBLIC src)
 target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
 
@@ -140,6 +141,7 @@ evo_add_shaders(Evolution
     shaders/crt.comp
     shaders/composite.comp
     shaders/retro/palette_map.comp
+    shaders/retro/plasma.comp
     shaders/retro/test_pattern.comp
     shaders/text/text_index.comp
     shaders/text/text_rgba.comp)
@@ -226,6 +228,14 @@ target_link_libraries(boot_test PRIVATE evo_render)
 target_compile_definitions(boot_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(boot_test Evolution_shaders)
 add_test(NAME boot COMMAND boot_test)
+
+# PLASMA: the cycling palette on the CPU and the plasma's index and colour images from the retro stage, with
+# the validation layer on; fails on any message it reports.
+add_executable(plasma_test tests/plasma_test.cpp)
+target_link_libraries(plasma_test PRIVATE evo_render)
+target_compile_definitions(plasma_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(plasma_test Evolution_shaders)
+add_test(NAME plasma COMMAND plasma_test)
 
 # The font's invariants, its UTF-8 mapping and the atlas layout; CPU only.
 add_executable(font_test tests/font_test.cpp)

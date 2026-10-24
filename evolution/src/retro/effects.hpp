@@ -43,16 +43,22 @@ inline constexpr const char* kTestPatternShader = "retro_test_pattern.comp.spv";
 inline constexpr std::uint32_t kDefaultRetroRate = 35;
 // Raytrace's 1993 side is a precalculated animation shown at a slower rate (step 3 renders it).
 inline constexpr std::uint32_t kRaytraceRetroRate = 10;
+// PLASMA's index image (shaders/retro/plasma.comp) and its rate, which the shader's clock assumes.
+inline constexpr const char* kPlasmaShader = "retro_plasma.comp.spv";
+inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 
-// The registry. Boot is the DOS prompt; Plasma and Credits get their own entries in later tasks of the step,
-// the other effects in later steps, and show the test pattern in grey until then.
+// The registry. Boot is the DOS prompt, Plasma the cycling plasma; Credits gets its own entry in a later
+// task of the step, the other effects in later steps, and show the test pattern in grey until then.
 inline const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kTestPattern{kTestPatternShader, kDefaultRetroRate, grayPalette};
     static constexpr EffectInfo kRaytrace{kTestPatternShader, kRaytraceRetroRate, grayPalette};
     static constexpr EffectInfo kBoot{nullptr, kBootRetroRate, bootPalette, bootText, bootBackground};
+    static constexpr EffectInfo kPlasma{kPlasmaShader, kPlasmaRetroRate, plasmaPalette};
     switch (effect) {
     case show::Effect::Boot:
         return kBoot;
+    case show::Effect::Plasma:
+        return kPlasma;
     case show::Effect::Raytrace:
         return kRaytrace;
     default:

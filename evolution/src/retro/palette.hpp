@@ -3,6 +3,7 @@
 #include "show/timeline.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace evo::retro {
@@ -25,5 +26,17 @@ constexpr std::uint32_t rgba(std::uint8_t red, std::uint8_t green, std::uint8_t 
 
 // A grey ramp: index 0 black ... 255 white. The palette of the test pattern.
 void grayPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame);
+
+// PLASMA's palette layout: index 0 black, 1..31 a fixed shadow ramp (black to the darkest violet) for
+// anything drawn over the plasma, and the 224 entries from kPlasmaFirstIndex up the colour ring the plasma
+// shader indexes (shaders/retro/plasma.comp).
+inline constexpr std::size_t kPlasmaFirstIndex = 32;
+inline constexpr std::size_t kPlasmaColours = 256 - kPlasmaFirstIndex;
+
+// PLASMA's palette (palettes.cpp): the colour ring is three smooth gradients, deep violet -> magenta ->
+// orange, orange -> yellow -> cyan and cyan -> deep blue -> deep violet, closed so its last entry runs into
+// its first. It cycles: entry kPlasmaFirstIndex + j shows ring colour (j + retroFrame) % 224, so the colours
+// flow one index per retro frame and come round every 224 retro frames (6.4 s at 35 Hz).
+void plasmaPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
 } // namespace evo::retro
