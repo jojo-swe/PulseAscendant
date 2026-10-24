@@ -217,6 +217,8 @@ void testPalette() {
 // checker of 16x16 tiles, A and B alternating, bevelled light at the top and left; the same every build.
 void testTexture() {
     const EffectTexture texture = evo::retro::rotozoomTexture();
+    // shaders/retro/rotozoom.comp hard-codes the size (kSize = 128, wrapping with & 127).
+    static_assert(evo::retro::kRotozoomSize == 128);
     CHECK(texture.width == 128 && texture.height == 128 && texture.texels.size() == 128u * 128u);
     const auto at = [&](int u, int v) {
         return static_cast<int>(

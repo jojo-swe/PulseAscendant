@@ -42,8 +42,9 @@ public:
     // builds and uploads every effect texture (EffectInfo::texture) once. Throws std::runtime_error if the
     // GPU cannot store to an R8_UINT image, std::invalid_argument for a texture without a shader, of no
     // texels or of a size other than width x height, and std::logic_error for a shader named both with and
-    // without one. The text pass draws the palette indices of text-only effects and text overlays
-    // (drawIndex); it must outlive the stage.
+    // without one. The textures upload with a blocking immediate submit here, so construct the stage before
+    // the first frame is recorded (never mid-show). The text pass draws the palette indices of text-only
+    // effects and text overlays (drawIndex); it must outlive the stage.
     RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text,
                EffectLookup effects = retro::effectFor);
 
@@ -52,7 +53,8 @@ public:
     // Throws what SceneRaster::draw throws for a scene past the limits.
     bool render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
 
-    // The retro frame of the last render().
+    // The retro frame of the last render(), of the frame's own effect at its rate: for a megamix, FINALE's
+    // (outer) frame, not the home frame of the sub-effect it resolved to.
     std::uint32_t retroFrame() const { return retroFrame_; }
     gfx::Image& image() { return color_; }      // RGBA8 320x200
     gfx::Image& indexImage() { return index_; } // R8_UINT 320x200

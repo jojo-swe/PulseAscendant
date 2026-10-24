@@ -3,10 +3,12 @@
 
 // LENS (chapter 6): the rotozoomer and the bouncing lens (src/retro/rotozoom.hpp has the formulas and the
 // palette). The 128x128 texture is the effect's own (binding 1), its texels palette indices. Per frame the
-// view becomes 16.16 fixed-point texture steps, as on a 486; per pixel only integer adds and a wrap-around
-// lookup. Inside the lens a pixel shows the rotozoomed point the refraction table names (to 1/256 pixel),
-// through the glass palette; the rim and the highlight are drawn on top. The time is pc.retroSeconds, so the image is a pure
-// function of retroFrame.
+// view becomes 16.16 fixed-point texture steps, as on a 486; per pixel integer multiply-adds and a
+// wrap-around lookup, with the refraction profile evaluated per pixel. Inside the lens a pixel shows the
+// rotozoomed point the refraction table names (to 1/256 pixel), through the glass palette; the rim and the
+// highlight are drawn on top. The time is pc.retroSeconds, so the image is a pure function of retroFrame.
+// GLSL round() at an exact .5 and float sin/cos are not bit-exact across vendors, so a pixel by a texel
+// boundary or a rim shade's edge may come out differently; tests/rotozoom_test.cpp allows for that.
 //
 // ROTOZOOM_TEST_VIEW=n (tests/rotozoom_test.cpp only): no rotation, n texels per pixel from texel (0, 0) at
 // pixel (0, 0), sampled half a texel in (off the texel edges), and the lens held at (160, 100).
@@ -26,6 +28,7 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 // Must match src/retro/rotozoom.hpp.
+const uint kSize = 128u; // kRotozoomSize: the texture is 128x128, wrapped with & (kSize - 1)
 const float kPixelAspect = 1.2;
 const float kLensRadius = 48.0;
 const float kRimInner = 1.0 - 4.0 / 48.0;
@@ -55,9 +58,10 @@ View viewAt(float t) {
 #else
     float angle = 0.95 * sin(0.33 * t) + 0.08 * t;
     float zoom = 0.7 + 0.4 * sin(0.41 * t - 1.2);
-    vec2 centre = mod(vec2(64.0 + 23.0 * t, 64.0 + 40.0 * sin(0.29 * t)), 128.0);
+    vec2 centre = mod(vec2(64.0 + 23.0 * t, 64.0 + 40.0 * sin(0.29 * t)), float(kSize));
     ivec2 stepX = ivec2(fixed16(zoom * cos(angle)), fixed16(zoom * sin(angle)));
-    ivec2 stepY = ivec2(fixed16(-kPixelAspect * zoom * sin(angle)), fixed16(kPixelAspect * zoom * cos(angle)));
+    ivec2 stepY =
+        ivec2(fixed16(-kPixelAspect * zoom * sin(angle)), fixed16(kPixelAspect * zoom * cos(angle)));
     view.stepX = uvec2(stepX);
     view.stepY = uvec2(stepY);
     view.origin = uvec2(ivec2(fixed16(centre.x), fixed16(centre.y)) - 160 * stepX - 100 * stepY);
@@ -74,7 +78,7 @@ uint rotozoomed(View view, ivec2 p256) {
     ivec2 part = p256 & 255;
     ivec2 between = (part.x * ivec2(view.stepX) + part.y * ivec2(view.stepY)) >> 8;
     uvec2 uv = view.origin + uint(whole.x) * view.stepX + uint(whole.y) * view.stepY + uvec2(between);
-    return imageLoad(tile, ivec2((uv >> 16u) & 127u)).r;
+    return imageLoad(tile, ivec2((uv >> 16u) & (kSize - 1u))).r;
 }
 
 void main() {

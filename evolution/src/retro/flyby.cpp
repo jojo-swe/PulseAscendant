@@ -113,11 +113,12 @@ constexpr std::array<Face, 34> kFuselageFaces = {{
     {13, 17, 18, Ramp::Hull},
 }};
 
-// The fuselage lies within |x| <= 0.34 (its middle section); the wings and pods lie outside, but for the
-// wing roots: a straight edge that sinks up to 0.075 units into the fuselage (at z = -0.3, where the hull is
-// widest). This plane on either side separates them; drawn after the fuselage, a wing can show a thin strip
-// of its root through the hull's side (a known seam, see flybyShipFaces).
-constexpr double kFuselageHalfWidth = 0.34;
+// The fuselage lies within |x| <= kFlybyFuselageHalfWidth (its middle section); the wings and pods lie
+// outside, but for the wing roots: a straight edge that sinks up to 0.075 units into the fuselage (at
+// z = -0.3, where the hull is widest). This plane on either side separates them; drawn after the fuselage, a
+// wing can show a thin strip of its root through the hull's side (a known seam, see flybyShipFaces).
+constexpr double kFuselageHalfWidth = kFlybyFuselageHalfWidth;
+static_assert(kFuselageHalfWidth == kFuselageVertices[8][0]); // the middle section's widest point
 
 // The right wing, swept back hard with a little dihedral: a thin wedge, 0.08 thick at the root (sunk into the
 // fuselage) and sharp at the tip. The left wing is its mirror image.
@@ -189,7 +190,7 @@ static_assert(kFuselageFaces.size() + 2 * kWingFaces.size() + 2 * kPodFaces.size
 const Vec3 kLight = normalize({0.9, 0.74, -0.4});
 constexpr double kDiffuse = 1.0;
 
-constexpr double kFovY = 42; // degrees, the ship's camera and the stars'
+constexpr double kFovY = kFlybyFovY; // degrees, the ship's camera and the stars'
 
 // A small integer hash (lowbias32): the stars' fixed seeds and the engines' flicker.
 std::uint32_t hash(std::uint32_t x) {
@@ -415,7 +416,7 @@ bool covers(const RetroTriangle& t, std::int64_t px, std::int64_t py) {
 // Whether any pixel of the point's square is covered by one of the triangles.
 bool hidden(const RetroPoint& point, const std::vector<RetroTriangle>& triangles, std::size_t first) {
     const int size = point.size;
-    const int firstX = (point.x - size * 8 + 8) >> 4, firstY = (point.y - size * 8 + 8) >> 4;
+    const auto [firstX, firstY] = pointCorner(point);
     for (std::size_t i = first; i < triangles.size(); ++i) {
         const RetroTriangle& t = triangles[i];
         const int minX = (std::min({t.x[0], t.x[1], t.x[2]}) - 8) >> 4;
@@ -528,9 +529,18 @@ std::vector<FlybyFace> flybyShipFaces(const show::TimelineFrame& frame, std::uin
     return flybyShipFacesFrom(flybyCamera(frame, retroFrame), retroFrame);
 }
 
+Vec3 flybyShipEye(const Camera& camera, std::uint32_t retroFrame) {
+    const Rotation rotation = shipRotation(static_cast<double>(retroFrame) / kFlybyRetroRate);
+    return rotation.applyInverse({camera.eye[0], camera.eye[1], camera.eye[2]});
+}
+
+bool flybyUsesCentrePlane(const Camera& camera, std::uint32_t retroFrame) {
+    return !(std::abs(flybyShipEye(camera, retroFrame)[0]) > kFuselageHalfWidth);
+}
+
 std::vector<FlybyFace> flybyShipFacesFrom(const Camera& camera, std::uint32_t retroFrame) {
     const Rotation rotation = shipRotation(static_cast<double>(retroFrame) / kFlybyRetroRate);
-    const Vec3 eye = rotation.applyInverse({camera.eye[0], camera.eye[1], camera.eye[2]});
+    const Vec3 eye = flybyShipEye(camera, retroFrame);
 
     const Part fuselage = makePart(kFuselageVertices, kFuselageFaces, FlybyPart::Fuselage, 0);
     // Index 0: the right side (+x), 1: the left.
@@ -564,7 +574,7 @@ std::vector<FlybyFace> flybyShipFacesFrom(const Camera& camera, std::uint32_t re
         drawFlames();
     // x = +-kFuselageHalfWidth separates each side from the fuselage.
     drawSide(1 - nearSide);
-    if (std::abs(eye[0]) > kFuselageHalfWidth) {
+    if (!flybyUsesCentrePlane(camera, retroFrame)) {
         drawPart(faces, rotation, eye, fuselage, EngineShades{});
         drawSide(nearSide);
     } else {

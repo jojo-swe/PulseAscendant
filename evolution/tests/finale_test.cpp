@@ -11,6 +11,8 @@
 #include "retro/dots.hpp"
 #include "retro/effects.hpp"
 #include "retro/finale.hpp"
+#include "retro/raytrace.hpp"
+#include "retro/rotozoom.hpp"
 #include "retro/tunnel.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/cues.hpp"
@@ -56,17 +58,21 @@ void setEnv(const char* name, const char* value) {
 constexpr int kFinaleChapter = 9;
 constexpr std::uint32_t kRate = evo::retro::kFinaleRetroRate;
 
-// A FINALE frame at `fraction` of the way through retro frame `retroFrame`.
+// A FINALE frame at `fraction` of the way through retro frame `retroFrame` (just before the chapter's end for
+// the last, partial retro frame).
 TimelineFrame finale(std::uint32_t retroFrame, double fraction = 0.5) {
+    const double start = evo::show::chapterStart(kFinaleChapter);
+    const double end = start + evo::show::sampleTimeline(start).chapterDuration;
     const TimelineFrame frame =
-        evo::show::sampleTimeline(evo::show::chapterStart(kFinaleChapter) + (retroFrame + fraction) / kRate);
+        evo::show::sampleTimeline(std::min(start + (retroFrame + fraction) / kRate, end - 1e-6));
     if (frame.chapter != kFinaleChapter || frame.effect != Effect::Finale)
         throw std::runtime_error("expected a FINALE frame at retro frame " + std::to_string(retroFrame));
     return frame;
 }
 
+// The retro frames the stage shows in the chapter, the last one partial.
 std::uint32_t frameCount() {
-    return static_cast<std::uint32_t>(std::floor(finale(0, 0).chapterDuration * kRate));
+    return static_cast<std::uint32_t>(std::ceil(finale(0, 0).chapterDuration * kRate));
 }
 
 EffectFrame resolved(std::uint32_t retroFrame) {
@@ -141,6 +147,23 @@ void testCutsOnTheBeatGrid() {
                 evo::retro::kFinaleBeatsPerCut, cuts.front(), cuts.back(), frameCount());
 }
 
+// The beat a chapter starts on, on a made-up grid: the beat at its start (within 1e-6 either way), else the
+// next; the first beat for a start before the track's first beat (where beatAt says -1).
+void testFirstBeat() {
+    const double times[] = {0.5, 1.0, 1.5, 2.0};
+    const unsigned char bars[] = {0, 1, 2, 3};
+    const evo::show::BeatGridView grid(times, bars, 4);
+    CHECK(grid.beatAt(0.2) == -1);
+    CHECK(evo::retro::finaleFirstBeat(grid, 0.0) == 0);
+    CHECK(evo::retro::finaleFirstBeat(grid, 0.2) == 0);
+    CHECK(evo::retro::finaleFirstBeat(grid, 0.5) == 0);
+    CHECK(evo::retro::finaleFirstBeat(grid, 0.5 - 1e-7) == 0);
+    CHECK(evo::retro::finaleFirstBeat(grid, 0.5 + 1e-7) == 0);
+    CHECK(evo::retro::finaleFirstBeat(grid, 0.6) == 1);
+    CHECK(evo::retro::finaleFirstBeat(grid, 1.5) == 2);
+    CHECK(evo::retro::finaleFirstBeat(grid, 1.7) == 3);
+}
+
 // Every retro frame of the chapter: the flash exactly on the cut frames, the sub-effects in order between
 // them (FLYBY first), all six shown, each in its home chapter's frame, advancing at its own rate.
 void testEveryFrameResolves() {
@@ -185,9 +208,33 @@ void testHomeStarts() {
         const int home = evo::retro::finaleHomeChapter(sub);
         const double duration = evo::show::sampleTimeline(evo::show::chapterStart(home)).chapterDuration;
         const std::uint32_t rate = evo::retro::effectFor(sub).retroRate;
-        // Room for a whole cut of eight beats after the start.
+        // At least 4 s of the home chapter after the start (a cut of two beats is under a second).
         CHECK(evo::retro::finaleHomeStart(sub) + 4.0 * rate < duration * rate);
     }
+    const auto facts = [](Effect sub) {
+        return evo::show::sampleTimeline(evo::show::chapterStart(evo::retro::finaleHomeChapter(sub)));
+    };
+    const auto framesAt = [](double seconds, std::uint32_t rate) {
+        return static_cast<std::uint32_t>(std::floor(seconds * rate));
+    };
+    // FLYBY at 60 % of its flight, GLENZ on its accent, RAYTRACE halfway, each at its own rate.
+    CHECK(
+        evo::retro::finaleHomeStart(Effect::Flyby) ==
+        framesAt(0.6 * facts(Effect::Flyby).chapterDuration, evo::retro::effectFor(Effect::Flyby).retroRate));
+    CHECK(evo::retro::finaleHomeStart(Effect::Glenz) ==
+          framesAt(facts(Effect::Glenz).accentSeconds, evo::retro::effectFor(Effect::Glenz).retroRate));
+    CHECK(evo::retro::finaleHomeStart(Effect::Raytrace) ==
+          framesAt(0.5 * facts(Effect::Raytrace).chapterDuration, evo::retro::kRaytraceRetroRate));
+    // LENS: the lens wholly on the screen, high, at the right end of its run.
+    const std::uint32_t lensStart = evo::retro::finaleHomeStart(Effect::Lens);
+    CHECK(lensStart == framesAt(evo::retro::kFinaleLensStartSeconds, evo::retro::kRotozoomRetroRate));
+    const evo::retro::RotozoomView lens =
+        evo::retro::rotozoomView(static_cast<double>(lensStart) / evo::retro::kRotozoomRetroRate);
+    const int r = evo::retro::kRotozoomLensRadius, rows = 40; // 48 pixels across, 40 rows down
+    std::printf("finale: LENS starts at home retro frame %u, the lens at (%d, %d)\n", lensStart, lens.lensX,
+                lens.lensY);
+    CHECK(lens.lensX - r >= 0 && lens.lensX + r <= 320 && lens.lensY - rows >= 0 && lens.lensY + rows <= 200);
+    CHECK(lens.lensX >= 240 && lens.lensY <= 70);
     const TimelineFrame tunnel = evo::retro::finaleHomeFrame(Effect::Tunnel, 0);
     CHECK(evo::retro::tunnelTubeFront(tunnel, evo::retro::finaleHomeStart(Effect::Tunnel)) ==
           evo::retro::kTunnelTubeNear);
@@ -199,9 +246,10 @@ void testHomeStarts() {
 
 // The own frame of a sub-effect without its text, as FINALE shows it.
 const EffectInfo& withoutText(Effect effect) {
-    static const std::array<EffectInfo, 31> entries = [] {
-        std::array<EffectInfo, 31> all{};
-        for (int e = 0; e < 31; ++e) {
+    constexpr int kEffects = static_cast<int>(Effect::TheEnd) + 1;
+    static const std::array<EffectInfo, kEffects> entries = [] {
+        std::array<EffectInfo, kEffects> all{};
+        for (int e = 0; e < kEffects; ++e) {
             all[static_cast<std::size_t>(e)] = evo::retro::effectFor(static_cast<Effect>(e));
             all[static_cast<std::size_t>(e)].text = nullptr;
         }
@@ -268,6 +316,7 @@ int main() {
     try {
         setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
+        testFirstBeat();
         testCutsOnTheBeatGrid();
         testEveryFrameResolves();
         testHomeStarts();

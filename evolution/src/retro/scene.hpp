@@ -54,6 +54,16 @@ struct RetroPoint {
 };
 static_assert(sizeof(RetroPoint) == 12);
 
+// The top-left pixel of a point's square, as points.comp computes it: (x - size * 8 + 8) >> 4, the same for y
+// (an arithmetic shift, so a floor left of and above the screen too).
+struct PointCorner {
+    std::int32_t x, y;
+};
+constexpr PointCorner pointCorner(const RetroPoint& point) {
+    const std::int32_t half = std::int32_t{point.size} * 8;
+    return {(point.x - half + 8) >> 4, (point.y - half + 8) >> 4};
+}
+
 // One retro frame's primitives in draw order. addTriangle and addPoint also record each primitive's view
 // depth in triangleDepth / pointDepth (one entry per primitive), which sortBackToFront orders by. A provider
 // that writes primitives directly in screen space may leave the depths empty if it does not sort.

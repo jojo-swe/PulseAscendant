@@ -51,13 +51,19 @@ std::uint8_t raytraceQuantise(std::uint8_t r, std::uint8_t g, std::uint8_t b, st
     return static_cast<std::uint8_t>(kRaytraceCube + 36 * q[0] + 6 * q[1] + q[2]);
 }
 
+double raytracePhase(double x) {
+    constexpr double kTau = 2 * std::numbers::pi;
+    const double turns = x / kTau + 0.5;
+    return kTau * (turns - std::floor(turns) - 0.5);
+}
+
 std::array<RaytraceSphere, kRaytraceSpheres> raytraceSpheres(double seconds) {
     std::array<RaytraceSphere, kRaytraceSpheres> spheres{};
     spheres[0] = {{0, 1.3, 0}, 1.3};
     for (int i = 1; i < kRaytraceSpheres; ++i) {
-        const double angle = 0.6 * seconds + (i - 1) * 2 * std::numbers::pi / 5;
+        const double angle = raytracePhase(0.6 * seconds + (i - 1) * 2 * std::numbers::pi / 5);
         const double radius = 0.6;
-        const double bounce = std::abs(std::sin(1.7 * seconds + 1.3 * i));
+        const double bounce = std::abs(std::sin(raytracePhase(1.7 * seconds + 1.3 * i)));
         spheres[i] = {{kRaytraceOrbitRadius * std::sin(angle), radius + 0.9 * bounce,
                        -kRaytraceOrbitRadius * std::cos(angle)},
                       radius};

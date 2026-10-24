@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <numbers>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -284,7 +285,7 @@ constexpr double kSeamDepth = 0.3; // world units; at most 0.273 over the flight
 
 struct OrderErrors {
     std::size_t rays = 0, seams = 0, wrong = 0, worstFrameSeams = 0;
-    double deepestSeam = 0;
+    double deepestSeam = 0, deepestWrong = 0;
 };
 
 // Adds one view's rays: the faces in painter's order and the camera that sees them.
@@ -320,6 +321,7 @@ void addOrderErrors(OrderErrors& errors, const std::vector<FlybyFace>& faces,
                 errors.deepestSeam = std::max(errors.deepestSeam, lastT - nearestT);
             } else {
                 ++errors.wrong;
+                errors.deepestWrong = std::max(errors.deepestWrong, lastT - nearestT);
                 if (errors.wrong <= 5)
                     std::printf("flyby: retro frame %u, pixel (%.0f, %.0f): part %d side %d drawn over the "
                                 "nearer part %d side %d, %.3f behind it\n",
@@ -380,6 +382,41 @@ void testCentrePlane() {
     CHECK(errors.rays >= 5000);
     CHECK(errors.wrong == 0);
     CHECK(errors.seams <= errors.rays / 50);
+
+    // The third known limitation (flyby.hpp): near the centre plane and a little below the wings, the wings'
+    // sunk inboard strips misorder against the fuselage drawn last, a few rays a view. One such view, behind
+    // the ship and 6 degrees below it, pinned with a small budget so that a change making it worse is noticed
+    // (measured: 7 of 548 rays over the four frames, at most 0.59 behind the nearest face).
+    const double below = -6 * std::numbers::pi / 180;
+    const evo::retro::Camera camera = {
+        {0.1, 7.5 * std::sin(below), -7.5 * std::cos(below)}, {0, 0, 0}, {0, 1, 0}, 42};
+    OrderErrors residual;
+    for (std::uint32_t retroFrame = 0; retroFrame < 4; ++retroFrame) {
+        CHECK(evo::retro::flybyUsesCentrePlane(camera, retroFrame));
+        addOrderErrors(residual, evo::retro::flybyShipFacesFrom(camera, retroFrame), camera, retroFrame);
+    }
+    std::printf(
+        "flyby: behind and 6 degrees below the centre plane: %zu rays, %zu at the seam, %zu wrong (at "
+        "most %.3f behind)\n",
+        residual.rays, residual.seams, residual.wrong, residual.deepestWrong);
+    CHECK(residual.rays >= 400);
+    CHECK(residual.wrong <= 10);
+    CHECK(residual.deepestWrong <= 0.8);
+}
+
+// FLYBY's own flight never takes the centre-plane branch: the eye in model space stays well clear of
+// x = +-kFlybyFuselageHalfWidth on every retro frame (a camera retune that brings it near is noticed here).
+void testFlightAvoidsCentrePlane() {
+    double closest = 1e9;
+    for (std::uint32_t retroFrame = 0; retroFrame <= lastFrame(); ++retroFrame) {
+        const evo::retro::Camera camera = evo::retro::flybyCamera(flyby(timeIn(retroFrame)), retroFrame);
+        CHECK(!evo::retro::flybyUsesCentrePlane(camera, retroFrame));
+        closest = std::min(closest, std::abs(evo::retro::flybyShipEye(camera, retroFrame)[0]));
+    }
+    std::printf("flyby: the flight's eye stays at |x| >= %.3f in model space (the centre-plane branch is "
+                "|x| <= %.2f)\n",
+                closest, evo::retro::kFlybyFuselageHalfWidth);
+    CHECK(closest > evo::retro::kFlybyFuselageHalfWidth);
 }
 
 // The share of the frame the ship covers.
@@ -489,6 +526,7 @@ int main() {
         testShipFaces();
         testPainterOrder();
         testCentrePlane();
+        testFlightAvoidsCentrePlane();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())

@@ -167,6 +167,7 @@ std::vector<TunnelFace> tunnelTubeFaces(const show::TimelineFrame& frame, std::u
     std::vector<TunnelFace> outside; // a band's faces seen from outside, drawn after its inner faces
     for (std::int64_t m = last; m >= first; --m) {
         const double zMiddle = (static_cast<double>(m) + 0.5) * kTunnelBandLength - s;
+        // Every band drawn lies between kTunnelTubeNear and kTunnelTubeFar, so the clamp is only defensive.
         const double fade =
             std::clamp((kTunnelTubeFar - zMiddle) / (kTunnelTubeFar - kTunnelTubeNear), 0.0, 1.0);
         const std::array<double, 2> axisNear = tunnelRingCentre(s, zMiddle - kTunnelBandLength / 2);

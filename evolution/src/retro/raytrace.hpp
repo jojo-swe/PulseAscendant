@@ -50,6 +50,10 @@ struct RaytraceSphere {
 inline constexpr int kRaytraceSpheres = 6;
 inline constexpr int kRaytraceGlassSphere = 3;
 inline constexpr double kRaytraceOrbitRadius = 3.0;
+// Sphere i >= 1 at time t: angle a = phase(0.6 t + (i - 1) 2 pi / 5), centre (3 sin a, 0.6 + 0.9
+// |sin(phase(1.7 t + 1.3 i))|, -3 cos a), radius 0.6, where phase reduces an angle to [-pi, pi) (as the
+// shader does before every sin and cos, whose accuracy far from 0 differs between GPU vendors).
+double raytracePhase(double radians);
 std::array<RaytraceSphere, kRaytraceSpheres> raytraceSpheres(double seconds);
 // The fixed camera: y up, the checkerboard the plane y = 0 with squares 1 unit wide. The shader's ray through
 // a pixel centre is the one retro::project maps back to it.

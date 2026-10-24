@@ -41,8 +41,9 @@ constexpr std::uint32_t kFlashFrames = 2;
 // The flash and the black after it: the last retro frames of the chapter.
 constexpr double kCutFrames = 4;
 
-// The first retro frame at or after `seconds`. Every script time is a whole number of 35 Hz frames; the
-// epsilon keeps a product like 1.6 * 35 = 56.000000000000007 on its frame.
+// The first retro frame at or after `seconds`. A script time need not fall on a 35 Hz frame (REBOOT's 1.5 s
+// is frame 52.5, so it starts on 53); the epsilon keeps one that does, like 1.6 * 35 = 56.000000000000007, on
+// that frame rather than the next.
 std::uint32_t frameAt(double seconds) {
     return static_cast<std::uint32_t>(std::ceil(seconds * kBootRetroRate - 1e-6));
 }
