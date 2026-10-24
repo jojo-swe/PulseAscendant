@@ -6,11 +6,13 @@ as a hard requirement. It is a standalone project inside PulseAscendant; the des
 implementation plans live in [`docs/plans/`](docs/plans/), starting with
 [`2026-10-21-evolution-design.md`](docs/plans/2026-10-21-evolution-design.md).
 
-> **Status:** steps 0–3 of the plan are done. The music drives a timeline of 31 chapters in three acts, and
+> **Status:** steps 0–4 of the plan are done. The music drives a timeline of 31 chapters in three acts, and
 > every chapter with a 1993 side (act I, REBOOT, CREDITS and THE END) shows its 1993 effect through its own
 > pipeline (below). The act II and act III planetary chapters are 2026 only (forced into 1993 they show a grey
-> test pattern). On the 2026 side, step 4 path traces the Studio in FINALE, PORTAL, STUDIO NIGHT, RETURN and
-> REBOOT; the other 2026 chapters show a placeholder gradient until step 5.
+> test pattern; STUDIO NIGHT and RETURN show the DOS prompt the demo exited to). The 2026 side is a path
+> tracer with a denoiser and an ACES tonemap (below), and it renders the Studio in FINALE, PORTAL, STUDIO
+> NIGHT, RETURN and REBOOT; the other 2026 chapters show a placeholder gradient until step 5 brings the
+> modern scenes.
 
 ## Requirements
 
@@ -41,18 +43,35 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 `assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
-The 49 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
-also numpy). Every GPU test runs with the validation layer on and fails on any message it reports, except the
-one `context` provokes on purpose to check that messages are counted.
+The 50 tests run headless (they also pass on lavapipe, in about 2 minutes at 8 at a time) and need Python 3
+(`python_tools` and `storyboard` also numpy). Every GPU test runs with the validation layer on and fails on any
+message it reports, except the two provoked on purpose: `context`'s, to check that messages are counted, and
+`descriptors`' synchronisation hazard, to check that synchronisation validation is on. The `accel`,
+`path_tracer`, `denoiser` and `image` tests (and that case of `descriptors`) also run synchronisation
+validation.
 - The show and its music: `options`, `timeline`, `era`, `clock`, `audio_transport` and `show_info`.
-- The render foundation: `png`, `png_decode`, `context`, `gfx_foundation`, `renderer`, `swapchain`, `font`,
-  `text_pass` and `no_wait_idle`.
+- The render foundation: `png`, `png_decode`, `context`, `gfx_foundation`, `descriptors` (layouts, per-slot
+  pools, acceleration structure writes), `image` (mip chains, depth, the sRGB sampled view), `renderer`,
+  `stage_plan` (which stages a frame runs and when the 2026 history resets, swept over the whole show),
+  `compositor` (a hidden stage's image never reaches the output), `swapchain`, `font`, `text_pass` and
+  `no_wait_idle`.
 - The 1993 side: one test per effect (`boot`, `plasma`, `scroller`, `flyby`, `dots`, `tunnel`, `glenz`,
   `rotozoom`, `raytrace`, `city`, `finale`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon
   and point rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
   frame, every scene within the rasterisers' limits).
+- Ray tracing: `accel` (BLASes, compaction and a TLAS rebuilt every frame with two frames in flight, probed
+  with ray queries), `rt_pipeline` (the shader binding table layout for lavapipe and RTX alignments, every hit
+  group and miss reached, recursion refused outside the raygen), `mesh_builder` (the procedural meshes
+  watertight), `material` (the GPU struct layouts, and the BSDFs against furnace means, Fresnel and a
+  quadrature of their own evaluation), `path_tracer` (emitters, MIS against analytic and quadrature references
+  with several lights, a portal and a two-tone screen, the furnace, determinism, finiteness under stress, the
+  guides, batched dispatches), `denoiser` (accumulation, resets, reprojection, edges, the emission bypass,
+  NaN/Inf) and `tonemap` (the GPU against the CPU reference and golden values).
 - The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT lighting the room, the screen following
-  the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS prompt).
+  the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS prompt) and
+  `seek_determinism` (in the window, after any seek, chapter change, camera cut or step back in time, the
+  frames equal a fresh renderer's from the same point byte for byte; BeatSwap keeps the hidden 2026 side warm
+  in the window and skips it in exports).
 - The executable end to end, its exports at `--spp 2`: `render_stream`, `capture`, `stream_capture` and
   `stream_capture_studio` (a frame of a stream equals a fresh capture at the same time, for every chapter; the
   Studio chapters, path traced, in a part of their own that runs beside the rest), `export_mode` (the seeds,
@@ -116,10 +135,12 @@ rather than trusting the autocorrelation, which reads them at 2/3 of their tempo
 runs the pipeline into a temporary directory on a 270 s, 134 BPM placeholder song synthesised by
 `tools/make_placeholder.py`, with `tools/show_targets_placeholder.json`.
 
-## The 1993 pipeline
+## How a frame is made
 
-Every frame is rendered by compute passes into one RGBA8 image at the output size, which the window shows and
-the exports read back:
+Every frame is rendered into one RGBA8 image at the output size, which the window shows and the exports read
+back. Only the stages a frame shows run (a pure 1993 frame never path traces, a 2026-only chapter never
+renders the 1993 picture unless the Studio's CRT shows it), and the compositor is told which images are
+visible, so a skipped stage's stale image never reaches the output:
 
 1. **Retro stage.** The chapter's 1993 effect writes palette indices into a 320×200 8-bit image, as a VGA
    mode 13h screen would hold them, and a second pass maps them through the 256 colours that the effect's
@@ -135,14 +156,9 @@ the exports read back:
 2. **CRT.** The 320×200 picture fills a centred 4:3 rectangle (its pixels are 1.2 times taller than wide),
    black around it. With the CRT look on it also gets a 2 % barrel, a little bloom, darker odd scanlines, a
    phosphor mask and a vignette. Key C or `--no-crt` turns the look off; the rectangle stays the same.
-3. **Modern stage.** The 2026 side, in HDR light tone mapped once (ACES). FINALE, PORTAL, STUDIO NIGHT,
-   RETURN and REBOOT path trace the Studio: a dark room at night around a 1993 PC on a wooden desk, whose CRT
-   shows the live 1993 picture (barrel-warped, with scanlines) and lights the room, with a warm desk lamp, a
-   moonlit window onto a procedural night sky, a 101-key keyboard, a chrome and a glass sphere, all built in
-   code. The path tracer's output goes through the denoiser (temporal in the window, spatial à-trous) and the
-   CRT's picture bypasses both, so it stays sharp and current. In STUDIO NIGHT and RETURN the CRT sits at the
-   DOS prompt the demo exited to. Every other 2026 chapter shows a placeholder gradient in the chapter's hue
-   with a circle on kick and beat until step 5.
+3. **Modern stage.** The 2026 side, in HDR light (RGBA16F) tone mapped once. FINALE, PORTAL, STUDIO NIGHT,
+   RETURN and REBOOT path trace the Studio (below) and denoise it; every other 2026 chapter shows a
+   placeholder gradient in the chapter's hue with a circle on kick and beat until step 5.
 4. **Era compositor.** Blends the two by the timeline's era: a Cut or BeatSwap chapter shows one era whole,
    a Wipe sweeps 2026 in from the left behind a white seam, a Portal cross-fades for now, and a cut flashes
    white.
@@ -209,14 +225,78 @@ them). The primitive lists live in host-visible buffers per frame-in-flight slot
 - **Scrollers**: CREDITS (chapter 29, now a 1993 chapter) rolls the credits on a sine wave over deep blue
   under a static EVOLUTION title; FLYBY's greeting is the other.
 
+## The 2026 side
+
+### The path tracer
+
+The 2026 side is a path tracer on Vulkan's ray tracing pipeline (`src/rt`, `src/modern`, `shaders/rt`). A
+scene's meshes share one vertex and one index buffer; each mesh gets one compacted bottom-level acceleration
+structure at setup, and the top-level one is rebuilt every frame from a per-frame-in-flight instance buffer. One
+raygen shader loops over the bounces and is the only shader that traces (recursion depth 1; the pipeline
+refuses a closest-hit or miss shader that traces); there is one closest-hit shader per material class, which
+only evaluates the surface, and two misses, the sky and the shadow ray. The shader binding table layout is
+computed from the device's handle size and alignments (lavapipe's and RTX's differ).
+
+- **Materials.** Physically based and authored in code: GGX metal and plastic (Smith height-correlated
+  masking, visible-normal sampling, Schlick Fresnel) under an optional clear coat, smooth and rough dielectric
+  glass with exact Fresnel, emitters (textured: the CRT samples the 1993 picture), and a procedural checker
+  floor; wood planks and brushed metal are procedural patterns. Single-scattering GGX, so very rough metals
+  lose some energy.
+- **Lights.** Rectangular area lights of three kinds: an emitter, the retro screen (its radiance is the 1993
+  picture, sampled through an sRGB view so it is decoded to linear light exactly once, at a mip level from a
+  ray cone) and a portal (a window: its radiance is the procedural night sky behind it). Next-event
+  estimation picks one light by fixed weights per sample and combines with the BSDF's own sampling by multiple
+  importance sampling (power heuristic), portals included. The night sky is a pure function of the direction:
+  a blue gradient, hashed stars, the moon's glow and a distant town's lights below the horizon.
+- **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
+  after the first bounce clamped to a luminance limit (64, the Studio 2) against fireflies; a non-finite
+  sample counts as 0. The window traces at most 4 bounces, exports 6, in dispatches of 4 samples per pixel
+  (so a 4K export at 64 spp never holds the GPU for one long dispatch). Every random number is an integer
+  hash of (frame seed, pixel, sample, dimension).
+- **Denoiser** (`src/post`, `shaders/post`). The tracer writes the lighting without the primary hit's
+  emission, plus guides (albedo, normal, depth, motion). The lighting is divided by the albedo, reprojected
+  into a temporal history (in the window only: rejected where depth or normal disagree, an exponential blend
+  that starts as a plain copy after a reset), then filtered by three à-trous passes guided by depth, normal
+  and an edge-robust estimate of the noise, and multiplied by the albedo again. The primary hit's emission,
+  the CRT's own picture, is added after all that, so the screen is never smeared by the history or blurred by
+  the filter. Exports keep no history and filter only below 16 spp.
+- **Tonemap.** One ACES fit (Hill's RRT+ODT approximation) per frame, then the sRGB encoding and a static
+  per-pixel triangular dither into the RGBA8 image the compositor reads; a CPU reference pins it.
+
+### The Studio
+
+A dark room at night (spec §2.1), all procedural: checkered linoleum, a wooden desk with a coat on brushed
+steel legs, a beige 1993 PC and CRT monitor, a 101-key keyboard (one key-cap mesh, 101 instances), a mouse,
+floppy disks, a mug, a chrome and a glass sphere on small stands, an office chair, a desk lamp, and a window in
+the back wall onto the night sky with the moon outside it (191 instances of 21 meshes, 29 materials). Four
+lights: the CRT's screen, the lamp, the window (a portal) and the moon (a small emitter outside the window).
+The CRT shows the live 1993 picture, barrel-warped with darker odd scanlines that fade out with distance, and
+lights the room; in STUDIO NIGHT and RETURN it sits at the DOS prompt the demo exited to (`C:\DEMO>` with a
+blinking cursor). The camera follows authored keys per chapter (a pull out from the screen in FINALE and
+PORTAL, a dolly towards the desk and, from the accent, an orbit round the monitor in STUDIO NIGHT, a push back
+in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
+
+### Limits worth knowing
+
+- **lavapipe.** The tests and the storyboard run the path tracer in software, which is far too slow for the
+  window: below 2 fps every frame counts as a time jump, so the window's accumulation never builds up and it
+  shows each frame's single sample, filtered. The real look needs a ray tracing GPU, which has not been tried yet (nor has
+  Windows).
+- **The first frames after a reset** (a seek, a chapter change or a camera cut) look blotchy in the window at
+  1 spp, and clear within about 10 frames.
+- **Exports at 16 spp and more** are not filtered, so dark corners keep a fine grain at the 64 spp default;
+  more samples (e.g. `--spp 256`) clean them up.
+- ACES pushes the CRT's brightest saturated colours towards white; the lights are picked by fixed weights
+  (no spatial importance); the glass sphere's caustic is subtle, dimmed by the Studio's indirect clamp.
+
 ## Storyboard
 
 `tools/storyboard.py` captures every chapter at 20 %, at its accent and at 80 % of its length, once forced
 into 1993 and once into 2026, and composes one PNG grid per act (`act1.png`, `act2.png`, `act3.png`): a row
 per chapter, labelled with its number, title, transition and times, and six columns (1993 at the three
 times, then 2026). Each cell is the capture at half size. It needs numpy and runs the executable once per
-cell; all 31 chapters at 640×360 and the default `--spp 8` take about 2 minutes on lavapipe, most of it in
-the five path-traced Studio chapters.
+cell; all 31 chapters at 640×360 and the default `--spp 8` take just under 2 minutes on lavapipe (1 min 49 s
+on a 4-core machine), most of it in the five path-traced Studio chapters.
 
 ```sh
 cd evolution

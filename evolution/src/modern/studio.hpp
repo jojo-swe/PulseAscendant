@@ -49,7 +49,7 @@ float studioExposureEV(show::Effect effect);
 
 class Studio final : public ModernScene {
 public:
-    // Builds the meshes, materials, the placed instances and the three lights once (CPU only).
+    // Builds the meshes, materials, the placed instances and the four lights once (CPU only).
     Studio();
 
     // The mesh every key cap instances, and how many key caps there are (a 101-key keyboard).
@@ -72,7 +72,7 @@ public:
     static constexpr Vec3 kMoonDirection{-0.6807f, 0.5327f, -0.5031f};
     // The screen's emissionScale: the RetroScreen light's radiance is the picture (linear light) times it.
     static constexpr float kScreenEmission = 1.2f;
-    // The lamp's emitter: a warm 7 cm square, colour times intensity.
+    // The lamp's emitter: a warm 10 cm square, colour times intensity.
     static constexpr Vec3 kLampColor{1.f, 0.75f, 0.5f};
     static constexpr float kLampIntensity = 35.f;
     static constexpr float kChromeRadius = 0.04f, kGlassRadius = 0.045f;

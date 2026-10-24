@@ -1,18 +1,18 @@
-# Handoff — EVOLUTION (uppdaterad 2026-10-24, steg 3 klart; helgrenens granskning av steg 3 återstår)
+# Handoff — EVOLUTION (uppdaterad 2026-10-24, steg 4 klart; granskningen av Task 10 och steg 4:s slutgranskning återstår)
 
 Läs detta först i nästa session. Specen och planerna ligger bredvid.
 
 ## Läge
 
 - **Spec:** `2026-10-21-evolution-design.md` — godkänd av ägaren. Alla standardval i avsnitt 9 gäller (Vulkan 1.3 + RT krävs, Studion, DOS-boot, två epoker, CRT på, engelsk text, syntetisk placeholder-musik). Credits-texten är inte bekräftad. CREDITS (kapitel 29) är sedan steg 2 ett 1993-kapitel: en sinusscroller med `eraFixed` 0 (se steg 2 nedan).
-- **Planer:** `2026-10-21-step0-skeleton.md` (steg 0, klart), `2026-10-23-step1-audio-timeline.md` (steg 1, klart; amendment med tre akter), `2026-10-24-step2-retro-pipeline.md` (steg 2, klart; slutgranskat med en fixvåg), `2026-10-25-step3-retro-effects.md` (steg 3, klart; slutgranskning återstår), `2026-10-26-step4-rt-foundation.md` (steg 4, utkast pågår). Status per task står längre ner här.
+- **Planer:** `2026-10-21-step0-skeleton.md` (steg 0, klart), `2026-10-23-step1-audio-timeline.md` (steg 1, klart; amendment med tre akter), `2026-10-24-step2-retro-pipeline.md` (steg 2, klart; slutgranskat med en fixvåg), `2026-10-25-step3-retro-effects.md` (steg 3, klart; slutgranskat med en fixvåg), `2026-10-26-step4-rt-foundation.md` (steg 4, klart; Task 10:s granskning och helgrenens slutgranskning återstår). Status per task står längre ner här.
 - **Branch:** `claude/evolution-showcase-plan`, utkast-PR #3 i jojo-swe/PulseAscendant. Allt arbete under `evolution/`.
 - **Musik:** levererad. Tre Suno-låtar av joyolo, en per akt: Amiga Trance Demo (194,00 s), Guitar Trance (218,40 s), Rigid Arpeggios (298,76 s), totalt 711,16 s. MP3:orna i `music/source/` och WAV:arna i `assets/music/` är git-ignorerade; `python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Rigid Arpeggios.mp3"` återskapar `show.wav`, headers och kvitton. Varje aktskarv i `show.wav` har en 3 ms raised-cosine-fade (tar bort ett klick; längd, analys och kapitelstarter oförändrade). Proveniens i `licenses/MUSIC-NOTICE.md`. Placeholder-låten används bara av Python-testerna.
 - **Arbetssätt ägaren vill ha:** denna session är hjärnan/kontrollern; Opus-subagenter gör de enklare tasks (implementation och granskning). Processen: superpowers:subagent-driven-development med en implementer + en reviewer per task.
 
 ## Slutleverans (ägarens beställning 2026-10-23)
 
-När demot är klart: rendera **4K60** med exportkedjan och publicera **privat på YouTube** via vidIQ-kopplingen (`vidiq_video_upload`, privacy private). Containern kör Vulkan i mjukvara (lavapipe), så den fulla 4K60-renderingen görs på ägarens RTX-maskin med `tools/render_video.py`; ägaren laddar upp filen, sessionen publicerar. Kortare/lägre förhandsvisningar kan renderas här.
+När demot är klart: rendera **4K60** med exportkedjan och publicera **privat på YouTube** via vidIQ-kopplingen (`vidiq_video_upload`, privacy private). Containern kör Vulkan i mjukvara (lavapipe), så den fulla 4K60-renderingen görs på ägarens RTX-maskin med `tools/render_video.py` (skrivs i steg 8; till dess `--render-stream` till ffmpeg); ägaren laddar upp filen, sessionen publicerar. Kortare/lägre förhandsvisningar kan renderas här.
 
 ## Miljö (måste göras om i en ny container)
 
@@ -121,9 +121,9 @@ Steg 2 levererar: indexerad 320×200 med palett och palettcykling på CPU:n, fps
 
 ## Så här återupptas arbetet
 
-1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (35 tester). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
-2. Steg 3 är klart (se nedan) utom helgrenens slutgranskning (Opus) med fixvåg; kör den först, över `0715043..HEAD`. Låt ägaren köra Windows-kontrollen och titta på storyboarden (`python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard`, ~30 s på lavapipe).
-3. Sedan steg 4 enligt `2026-10-26-step4-rt-foundation.md` (utkast pågår; gör klart och låt ägaren godkänna), med `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief <plan> <n>`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
+1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (50 tester, ~2 min med preseten som kör 8 åt gången; `python_tools` är långsammast). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
+2. Steg 4 är klart (se nedan). Kvar innan steg 5: Task 10:s granskning (Opus, pågick när Task 12 stängdes; dess fynd går till en fixrunda) och helgrenens slutgranskning av steg 4 över `20c8e46..HEAD` med fixvåg. Låt ägaren köra Windows-kontrollen och RTX-checklistan (steg 4 nedan) och titta på storyboarden (`python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard`, ~1 min 50 s på lavapipe vid standardvärdet `--spp 8`).
+3. Sedan steg 5 (se "Nästa steg" längst ner): skriv planen, låt ägaren godkänna, kör den med `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief <plan> <n>`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
 
 ## Steg 3 — KLART (2026-10-24, plan `2026-10-25-step3-retro-effects.md`)
 
@@ -170,11 +170,83 @@ Steg 3 levererar: CPU-transform + GPU-rasterisering på 486-vis (scenen transfor
 - Determinism gäller inom en build på en maskin: libm (`sin`, `atan2`, `pow`) kan skilja i sista biten mellan Linux och Windows, och shaderns float-matte mellan GPU:er, så en pixel vid en avrundningskant kan skilja mellan plattformar (README säger det).
 - Fjärrgrenarna `claude/evolution-step3-rotozoom` och `claude/evolution-step3-wip-glenz-fixes` är inaktuella (sammanslagna resp. ersatta av da66f17) och kan tas bort.
 
-## Nästa steg: steg 4
+## Steg 4 — KLART (2026-10-24, plan `2026-10-26-step4-rt-foundation.md`)
 
-Planen `2026-10-26-step4-rt-foundation.md` (RT-grunden för 2026-sidan) skrivs. Den ska ta med rekommendationerna till steg 4 under steg 2 ovan (DescriptorAllocator med acceleration structures, `Image` med djup/mips/SAMPLED, HDR-modernsteg med tonemap, readback per ring-slot, interaktivt mot exportläge, historik-återställning vid klipp, och att hoppa över pass för en epok som inte syns). Ägarens Windows-kontroll (bygg + ctest med `windows`-preseten, och showen i fönster med hörlurar) väntar fortfarande och bör göras innan steg 4 bygger vidare.
+| Task | Status | Commit |
+|---|---|---|
+| 1. Stegplan, stegskippning, historikåterställning | **klar**, granskad (fixar med Task 3) | ab30e09; fixar f2eceee |
+| 2. Descriptors, RT-egenskaper, alignade buffertar, sync-validering | **klar**, granskad (fixrunda A) | 028f739 (merge 9992e39); fixar bf8854b |
+| 3. Retrobilden som mipmappad SRGB-textur, djup och mips i `Image` | **klar**, granskad (fixrunda A) | 00b5d66 (merge c0f6814); planrättning 184dfec; fixar bf8854b |
+| 4. Geometrilager, kompakterade BLAS, TLAS varje frame | **klar**, granskad (barriärerna handgranskade; småfixar i fixrunda C) | 04e72f3 (merge 50208b1); fixar 1efd0f2 |
+| 5. RT-pipeline och beräknad SBT | **klar**, granskad | ce28f5a (merge 54fc056); rekursionsvakten i 95071fd |
+| 6. Material, BSDF:er, delade GPU-structs, procedurella meshar | **klar**, granskad | 0cd88f6; planändring 2b5808d; fixar i 95071fd (rough glass) och 1efd0f2 (u-riktning) |
+| 7. Path tracern (NEE/MIS, portal, retroskärm, guider) | **klar**, djupgranskad (fixrunda D) | 95071fd (merge fbab413); planrättning a386e14; fixar d15eaca |
+| 8. Temporal ackumulering + à-trous-denoiser | **klar**, granskad (fixrunda A) | d5f5059 (merge 4bfe2b3); fixar ebdafaf (merge 9016455) |
+| 9. HDR-modernsteg, scenregister, ACES-tonemap | **klar**, granskad (fixrunda C) | ce4d832 (merge 8bb2c5f); fixar 1efd0f2 |
+| 10. Studion | **klar**; granskningen (Opus) pågick när Task 12 stängdes | 77d3915, a2d3df6 |
+| 11. Export: `--spp`, seeds, exportdeterminism | **klar**, granskad (fynden gick till Task 10) | 9ea81d0 |
+| 12. Seek-determinism, storyboard, README, HANDOFF | **klar** | `Pin seeking under temporal accumulation and document the path tracer` |
 
-**Worktrees.** Huvudträdet `/home/user/PulseAscendant` står på `claude/evolution-showcase-plan`; parallella implementers jobbar i `/home/user/wt-a` (gren `step3-a`) och `/home/user/wt-b` (`step3-b`), som återställs till huvudgrenen efter varje sammanslagning (`git worktree add /home/user/wt-a -b step3-a`). En worktree konfigureras på sekunder utan nedladdning genom att peka FetchContent på huvudträdets källor och länka in musiken:
+50/50 CTest gröna på lavapipe (steg 3:s 35 plus `stage_plan, descriptors, accel, rt_pipeline, mesh_builder, material, denoiser, tonemap, path_tracer, compositor, image, export_mode, studio, seek_determinism, stream_capture_studio`), plus `windowed`, `windowed_unsupported` och `silent_mode` bakom `EVO_RUNTIME_TESTS`. Inga valideringsmeddelanden utom de två avsiktliga (`context`:s buffert av storlek 0 och `descriptors` SYNC-HAZARD). `accel`, `path_tracer`, `denoiser`, `image` och `descriptors` hazard-fall kör sync-validering (Beslut 9).
+
+Steg 4 levererar: `evo_rt` (geometrilager, en kompakterad BLAS per mesh vid setup, TLAS varje frame ur instansbuffertar per ring-slot), RT-pipeline med beräknad SBT och en closest-hit per materialklass (pbr, glas, emissiv, schack), två miss (himmel, skugga), rekursionsdjup 1; path tracern i `evo_modern` (en raygen som loopar studsar, NEE mot rektangelljus av tre slag — Emitter, RetroScreen, Portal — med MIS och power-heuristik, rysk roulette från studs 3, klamp av indirekt ljus, ray-cone-LOD på skärmen, procedurell natthimmel, dispatcher om 4 spp); `evo_post` (denoiser: demodulering, reprojektion och ackumulering, 3 à-trous-pass, remodulering, primärträffens emission förbi alltihop; ACES-tonemap med statisk dither och CPU-referens); stegplanen (bara de steg en frame visar körs, compositorn får synlighetsbitar) och `HistoryTracker`; Studion (191 instanser av 21 meshar, 29 material, 4 ljus) i FINALE, PORTAL, STUDIO NIGHT, RETURN och REBOOT; DOS-viloskärmen (`C:\DEMO>`) i STUDIO NIGHT och RETURN; `--spp` (fönstret 1, export 64). Specens klart-kriterium för steg 4 ("Studion path-tracad i lavapipe, determinismtest grönt") är uppfyllt: `studio`, `export_mode`, `stream_capture_studio` och `seek_determinism`.
+
+**Beslut i steg 4:**
+1. Planens tio beslut accepterade som föreslagna (kontrollerns rulings 2026-10-24): Studion i FINALE, PORTAL, STUDIO NIGHT, RETURN och REBOOT (FLYBY:s avslöjande väntar på steg 5–6); Portal förblir en övertoning till steg 6; CRT:n visar DOS-viloskärmen i de rena 2026-kapitlen; export-`--spp` 64 (tester 2, storyboard 8); studsar 4 i fönstret, 6 i export; à-trous i export bara under 16 spp; fönstret kör den dolda 2026-sidan i BeatSwap/Portal/Wipe (varm historik), exporten hoppar över den; readback per slot och RGB-packning på GPU:n flyttas till steg 8; sync-validering bara i AS-, path tracer- och denoisertesterna; platt CRT-skärm med UV-warp.
+2. **Retrobilden** är `R8G8B8A8_SRGB` med `MUTABLE_FORMAT | EXTENDED_USAGE` och formatlistan {SRGB, UNORM}: `view()` är en UNORM-lagringsvy (nivå 0) vars `imageLoad` ger de kodade bytena (palette_map och CRT-passet ser samma bytes som förut); `sampledView()` är en SRGB-vy vars sampel redan är linjärt ljus — avkoda dem aldrig igen. Mips blittas i linjärt ljus. Planens text rättades (184dfec, a386e14). Bilder med två format provas med `vkGetPhysicalDeviceImageFormatProperties2` först.
+3. **Rekursionsvakt:** `RayTracingPipeline` söker igenom SPIR-V och vägrar `OpTraceRayKHR` i miss- och closest-hit-shaders och `OpExecuteCallableKHR` överallt (NV-opkoderna kräver NV-tillägg och kontrolleras inte). Valideringslagret fångar inte ett för högt rekursionsdjup, så detta är enda vakten.
+4. **Denoiserns varians är kantrobust:** för historik < 4 tas den spatialt som min(Kuwahara, riktad) × 4/len, djup- och normalviktad (planens temporala formel gav 0 vid len 1 och stoppade à-trous helt, även i export); momentbilden lagrar variansen direkt (inte m2), så den inte kollapsar i fp16 över luminans ≈ 245; demodulerat ljus klampas till [0, 60000]; ingen historikklamp (en 3×3 min/max-klamp biasar gles 1 spp mörkt); en firefly klingar av på ~43 frames.
+5. **Ljus/instans-validering** i `PathTracer::trace()` före all inspelning: arean = |edgeU × edgeV|, giltig `kind`, en Emitters emission = materialets emission · emissionScale, RetroScreen bara på ett Emissive-material med `kRetroScreenTexture` och emission (s,s,s), ingen instans får namnge en Portal, ingen spegling (det < 0; även `rectLightForQuad`). Ett andra `trace()` eller ett andra TLAS-bygge i samma frame kastar `logic_error`. Inte kontrollerat: att instansens mesh verkligen är ljusets quad, och ljus utan instans (en Emitter utan geometri blir biasad under MIS) — dokumenterat i `scene.hpp`.
+6. **Staplade portaler:** för en portal är NEE-pdf:en summan över alla portaler riktningen korsar, samma summa som escape-vikten använder (bias +85 % → 0,1 % i testet). Portalskuggstrålar går till oändligheten; ljusinstanser är ensidiga, andra emitters tvåsidiga och nås bara via BSDF-sampling; riktningar där shading- och geometrinormal är oense släpps av båda strategierna (−0,24 % i ugnen); renderad emission klampas till 65 504 (fp16).
+7. **Task 11 slogs ihop före Task 10** med `HistoryState`-kontraktet: renderern räknar fram {reset, framesSinceReset, mode, spp, maxBounces (upplöst, aldrig 0), frameSeed} och `ModernStage` räknar aldrig om seeden (`Stats::frameSeed` visar den, 0 när modernsteget inte körde). Export: `frameSeedFor(t, 0)`; fönstret: `frameSeedFor(t, framesSinceReset)`, så fönstrets första frame efter en återställning är exportens frame.
+8. **Studions avvikelser från planen** (godkända): fyra ljus i stället för tre — skärmen 0,3, lampan 0,45, fönstret 0,1 och månen 0,15 (planen: 0,45/0,35/0,20; lampan lyser det mesta kamerorna ser); månskivan borttagen ur himlen, månen är en egen liten Emitter utanför fönstret (fireflies annars); `SceneFrame::clampIndirect` (standard 64) är 2 i Studion; skärmens emissionScale 1,2 (planen 5) så 1993-bilden går att läsa vid rummets exponering; lampan en 10 cm-kvadrat × 35; exponering STUDIO NIGHT +3 EV, REBOOT +1, övriga +2,5; en stol tillagd; CRT-looken tonar scanlines mot medelvärdet 0,875 med avståndet och har vinjett och ett svagt glas-sken. Studions GPU-sida byggs vid första Studio-frame; fönstret anropar `Renderer::prepare()` så kapitel 9 inte hackar.
+9. **Strikta Studio-tester:** `export_mode`, `capture_test.py` och `stream_capture_test.py` fallerar om inte alla fem Studio-kapitlen path-tracas (`--show-info` har fått fältet `scene`, "Placeholder" eller "Studio"); `stream_capture` är delat i två CTest-tester (`stream_capture` och `stream_capture_studio`) som körs parallellt; jämförelsen förblir bytexakt.
+10. **Material:** single-scatter-GGX (r 0,5 tappar upp till ~16 %; ugnsbandet sänkt 0,85 → 0,83, 2b5808d); dielektriskt F0 från IOR (IOR 1 = ren Lambert, F90 = saturate(50·F0)); ett material är glas när transmission > 0,5; rough glass släpper mikrofacettsampel på fel sida; BSDF:ernas sampling kontrolleras mot en kvadratur av `bsdfEval`. Roterade meshar (lathe, cylinder, sfär) har u åt höger sett utifrån (1efd0f2).
+11. **Tonemap:** negativt ljus klampas i AP1 före kurvan (annars blev −1 vitt); platshållaren går genom HDR-bilden via den exakta inversen av tonemappen (`fill_hdr.comp`), så den ser ut som förut (±1).
+12. **Seek-determinismen** (Task 12): återställningen är dubbelt säkrad — denoiserns `resetHistory()` och att ingen föregående kamera ges (motion ogiltig, inget reprojiceras). Testet fallerar först när båda tas bort; det är avsiktligt.
+13. **Sync-validering i lagret 1.3.275** krediterar inte värdväntningar på timeline-semaforen (`FrameRing::wait`): när VMA återanvänder minnet från en frigjord buffert rapporteras en falsk hazard. Testerna håller buffertar vid liv eller tomgångskör kön mellan deltester. Lagret ser inte heller AS-byggen, trace→trace-hazards eller åtkomst genom deskriptorarrayer, så de barriärerna är handgranskade (RTX-checklistan).
+
+**RTX-checklista (ägarens maskin; inget av detta kan provas på lavapipe):**
+- Hela `ctest` med ett **nytt valideringslager** (sync-validering slås på i `accel`, `path_tracer`, `denoiser`, `image`): noll meddelanden utöver de två avsiktliga. Gör sedan om barriärmutationerna: ta bort TLAS-barriärerna i `Tlas::build`, barriären mellan trace-dispatcherna (förvänta RAW/WAW på lighting/emission/albedo) och per-nivå-barriären i `generateMips` (35 hazards) — alla ska nu fångas.
+- **SBT med paddad layout** (handle 32, alignment 32, base 64; vissa GPU:er base 128): `rt_pipeline`:s prob och path tracern ska ge samma resultat. Task 5:s GPU-prob med överstyrda egenskaper (base 128) är **inte gjord**; tabellen är bara testad på CPU:n.
+- **Scratch-alignment 128** (`minAccelerationStructureScratchOffsetAlignment`); konstruktörerna kastar om adressen inte är alignad.
+- **Kompaktering** krymper faktiskt (lavapipe: 1480 → 1480 byte); `accel_test` jämför kompakterad mot okompakterad prob med memcmp — kan behöva lättas till 1e-4 där.
+- **Facing:** `frontFace`/`gl_HitKindEXT` som på lavapipe (utåtvänd CCW sedd utifrån = front); de ensidiga ljusen och instanser sedda bakifrån.
+- **SRGB + STORAGE med EXTENDED_USAGE** för retrobilden (format-probet ska lyckas), och `path_tracer` (h): byte 128 → 0,4331 vid scale 2 genom SRGB-vyn.
+- **isnan/isinf under fast-math:** stressscenen ska förbli ändlig (powerHeuristic, allFinite); denoisern använder bitbaserad `isFinite`.
+- **Determinism:** samma seed → samma bytes över körningar och nya tracers (BVH-bygge, closest-hit-oavgjorda), `stream_capture_studio`, `export_mode`, `seek_determinism`; tonemappen GPU mot CPU inom ±1 (pow/FMA).
+- **Windows TDR vid 4K:** tidsmät en dispatch om 4 spp, 6 studsar i 4K i Studion (ska vara långt under 2 s) och en hel 4K-export vid 64 spp; vid behov färre spp per dispatch.
+- `maxShaderGroupStride` (RTX 4096) och pipelineskapande med rekursionsdjup 1.
+- `accel_test` skriver fortfarande `warning: synchronization validation unavailable` i stället för `SKIP sync validation` och saknar `SKIP_REGULAR_EXPRESSION` (de andra sync-testerna har dem).
+
+**Uppskjutet och öppna kvalitetspunkter från steg 4** (ur ledgern):
+- **Blotchiga första fönsterframes efter en återställning** vid 1 spp (sök, kapitel, klipp): den kantrobusta spatiala variansen filtrerar glesa mörka sampel för lite — mörka hål i den belysta beigea plasten som försvinner på ~10 frames. Hör till denoisern (Task 8:s val; modellerat RMSE 0,063 mot 0,033 för gles brus).
+- **Korn i export ≥ 16 spp** (ingen à-trous enligt Beslut 6): mörka hörn behåller fint korn vid standardvärdet 64; vid 192 spp är stillbilderna rena. Överväg högre spp för slutrenderingen på RTX eller à-trous vid alla spp (ändrar Review Focus 6 vid spp ≥ 16, där fönster och export redan skiljer sig).
+- **ACES tvättar ur CRT:ns ljusa mättade färger** mot vitt vid rummets exponering (megamixen förblir läsbar). Grading hör till steg 6.
+- **Fasta ljusvalsvikter** (ingen spatial importance sampling): DOS-kapitlen lägger 30 % av samplen på en nästan svart skärm. Viktigt för steg 5:s scener med många ljus.
+- **Glaskulans kaustik är svag** (lampan nästan rakt ovanför, clamp 2 dämpar kaustikvägar).
+- Single-scatter-GGX förlorar energi i grova metaller; glas tonas av baseColor vid varje genomgång och transmissionen saknar η²-term.
+- Fönstret på lavapipe: under 2 fps blir varje frame ett TimeJump, så ackumuleringen byggs aldrig upp där (README säger det). Stats: `frameSeed` 0 betyder "inte körd", fast en riktig seed kan vara 0.
+- Småfynd: `HistoryState` bär numera inställningar och seed, inte bara historik (namnet); `frameSeedFor` bor i det tunga `path_tracer.hpp` (en lätt header vore bättre); `stream_capture_test.py` har kvar Studio-titlarna i `STUDIO_CHAPTERS` vid sidan av `scene`-fältet; compositorns CRT-på-pixelkontroll och en `SKIP_AABBS`-flagga på strålarna (prestanda) gjordes inte; `Image` exponerar inte usage, så denoisern kan inte kontrollera STORAGE på sina indata; `lathe` kastar på upprepade profilpunkter (inga skarpa veck); en firefly kan spridas av à-trous innan remodulering (ändlig, klampad).
+- `Renderer::resize` väntar med `waitAll` (timeline-värdväntan): med sync-validering påslagen i fönstret kan en storleksändring ge lagrets falska hazard (se beslut 13).
+- Steg 2:s rekommendation om readback per slot och RGB-packning på GPU:n är flyttad till steg 8 (Beslut 8).
+- Task 10:s granskning pågick när detta skrevs; dess fynd hör hit när de är åtgärdade eller uppskjutna.
+
+**Storyboard vid steg 4:s slut** (`--spp 8`, 1 min 49 s): 1993-cellerna ser ut som i steg 3; Studio-cellerna i FINALE, PORTAL, STUDIO NIGHT, RETURN och REBOOT ser rätt ut (beige CRT med live-bild, lampan, fönstret mot staden, krom- och glaskulan, DOS-listningen läsbar på skärmen i STUDIO NIGHT och RETURN). Synligt men inte trasigt: korn på den beigea plasten i närbilderna (FINALE/PORTAL 20 %, REBOOT) vid 8 spp, megamixens färger tvättade mot pastell av ACES, lampskärmens topp klipper vitt i STUDIO NIGHT:s orbit, och vidbilderna vid 80 % är mycket mörka utanför skrivbordet.
+
+## Nästa steg: steg 5
+
+Specens §7, steg 5: **moderna scener** — partiklar (compute), nebulosa (volym), tunnel, glas-glenz, lins/schack, kulor, stad och skepp; klart när alla 2026-rutor finns (de 23 kapitel vars 2026-sida i dag är platshållargradienten: akt I:s åtta effektkapitel från FLYBY till VECTOR CITY och akt II:s och III:s 15 planetkapitel; FLYBY:s Studio-avslöjande kommer med skeppet). Planen skrivs först och godkänns av ägaren. Rekommendationer ur steg 4:
+- Varje scen är en `modern::ModernScene` (`staticScene`, `frame`, `samplesRetro`) i `sceneFor`/`makeScene`; `ModernStage` håller i dag bara en `Traced` (Studion) — generalisera till en per scen med lat GPU-setup, och tänk på minnet (varje `PathTracer` bygger egna BLAS:er och egen pipeline).
+- Partiklar och volymer ska djuptesta mot `depth`-guiden (linjärt vy-djup, −1 vid miss) och komma in före denoisern eller som egen emission; rörliga objekt behöver objektrörelsevektorer (föregående instanstransformer) — i dag rör sig bara kameran.
+- Gränser: `PathTracer::kMaxInstances = 1024` (TLAS) och `kMaxLights = 64`; många ljus kräver bättre ljusval än fasta vikter (ljusträd eller vikter efter avstånd/effekt).
+- Behåll reglerna: ljusen härleds ur sina material (valideringen kastar annars), inga koplanära emitters och väggar (closest-hit-oavgjorda är en determinismrisk på RTX), inget glas framför en texturerad emitter eller i en portal, samma UV-warp på träff- och NEE-sidan.
+- Varje ny scen in i `stream_capture_studio`-delen (via `scene`-fältet) och i `seek_determinism` när den har klipp.
+- Blotchiga första frames och kornet i export (ovan) bör tas innan scenerna blir många — de syns i varje 2026-kapitel.
+
+**Slutleverans** (oförändrad, se ovan): när showen är klar renderas den i **4K60** på ägarens RTX-maskin med exportkedjan (`--render-stream` vid önskat `--spp` till ffmpeg; `tools/render_video.py` finns inte än och hör till steg 8; lavapipe räcker bara till stillbilder och korta klipp), ägaren laddar upp filen till sessionen, och sessionen publicerar den **privat på YouTube** via vidIQ (`vidiq_video_upload`, privacy private). Kortare förhandsvisningar i låg upplösning kan renderas i containern.
+
+**Worktrees.** Huvudträdet `/home/user/PulseAscendant` står på `claude/evolution-showcase-plan`; parallella implementers jobbar i `/home/user/wt-a`, `/home/user/wt-b` och `/home/user/wt-c` (grenarna `step4-a`, `step4-b`, `step4-c` i steg 4; `step3-a`/`step3-b` i steg 3), som spolas fram till huvudgrenen efter varje sammanslagning (`git worktree add /home/user/wt-a -b step4-a`). En implementer jobbar bara i sin egen worktree, och en reviewer läser bara (bygger inte). En worktree konfigureras på sekunder utan nedladdning genom att peka FetchContent på huvudträdets källor och länka in musiken:
 
 ```sh
 cd /home/user/wt-a/evolution
@@ -188,4 +260,4 @@ cmake --build --preset linux && ctest --preset linux
 
 Två worktrees bygger och testar samtidigt utan problem, men lavapipe blir långsammare under last. Bara kontrollern slår ihop till huvudgrenen och pushar.
 
-Fullständig logg finns i `.superpowers/sdd/2026-10-25-step3-retro-effects/progress.md` (rapporterna `task-*-report.md` bredvid), men den är git-ignorerad och följer inte med till en ny session; allt som behövs står ovan.
+Fullständiga loggar finns i `.superpowers/sdd/2026-10-25-step3-retro-effects/progress.md` och `.superpowers/sdd/2026-10-26-step4-rt-foundation/progress.md` (rapporterna `task-*-report.md`, `fixround-*-report.md` och granskningarna bredvid), men de är git-ignorerade och följer inte med till en ny session; allt som behövs står ovan.

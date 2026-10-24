@@ -746,3 +746,14 @@ target_compile_definitions(studio_test PRIVATE
 add_dependencies(studio_test Evolution_shaders evo_modern_shaders)
 add_test(NAME studio COMMAND studio_test)
 set_tests_properties(studio PROPERTIES TIMEOUT 120)
+
+# Seeking with temporal accumulation on (Task 12 of step 4, Review Focus 1) at 160x90, 1 spp, Interactive:
+# after any reset (a seek forwards or backwards, a chapter change, a camera cut, time running backwards) the
+# window's frames equal a fresh renderer's from the same point byte for byte, in the Studio chapters, a
+# 1993 chapter and across BeatSwap. With the validation layer on; fails on any message.
+add_executable(seek_determinism_test tests/seek_determinism_test.cpp)
+target_link_libraries(seek_determinism_test PRIVATE evo_render evo_modern)
+target_compile_definitions(seek_determinism_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(seek_determinism_test Evolution_shaders evo_modern_shaders)
+add_test(NAME seek_determinism COMMAND seek_determinism_test)
+set_tests_properties(seek_determinism PROPERTIES TIMEOUT 120)
