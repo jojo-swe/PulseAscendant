@@ -6,11 +6,10 @@ as a hard requirement. It is a standalone project inside PulseAscendant; the des
 implementation plans live in [`docs/plans/`](docs/plans/), starting with
 [`2026-10-21-evolution-design.md`](docs/plans/2026-10-21-evolution-design.md).
 
-> **Status:** step 3 of the plan (the 1993 effects) is under way. The music drives a timeline of 31 chapters
-> in three acts, and the 1993 side renders through its own pipeline (below): BOOT, FLYBY, DOTS, PLASMA,
-> TUNNEL, GLENZ, LENS, RAYTRACE, VECTOR CITY, PORTAL, REBOOT, the CREDITS sine scroller and THE END are
-> finished on the 1993 side, the other effects still show a grey test pattern there, and the 2026 side is still a
-> placeholder gradient.
+> **Status:** steps 0–3 of the plan are done. The music drives a timeline of 31 chapters in three acts, and
+> every chapter with a 1993 side (act I, REBOOT, CREDITS and THE END) shows its 1993 effect through its own
+> pipeline (below). The act II and act III planetary chapters are 2026 only (forced into 1993 they show a grey
+> test pattern), and the 2026 side is still a placeholder gradient until steps 4 and 5.
 
 ## Requirements
 
@@ -41,15 +40,15 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 `assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
-The 34 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
+The 35 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
 also numpy). Every GPU test runs with the validation layer on and fails on any message it reports, except the
 one `context` provokes on purpose to check that messages are counted.
 - The show and its music: `options`, `timeline`, `era`, `clock`, `audio_transport` and `show_info`.
 - The render foundation: `png`, `png_decode`, `context`, `gfx_foundation`, `renderer`, `swapchain`, `font`,
   `text_pass` and `no_wait_idle`.
 - The 1993 side: one test per effect (`boot`, `plasma`, `scroller`, `flyby`, `dots`, `tunnel`, `glenz`,
-  `rotozoom`, `raytrace`, `city`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon and point
-  rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
+  `rotozoom`, `raytrace`, `city`, `finale`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon
+  and point rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
   frame, every scene within the rasterisers' limits).
 - The executable end to end: `render_stream`, `capture`, `stream_capture` (a frame of a stream equals a fresh
   capture at the same time, for every chapter), `storyboard`, `exit_codes`, and `python_tools` (the music
@@ -116,10 +115,13 @@ the exports read back:
 
 1. **Retro stage.** The chapter's 1993 effect writes palette indices into a 320×200 8-bit image, as a VGA
    mode 13h screen would hold them, and a second pass maps them through the 256 colours that the effect's
-   palette builder makes on the CPU. Palette cycling happens there, never in a shader. Each effect has its
-   own retro frame rate (35 Hz, RAYTRACE 10 Hz); the stage renders only when the retro frame
-   changes, and everything it draws is a function of the chapter and the retro frame alone, so seeking,
-   playback and export give the same picture.
+   palette builder makes on the CPU. Palette cycling happens there, never in a shader. An effect is an entry
+   in the registry (`src/retro/effects.cpp`): an optional compute shader (or a clear index), an optional
+   scene of triangles and points for the rasteriser (below), optional text in the 8×8 font, and its palette.
+   An effect may own a texture, built once on the CPU and read by its shader as an R8_UINT storage image
+   (LENS's 128×128 logo checker). Each effect has its own retro frame rate (35 Hz, RAYTRACE 10 Hz); the stage
+   renders only when the retro frame changes, and everything it draws is a function of the chapter and the
+   retro frame alone, so seeking, playback and export give the same picture.
 2. **CRT.** The 320×200 picture fills a centred 4:3 rectangle (its pixels are 1.2 times taller than wide),
    black around it. With the CRT look on it also gets a 2 % barrel, a little bloom, darker odd scanlines, a
    phosphor mask and a vignette. Key C or `--no-crt` turns the look off; the rectangle stays the same.
@@ -133,7 +135,26 @@ the exports read back:
    8× at 2560×1440, at 1× of the step when a card would not fit). The window also shows the chapter title
    top-left as a development aid; captures and `--render-stream` never do. Key H or `--no-hud` hides it.
 
-The effects so far:
+### The 1993 rasteriser
+
+Polygon and dot effects work as they did on a 486: the CPU transforms the scene once per retro frame (in
+`double`), clips each triangle against the near plane (z ≥ 0.1) and against a guard band 512 px beyond each
+screen edge, projects it with the 1.2 pixel aspect of a 4:3 display and quantises the vertices to 28.4 fixed
+point (`std::lround`). The effect orders its triangles back to front (a sort by depth, or a fixed painter's
+order such as FLYBY's separating planes), and the GPU draws them in upload order:
+
+- `retro/polys.comp`: one invocation per pixel over the triangle list, integer edge functions with the
+  top-left fill rule, so a mesh is watertight (no pixel drawn twice or missed on a shared edge). Three modes:
+  flat (one index), gouraud (the index interpolated exactly in integers and Bayer-dithered) and glenz (the
+  face's colour code ORed into the pixel, so overlaps tint without blending).
+- `retro/points.comp`: square dots of a few pixels, later points winning through a per-pixel order
+  buffer.
+
+A frame holds at most 2048 triangles and 8192 points; the limits and the guard band are checked on every
+frame (the stage throws past them, and `retro_registry` checks every retro frame of every effect against
+them). The primitive lists live in host-visible buffers per frame-in-flight slot.
+
+### The 1993 effects
 
 - **BOOT** (chapter 0): a DOS prompt types the demo's start-up in light grey on black, 40 columns, with a
   blinking cursor, and cuts to FLYBY with two white frames.
@@ -156,6 +177,11 @@ The effects so far:
   street grid. The camera flies low down the main street towards a striped sun at its vanishing point, then
   climbs over the roofs and banks into a turn as the wipe brings 2026 in; the city fades into the haze with
   distance, so a frame draws about 200 polygons of buildings and streets plus a few lit windows.
+- **FINALE** (chapter 9): a megamix that cuts every two beats between FLYBY, DOTS, TUNNEL, GLENZ, LENS and
+  RAYTRACE, with one white flash frame on each cut. It is one registry entry with a resolve hook: for each
+  retro frame it hands the stage another effect's entry with a frame of that effect's own (home) chapter and
+  a home retro frame, so each sub-effect looks exactly as in its own chapter while the cache stays keyed on
+  FINALE.
 - **PORTAL** (chapter 10): FLYBY's ship turns away and shrinks into the stars while a beige monitor bezel
   closes in to a 4:3 frame, `THE SCREEN` typed in its corner, before the camera pulls out of the CRT.
 - **REBOOT** (chapter 20): BOOT's prompt again with a second script, `evolution.exe /2026` and on to
@@ -171,7 +197,7 @@ The effects so far:
 into 1993 and once into 2026, and composes one PNG grid per act (`act1.png`, `act2.png`, `act3.png`): a row
 per chapter, labelled with its number, title, transition and times, and six columns (1993 at the three
 times, then 2026). Each cell is the capture at half size. It needs numpy and runs the executable once per
-cell, so all 31 chapters take a few minutes on lavapipe.
+cell; all 31 chapters at 640×360 take about 30 s on lavapipe.
 
 ```sh
 cd evolution

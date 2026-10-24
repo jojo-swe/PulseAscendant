@@ -3,6 +3,7 @@
 // with the validation layer on and fails on any message it reports.
 
 #include "gfx/context.hpp"
+#include "render/renderer.hpp"
 #include "retro/effects.hpp"
 #include "retro/flyby.hpp"
 #include "retro/palette.hpp"
@@ -19,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -212,7 +214,7 @@ void testRegistry() {
     CHECK(same({text.begin() + 1, text.end()}, scroller));
     // FLYBY's: the greeting low over the ship and the stars, white (255) in FLYBY's palette.
     CHECK(same(evo::retro::flybyText(frame, 140),
-               scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 180, 255, true)));
+               scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 172, 255, true)));
 
     // Pure: the same retro frame gives the same items whatever else of the frame changes within it.
     TimelineFrame noisy = chapterFrame(kCreditsChapter, Effect::Credits, middleOf(140) + .01);
@@ -318,7 +320,8 @@ void testImages(evo::gfx::Context& ctx) {
     checked = 0;
     for (std::size_t i = glyphs; i < greeting.size(); ++i)
         if (wholeInside(greeting[i])) {
-            CHECK(greeting[i].y >= 174 && greeting[i].y <= 186);
+            CHECK(greeting[i].y >= evo::retro::kFlybyBaseY - evo::retro::kFlybyAmplitude &&
+                  greeting[i].y <= evo::retro::kFlybyBaseY + evo::retro::kFlybyAmplitude);
             CHECK(glyphAt(overlay, greeting[i], 255, -1));
             ++checked;
         }
@@ -365,6 +368,33 @@ void testImages(evo::gfx::Context& ctx) {
     CHECK(greetingWhite >= 100);
 }
 
+// FLYBY's greeting stays clear of the 1993 epoch card: over the whole chapter its lowest row, drop shadow
+// included, ends above the card's top row at every 16:9 output size (the 320x200 picture fills the output's
+// height, so retro row r starts at output row r * height / 200). The card is drawn bottom-left at its own
+// size, so a greeting at the very bottom of the frame ran through it.
+void testGreetingClearsCard() {
+    const TimelineFrame flyby = chapterFrame(kFlybyChapter, Effect::Flyby, 3);
+    CHECK(flyby.era == 0.f);
+    int bottom = 0; // one past the greeting's lowest retro row
+    const auto frames =
+        static_cast<std::uint32_t>(std::ceil(flyby.chapterDuration * evo::retro::kScrollerRetroRate));
+    for (std::uint32_t retroFrame = 0; retroFrame < frames; ++retroFrame)
+        for (const Item& item : evo::retro::flybyText(flyby, retroFrame))
+            bottom = std::max(bottom, static_cast<int>(std::floor(item.y)) + 8);
+    for (const auto& [width, height] :
+         {std::pair{640u, 360u}, std::pair{1280u, 720u}, std::pair{1920u, 1080u}, std::pair{3840u, 2160u}}) {
+        const std::vector<Item> hud = evo::render::hudItems(flyby, width, height, false);
+        CHECK(!hud.empty());
+        float cardTop = static_cast<float>(height);
+        for (const Item& item : hud)
+            cardTop = std::min(cardTop, item.y);
+        const double greetingBottom = static_cast<double>(bottom) * height / kHeight;
+        std::printf("flyby: greeting ends at output row %.1f, the card starts at %.0f (%ux%u)\n",
+                    greetingBottom, cardTop, width, height);
+        CHECK(greetingBottom <= cardTop);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -372,6 +402,7 @@ int main() {
         setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testPositions();
         testRegistry();
+        testGreetingClearsCard();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())

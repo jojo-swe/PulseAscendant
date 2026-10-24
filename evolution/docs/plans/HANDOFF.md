@@ -1,11 +1,11 @@
-# Handoff — EVOLUTION (uppdaterad 2026-10-24, steg 2 klart och slutgranskat)
+# Handoff — EVOLUTION (uppdaterad 2026-10-24, steg 3 klart; helgrenens granskning av steg 3 återstår)
 
 Läs detta först i nästa session. Specen och planerna ligger bredvid.
 
 ## Läge
 
 - **Spec:** `2026-10-21-evolution-design.md` — godkänd av ägaren. Alla standardval i avsnitt 9 gäller (Vulkan 1.3 + RT krävs, Studion, DOS-boot, två epoker, CRT på, engelsk text, syntetisk placeholder-musik). Credits-texten är inte bekräftad. CREDITS (kapitel 29) är sedan steg 2 ett 1993-kapitel: en sinusscroller med `eraFixed` 0 (se steg 2 nedan).
-- **Planer:** `2026-10-21-step0-skeleton.md` (steg 0, klart), `2026-10-23-step1-audio-timeline.md` (steg 1, klart; amendment med tre akter), `2026-10-24-step2-retro-pipeline.md` (steg 2, klart; slutgranskat med en fixvåg). Status per task står längre ner här.
+- **Planer:** `2026-10-21-step0-skeleton.md` (steg 0, klart), `2026-10-23-step1-audio-timeline.md` (steg 1, klart; amendment med tre akter), `2026-10-24-step2-retro-pipeline.md` (steg 2, klart; slutgranskat med en fixvåg), `2026-10-25-step3-retro-effects.md` (steg 3, klart; slutgranskning återstår), `2026-10-26-step4-rt-foundation.md` (steg 4, utkast pågår). Status per task står längre ner här.
 - **Branch:** `claude/evolution-showcase-plan`, utkast-PR #3 i jojo-swe/PulseAscendant. Allt arbete under `evolution/`.
 - **Musik:** levererad. Tre Suno-låtar av joyolo, en per akt: Amiga Trance Demo (194,00 s), Guitar Trance (218,40 s), Rigid Arpeggios (298,76 s), totalt 711,16 s. MP3:orna i `music/source/` och WAV:arna i `assets/music/` är git-ignorerade; `python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Rigid Arpeggios.mp3"` återskapar `show.wav`, headers och kvitton. Varje aktskarv i `show.wav` har en 3 ms raised-cosine-fade (tar bort ett klick; längd, analys och kapitelstarter oförändrade). Proveniens i `licenses/MUSIC-NOTICE.md`. Placeholder-låten används bara av Python-testerna.
 - **Arbetssätt ägaren vill ha:** denna session är hjärnan/kontrollern; Opus-subagenter gör de enklare tasks (implementation och granskning). Processen: superpowers:subagent-driven-development med en implementer + en reviewer per task.
@@ -121,25 +121,70 @@ Steg 2 levererar: indexerad 320×200 med palett och palettcykling på CPU:n, fps
 
 ## Så här återupptas arbetet
 
-1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (23 tester). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
-2. Steg 2 är slutgranskat och fixat (se ovan). Låt ägaren köra Windows-kontrollen, titta på storyboarden (`python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard`) och skriv sedan steg 3:s plan med rekommendationerna ovan (resterande retroeffekter) och kör den med `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief <plan> <n>`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
-3. När steg 3 är klart: slutgranskning av steg 3, sedan nästa stegs plan.
+1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (35 tester). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
+2. Steg 3 är klart (se nedan) utom helgrenens slutgranskning (Opus) med fixvåg; kör den först, över `0715043..HEAD`. Låt ägaren köra Windows-kontrollen och titta på storyboarden (`python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard`, ~30 s på lavapipe).
+3. Sedan steg 4 enligt `2026-10-26-step4-rt-foundation.md` (utkast pågår; gör klart och låt ägaren godkänna), med `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief <plan> <n>`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
 
-## Läge vid sessionsslut (steg 3 pågår)
+## Steg 3 — KLART (2026-10-24, plan `2026-10-25-step3-retro-effects.md`)
 
-Klart på `claude/evolution-showcase-plan` (62020a4): steg 3 Task 1–5, 7 och 9 (rasterisering, FLYBY, DOTS, TUNNEL, GLENZ, RAYTRACE, PORTAL, REBOOT, THE END), 32/32 tester.
+| Task | Status | Commit |
+|---|---|---|
+| 1. Registret i `effects.cpp`, scen-providers, polygon- och punktrasterisering, determinismtester | **klar**, granskad (en fixrunda) | 0094297, 0fe4b21; fixar a4cd032 |
+| 2. FLYBY (flatskuggat skepp över stjärnfält) | **klar**, granskad (två fixrundor) | 2938f11; fixar d6f9c9e, cbaa9fa |
+| 3. DOTS (512 punkter som morfar) | **klar**, granskad (en fixrunda) | 7ce5029; fixar a489a18 |
+| 4. TUNNEL (punktringar → massivt rör) | **klar**, granskad (en fixrunda) | a2550fe; fixar cbaa9fa, 0b473bb |
+| 5. GLENZ (Future Crews glenzvektor över copper) | **klar**, granskad (en fixrunda) | d9df900; fixar da66f17 |
+| 6. ROTOZOOM/LENS | **klar**, granskad | 1fbfd47 (merge aa2ded8); småfixar 0b473bb |
+| 7. RAYTRACE ("förberäknad", 10 fps) | **klar**, granskad (en fixrunda) | 6f445c9; fixar 0b473bb |
+| 8. VECTOR CITY och FINALE | **klar**; FINALE granskad, CITY:s granskning pågick vid sessionsslut | 1f4477d (merge c4247d5), 0880e7d; FINALE-fixar 0b473bb |
+| 9. PORTAL, REBOOT, THE END | **klar**, granskad (en fixrunda) | 62020a4; fixar 0b473bb |
+| Fixvåg (registret med designated initialisers m.m.) | **klar** | 0b473bb (merge 42ccd5b) |
+| 10. Storyboard, README, HANDOFF | **klar** | `Close step 3 with fresh storyboards, README and handoff` |
 
-Ej sammanslaget:
-- `claude/evolution-step3-rotozoom` (cbaa9fa, 1fbfd47): FLYBY/TUNNEL-granskningsfixar + Task 6 ROTOZOOM/LENS. Committat men ej granskat. Slå ihop i huvudgrenen (väntade konflikter: `effects.cpp/.hpp`, `CMakeLists.txt`, README, `tests/retro_stage_fixture.hpp`, eventuellt dubbel `flybyShipFacesFrom`), kör ctest, granska.
-- `claude/evolution-step3-wip-glenz-fixes`: påbörjade GLENZ-granskningsfixar, ofärdigt och otestat. Gör om eller slutför.
+35/35 CTest gröna på lavapipe (`options, png, png_decode, audio_transport, timeline, era, clock, context, gfx_foundation, renderer, boot, plasma, flyby, dots, tunnel, city, glenz, raytrace, finale, closing, rotozoom, scroller, raster, retro_registry, font, text_pass, swapchain, render_stream, capture, stream_capture, storyboard, show_info, exit_codes, no_wait_idle, python_tools`), plus `windowed`, `windowed_unsupported` och `silent_mode` bakom `EVO_RUNTIME_TESTS`. Varje kapitel med en 1993-sida (akt I, REBOOT, CREDITS, THE END) visar nu sin effekt; akt II och akt III:s planetkapitel är bara 2026 och visar testmönstret i grått om de tvingas till 1993. 2026-sidan är fortfarande platshållargradienten.
 
-Kvar i steg 3:
-- GLENZ-fixar (granskning: test att alla 144 färgkombinationer är distinkta, studs-kantfall, döp om `kGlenz` i effects.cpp, byt namn på lokalerna `distance`/`step` i copper.comp, Unlicense-notis i `evolution/licenses`, DOTS flödesgräns 0.52).
-- Granskning av RAYTRACE + PORTAL/REBOOT/THE END (avbruten).
-- Task 8: VECTOR CITY och FINALE. Beslut: FINALE ger varje deleffekt en syntetisk TimelineFrame med deleffektens HEMKAPITELS fasta fakta (längd, accent, beats) och ett hemlokalt retroFrame.
-- Task 10: storyboard, README, HANDOFF.
-- Helgrenens granskning (Opus) och fixvåg.
+Steg 3 levererar: CPU-transform + GPU-rasterisering på 486-vis (scenen transformeras i `double` per retroFrame, klipps mot närplanet z ≥ 0,1 och ett guard band 512 px utanför varje skärmkant, projiceras med pixelaspekt 1,2 och kvantiseras till 28.4 fixpunkt med `std::lround`); `retro/polys.comp` (en invocation per pixel, heltalskantfunktioner med top-left-regeln, vattentätt, lägen flat/gouraud/glenz; gouraud exakt i heltal med Bayer-dither) och `retro/points.comp` (kvadratiska punkter, senare vinner via en ordningsbuffert); max 2048 trianglar och 8192 punkter per retroFrame, kontrollerat varje frame (`retro::checkScene`, `SceneRaster` kastar; `retro_registry` kör varje retroFrame av varje effekt). `EffectInfo` har fått `scene`, `texture` (effektens egen R8_UINT-textur, byggd en gång; LENS) och `resolve` (FINALE). Effekterna: FLYBY, DOTS, TUNNEL, GLENZ, LENS, RAYTRACE, VECTOR CITY, FINALE, PORTAL, REBOOT och THE END (beskrivna i README).
 
-Beslut i steg 3: guard-bandets undantag behålls (bara handbyggda skärmprimitiver kan kasta); GLENZ använder schackbitar 6/7 ovanpå koderna 1/2; RAYTRACE har 24 gråtoner (planens räkning var fel); PORTAL-animationen slutar vid accenten.
+**Beslut i steg 3:**
+1. Guard-bandets undantag behålls: `SceneRaster` kastar `invalid_argument` för primitiver utanför bandet. Bara handbyggda skärmprimitiver kan träffa det (`addTriangle`/`addPoint` klipper alltid).
+2. `EVO_FORCE_ERA` gäller både `--capture-dir` och `--render-stream` (aldrig fönstret); en tvingad `--render-stream` skriver `render-stream: EVO_FORCE_ERA=<v> (<era> only)` en gång på stderr, eftersom exportvägen annars tyst kunde bli fel. `--show-info` ger varje kapitel `"eras"`, som `stream_capture` använder: varje kapitel med 1993-sida jämförs tvingat på båda epokerna plus otvingat (mitt i, och vid 0,3 för icke-Cut).
+3. FLYBY ritar skeppet i fast målarordning från separerande plan (en liten BSP i modellrymden) i stället för `sortBackToFront`. Tre kända begränsningar är dokumenterade i `flyby.hpp` och har mätta budgetar i testerna: vingroten sjunker in i flygkroppen (en remsa kan synas), flamtrianglarna skär varandra (samma index, syns aldrig), och vyer under vingplanet nära mittplanet ordnar fel upp till ~1 enhet djupt (FLYBY:s flykt tar aldrig den grenen, |x| ≥ 0,42; PORTAL gör det i 8 frames, testat).
+4. GLENZ: schackbitar 6/7 ovanpå koderna 1 (fram) och 2 (bak) i bit 4–5, som i originalet (`epolysb`); utan dem blir objektet en platt kod-3-klump. Överlapp är fortfarande `base | 3` i kodfältet. Alla 144 nåbara färgkombinationer är distinkta (testat). GLENZ får läsa spårets beat-grid via `show::beatGrid` (fast data per kapitel). Licensnotis i `licenses/FUTURE-CREW-NOTICE.md`.
+5. RAYTRACE: 6×6×6-kub (16–231) plus 24 gråtoner (232–255); planens "40 grått" var en räknefel (skulle spräcka paletten); 0–15 orörda. Epokkortet säger `10 FPS` (verklig takt).
+6. PORTAL:s och VECTOR CITY:s animationer är tajmade mot accenten, inte kapitlets slut (1993 syns bara till ungefär accenten); efter accenten håller PORTAL och CITY flyger vidare plant. CITY:s himmel är en gouraud-kupol i världsrymden (shadern vet inte kameran); ~190 stadspolygoner per frame i gatuhöjd, i snitt 300 och högst ~390 över taken (kortet säger 200; 473–846 trianglar med himlen).
+7. FINALE klipper var **annan beat** (inte varannan takt: kapitlet är ~7 takter, och BeatSwap visar bara 1993 på sex enskilda slag), med en vit flashframe per klipp (`kFinaleBeatsPerCut` i `finale.hpp`). Mekanismen är `EffectInfo::resolve`: varje retroFrame lämnas till deleffektens registerpost med en syntetisk TimelineFrame från deleffektens HEMKAPITEL (längd, accent, beats) och ett hemlokalt retroFrame, så deleffekterna beter sig exakt som i sina egna kapitel; cachen nycklas fortfarande på FINALE, texten tas från FINALE (ingen FLYBY-hälsning i megamixen). Att flashen nästan inte syns under BeatSwap är accepterat (compositorns `eraCut`-blink täcker).
+8. Registret använder designated initialisers (`.shader = …, .scene = …`).
+9. Parallellt arbete i git worktrees (se nedan); granskningar batchade och körda parallellt med nästa implementer.
+10. FLYBY-hälsningen ligger på baslinje 172 (var 180), så den aldrig korsar 1993-kortet; `scroller_test` kontrollerar det i 640×360 till 3840×2160 (Task 10, enda fixen efter storyboard-granskningen).
 
-Fullständig logg finns i `.superpowers/sdd/2026-10-25-step3-retro-effects/progress.md`, men den är git-ignorerad och följer inte med till en ny session.
+**Uppskjutna småfynd från steg 3:**
+- THE END: epokkortet förblir vitt medan texten tonar ut (tona HUD:en med slutskärmen) — steg 6.
+- FINALE: att hoppa över omrendering när den upplösta trippeln (effekt, kapitel, retroFrame) är oförändrad gjordes inte (ändrar vad `render()` returnerar och palettslottarna).
+- `polys.comp` har ingen tile-binning (pixlar × trianglar); värsta fallet 2048 stora trianglar är inte tidmätt. Räcker för dagens högst ~930 (TUNNEL-röret).
+- Klipparens kanoniska kantordning är defensiv och otestad (slumptester träffar aldrig en avrundningsgräns).
+- Palettbufferten är en per slot: två `RetroStage::render` i samma inspelning delar sista paletten (äldre än steg 3).
+- ROTOZOOM: `round()` vid .5 och float-sin/cos är inte bitexakta mellan GPU-leverantörer (testerna tål det). RAYTRACE: shaderns float-fasreduktion skiljer ~1e-6 mot CPU-tvillingen; ordnad dither syns som fin textur i himlen; lågmättade färger hamnar ibland på en gråton.
+- DOTS: flödesgränserna (0,52 / 0,78) är rimlighetsgränser; x-snurren är vald för kapitlets tajming. GLENZ: copperbarerna är speglade parvis.
+- CITY: granskningen av 1f4477d pågick vid sessionsslut — ta med dess fynd i slutgranskningens fixvåg.
+- `stream_capture` tar ~30 s och `python_tools` 60–370 s beroende på last.
+- Fjärrgrenarna `claude/evolution-step3-rotozoom` och `claude/evolution-step3-wip-glenz-fixes` är inaktuella (sammanslagna resp. ersatta av da66f17) och kan tas bort.
+
+## Nästa steg: steg 4
+
+Planen `2026-10-26-step4-rt-foundation.md` (RT-grunden för 2026-sidan) skrivs. Den ska ta med rekommendationerna till steg 4 under steg 2 ovan (DescriptorAllocator med acceleration structures, `Image` med djup/mips/SAMPLED, HDR-modernsteg med tonemap, readback per ring-slot, interaktivt mot exportläge, historik-återställning vid klipp, och att hoppa över pass för en epok som inte syns). Ägarens Windows-kontroll (bygg + ctest med `windows`-preseten, och showen i fönster med hörlurar) väntar fortfarande och bör göras innan steg 4 bygger vidare.
+
+**Worktrees.** Huvudträdet `/home/user/PulseAscendant` står på `claude/evolution-showcase-plan`; parallella implementers jobbar i `/home/user/wt-a` (gren `step3-a`) och `/home/user/wt-b` (`step3-b`), som återställs till huvudgrenen efter varje sammanslagning (`git worktree add /home/user/wt-a -b step3-a`). En worktree konfigureras på sekunder utan nedladdning genom att peka FetchContent på huvudträdets källor och länka in musiken:
+
+```sh
+cd /home/user/wt-a/evolution
+mkdir -p assets/music && ln -sf /home/user/PulseAscendant/evolution/assets/music/*.wav assets/music/   # före configure, så att show.wav länkas till bin/
+M=/home/user/PulseAscendant/evolution/build/linux/_deps
+cmake --preset linux -DFETCHCONTENT_SOURCE_DIR_SDL3=$M/sdl3-src -DFETCHCONTENT_SOURCE_DIR_VOLK=$M/volk-src \
+  -DFETCHCONTENT_SOURCE_DIR_VULKANHEADERS=$M/vulkanheaders-src \
+  -DFETCHCONTENT_SOURCE_DIR_VULKANMEMORYALLOCATOR=$M/vulkanmemoryallocator-src
+cmake --build --preset linux && ctest --preset linux
+```
+
+Två worktrees bygger och testar samtidigt utan problem, men lavapipe blir långsammare under last. Bara kontrollern slår ihop till huvudgrenen och pushar.
+
+Fullständig logg finns i `.superpowers/sdd/2026-10-25-step3-retro-effects/progress.md` (rapporterna `task-*-report.md` bredvid), men den är git-ignorerad och följer inte med till en ny session; allt som behövs står ovan.
