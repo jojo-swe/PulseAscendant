@@ -108,12 +108,13 @@ target_link_libraries(evo_text PUBLIC evo_gfx)
 
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
-# registry and palette builders it draws on.
+# registry, the palette builders and the BOOT prompt script it draws on.
 add_library(evo_render STATIC
     src/render/compositor.cpp
     src/render/modern_stage.cpp
     src/render/renderer.cpp
     src/render/retro_stage.cpp
+    src/retro/boot.cpp
     src/retro/effects.hpp
     src/retro/palette.cpp)
 target_include_directories(evo_render PUBLIC src)
@@ -217,6 +218,14 @@ target_compile_definitions(renderer_test PRIVATE
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(renderer_test Evolution_shaders)
 add_test(NAME renderer COMMAND renderer_test)
+
+# BOOT: the DOS prompt script on the CPU and its index image from the retro stage, with the validation layer
+# on; fails on any message it reports.
+add_executable(boot_test tests/boot_test.cpp)
+target_link_libraries(boot_test PRIVATE evo_render)
+target_compile_definitions(boot_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(boot_test Evolution_shaders)
+add_test(NAME boot COMMAND boot_test)
 
 # The font's invariants, its UTF-8 mapping and the atlas layout; CPU only.
 add_executable(font_test tests/font_test.cpp)

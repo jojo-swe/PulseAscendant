@@ -19,7 +19,8 @@
 
 namespace evo::render {
 
-// The 1993 side: the chapter's effect renders palette indices into a 320x200 R8_UINT image, which
+// The 1993 side: the chapter's effect renders palette indices into a 320x200 R8_UINT image (its compute
+// shader, or a clear for a text-only effect, then the effect's text drawn with the text pass), which
 // palette_map.comp turns into a 320x200 RGBA8 image through the 256 colours the effect's palette builder
 // makes on the CPU. Both passes run only when the retro frame changes: retroFrame = floor(localSeconds *
 // retroRate), keyed together with the chapter (and the effect), so a chapter that starts on the same retro
@@ -53,7 +54,7 @@ private:
     };
 
     gfx::FrameRing& ring_;
-    text::TextPass& text_; // for the text-only effects and overlays of the later tasks of the step
+    text::TextPass& text_; // draws the effects' text (EffectInfo::text)
     gfx::Image index_;
     gfx::Image color_;
     // One palette per frame in flight: the CPU writes the slot being recorded, whose last submit is done.

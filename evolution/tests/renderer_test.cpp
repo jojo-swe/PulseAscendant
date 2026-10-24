@@ -6,6 +6,7 @@
 #include "gfx/readback.hpp"
 #include "image/png.hpp"
 #include "render/renderer.hpp"
+#include "retro/boot.hpp"
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
 #include "show/timeline.hpp"
@@ -157,7 +158,12 @@ TimelineFrame retroFrame(int chapter, double localSeconds) {
     return frame;
 }
 
-// The CPU side: every effect has a shader, a rate and a palette whose index 0 is black.
+// A full-frame picture for the geometry checks: the test pattern in chapter 0 (BOOT itself is mostly black).
+TimelineFrame pattern(double localSeconds) {
+    return retroFrame(0, localSeconds);
+}
+
+// The CPU side: every effect has a shader or text, a rate and a palette whose index 0 is black.
 void testEffectRegistry() {
     std::array<std::uint32_t, 256> palette{};
     evo::retro::grayPalette(palette, TimelineFrame{}, 0);
@@ -168,20 +174,19 @@ void testEffectRegistry() {
     for (int i = 0; i < evo::show::chapterCount(); ++i) {
         const TimelineFrame frame = evo::show::sampleTimeline(evo::show::chapterStart(i) + .5);
         const evo::retro::EffectInfo& info = evo::retro::effectFor(frame.effect);
-        CHECK(info.shader != nullptr && info.retroRate > 0 && info.palette != nullptr);
+        CHECK((info.shader != nullptr || info.text != nullptr) && info.retroRate > 0 &&
+              info.palette != nullptr);
         palette.fill(0x12345678u);
         info.palette(palette, frame, 7);
         CHECK(palette[0] == 0xff000000u);
     }
 }
 
-// (a) Boot at t=1, 640x360: a 480x360 4:3 picture with 80-column black bars left and right.
+// (a) The test pattern at t=1, 640x360: a 480x360 4:3 picture with 80-column black bars left and right.
 void testPillarbox(evo::gfx::Context& ctx) {
     Harness harness(ctx, 640, 360);
-    const TimelineFrame boot = evo::show::sampleTimeline(1.0);
-    CHECK(boot.effect == Effect::Boot && boot.era == 0.0f);
-    const Picture picture = harness.render(boot);
-    save(picture, "boot-640x360.png");
+    const Picture picture = harness.render(pattern(1.0));
+    save(picture, "pattern-640x360.png");
 
     for (std::uint32_t y = 0; y < picture.height; ++y) {
         for (std::uint32_t x = 0; x < 80; ++x) {
@@ -204,10 +209,10 @@ void testPillarbox(evo::gfx::Context& ctx) {
 // and 450..599 black. Reached through resize(), as a window dragged tall would.
 void testTallOutput(evo::gfx::Context& ctx) {
     Harness harness(ctx, 640, 360);
-    harness.render(evo::show::sampleTimeline(1.0));
+    harness.render(pattern(1.0));
     harness.resize(400, 600);
-    const Picture picture = harness.render(evo::show::sampleTimeline(1.0));
-    save(picture, "boot-400x600.png");
+    const Picture picture = harness.render(pattern(1.0));
+    save(picture, "pattern-400x600.png");
 
     for (std::uint32_t x = 0; x < picture.width; ++x) {
         for (std::uint32_t y = 0; y < 150; ++y) {
@@ -231,22 +236,22 @@ void testCrtKeepsGeometry(evo::gfx::Context& ctx) {
     for (const auto& [width, height] : sizes) {
         Harness crt(ctx, width, height, true);
         Harness plain(ctx, width, height, false);
-        const Picture withCrt = crt.render(evo::show::sampleTimeline(1.0));
-        const Picture withoutCrt = plain.render(evo::show::sampleTimeline(1.0));
+        const Picture withCrt = crt.render(pattern(1.0));
+        const Picture withoutCrt = plain.render(pattern(1.0));
         std::printf("%ux%u: content %u..%u x %u..%u\n", width, height, contentBounds(withCrt).left,
                     contentBounds(withCrt).right, contentBounds(withCrt).top, contentBounds(withCrt).bottom);
         CHECK(contentBounds(withCrt) == expectedBounds(width, height));
         CHECK(contentBounds(withoutCrt) == expectedBounds(width, height));
         CHECK(withCrt.rgb != withoutCrt.rgb); // the look does change
         if (width == 640)
-            save(withoutCrt, "boot-640x360-plain.png");
+            save(withoutCrt, "pattern-640x360-plain.png");
     }
 
     // Toggled on a live renderer, as key C does.
     Harness harness(ctx, 640, 360, true);
-    const Picture on = harness.render(evo::show::sampleTimeline(1.0));
+    const Picture on = harness.render(pattern(1.0));
     harness.renderer().setCrt(false);
-    const Picture off = harness.render(evo::show::sampleTimeline(1.0));
+    const Picture off = harness.render(pattern(1.0));
     CHECK(!harness.renderer().lastStats().retroRendered); // same retro frame: the CRT pass alone reran
     CHECK(on.rgb != off.rgb);
     CHECK(contentBounds(on) == contentBounds(off));
@@ -257,19 +262,19 @@ void testCrtKeepsGeometry(evo::gfx::Context& ctx) {
 // image's nearest-neighbour scale.
 void testRetroFrameLock(evo::gfx::Context& ctx) {
     Harness harness(ctx, 320, 240, false);
-    const Picture a = harness.render(evo::show::sampleTimeline(1.000));
+    const Picture a = harness.render(pattern(1.000));
     CHECK(harness.renderer().lastStats().retroRendered && harness.renderer().lastStats().retroFrame == 35);
-    const Picture b = harness.render(evo::show::sampleTimeline(1.010));
+    const Picture b = harness.render(pattern(1.010));
     CHECK(!harness.renderer().lastStats().retroRendered && harness.renderer().lastStats().retroFrame == 35);
     CHECK(a.rgb == b.rgb);
-    const Picture c = harness.render(evo::show::sampleTimeline(1.030));
+    const Picture c = harness.render(pattern(1.030));
     CHECK(harness.renderer().lastStats().retroRendered && harness.renderer().lastStats().retroFrame == 36);
     CHECK(a.rgb != c.rgb);
 
     // A fresh renderer gives the same frame however it got there.
     Harness fresh(ctx, 320, 240, false);
-    CHECK(fresh.render(evo::show::sampleTimeline(1.010)).rgb == a.rgb);
-    CHECK(harness.render(evo::show::sampleTimeline(1.000)).rgb == a.rgb);
+    CHECK(fresh.render(pattern(1.010)).rgb == a.rgb);
+    CHECK(harness.render(pattern(1.000)).rgb == a.rgb);
 }
 
 // (e) Review Focus 2: a chapter change at an equal retro frame must not reuse the cached image.
@@ -430,6 +435,35 @@ void testHud(evo::gfx::Context& ctx) {
             }
 }
 
+// BOOT through the whole renderer, CRT and HUD off: grey DOS text on black inside the 4:3 box, and the
+// flash that cuts to FLYBY fills the box with white (the bars stay black).
+void testBoot(evo::gfx::Context& ctx) {
+    Harness harness(ctx, 640, 360, false);
+    const Picture prompt = harness.render(evo::show::sampleTimeline(3.0));
+    save(prompt, "boot-640x360-prompt.png");
+    std::size_t grey = 0, other = 0;
+    for (std::uint32_t y = 0; y < 360; ++y)
+        for (std::uint32_t x = 0; x < 640; ++x) {
+            const std::uint8_t* p = prompt.at(x, y);
+            if (p[0] == 0xAA && p[1] == 0xAA && p[2] == 0xAA)
+                ++grey;
+            else if (!prompt.black(x, y))
+                ++other;
+        }
+    std::printf("boot: %zu grey pixels at t=3.0\n", grey);
+    CHECK(grey > 0 && other == 0);
+    CHECK(contentBounds(prompt).left >= 80 && contentBounds(prompt).right < 560);
+
+    const TimelineFrame any = evo::show::sampleTimeline(1.0);
+    const std::uint32_t flash = evo::retro::bootFlashFrame(any);
+    const Picture white = harness.render(evo::show::sampleTimeline((flash + .5) / 35.0));
+    CHECK(harness.renderer().lastStats().retroFrame == flash);
+    CHECK(contentBounds(white) == expectedBounds(640, 360));
+    for (std::uint32_t y = 0; y < 360; y += 7)
+        for (std::uint32_t x = 80; x < 560; x += 7)
+            CHECK(white.at(x, y)[0] == 255 && white.at(x, y)[1] == 255 && white.at(x, y)[2] == 255);
+}
+
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
     evo::gfx::FrameRing ring(ctx);
     bool threw = false;
@@ -460,6 +494,7 @@ int main() {
             testWipe(ctx);
             testEraCutFlash(ctx);
             testHud(ctx);
+            testBoot(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

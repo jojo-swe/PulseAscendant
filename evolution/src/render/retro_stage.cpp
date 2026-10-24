@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
+#include <vector>
 
 namespace evo::render {
 
@@ -35,8 +36,11 @@ gfx::Image createIndexImage(gfx::Context& ctx) {
     vkGetPhysicalDeviceFormatProperties(ctx.physicalDevice(), VK_FORMAT_R8_UINT, &properties);
     if (!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT))
         throw std::runtime_error("the GPU cannot use R8_UINT as a storage image, which the 1993 stage needs");
-    return gfx::Image(ctx, {RetroStage::kWidth, RetroStage::kHeight, VK_FORMAT_R8_UINT,
-                            VK_IMAGE_USAGE_STORAGE_BIT, 1, "retro index"});
+    // Cleared for the text-only effects (transfer destination) and read back by tests (transfer source).
+    return gfx::Image(
+        ctx, {RetroStage::kWidth, RetroStage::kHeight, VK_FORMAT_R8_UINT,
+              VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+              1, "retro index"});
 }
 
 std::uint32_t retroFrameOf(const show::TimelineFrame& frame, std::uint32_t rate) {
@@ -69,8 +73,8 @@ bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     if (cached_ == key)
         return false;
 
-    // The effect: palette indices. Every effect has a shader so far; a text-only effect (later in the step)
-    // will have none and draw its indices with the text pass instead.
+    // The effect: palette indices, from its shader, or for a text-only effect a clear to its background
+    // (index 0 by default) that the text below draws on; nothing of the last frame may show through.
     const VkDescriptorImageInfo indexInfo{VK_NULL_HANDLE, index_.view(), VK_IMAGE_LAYOUT_GENERAL};
     if (effect.shader) {
         index_.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -81,6 +85,20 @@ bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
                                       static_cast<float>(retroFrame_) / static_cast<float>(effect.retroRate)};
         pass.push(cmd, &push, sizeof push);
         pass.dispatch(cmd, kWidth, kHeight);
+    } else {
+        index_.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                          VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        VkClearColorValue clear{};
+        clear.uint32[0] = effect.background ? effect.background(frame, retroFrame_) : 0u;
+        const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        vkCmdClearColorImage(cmd, index_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+    }
+
+    // The effect's text over it; drawIndex leaves the image in GENERAL after its last write.
+    if (effect.text) {
+        const std::vector<text::Item> items = effect.text(frame, retroFrame_);
+        if (!items.empty())
+            text_.drawIndex(cmd, index_, items);
     }
 
     // The palette, written into this slot's buffer: the ring's begin() waited for the submit that last used

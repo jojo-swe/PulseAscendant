@@ -12,7 +12,10 @@ namespace evo::retro {
 using Palette = std::array<std::uint32_t, 256>;
 
 // Builds the palette of one retro frame on the CPU. Cycling is done here, by retroFrame, never by a shader;
-// the retro stage calls the builder only when it re-renders the retro frame.
+// the retro stage calls the builder only when it re-renders the retro frame, so a builder must depend only on
+// (chapter, retroFrame) and the chapter's fixed facts (chapterDuration, accentSeconds), never on
+// localSeconds, showSeconds or the music signals of the frame. The text and background providers of
+// retro/effects.hpp keep the same contract.
 using PaletteBuilder = void (*)(Palette&, const show::TimelineFrame&, std::uint32_t retroFrame);
 
 // An opaque RGBA8 colour in the palette layout.
