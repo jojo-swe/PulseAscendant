@@ -1361,3 +1361,18 @@ The ABI field names are fixed in Task 1 and only used afterwards.
 ## Controller rulings (2026-10-24)
 
 All twenty decisions are accepted as proposed (the plan's defaults), with one change: Decision 1 keeps the 5a/5b cut line and the owner's RTX `--bench` checkpoint, but the checkpoint does **not** block step 5b. Work continues straight into 5b; the owner runs `--bench` (and the RTX checklist in HANDOFF.md) when the machine is available, and any findings are folded into a later fix wave. Tonemap: Khronos PBR Neutral.
+
+## Controller rulings after the Task 1 review (2026-10-24)
+
+A short Task 1 fix round (call it Task 1b) runs after wave 2 and before wave 3. It freezes the remaining ABI gaps:
+
+- **Hit payload** gains `materialFlags`, `abbe`, `medium`, `primitive` and `prevPosition`, filled by every closest-hit now (nothing reads them yet, so output stays byte-exact). Tasks 6, 8, 9, 11, 12 and 13 use these fields and must not add their own.
+- **`FrameUniforms.pad2` becomes `float seconds`** (chapter-local show time), written every frame. Shutter slices offset from it.
+- **Caustic receivers:** binding 27 is reserved for the receiver table (world-to-uv transforms), and `Material.pad` @92 becomes `receiver` (an index or `kNoReceiver`). Task 13 fills it.
+- **`MediumUniforms`** may be resized to 256 B by Task 11 (and only Task 11), with the layout test updated in the same commit.
+- **Spheres:** every sphere in one instance shares that instance's material class (one hit group per instance). RAYTRACE-like mixes use one instance per class. Task 8 decides how sphere ranges map to AABB BLASes, one BLAS per instance range.
+- **Per-frame feature resources** (particle fields, medium volumes, splat accumulators, caustic maps) live once in `ModernStage`, sized to the largest prepared scene, not per scene.
+- The Python export tests and the storyboard pass `--detail 0.004` (Global Constraints).
+- The byte-identity baseline is committed as a script plus SUMS at the fix round's base, so later tasks compare against a shared reference.
+- `scene_table_test` asserts each effect maps to Placeholder or to its planned scene, and the Studio cut test compares against `camera().shot`.
+- Memory is measured from real allocations (VMA statistics, `Denoiser::imageBytes()`), not a formula.
