@@ -22,8 +22,10 @@ namespace evo::gfx {
 //     ...record passes...
 //     std::uint64_t done = ring.submit();   // the timeline value that marks this frame complete
 //
-// The destructor waits for every submit, so declare a ring after the images and buffers its frames use:
-// it is then destroyed first and they outlive the GPU work.
+// The destructor waits for every submit, so declare a ring after everything its frames use (images, buffers,
+// compute pipelines with their descriptor pools, samplers and other descriptor resources): it is then
+// destroyed first and they outlive the GPU work. Whatever is destroyed while the ring lives needs a waitAll()
+// (or a device wait) first.
 class FrameRing {
 public:
     static constexpr std::uint32_t kFramesInFlight = 2;

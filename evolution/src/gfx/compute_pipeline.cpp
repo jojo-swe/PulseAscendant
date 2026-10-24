@@ -34,6 +34,9 @@ bool isImageDescriptor(VkDescriptorType type) {
 ComputePipeline::ComputePipeline(Context& ctx, const std::filesystem::path& spv,
                                  std::span<const Binding> bindings, std::uint32_t pushConstantBytes)
     : ctx_(ctx), bindings_(bindings.begin(), bindings.end()), pushConstantBytes_(pushConstantBytes) {
+    if (pushConstantBytes % 4 != 0)
+        throw std::invalid_argument("ComputePipeline: push constant size " +
+                                    std::to_string(pushConstantBytes) + " is not a multiple of 4");
     const VkDevice device = ctx.device();
     const std::string name = spv.filename().string();
     try {
@@ -158,6 +161,9 @@ VkDescriptorSet ComputePipeline::allocateSet(std::uint32_t slot) {
         }
         if (result != VK_ERROR_OUT_OF_POOL_MEMORY && result != VK_ERROR_FRAGMENTED_POOL)
             vkCheck(result, "vkAllocateDescriptorSets");
+        // An empty pool (new or just reset) that cannot hold one set never will: no endless new pools.
+        if (pools.usedInCurrent == 0)
+            vkCheck(result, "vkAllocateDescriptorSets(empty pool)");
         pools.usedInCurrent = kSetsPerPool; // full for the rest of the frame
     }
 }
@@ -202,9 +208,10 @@ void ComputePipeline::bind(VkCommandBuffer cmd, FrameRing& ring,
 }
 
 void ComputePipeline::push(VkCommandBuffer cmd, const void* data, std::uint32_t bytes) {
-    if (bytes > pushConstantBytes_)
+    if (bytes > pushConstantBytes_ || bytes % 4 != 0)
         throw std::invalid_argument("ComputePipeline::push() of " + std::to_string(bytes) +
-                                    " bytes into a range of " + std::to_string(pushConstantBytes_));
+                                    " bytes into a range of " + std::to_string(pushConstantBytes_) +
+                                    " (a multiple of 4 is required)");
     vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, bytes, data);
 }
 

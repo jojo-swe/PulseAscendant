@@ -25,11 +25,15 @@ struct Binding {
 // pools kept per FrameRing slot that are reset when the ring reuses the slot, and a pool is added when a
 // frame needs more sets than the slot's pools hold.
 //
-// The first bind() ties the pipeline to that ring; destroy the pipeline before the ring, or let the ring go
-// first (the pipeline then attaches to the next ring it is bound with).
+// Lifetime: the VkPipeline and the descriptor sets a frame binds are used by the GPU until that frame's
+// submit completes, so a pipeline must outlive every submit that bound it. Declare the FrameRing after its
+// pipelines (the ring's destructor waits for its submits), or wait for the ring (waitAll) or the device
+// before the pipeline goes. The first bind() ties the pipeline to that ring; binding it with a second live
+// ring throws, and once the ring is gone the pipeline attaches to the next ring it is bound with.
 class ComputePipeline {
 public:
-    // The SPIR-V's entry point is "main". Throws std::runtime_error naming the file when it cannot load.
+    // The SPIR-V's entry point is "main". Throws std::runtime_error naming the file when it cannot load, and
+    // std::invalid_argument when pushConstantBytes is not a multiple of 4.
     ComputePipeline(Context& ctx, const std::filesystem::path& spv, std::span<const Binding> bindings,
                     std::uint32_t pushConstantBytes);
     ~ComputePipeline();
@@ -41,7 +45,8 @@ public:
     // ring.begin() and ring.submit() only. Throws std::invalid_argument when the counts do not match.
     void bind(VkCommandBuffer cmd, FrameRing& ring, std::span<const VkDescriptorImageInfo> images,
               std::span<const VkDescriptorBufferInfo> buffers);
-    // Throws std::invalid_argument for more bytes than the pipeline's push constant range.
+    // Throws std::invalid_argument for more bytes than the pipeline's push constant range, or a size that is
+    // not a multiple of 4.
     void push(VkCommandBuffer cmd, const void* data, std::uint32_t bytes);
     // ceil(width / localX) x ceil(height / localY) workgroups; the shader must skip the pixels outside.
     void dispatch(VkCommandBuffer cmd, std::uint32_t width, std::uint32_t height, std::uint32_t localX = 8,
