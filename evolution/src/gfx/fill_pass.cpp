@@ -4,6 +4,8 @@
 
 #include <array>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 
 namespace evo::gfx {
 
@@ -35,10 +37,15 @@ constexpr std::array<Binding, 1> kBindings = {Binding{0, VK_DESCRIPTOR_TYPE_STOR
 
 } // namespace
 
-FillPass::FillPass(Context& ctx)
-    : pipeline_(ctx, shaderDir() / "fill.comp.spv", kBindings, sizeof(FillPushConstants)) {}
+FillPass::FillPass(Context& ctx, FillTarget target)
+    : format_(target == FillTarget::Hdr ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM),
+      pipeline_(ctx, shaderDir() / (target == FillTarget::Hdr ? "fill_hdr.comp.spv" : "fill.comp.spv"),
+                kBindings, sizeof(FillPushConstants)) {}
 
 void FillPass::record(VkCommandBuffer cmd, FrameRing& ring, Image& target, const FillParams& params) {
+    if (target.viewFormat() != format_)
+        throw std::invalid_argument("FillPass: target format " + std::to_string(target.viewFormat()) +
+                                    ", expected " + std::to_string(format_));
     target.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     const VkDescriptorImageInfo image{VK_NULL_HANDLE, target.view(), VK_IMAGE_LAYOUT_GENERAL};

@@ -1,0 +1,17 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// fill.comp's pattern as HDR light for the 2026 placeholder: each display-encoded colour becomes the
+// linear light that post/tonemap.comp at 0 EV maps back to it (the sRGB EOTF, then the ACES fit
+// inverted), written to an RGBA16F image. The placeholder thus goes through the HDR image and the one
+// tonemap like every 2026 picture and still looks as it did (within the dither's one step).
+
+#include "post/aces.glsl"
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D outImage;
+
+vec4 encodeFill(vec3 color) {
+    return vec4(acesFittedInverse(srgbEotf(clamp(color, 0.0, 1.0))), 1.0);
+}
+
+#include "fill.glsl"
