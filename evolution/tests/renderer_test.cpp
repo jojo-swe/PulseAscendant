@@ -9,6 +9,7 @@
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
 #include "show/timeline.hpp"
+#include "text/font8x8.hpp"
 
 #include <array>
 #include <cstdint>
@@ -104,12 +105,14 @@ Bounds expectedBounds(std::uint32_t width, std::uint32_t height) {
     return {left, top, left + contentWidth - 1, top + contentHeight - 1};
 }
 
-// A renderer with its own ring and readback; every render() submits and waits, then reads back.
+// A renderer with its own ring and readback; every render() submits and waits, then reads back. The HUD is
+// off unless asked for, so the geometry checks see only the picture.
 class Harness {
 public:
-    Harness(evo::gfx::Context& ctx, std::uint32_t width, std::uint32_t height, bool crt = true)
+    Harness(evo::gfx::Context& ctx, std::uint32_t width, std::uint32_t height, bool crt = true,
+            bool hud = false)
         : ctx_(ctx), readback_(std::in_place, ctx, width, height), ring_(ctx),
-          renderer_(ctx, ring_, {width, height, crt}) {}
+          renderer_(ctx, ring_, {width, height, crt, hud}) {}
 
     Picture render(const TimelineFrame& frame) {
         VkCommandBuffer cmd = ring_.begin();
@@ -321,6 +324,112 @@ void testEraCutFlash(evo::gfx::Context& ctx) {
     CHECK(flash.at(0, 0)[0] >= 152 && flash.at(0, 0)[0] <= 154); // 0.6 * 255 = 153
 }
 
+// The HUD layout on the CPU: which texts, where, each after its shadow, all inside the margin.
+void testHudItems() {
+    using evo::render::hudItems;
+    using evo::render::kHudMargin;
+    const auto inside = [](const std::vector<evo::text::Item>& items, std::uint32_t width,
+                           std::uint32_t height) {
+        for (const evo::text::Item& item : items) {
+            const int scale = static_cast<int>(item.scale);
+            if (item.x < kHudMargin || item.y < kHudMargin ||
+                item.x + evo::text::textWidth(item.text, scale) > static_cast<float>(width) - kHudMargin ||
+                item.y + 8.0f * static_cast<float>(scale) > static_cast<float>(height) - kHudMargin)
+                return false;
+        }
+        return true;
+    };
+    const auto shadowed = [](const std::vector<evo::text::Item>& items) {
+        if (items.size() % 2 != 0)
+            return false;
+        for (std::size_t i = 0; i < items.size(); i += 2)
+            if (items[i].rgba != 0xFF000000u || items[i].text != items[i + 1].text ||
+                items[i].x != items[i + 1].x + 1 || items[i].y != items[i + 1].y + 1)
+                return false;
+        return true;
+    };
+
+    // Boot, era 0: the title at (8, 8) and the 1993 card bottom-left at 2x.
+    const TimelineFrame boot = evo::show::sampleTimeline(1.0);
+    auto items = hudItems(boot, 1280, 720);
+    CHECK(items.size() == 4 && shadowed(items) && inside(items, 1280, 720));
+    CHECK(items[1].text == "BOOT" && items[1].x == 8 && items[1].y == 8 && items[1].scale == 1);
+    CHECK(items[1].rgba == 0xFFFFFFFFu && items[3].rgba == 0xFFE0E0E0u);
+    CHECK(items[3].text == boot.thenCard && items[3].scale == 2 && items[3].x == 8);
+    CHECK(items[3].y == 720 - 8 - 16 - 1); // the shadow's bottom row is 8 pixels above the edge
+
+    // The 2026 card from era 0.5; an empty card is left out.
+    TimelineFrame frame = retroFrame(2, 1.0);
+    frame.title = "DOTS";
+    frame.thenCard = "1993 THEN";
+    frame.nowCard = "2026 NOW";
+    frame.era = .5f;
+    items = hudItems(frame, 640, 360);
+    CHECK(items.size() == 4 && items[3].text == "2026 NOW");
+    frame.era = .49f;
+    CHECK(hudItems(frame, 640, 360)[3].text == "1993 THEN");
+    frame.thenCard = "";
+    CHECK(hudItems(frame, 640, 360).size() == 2);
+
+    // Wipe: 2026 bottom-left, 1993 bottom-right on the same line when they fit...
+    frame.transition = Transition::Wipe;
+    frame.thenCard = "1993 \xC2\xB7 PALETTE CYCLING";
+    frame.nowCard = "2026 \xC2\xB7 VOLUMETRIC NEBULA";
+    items = hudItems(frame, 1280, 720);
+    CHECK(items.size() == 6 && shadowed(items) && inside(items, 1280, 720));
+    CHECK(items[3].text == frame.nowCard && items[3].x == 8);
+    CHECK(items[5].text == frame.thenCard && items[5].y == items[3].y);
+    CHECK(items[5].x + evo::text::textWidth(frame.thenCard, 2) == 1280 - 8 - 1);
+    // ...and the 1993 card a line up when they would meet.
+    items = hudItems(frame, 640, 360);
+    CHECK(items.size() == 6 && inside(items, 640, 360));
+    CHECK(items[5].y + 16 + 1 < items[3].y);
+    frame.nowCard = "";
+    items = hudItems(frame, 640, 360);
+    CHECK(items.size() == 4 && items[3].text == frame.thenCard && items[3].y == 360 - 25);
+
+    // Every chapter of the show at the default size.
+    for (int i = 0; i < evo::show::chapterCount(); ++i) {
+        const TimelineFrame sample = evo::show::sampleTimeline(evo::show::chapterStart(i) + .5);
+        CHECK(inside(hudItems(sample, 1280, 720), 1280, 720));
+    }
+}
+
+// The HUD drawn: only the title and card areas change, at least 8 pixels inside the output; H (setHud)
+// takes it away again without re-rendering the retro frame.
+void testHud(evo::gfx::Context& ctx) {
+    Harness harness(ctx, 640, 360, true, true);
+    const TimelineFrame boot = evo::show::sampleTimeline(1.0);
+    const Picture with = harness.render(boot);
+    save(with, "boot-640x360-hud.png");
+    harness.renderer().setHud(false);
+    const Picture without = harness.render(boot);
+    CHECK(!harness.renderer().lastStats().retroRendered);
+
+    std::size_t changed = 0, title = 0, card = 0;
+    for (std::uint32_t y = 0; y < 360; ++y)
+        for (std::uint32_t x = 0; x < 640; ++x) {
+            const std::uint8_t* a = with.at(x, y);
+            const std::uint8_t* b = without.at(x, y);
+            if (a[0] == b[0] && a[1] == b[1] && a[2] == b[2])
+                continue;
+            ++changed;
+            CHECK(x >= 8 && y >= 8 && x < 640 - 8 && y < 360 - 8);
+            title += y < 8 + 9;
+            card += y >= 360 - 8 - 17;
+        }
+    std::printf("hud: %zu pixels changed, %zu in the title, %zu in the card\n", changed, title, card);
+    CHECK(title > 20 && card > 100 && title + card == changed);
+    // The title's first glyph, white on the black bar: "B" at (8, 8).
+    const evo::text::GlyphRows& b = evo::text::glyph('B');
+    for (std::uint32_t row = 0; row < 7; ++row)
+        for (std::uint32_t col = 0; col < 7; ++col)
+            if (b[row] & (0x80u >> col)) {
+                const std::uint8_t* p = with.at(8 + col, 8 + row);
+                CHECK(p[0] == 255 && p[1] == 255 && p[2] == 255);
+            }
+}
+
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
     evo::gfx::FrameRing ring(ctx);
     bool threw = false;
@@ -338,6 +447,7 @@ int main() {
     try {
         setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testEffectRegistry();
+        testHudItems();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())
@@ -349,6 +459,7 @@ int main() {
             testChapterChangeInvalidates(ctx);
             testWipe(ctx);
             testEraCutFlash(ctx);
+            testHud(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

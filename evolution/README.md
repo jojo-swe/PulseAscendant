@@ -100,7 +100,7 @@ runs the pipeline into a temporary directory on a 270 s, 134 BPM placeholder son
 
 Run `Evolution` without arguments for a 1280×720 window that plays the show from the start. Keys:
 ← / → previous / next chapter (wrapping around the show), 1–9 and 0 jump to chapters 1–10, C toggles
-the CRT look of the 1993 picture, M mutes, F11 toggles fullscreen, Esc quits. The window title shows the chapter and the show time.
+the CRT look of the 1993 picture, H shows or hides the chapter title and the epoch cards, M mutes, F11 toggles fullscreen, Esc quits. The window title shows the chapter and the show time.
 
 ```text
 Usage: Evolution [options]
@@ -123,6 +123,7 @@ Options:
                        picture follows, -500..500 (default 0); raise it if the picture
                        lags the sound
   --no-crt             Show the 1993 picture without the CRT look (C toggles)
+  --no-hud             Hide the chapter title and the epoch cards (H toggles)
   --show-info          Print the show's chapters and music as JSON and exit
   --validation         Enable the Vulkan validation layers
   --device-info        Print information about the selected GPU and exit
@@ -130,7 +131,7 @@ Options:
   -h, --help           Show this help and exit
 
 Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,
-C CRT look, M mute, F11 fullscreen, Esc quit
+C CRT look, H HUD, M mute, F11 fullscreen, Esc quit
 ```
 
 Examples:

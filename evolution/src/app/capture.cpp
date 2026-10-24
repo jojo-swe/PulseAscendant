@@ -35,7 +35,7 @@ int runCapture(const Options& options) {
     const auto height = static_cast<std::uint32_t>(options.height);
     gfx::Readback readback(ctx, width, height);
     gfx::FrameRing ring(ctx);
-    render::Renderer renderer(ctx, ring, {width, height, options.crt});
+    render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud});
     VkCommandBuffer cmd = ring.begin();
     renderer.render(cmd, show::sampleTimeline(options.time));
     readback.record(cmd, renderer.output());

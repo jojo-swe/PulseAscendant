@@ -185,8 +185,8 @@ int runWindowed(const Options& options) {
     gfx::FrameRing ring(ctx);
     render::Renderer renderer(ctx, ring,
                               {static_cast<std::uint32_t>(width > 0 ? width : options.width),
-                               static_cast<std::uint32_t>(height > 0 ? height : options.height),
-                               options.crt});
+                               static_cast<std::uint32_t>(height > 0 ? height : options.height), options.crt,
+                               options.hud});
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
@@ -219,6 +219,8 @@ int runWindowed(const Options& options) {
                     clock.setMuted(muted);
                 } else if (event.key.key == SDLK_C) {
                     renderer.setCrt(!renderer.crt());
+                } else if (event.key.key == SDLK_H) {
+                    renderer.setHud(!renderer.hud());
                 } else if (const int chapter = chapterForKey(event.key.key, clock.now()); chapter >= 0) {
                     clock.seek(show::chapterStart(chapter));
                 }
@@ -288,7 +290,7 @@ int runRenderStream(const Options& options) {
     const auto height = static_cast<std::uint32_t>(options.height);
     gfx::Readback readback(ctx, width, height);
     gfx::FrameRing ring(ctx);
-    render::Renderer renderer(ctx, ring, {width, height, options.crt});
+    render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud});
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();
         renderer.render(cmd, show::sampleTimeline(options.time + static_cast<double>(i) / options.fps));

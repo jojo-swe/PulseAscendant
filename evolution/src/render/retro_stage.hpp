@@ -6,6 +6,7 @@
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
 #include "show/timeline.hpp"
+#include "text/text_pass.hpp"
 
 #include <volk.h>
 
@@ -30,7 +31,9 @@ public:
 
     // Loads every effect shader of the registry up front, so no chapter hitches on its first frame. Throws
     // std::runtime_error if the GPU cannot store to an R8_UINT image.
-    RetroStage(gfx::Context& ctx, gfx::FrameRing& ring);
+    // The text pass draws the palette indices of text-only effects and text overlays (drawIndex); it must
+    // outlive the stage.
+    RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text);
 
     // Records the effect and palette passes if (chapter, effect, retroFrame) differ from the last frame
     // rendered; returns whether they were recorded. image() then holds the frame's picture either way.
@@ -50,6 +53,7 @@ private:
     };
 
     gfx::FrameRing& ring_;
+    text::TextPass& text_; // for the text-only effects and overlays of the later tasks of the step
     gfx::Image index_;
     gfx::Image color_;
     // One palette per frame in flight: the CPU writes the slot being recorded, whose last submit is done.

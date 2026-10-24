@@ -46,8 +46,8 @@ std::uint32_t retroFrameOf(const show::TimelineFrame& frame, std::uint32_t rate)
 
 } // namespace
 
-RetroStage::RetroStage(gfx::Context& ctx, gfx::FrameRing& ring)
-    : ring_(ring), index_(createIndexImage(ctx)),
+RetroStage::RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text)
+    : ring_(ring), text_(text), index_(createIndexImage(ctx)),
       color_(ctx, {kWidth, kHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, 1, "retro color"}),
       paletteMap_(ctx, gfx::shaderDir() / "retro_palette_map.comp.spv", kPaletteMapBindings, 0) {
     for (gfx::Buffer& palette : palettes_)

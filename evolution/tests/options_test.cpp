@@ -111,13 +111,20 @@ int main() {
         CHECK(!evo::parseOptions({"--no-crt"}).crt);
         CHECK(!evo::parseOptions({"--capture-dir", "out", "--no-crt"}).crt);
 
+        // --no-hud: no chapter title or epoch cards; shown by default.
+        CHECK(defaults.hud);
+        CHECK(!evo::parseOptions({"--no-hud"}).hud);
+        CHECK(!evo::parseOptions({"--render-stream", "--duration", "1", "--no-hud"}).hud);
+        CHECK(evo::parseOptions({"--no-crt"}).hud);
+
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
         for (const char* flag :
-             {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt"})
+             {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt", "--no-hud"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);
         CHECK(evo::helpText().find("C CRT look") != std::string::npos);
+        CHECK(evo::helpText().find("H HUD") != std::string::npos);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "CHECK failed: %s\n", error.what());
         return 1;

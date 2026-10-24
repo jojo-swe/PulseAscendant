@@ -60,8 +60,9 @@ void prepareWrite(VkCommandBuffer cmd, gfx::Image& image) {
 
 } // namespace
 
-Compositor::Compositor(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height)
-    : ctx_(ctx), ring_(ring),
+Compositor::Compositor(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text, std::uint32_t width,
+                       std::uint32_t height)
+    : ctx_(ctx), ring_(ring), text_(text),
       crt_(ctx, gfx::shaderDir() / "crt.comp.spv", kCrtBindings, sizeof(CompositorPushConstants)),
       composite_(ctx, gfx::shaderDir() / "composite.comp.spv", kCompositeBindings,
                  sizeof(CompositorPushConstants)),
@@ -73,7 +74,7 @@ void Compositor::resize(std::uint32_t width, std::uint32_t height) {
 }
 
 void Compositor::render(VkCommandBuffer cmd, gfx::Image& retro, gfx::Image& modern,
-                        const show::TimelineFrame& frame, bool crt) {
+                        const show::TimelineFrame& frame, bool crt, std::span<const text::Item> overlay) {
     const VkExtent2D size = output_.extent();
     const CompositorPushConstants push{size.width,    size.height,
                                        frame.era,     frame.wipe,
@@ -95,6 +96,10 @@ void Compositor::render(VkCommandBuffer cmd, gfx::Image& retro, gfx::Image& mode
     composite_.bind(cmd, ring_, compositeImages, {});
     composite_.push(cmd, &push, sizeof push);
     composite_.dispatch(cmd, size.width, size.height);
+
+    // Last, over both eras.
+    if (!overlay.empty())
+        text_.drawRgba(cmd, output_, overlay);
 }
 
 } // namespace evo::render

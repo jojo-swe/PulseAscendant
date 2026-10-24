@@ -97,6 +97,15 @@ add_library(evo_show STATIC
 target_include_directories(evo_show PUBLIC src)
 target_compile_definitions(evo_show PRIVATE EVO_VERSION="${PROJECT_VERSION}")
 
+# Text: the original 8x8 font, its atlas image and the compute pass that draws strings into the 1993 index
+# image or blends them over an RGBA8 image.
+add_library(evo_text STATIC
+    src/text/atlas.cpp
+    src/text/font8x8.cpp
+    src/text/text_pass.cpp)
+target_include_directories(evo_text PUBLIC src)
+target_link_libraries(evo_text PUBLIC evo_gfx)
+
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
 # registry and palette builders it draws on.
@@ -108,7 +117,7 @@ add_library(evo_render STATIC
     src/retro/effects.hpp
     src/retro/palette.cpp)
 target_include_directories(evo_render PUBLIC src)
-target_link_libraries(evo_render PUBLIC evo_gfx evo_show)
+target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
 
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.
@@ -130,7 +139,9 @@ evo_add_shaders(Evolution
     shaders/crt.comp
     shaders/composite.comp
     shaders/retro/palette_map.comp
-    shaders/retro/test_pattern.comp)
+    shaders/retro/test_pattern.comp
+    shaders/text/text_index.comp
+    shaders/text/text_rgba.comp)
 
 # The show's music (git-ignored; tools/prepare_show.py writes it) goes where Evolution looks for it, so a dev
 # build plays it with no flags: a symbolic link, or a copy on Windows, where links need extra privileges.
@@ -206,6 +217,18 @@ target_compile_definitions(renderer_test PRIVATE
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(renderer_test Evolution_shaders)
 add_test(NAME renderer COMMAND renderer_test)
+
+# The font's invariants, its UTF-8 mapping and the atlas layout; CPU only.
+add_executable(font_test tests/font_test.cpp)
+target_link_libraries(font_test PRIVATE evo_text)
+add_test(NAME font COMMAND font_test)
+
+# The text pass against a CPU rendering of the font, with the validation layer on.
+add_executable(text_pass_test tests/text_pass_test.cpp)
+target_link_libraries(text_pass_test PRIVATE evo_text)
+target_compile_definitions(text_pass_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(text_pass_test Evolution_shaders)
+add_test(NAME text_pass COMMAND text_pass_test)
 
 add_executable(swapchain_test tests/swapchain_test.cpp)
 target_link_libraries(swapchain_test PRIVATE evo_gfx)
