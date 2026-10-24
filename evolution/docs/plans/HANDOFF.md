@@ -1,11 +1,11 @@
-# Handoff — EVOLUTION (uppdaterad 2026-10-24, steg 1 klart)
+# Handoff — EVOLUTION (uppdaterad 2026-10-24, steg 2 klart)
 
 Läs detta först i nästa session. Specen och planerna ligger bredvid.
 
 ## Läge
 
-- **Spec:** `2026-10-21-evolution-design.md` — godkänd av ägaren. Alla standardval i avsnitt 9 gäller (Vulkan 1.3 + RT krävs, Studion, DOS-boot, två epoker, CRT på, engelsk text, syntetisk placeholder-musik). Credits-texten är inte bekräftad.
-- **Planer:** `2026-10-21-step0-skeleton.md` (steg 0, klart), `2026-10-23-step1-audio-timeline.md` (steg 1, klart; amendment med tre akter), `2026-10-24-step2-retro-pipeline.md` (steg 2, nästa). Status per task står längre ner här.
+- **Spec:** `2026-10-21-evolution-design.md` — godkänd av ägaren. Alla standardval i avsnitt 9 gäller (Vulkan 1.3 + RT krävs, Studion, DOS-boot, två epoker, CRT på, engelsk text, syntetisk placeholder-musik). Credits-texten är inte bekräftad. CREDITS (kapitel 29) är sedan steg 2 ett 1993-kapitel: en sinusscroller med `eraFixed` 0 (se steg 2 nedan).
+- **Planer:** `2026-10-21-step0-skeleton.md` (steg 0, klart), `2026-10-23-step1-audio-timeline.md` (steg 1, klart; amendment med tre akter), `2026-10-24-step2-retro-pipeline.md` (steg 2, klart; slutgranskning återstår). Status per task står längre ner här.
 - **Branch:** `claude/evolution-showcase-plan`, utkast-PR #3 i jojo-swe/PulseAscendant. Allt arbete under `evolution/`.
 - **Musik:** levererad. Tre Suno-låtar av joyolo, en per akt: Amiga Trance Demo (194,00 s), Guitar Trance (218,40 s), Rigid Arpeggios (298,76 s), totalt 711,16 s. MP3:orna i `music/source/` och WAV:arna i `assets/music/` är git-ignorerade; `python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Rigid Arpeggios.mp3"` återskapar `show.wav`, headers och kvitton. Varje aktskarv i `show.wav` har en 3 ms raised-cosine-fade (tar bort ett klick; längd, analys och kapitelstarter oförändrade). Proveniens i `licenses/MUSIC-NOTICE.md`. Placeholder-låten används bara av Python-testerna.
 - **Arbetssätt ägaren vill ha:** denna session är hjärnan/kontrollern; Opus-subagenter gör de enklare tasks (implementation och granskning). Processen: superpowers:subagent-driven-development med en implementer + en reviewer per task.
@@ -55,7 +55,7 @@ Beslut i steg 0 (utöver tidigare): min upplösning 16; VK_KHR_swapchain via ext
 | 6. Frame synlig i testmönstret | **klar** | f726216 |
 | 7. README + handoff | **klar** | `Document the music pipeline and step 1 controls` |
 
-15/15 CTest gröna på lavapipe (`options, png, png_decode, context, offscreen, swapchain, render_stream, capture, exit_codes, python_tools, audio_transport, timeline, era, clock, show_info`), plus `windowed` och `silent_mode` bakom `EVO_RUNTIME_TESTS`. Bygget renderar fortfarande testmönstret, men det visar timelinens läge (kapitel, epok 1993/2026, övergång, beat och kick).
+15/15 CTest gröna på lavapipe vid steg 1:s slut (dagens lista står under steg 2), plus `windowed` och `silent_mode` bakom `EVO_RUNTIME_TESTS`. Bygget renderar fortfarande testmönstret, men det visar timelinens läge (kapitel, epok 1993/2026, övergång, beat och kick).
 
 Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 default); exakta beat-tider (4 decimaler); `show_targets.json` är ett objekt `{max_chapter_seconds, chapters:[…]}` — Task 3 cross-check läser `.chapters`/`chapterTargets[]`. Placeholder: hi-hats på fjärdedelar (åttondelar fick tempo-estimatorn att läsa 2/3-tempo). De riktiga trance-låtarna lästes också på 2/3-tempo (3/16-delays); `beat_grid.disambiguate_period()` väljer nu tempo efter basonseter på kandidatgridden (Amiga Trance Demo 141,6, Guitar Trance 140,5, Rigid Arpeggios 138,3 BPM; placeholdern oförändrad 134). Showen är tre akter, 31 kapitel, 34 135 680 frames = 711,16 s (planens amendment). BeatSwap-pariteten är förankrad i downbeat D (flippen på D landar alltid på 2026). `--show-info` skriver musiksökvägen `assets/music/show.wav` relativt exe:n, samma som `--music`-defaulten. Configure länkar `assets/music/show.wav` till `bin/assets/music/` när den finns (kopia på Windows); annars SILENT MODE. Klockan faller tillbaka till monoton tid om strömmen dör mitt i showen. `chapterForKey`/`windowTitle` är publika för tester. `silent_mode` spelar en gles tyst WAV av showens exakta längd, så bara ljuddrivrutinen avgör.
 
@@ -75,27 +75,41 @@ Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 def
 - `eraCut` syns inte i testmönstret (ingen plats i push constants).
 - Övrigt från granskningarna: råa tag-bytes i WAV-felmeddelanden; testluckor (JSON-accent, `beatAt` efter sista beat); näst bästa tempokandidat ignoreras och `tempo_candidates` kan få nyckelkollisioner; ac4832b bygger inte ensam (bara bisect); `marks()`-hjälparen i era-testet speglar koden; wipe-fallbacken testas bara syntetiskt.
 
-## Steg 2 — pågår (plan `2026-10-24-step2-retro-pipeline.md`)
+## Steg 2 — KLART (2026-10-24, plan `2026-10-24-step2-retro-pipeline.md`)
 
 | Task | Status | Commit |
 |---|---|---|
 | 1. Render-grund (Image, Buffer, FrameRing, ComputePipeline, Readback) | **klar**, granskad (en fixrunda) | e676fd4, b13f2d9, 0cd7e88 |
-| 2. Renderer, retro-steg, CRT-pillarbox, compositor | pågår | |
-| 3. 8×8-font + textpass | | |
-| 4. BOOT | | |
-| 5. PLASMA | | |
-| 6. Sinusscroller | | |
-| 7. Storyboard-verktyg + README | | |
+| 2. Renderer, retro-steg, CRT-pillarbox, compositor | **klar**, granskad | e972532, 1036625 |
+| 3. 8×8-font + textpass | **klar**, granskad | 3299146 |
+| 4. BOOT | **klar**, granskad (en fixrunda) | 7417740, ad31bdc, cfc78e0 |
+| 5. PLASMA | **klar**, granskad | c2dcb87 |
+| 6. Sinusscroller | **klar**, granskad | ea05f70, ed9fb5b |
+| 7. Storyboard-verktyg + README | **klar** | `Capture a storyboard of every chapter in both eras` |
+
+23/23 CTest gröna på lavapipe (`options, png, png_decode, audio_transport, timeline, era, clock, context, gfx_foundation, renderer, boot, plasma, scroller, font, text_pass, swapchain, render_stream, capture, storyboard, show_info, exit_codes, no_wait_idle, python_tools`), plus `windowed`, `windowed_unsupported` och `silent_mode` bakom `EVO_RUNTIME_TESTS`. Testet `offscreen` finns inte längre (Offscreen ersattes av frame-ringen i Task 1–2).
+
+Beslut i steg 2 Task 7 (storyboard): `tools/storyboard.py --app EXE --out DIR [--width 640 --height 360] [--chapters 0,3] [--no-crt]` fångar varje kapitel vid 20 %, accenten och 80 %, en gång tvingat till 1993 och en gång till 2026, och sätter ihop en PNG per akt (`act1.png`–`act3.png`; rader = kapitel, sex kolumner, cellerna nedskalade 2× med boxfilter, 2 px mörkgrå gutter, etiketter i ett eget 5×7-typsnitt eftersom HUD-titeln blir oläslig i halv storlek; HUD:en är ändå på). Tvingandet är den diagnostiska miljövariabeln `EVO_FORCE_ERA` (`0`/`1`, annat ignoreras) som bara capture-läget läser: den sätter `era`, `wipe` (0 eller 1) och `eraCut` 0. Hela showen i 640×360 tar ~25 s på lavapipe. CTest `storyboard` kör kapitel 0 och 3 i 320×180 och kontrollerar storlek och att 1993- och 2026-cellerna skiljer sig; `capture` kontrollerar att `EVO_FORCE_ERA=1` ändrar BOOT och att ogiltiga värden ignoreras.
 
 Beslut i steg 2 Task 6 (sinusscrollern): CREDITS (kapitel 29) har nu `eraFixed` 0 i stället för 1 — eftertexterna rullar som en 1993-sinusscroller (vit text på mörkblått `#000040`, statisk rad `EVOLUTION` överst), vilket aldrig hade syntes i en 2026-låst Cut. Kortet `1993 → 2026 · CREDITS` är flyttat till kapitlets thenCard så att HUD:en visar det (amendment-raden i steg 1-planen och `era_test` uppdaterade). Scrollern räknar positioner från `retroFrame / 35` (ren funktion, cachebar), en `text::Item` per tecken, och loopar när hela texten passerat (period 320 + textbredd). FLYBY behåller testmönstret till steg 3 men scrollar `WE WERE THERE IN 1993 ...` i index 255 (vitt i gråskalan) längst ner. HUD: under en Wipe visas båda epokkorten bara medan 0 < wipe < 1 (före: 1993-kortet, efter: 2026-kortet); ett kort som inte ryms i 2× mellan marginalerna ritas i 1×.
+
+**Uppskjutna småfynd från steg 2** (ur ledgern):
+- Render-grunden (Task 1): läsgenvägen i `Image::transition` spårar stage/access som separata unioner; `recording_` fastnar efter ett undantag mitt i en frame; `rgb()` före completion bara dokumenterat; grep-testets luckor (`immediate(`/`waitAll(` och markörernas placering); `windowed_unsupported` matchar bara meddelandet, inte exit-koden; callback-listan kopieras vid varje `begin`; inget C++-test för `invalid_argument`-kasten; push-storlek 0 når `vkCmdPushConstants`; pipeline utan bindings skapar en tom pool.
+- Renderer (Task 2): inget test för två frames i flykt som överlappar; kommentaren i testmönstret är inexakt; `app.hpp`-kommentaren behöver radbrytas om. (CRT-barrelns ~3 kolumner hanteras av textmarginalerna ≥ 4 px; effekter utan shader rensar sin indexbild sedan Task 4.)
+- Text/HUD (Task 3): batchningen av överlappande text är inte låst av ett test; ingen NaN-vakt i `layout()`; titeln i 1× är pytteliten i 4K (skala HUD:en med höjden senare). ~~Kort upp till 41 tecken klipps under ~680 px~~ — åtgärdat i Task 6 (1×-fallback). ~~`RetroStage::text_` oanvänd~~ — används sedan Task 4.
+- BOOT (Task 4): `effects.hpp` drar in mycket via `boot.hpp`; en radstart en frame för tidigt fångas inte (testerna samplar 1–2 frames under).
+- PLASMA (Task 5): flyttalsdrift mellan drivrutiner vid vikningsgränserna (ofarlig); `kRetroRate` dubblerad i shadern (använd hellre `pc.retroSeconds`); ingen kick-störning på GPU-nivå; namnen `palette.cpp` mot `palettes.cpp`; en lös kommentar; knyckar i C0-gradienten.
+- Scrollern (Task 6): FLYBY-hälsningen är svårläst över det ljusa testmönstret och krockar med 2×-kortet i 640×360 (lägg en skugga i index 0; steg 3 byter ändå mönstret); FLYBY-testet kontrollerar bara bläcket, inte att mönstret överlever; gränsen för 1×-fallbacken saknar test; planens Task 6-text är ersatt av besluten (notera vid slutgranskningen).
 
 Steg 1:s slutgranskning (Fable) godkände grunden efter en fixvåg: 3 ms raised-cosine-toning vid aktskarvarna (ägaren informerad), UTF-8-sökvägar och argv på Windows, rapport vid byte till tyst läge, kompensation för enhetsbuffert plus `--audio-offset MS` (positivt = bilden tidigare relativt ljudet), testhärdning. Uppskjutet från den: BeatSwap i Dots får bara en bar-flipp innan beat-flipparna (överväg att förlänga fönstret i stället för att släppa en flipp, steg 6); WAV i int16 för halva minnet; RIFF-storlek 0xFFFFFFFF ger otydligt fel; exportens bildrutenät (711,16 s är inte heltal 60 fps-rutor — steg 8: padda ljudet till rutnätet); ägarkontroller på Windows med hörlurar (skarvar, A/V-offset, urkoppling av hörlurar). Från steg 2 Task 1: läsgenvägen i `Image::transition` spårar stage/access som separata unioner; `recording_` fastnar efter undantag mitt i en frame; `rgb()` före completion bara dokumenterat; grep-testets luckor (`immediate(`/`waitAll(`); `windowed_unsupported` matchar bara meddelandet; push-storlek 0; pipeline utan bindings.
 
 
 Render-grunden (steg 0-punkterna) är nu på plats i Task 1: frame-ring med timeline-semafor, `Image` med layoutspårning och delad `gfx/sync.hpp`, compute-pass, readback bara vid export, context före fönstret. Övriga uppskjutna småfynd från steg 0 och 1 tas när de berör en task.
 
+Steg 2 levererar: indexerad 320×200 med palett och palettcykling på CPU:n, fps-lås per effekt (retroFrame), 4:3-pillarbox med CRT (C / `--no-crt`), era-compositor, 8×8-font med HUD (H / `--no-hud`), BOOT, PLASMA och sinusscrollrar (CREDITS, FLYBY-hälsningen). Dithering finns som delad 4×4 Bayer-tröskel i `shaders/retro/common.glsl` (testmönstret använder den), inte som eget pass.
+
 ## Så här återupptas arbetet
 
-1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (15 tester). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
-2. Fortsätt med steg 2, Task 1: `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief evolution/docs/plans/2026-10-24-step2-retro-pipeline.md 1`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
-3. När steg 2 är klart: slutgranskning av steg 2, sedan nästa stegs plan.
+1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (23 tester). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
+2. Kör slutgranskningen av steg 2 (hela `e676fd4..HEAD` under `evolution/`) och titta på storyboarden: `python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard`. Skriv sedan steg 3:s plan (resterande retroeffekter) och kör den med `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief <plan> <n>`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
+3. När steg 3 är klart: slutgranskning av steg 3, sedan nästa stegs plan.
