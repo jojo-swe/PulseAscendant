@@ -17,9 +17,9 @@ namespace evo::retro {
 // accent), never of the exact time within it.
 //
 // The classic DOS look: 8x8 glyphs at scale 1 in the 320x200 index image, light grey on black, a 4-pixel
-// margin at the left and the top, 8-pixel lines; a line longer than the 39 columns that fit wraps at a word
-// as a 40-column screen would show it. The cursor is an underscore on row 7 of the cell after the last
-// character written, blinking at 2 Hz.
+// margin at the left and the top, 8-pixel lines. Every script line fits the 39 columns right of the margin
+// (a longer one would wrap at a word, as a 40-column screen would show it). The cursor is an underscore on
+// row 7 of the cell after the last character written, blinking at 2 Hz.
 inline constexpr std::uint32_t kBootRetroRate = 35;
 
 // The palette indices BOOT uses: the DOS text colours.

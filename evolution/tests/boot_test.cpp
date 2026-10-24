@@ -140,19 +140,31 @@ void testScript() {
     CHECK(screen(1.61) == (Lines{"C:\\>cd demo", "C:\\DEMO>"}));
     CHECK(screen(3.0) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe"}));
     CHECK(screen(3.41) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026"}));
-    // The sound card line is 45 characters: it wraps at a word into the 39 columns.
-    const Lines atFive = screen(5.0);
-    CHECK(atFive ==
+    CHECK(screen(5.0) ==
           (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026",
-                 "Sound Blaster 16 at 220h, IRQ 5, DMA 1", "... OK", "Gravis Ultrasound ... not found"}));
+                 "Sound Blaster 16: 220h IRQ5 DMA1 ... OK", "Gravis Ultrasound ... not found"}));
     CHECK(screen(5.41).back() == "VGA 320x200x256 ... OK");
     CHECK(screen(6.01).back() == "Loading");
     CHECK(screen(6.24).back() == "Loading");
     CHECK(screen(6.26).back() == "Loading.");
     CHECK(screen(6.8).back() == "Loading...");
     CHECK(screen(7.01).back() == "Loading....");
-    for (const std::string& line : screen(7.01))
-        CHECK(line.size() <= evo::retro::kBootColumns);
+}
+
+// Every line of the script fits the 39 columns as written: at every retro frame of the chapter the screen
+// has exactly one row per line written, none wrapped, and the full screen just before the flash is the
+// whole script.
+void testLinesFit() {
+    using Lines = std::vector<std::string>;
+    const TimelineFrame frame = boot(1.0);
+    const std::uint32_t flash = evo::retro::bootFlashFrame(frame);
+    for (std::uint32_t retroFrame = 0; retroFrame < flash; ++retroFrame)
+        for (const std::string& line : evo::retro::bootScreen(frame, retroFrame))
+            CHECK(line.size() <= evo::retro::kBootColumns);
+    CHECK(evo::retro::bootScreen(frame, flash - 1) ==
+          (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026",
+                 "Sound Blaster 16: 220h IRQ5 DMA1 ... OK", "Gravis Ultrasound ... not found",
+                 "VGA 320x200x256 ... OK", "Loading...."}));
 }
 
 // Where the flash goes: 4 retro frames before the chapter ends (2 white, then black into FLYBY), or at the
@@ -208,9 +220,12 @@ void testTextIsPure() {
     CHECK(items[0].text == "C:\\>" && items[0].x == 4 && items[0].y == 4 && items[0].scale == 1);
     CHECK((items[0].rgba & 0xffu) == 7);
     CHECK(items[1].text == "_" && items[1].x == 4 + 4 * 8 && items[1].y == 4 && (items[1].rgba & 0xffu) == 7);
-    // 2 Hz: on for the first quarter second of each half, off for the second.
+    // 2 Hz: on for the first quarter second of each half (judged at the retro frame's centre), off for the
+    // second: on at 0.0-0.25 and 0.5-0.75 s, off at 0.25-0.5 and 0.75-1.0 s.
     CHECK(evo::retro::bootText(boot(0.3), 10).size() == 1);
-    CHECK(evo::retro::bootText(boot(0.5), 17).size() == 1);
+    CHECK(evo::retro::bootText(boot(0.5), 17).size() == 2);
+    CHECK(evo::retro::bootText(boot(0.7), 24).size() == 2);
+    CHECK(evo::retro::bootText(boot(0.8), 28).size() == 1);
     CHECK(evo::retro::bootText(boot(1.0), 35).size() == 2);
 }
 
@@ -236,16 +251,17 @@ void testImages(evo::gfx::Context& ctx) {
     pattern.effect = Effect::Dots;
     CHECK(fixture.render(pattern).count(0) < kWidth * kHeight / 2);
 
-    // t = 0.5: the prompt and the cursor only (blinked off at 0.5; on at 0.1).
+    // t = 0.5: the prompt and the cursor only; at 0.3 the cursor is blinked off.
     const Indices prompt = fixture.render(boot(0.5));
     std::printf("boot: t=0.5 has %zu set pixels\n", prompt.nonZero());
     CHECK(prompt.nonZero() > 0 && prompt.nonZero() <= 70);
     CHECK(prompt.count(7) == prompt.nonZero());
     CHECK(matchesText(prompt, "C:\\>", 4, 4));
-    const Indices cursor = fixture.render(boot(0.1));
-    CHECK(cursor.nonZero() <= 70 && cursor.nonZero() == prompt.nonZero() + 7);
     for (int x = 0; x < 7; ++x)
-        CHECK(cursor.at(4 + 32 + x, 4 + 7) == 7); // the cursor: row 7 of the fifth cell
+        CHECK(prompt.at(4 + 32 + x, 4 + 7) == 7); // the cursor: row 7 of the fifth cell
+    const Indices blinked = fixture.render(boot(0.3));
+    CHECK(blinked.nonZero() + 7 == prompt.nonZero());
+    CHECK(matchesText(blinked, "C:\\>", 4, 4));
 
     // t = 3.0: "evolution.exe" typed on the second line.
     const Indices typed = fixture.render(boot(3.0));
@@ -290,6 +306,7 @@ int main() {
         setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testScript();
+        testLinesFit();
         testFlashFrame();
         testTextIsPure();
         {

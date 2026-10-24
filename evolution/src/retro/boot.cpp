@@ -26,7 +26,7 @@ constexpr std::array<Write, 10> kScript = {{
     {1.6, "\nC:\\DEMO>", 0},
     {2.2, "evolution.exe", kTyping},
     {3.4, "\n\nEVOLUTION  1993 -> 2026\n", 0},
-    {4.0, "Sound Blaster 16 at 220h, IRQ 5, DMA 1 ... OK\n", 0},
+    {4.0, "Sound Blaster 16: 220h IRQ5 DMA1 ... OK\n", 0},
     {4.8, "Gravis Ultrasound ... not found\n", 0},
     {5.4, "VGA 320x200x256 ... OK\n", 0},
     {6.0, "Loading", 0},
@@ -82,8 +82,10 @@ std::vector<std::string> rows(std::string_view text) {
 }
 
 bool cursorOn(std::uint32_t retroFrame) {
-    // 2 Hz: on for the first quarter second of every half second.
-    return retroFrame * 4 / kBootRetroRate % 2 == 0;
+    // 2 Hz: on for the first quarter second of every half second (0.0-0.25 s, 0.5-0.75 s, ...), judged at the
+    // centre of the retro frame, (retroFrame + 0.5) / rate, so the frame that holds t = 0.5 s (17, from
+    // 0.486 s) shows it. floor(centre * 4) in integers: (2 * retroFrame + 1) * 2 / rate.
+    return (2 * retroFrame + 1) * 2 / kBootRetroRate % 2 == 0;
 }
 
 } // namespace
