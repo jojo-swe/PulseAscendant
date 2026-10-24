@@ -24,13 +24,14 @@ struct ContextOptions {
 
 // What the device reports for ray tracing (VkPhysicalDeviceRayTracingPipelinePropertiesKHR and
 // VkPhysicalDeviceAccelerationStructurePropertiesKHR). Read from the driver, never assumed: lavapipe reports
-// {32, 16, 32, 31, 8}, an RTX GPU handle 32, handle alignment 32 and base alignment 64.
+// {32, 16, 32, 31, 8, 16384}, an RTX GPU handle 32, handle alignment 32, base alignment 64, max stride 4096.
 struct RayTracingProperties {
     std::uint32_t shaderGroupHandleSize;
     std::uint32_t shaderGroupHandleAlignment;
     std::uint32_t shaderGroupBaseAlignment;
     std::uint32_t maxRayRecursionDepth;
     std::uint32_t minScratchOffsetAlignment; // minAccelerationStructureScratchOffsetAlignment
+    std::uint32_t maxShaderGroupStride;      // the largest miss / hit / callable SBT stride
 };
 
 // Thrown when the machine cannot run EVOLUTION: no Vulkan loader, no Vulkan 1.3 driver, no physical device,

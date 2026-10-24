@@ -67,6 +67,8 @@ add_library(evo_gfx STATIC
     src/gfx/image.cpp
     src/gfx/paths.cpp
     src/gfx/readback.cpp
+    src/gfx/rt_pipeline.cpp
+    src/gfx/sbt.cpp
     src/gfx/shader.cpp
     src/gfx/swapchain.cpp
     src/gfx/sync.hpp
@@ -296,6 +298,44 @@ add_custom_target(accel_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/test_ray_que
 add_dependencies(accel_test accel_test_shaders)
 target_compile_definitions(accel_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME accel COMMAND accel_test)
+
+# The shader binding table layout for lavapipe's and RTX's properties (Review Focus 4), and the ray tracing
+# pipeline tracing a probe (test-only shaders: one raygen, two misses and four closest-hits built from one
+# source each with -DMISS_INDEX / -DHIT_GROUP) whose pixels must each name the hit group or miss they reached,
+# with the validation layer on; fails on any message.
+set(sbtProbeShaders "")
+set(sbtProbeVariants "rgen" "miss0.rmiss:-DMISS_INDEX=0" "miss1.rmiss:-DMISS_INDEX=1")
+foreach(group 0 1 2 3)
+    list(APPEND sbtProbeVariants "hit${group}.rchit:-DHIT_GROUP=${group}")
+endforeach()
+foreach(variant IN LISTS sbtProbeVariants)
+    if(variant STREQUAL "rgen")
+        set(spirv "${EVO_TEST_SPIRV_DIR}/test_sbt_probe.rgen.spv")
+        set(source "${CMAKE_SOURCE_DIR}/shaders/test/sbt_probe.rgen")
+        set(define "")
+    else()
+        string(REPLACE ":" ";" parts "${variant}")
+        list(GET parts 0 name)
+        list(GET parts 1 define)
+        cmake_path(GET name EXTENSION LAST_ONLY extension)
+        set(spirv "${EVO_TEST_SPIRV_DIR}/test_sbt_probe_${name}.spv")
+        set(source "${CMAKE_SOURCE_DIR}/shaders/test/sbt_probe${extension}")
+    endif()
+    add_custom_command(
+        OUTPUT "${spirv}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+        COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 ${define} -o "${spirv}" "${source}"
+        DEPENDS "${source}"
+        COMMENT "Compiling test shader ${spirv}"
+        VERBATIM)
+    list(APPEND sbtProbeShaders "${spirv}")
+endforeach()
+add_custom_target(rt_pipeline_test_shaders DEPENDS ${sbtProbeShaders})
+add_executable(rt_pipeline_test tests/rt_pipeline_test.cpp)
+target_link_libraries(rt_pipeline_test PRIVATE evo_rt)
+add_dependencies(rt_pipeline_test rt_pipeline_test_shaders)
+target_compile_definitions(rt_pipeline_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_test(NAME rt_pipeline COMMAND rt_pipeline_test)
 
 # The renderer's passes at small sizes, with the validation layer on; fails on any message it reports.
 add_executable(renderer_test tests/renderer_test.cpp)

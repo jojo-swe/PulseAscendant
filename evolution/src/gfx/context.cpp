@@ -361,9 +361,12 @@ Context Context::create(const ContextOptions& options) {
     VkPhysicalDeviceProperties2 properties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
     properties2.pNext = &rtProperties;
     vkGetPhysicalDeviceProperties2(ctx.physicalDevice_, &properties2);
-    ctx.rayTracing_ = {rtProperties.shaderGroupHandleSize, rtProperties.shaderGroupHandleAlignment,
-                       rtProperties.shaderGroupBaseAlignment, rtProperties.maxRayRecursionDepth,
-                       accelProperties.minAccelerationStructureScratchOffsetAlignment};
+    ctx.rayTracing_ = {rtProperties.shaderGroupHandleSize,
+                       rtProperties.shaderGroupHandleAlignment,
+                       rtProperties.shaderGroupBaseAlignment,
+                       rtProperties.maxRayRecursionDepth,
+                       accelProperties.minAccelerationStructureScratchOffsetAlignment,
+                       rtProperties.maxShaderGroupStride};
 
     // --- Logical device: enable exactly the required features ---
     FeatureChain enabled;
@@ -538,6 +541,7 @@ std::string Context::deviceInfoJson() const {
            ",\"shaderGroupBaseAlignment\":" + std::to_string(rayTracing_.shaderGroupBaseAlignment) +
            ",\"maxRayRecursionDepth\":" + std::to_string(rayTracing_.maxRayRecursionDepth) +
            ",\"minScratchOffsetAlignment\":" + std::to_string(rayTracing_.minScratchOffsetAlignment) +
+           ",\"maxShaderGroupStride\":" + std::to_string(rayTracing_.maxShaderGroupStride) +
            "},\"validation\":" + (validation_ ? "true" : "false") + "}";
 }
 
