@@ -17,7 +17,7 @@ struct TextPushConstants {
     std::uint32_t first; // the first instance of the dispatch in the bound buffer
 };
 static_assert(sizeof(TextPushConstants) == 4);
-static_assert(sizeof(TextPass::GlyphInstance) == 16, "the std430 layout of GlyphInstance");
+static_assert(sizeof(GlyphInstance) == 16, "the std430 layout of GlyphInstance");
 
 constexpr std::array<gfx::Binding, 3> kBindings = {
     gfx::Binding{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER}, // the font atlas
@@ -39,12 +39,15 @@ struct Rect {
 
 // The glyphs of an item that touch a width x height target, and the rectangle they cover.
 struct Laid {
-    std::vector<TextPass::GlyphInstance> glyphs;
+    std::vector<GlyphInstance> glyphs;
     Rect bounds{0, 0, 0, 0};
 };
 
 Laid layout(const Item& item, VkExtent2D target) {
     Laid laid;
+    // NaN would turn into an unspecified integer below; infinity is no position either.
+    if (!std::isfinite(item.x) || !std::isfinite(item.y) || !std::isfinite(item.scale))
+        return laid;
     const int scale = std::clamp(static_cast<int>(std::lround(item.scale)), 1, kMaxScale);
     const int cell = 8 * scale;
     // Far-off positions (a scroller long gone) are clamped well outside any image, never overflowing.
@@ -79,6 +82,27 @@ void requireFormat(const gfx::Image& image, VkFormat format, const char* what) {
 }
 
 } // namespace
+
+std::vector<GlyphBatch> splitBatches(std::span<const Item> items, VkExtent2D target) {
+    std::vector<GlyphBatch> batches;
+    std::vector<Rect> bounds; // of each item in the last batch
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        Laid laid = layout(items[i], target);
+        if (laid.glyphs.empty())
+            continue;
+        const bool overlaps =
+            std::any_of(bounds.begin(), bounds.end(), [&](const Rect& r) { return r.overlaps(laid.bounds); });
+        if (batches.empty() || overlaps) {
+            batches.emplace_back();
+            bounds.clear();
+        }
+        GlyphBatch& batch = batches.back();
+        batch.glyphs.insert(batch.glyphs.end(), laid.glyphs.begin(), laid.glyphs.end());
+        batch.items.push_back(i);
+        bounds.push_back(laid.bounds);
+    }
+    return batches;
+}
 
 TextPass::TextPass(gfx::Context& ctx, gfx::FrameRing& ring)
     : ctx_(ctx), ring_(ring), atlas_(ctx),
@@ -125,25 +149,10 @@ void TextPass::draw(VkCommandBuffer cmd, gfx::ComputePipeline& pass, gfx::Image&
     if (!ring_.recording())
         throw std::logic_error("TextPass: draw outside FrameRing::begin()/submit()");
 
-    // Items go into one dispatch until one overlaps an item already in it: workgroups of a dispatch run in
-    // no particular order, so that item waits for the next dispatch. The glyphs of one item never overlap.
-    std::vector<GlyphInstance> batch;
-    std::vector<Rect> batchBounds;
-    for (const Item& item : items) {
-        Laid laid = layout(item, target.extent());
-        if (laid.glyphs.empty())
-            continue;
-        const bool overlaps = std::any_of(batchBounds.begin(), batchBounds.end(),
-                                          [&](const Rect& r) { return r.overlaps(laid.bounds); });
-        if (overlaps) {
-            dispatch(cmd, pass, target, batch, targetAccess);
-            batch.clear();
-            batchBounds.clear();
-        }
-        batch.insert(batch.end(), laid.glyphs.begin(), laid.glyphs.end());
-        batchBounds.push_back(laid.bounds);
-    }
-    dispatch(cmd, pass, target, batch, targetAccess);
+    // One dispatch per batch, each behind a barrier on the target (in dispatch()). The glyphs of one item
+    // never overlap.
+    for (const GlyphBatch& batch : splitBatches(items, target.extent()))
+        dispatch(cmd, pass, target, batch.glyphs, targetAccess);
 }
 
 void TextPass::dispatch(VkCommandBuffer cmd, gfx::ComputePipeline& pass, gfx::Image& target,

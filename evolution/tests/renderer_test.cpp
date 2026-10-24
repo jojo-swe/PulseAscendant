@@ -653,6 +653,70 @@ void testBoot(evo::gfx::Context& ctx) {
             CHECK(white.at(x, y)[0] == 255 && white.at(x, y)[1] == 255 && white.at(x, y)[2] == 255);
 }
 
+// PLASMA's 1993 picture at a retro frame (35 a second): chapter 3, era 0.
+TimelineFrame plasmaFrame(std::uint32_t retroFrame) {
+    TimelineFrame frame = evo::show::sampleTimeline(evo::show::chapterStart(3) + 1.0);
+    frame.era = 0.f;
+    frame.wipe = 0.f;
+    frame.eraCut = 0.f;
+    frame.localSeconds = (retroFrame + .5) / 35.0;
+    frame.showSeconds = evo::show::chapterStart(3) + frame.localSeconds;
+    return frame;
+}
+
+// Two frames in flight on one renderer: A recorded and submitted, then B recorded and submitted before A is
+// waited for, each with its own readback. Both must equal the same frames rendered one at a time: nothing B
+// writes on the CPU (palette, glyph instances, descriptor sets) may reach A, and B's passes must wait for A's
+// on the GPU. HUD and title on, so both frames also draw text.
+void testTwoFramesInFlight(evo::gfx::Context& ctx) {
+    constexpr std::uint32_t kWidth = 320, kHeight = 180;
+    const auto serial = [&](const TimelineFrame& frame) {
+        Harness harness(ctx, kWidth, kHeight, true, true, true);
+        return harness.render(frame).rgb;
+    };
+    struct Pair {
+        const char* name;
+        TimelineFrame a, b;
+        std::uint32_t retroA; // A's retro frame
+    };
+    // PLASMA at retro frames 70 and 71: the palette rotates, so the retro image re-renders with a different
+    // palette. Then PLASMA followed by BOOT while it types (its DOS text re-rendered into the other slot's
+    // glyph buffer).
+    const TimelineFrame boot = evo::show::sampleTimeline(2.4);
+    const std::array<Pair, 2> pairs = {{{"plasma 70, 71", plasmaFrame(70), plasmaFrame(71), 70},
+                                        {"plasma 72, boot", plasmaFrame(72), boot, 72}}};
+    CHECK(pairs[0].a.effect == Effect::Plasma && boot.effect == Effect::Boot);
+    for (const Pair& pair : pairs) {
+        const std::vector<std::uint8_t> expectedA = serial(pair.a);
+        const std::vector<std::uint8_t> expectedB = serial(pair.b);
+        CHECK(expectedA != expectedB);
+
+        evo::gfx::Readback readbackA(ctx, kWidth, kHeight);
+        evo::gfx::Readback readbackB(ctx, kWidth, kHeight);
+        evo::gfx::FrameRing ring(ctx);
+        Renderer renderer(ctx, ring, {kWidth, kHeight, true, true, true});
+
+        VkCommandBuffer cmd = ring.begin();
+        renderer.render(cmd, pair.a);
+        CHECK(renderer.lastStats().retroRendered && renderer.lastStats().retroFrame == pair.retroA);
+        readbackA.record(cmd, renderer.output());
+        const std::uint64_t doneA = ring.submit();
+
+        cmd = ring.begin(); // the other slot: does not wait for A
+        renderer.render(cmd, pair.b);
+        CHECK(renderer.lastStats().retroRendered && renderer.lastStats().retroFrame != pair.retroA);
+        readbackB.record(cmd, renderer.output());
+        const std::uint64_t doneB = ring.submit();
+
+        ring.wait(doneB);
+        ring.wait(doneA);
+        const bool sameA = readbackA.rgb() == expectedA, sameB = readbackB.rgb() == expectedB;
+        std::printf("in flight (%s): A %s, B %s\n", pair.name, sameA ? "matches" : "DIFFERS",
+                    sameB ? "matches" : "DIFFERS");
+        CHECK(sameA && sameB);
+    }
+}
+
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
     evo::gfx::FrameRing ring(ctx);
     bool threw = false;
@@ -686,6 +750,7 @@ int main() {
             testHud(ctx);
             testHudScaled(ctx);
             testBoot(ctx);
+            testTwoFramesInFlight(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

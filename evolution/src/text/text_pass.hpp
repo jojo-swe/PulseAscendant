@@ -29,13 +29,34 @@ struct Item {
     std::string text;
 };
 
+// A glyph instance the text shaders read (shaders/text/glyphs.glsl).
+struct GlyphInstance {
+    std::int32_t x, y;       // the top-left pixel of the glyph cell
+    std::uint32_t codeScale; // glyph code (32..127) in the low byte, scale above it
+    std::uint32_t rgba;
+};
+
+// One dispatch of a draw: the glyphs of `items` (indices into the drawn items, in draw order).
+struct GlyphBatch {
+    std::vector<GlyphInstance> glyphs;
+    std::vector<std::size_t> items;
+};
+
+// Pure: lays the items out on a target of the given extent and splits them into the dispatches a draw
+// records, in order. An item joins the current batch unless its glyph cells' bounding box overlaps one of an
+// item already in it (workgroups of a dispatch run in no particular order); then it starts the next batch, so
+// it lands on top. Items with no glyph on the target (empty, blank, wholly outside, or with a position or
+// scale that is not finite) are left out, and so are empty batches.
+std::vector<GlyphBatch> splitBatches(std::span<const Item> items, VkExtent2D target);
+
 // Draws Items with the 8x8 font: a compute pass over glyph instances, one 8x8 workgroup per glyph that
 // reads its cell of the font atlas and writes each set pixel's scale x scale block, clipped per pixel to the
 // target. Two variants:
 //   drawIndex  into an R8_UINT palette index image (the 1993 stage), writing the index where the font is set;
 //   drawRgba   into an R8G8B8A8_UNORM image, alpha-blending the colour over what is there.
 // Items are drawn in order: an item that overlaps an earlier one of the same call goes in a later dispatch
-// behind a barrier, so it lands on top (a drop shadow drawn first, then the text). Both record into the
+// behind a barrier, so it lands on top (a drop shadow drawn first, then the text; see splitBatches). An item
+// whose position or scale is not finite (NaN, infinity) draws nothing. Both record into the
 // ring's current command buffer (between begin() and submit()) and leave the target in GENERAL.
 //
 // The glyph instances go to a host-visible storage buffer of the ring slot being recorded, which the CPU
@@ -54,13 +75,6 @@ public:
     // begin()/submit().
     void drawIndex(VkCommandBuffer cmd, gfx::Image& indexImage, std::span<const Item> items);
     void drawRgba(VkCommandBuffer cmd, gfx::Image& rgbaImage, std::span<const Item> items);
-
-    // The glyph instance the shaders read (shaders/text/glyphs.glsl).
-    struct GlyphInstance {
-        std::int32_t x, y;       // the top-left pixel of the glyph cell
-        std::uint32_t codeScale; // glyph code (32..127) in the low byte, scale above it
-        std::uint32_t rgba;
-    };
 
 private:
     struct SlotBuffers {

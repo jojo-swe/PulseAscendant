@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -274,6 +275,73 @@ void testManyGlyphs(evo::gfx::Context& ctx, Fixture& fixture) {
     }
 }
 
+// The batch split on the CPU: which items share a dispatch, in draw order.
+void testSplitBatches() {
+    using evo::text::splitBatches;
+    const VkExtent2D target{320, 200};
+    const auto indices = [](const evo::text::GlyphBatch& batch) { return batch.items; };
+    using Indices = std::vector<std::size_t>;
+
+    // A shadow at +1,+1 and its text overlap: the shadow's dispatch first, the text's after it.
+    const std::vector<Item> shadowed = {{9, 9, 1, 0xFF000000u, "Hi!"}, {8, 8, 1, 0xFFFFFFFFu, "Hi!"}};
+    auto batches = splitBatches(shadowed, target);
+    CHECK(batches.size() == 2 && indices(batches[0]) == Indices{0} && indices(batches[1]) == Indices{1});
+    CHECK(batches[0].glyphs.size() == 3 && batches[0].glyphs[0].x == 9 && batches[0].glyphs[0].y == 9);
+    CHECK(batches[1].glyphs.size() == 3 && batches[1].glyphs[0].x == 8 && batches[1].glyphs[2].x == 24);
+    CHECK(batches[1].glyphs[0].codeScale == ('H' | 1u << 8) && batches[1].glyphs[0].rgba == 0xFFFFFFFFu);
+
+    // Items that do not overlap share one dispatch, their glyphs in item order; cells that merely touch
+    // (an item ending at x = 16, the next starting there) do not overlap.
+    const std::vector<Item> apart = {{0, 0, 1, 1, "AB"}, {16, 0, 1, 2, "CD"}, {0, 8, 2, 3, "EF"}};
+    batches = splitBatches(apart, target);
+    CHECK(batches.size() == 1 && indices(batches[0]) == (Indices{0, 1, 2}) && batches[0].glyphs.size() == 6);
+    CHECK(batches[0].glyphs[2].x == 16 && batches[0].glyphs[4].y == 8 && batches[0].glyphs[5].x == 16);
+    CHECK(batches[0].glyphs[5].codeScale == ('F' | 2u << 8));
+
+    // Three mutually overlapping items: three dispatches.
+    const std::vector<Item> stacked = {{0, 0, 1, 1, "AAA"}, {4, 4, 1, 2, "BBB"}, {8, 2, 1, 3, "CCC"}};
+    batches = splitBatches(stacked, target);
+    CHECK(batches.size() == 3);
+    for (std::size_t i = 0; i < 3; ++i)
+        CHECK(indices(batches[i]) == Indices{i} && batches[i].glyphs.size() == 3);
+
+    // Only the current batch counts: C overlaps A (in the batch before) but not B, so it joins B.
+    const std::vector<Item> chain = {{0, 0, 1, 1, "AA"}, {8, 4, 1, 2, "B"}, {0, 12, 1, 3, "C"}};
+    batches = splitBatches(chain, target);
+    CHECK(batches.size() == 2 && indices(batches[0]) == Indices{0} && indices(batches[1]) == (Indices{1, 2}));
+
+    // Nothing to draw: empty, blank, off the target, or a position or scale that is not finite. A valid item
+    // among them keeps its own index.
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    const std::vector<Item> nothing = {
+        {0, 0, 1, 1, ""},     {0, 0, 1, 1, "   "}, {-100, -100, 1, 1, "X"}, {400, 0, 1, 1, "X"},
+        {nan, 0, 1, 1, "X"},  {0, nan, 1, 1, "X"}, {0, 0, nan, 1, "X"},     {inf, 0, 1, 1, "X"},
+        {0, -inf, 1, 1, "X"}, {0, 0, inf, 1, "X"}, {0, 0, -inf, 1, "X"},
+    };
+    CHECK(splitBatches(nothing, target).empty());
+    std::vector<Item> mixed = nothing;
+    mixed.push_back({4, 4, 1, 9, "OK"});
+    batches = splitBatches(mixed, target);
+    CHECK(batches.size() == 1 && indices(batches[0]) == Indices{nothing.size()} &&
+          batches[0].glyphs.size() == 2);
+}
+
+// Items with a position or scale that is not finite draw nothing, beside one that draws.
+void testNonFinite(evo::gfx::Context& ctx, Fixture& fixture) {
+    Target target(ctx, 64, 32, VK_FORMAT_R8_UINT);
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    const std::vector<Item> items = {{nan, 8, 1, 7, "NAN"},
+                                     {8, inf, 1, 7, "INF"},
+                                     {8, 8, nan, 7, "NAN"},
+                                     {8, 8, inf, 7, "INF"},
+                                     {8, 8, 1, 15, "A"}};
+    const std::vector<std::uint8_t> pixels = fixture.draw(target, {}, items, true);
+    CHECK(pixels == referenceIndex(64, 32, {items.back()}));
+    CHECK(std::count(pixels.begin(), pixels.end(), std::uint8_t{7}) == 0);
+}
+
 void testEmpty(evo::gfx::Context& ctx, Fixture& fixture) {
     Target target(ctx, 32, 32, VK_FORMAT_R8_UINT);
     CHECK(countNonZero(fixture.draw(target, {}, {}, true)) == 0);
@@ -285,6 +353,7 @@ void testEmpty(evo::gfx::Context& ctx, Fixture& fixture) {
 int main() {
     try {
         setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        testSplitBatches();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())
@@ -297,6 +366,7 @@ int main() {
                 testRgba(ctx, fixture);
                 testManyGlyphs(ctx, fixture);
                 testEmpty(ctx, fixture);
+                testNonFinite(ctx, fixture);
             }
             CHECK(ctx.validationMessageCount() == 0);
         }
