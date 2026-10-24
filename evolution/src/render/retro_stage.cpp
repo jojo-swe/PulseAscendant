@@ -86,9 +86,12 @@ std::uint32_t retroFrameOf(const show::TimelineFrame& frame, std::uint32_t rate)
 
 RetroStage::RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text, EffectLookup effects)
     : ring_(ring), text_(text), effects_(effects), index_(createIndexImage(ctx)),
-      // Read back by tests (transfer source), like the index image.
-      color_(ctx, {kWidth, kHeight, VK_FORMAT_R8G8B8A8_UNORM,
-                   VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1, "retro color"}),
+      // Written as UNORM storage, sampled and mipmapped as sRGB; the blits need both transfer usages (and
+      // tests read it back).
+      color_(ctx, {kWidth, kHeight, VK_FORMAT_R8G8B8A8_SRGB,
+                   VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                       VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                   kRetroMipLevels, "retro color", VK_FORMAT_R8G8B8A8_UNORM}),
       paletteMap_(ctx, gfx::shaderDir() / "retro_palette_map.comp.spv", kPaletteMapBindings, 0),
       raster_(ctx, ring) {
     for (gfx::Buffer& palette : palettes_)
@@ -203,6 +206,11 @@ bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     const VkDescriptorBufferInfo paletteInfo{buffer.handle(), 0, kPaletteBytes};
     paletteMap_.bind(cmd, ring_, images, {&paletteInfo, 1});
     paletteMap_.dispatch(cmd, kWidth, kHeight);
+
+    // The mip chain from the new picture, ready for the compositor's CRT pass (storage reads of level 0)
+    // and for samplers.
+    color_.generateMips(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
     cached_ = key;
     return true;

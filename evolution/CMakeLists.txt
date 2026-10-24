@@ -508,3 +508,11 @@ target_link_libraries(compositor_test PRIVATE evo_render)
 target_compile_definitions(compositor_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(compositor_test Evolution_shaders)
 add_test(NAME compositor COMMAND compositor_test)
+
+# Images with mip levels, depth formats and sampled views, and the retro colour image as a mipmapped texture;
+# with the validation layer (and its synchronization validation) on, fails on any message it reports.
+add_executable(image_test tests/image_test.cpp)
+target_link_libraries(image_test PRIVATE evo_render)
+target_compile_definitions(image_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(image_test Evolution_shaders)
+add_test(NAME image COMMAND image_test)

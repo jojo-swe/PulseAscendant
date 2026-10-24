@@ -25,8 +25,8 @@ void Readback::record(VkCommandBuffer cmd, Image& src) {
     if (src.extent().width != width_ || src.extent().height != height_)
         throw std::invalid_argument("Readback of " + sizeText(width_, height_) + " cannot copy a " +
                                     sizeText(src.extent().width, src.extent().height) + " image");
-    if (src.format() != kFormat)
-        throw std::invalid_argument("Readback copies R8G8B8A8_UNORM images only, got format " +
+    if (src.format() != kFormat && src.format() != VK_FORMAT_R8G8B8A8_SRGB)
+        throw std::invalid_argument("Readback copies R8G8B8A8_UNORM and _SRGB images only, got format " +
                                     std::to_string(static_cast<int>(src.format())));
 
     src.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,

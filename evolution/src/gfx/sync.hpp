@@ -2,11 +2,39 @@
 
 #include <volk.h>
 
+#include <cstdint>
+
 namespace evo::gfx {
 
 // Every mip level and array layer of a colour image.
 inline constexpr VkImageSubresourceRange kColorRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0,
                                                      VK_REMAINING_ARRAY_LAYERS};
+
+// The aspects of a format: DEPTH for the depth formats, DEPTH | STENCIL for the combined ones, STENCIL for
+// S8_UINT, COLOR for every other format.
+inline constexpr VkImageAspectFlags formatAspect(VkFormat format) {
+    switch (format) {
+    case VK_FORMAT_D16_UNORM:
+    case VK_FORMAT_X8_D24_UNORM_PACK32:
+    case VK_FORMAT_D32_SFLOAT:
+        return VK_IMAGE_ASPECT_DEPTH_BIT;
+    case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+        return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    case VK_FORMAT_S8_UINT:
+        return VK_IMAGE_ASPECT_STENCIL_BIT;
+    default:
+        return VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+}
+
+// `levels` mip levels from `baseLevel` (all the rest by default) and every array layer, of the given aspects.
+inline constexpr VkImageSubresourceRange subresourceRange(VkImageAspectFlags aspect,
+                                                          std::uint32_t baseLevel = 0,
+                                                          std::uint32_t levels = VK_REMAINING_MIP_LEVELS) {
+    return {aspect, baseLevel, levels, 0, VK_REMAINING_ARRAY_LAYERS};
+}
 
 // One synchronization2 image barrier: waits for (srcStage, srcAccess), moves the image from `from` to `to`
 // and makes it available to (dstStage, dstAccess). Same queue family on both sides.
