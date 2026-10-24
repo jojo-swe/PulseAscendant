@@ -6,6 +6,7 @@
 #include "retro/boot.hpp"
 #include "retro/dots.hpp"
 #include "retro/flyby.hpp"
+#include "retro/glenz.hpp"
 #include "retro/palette.hpp"
 #include "retro/scroller.hpp"
 #include "retro/tunnel.hpp"
@@ -25,6 +26,8 @@ const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kDots{nullptr, kDotsRetroRate, dotsPalette, nullptr, nullptr, dotsScene};
     static constexpr EffectInfo kTunnel{nullptr, kTunnelRetroRate, tunnelPalette,
                                         nullptr, nullptr,          tunnelScene};
+    static constexpr EffectInfo kGlenz{kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr,
+                                       glenzScene};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
                                          creditsBackground};
     switch (effect) {
@@ -38,6 +41,8 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kPlasma;
     case show::Effect::Tunnel:
         return kTunnel;
+    case show::Effect::Glenz:
+        return kGlenz;
     case show::Effect::Credits:
         return kCredits;
     case show::Effect::Raytrace:

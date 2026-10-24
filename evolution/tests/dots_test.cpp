@@ -9,8 +9,8 @@
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
-#include "show/timeline.hpp"
 #include "retro_stage_fixture.hpp"
+#include "show/timeline.hpp"
 #include "text/font8x8.hpp"
 
 #include <algorithm>
@@ -330,7 +330,8 @@ void testSchedule() {
                 count, morphFrames, morphs.size(), held[DotsShape::Cube], held[DotsShape::Sphere],
                 held[DotsShape::Torus], held[DotsShape::Year], fastest, 100.0 * sizeTwo / (count * kCount));
     // The cube's corners reach past both ends of the ramp: the clamped ends are pinned too.
-    std::printf("dots: %zu points at or nearer than kDotsNear, %zu at or beyond kDotsFar\n", nearest, farthest);
+    std::printf("dots: %zu points at or nearer than kDotsNear, %zu at or beyond kDotsFar\n", nearest,
+                farthest);
     CHECK(nearest > 0 && farthest > 0);
     CHECK(morphs.size() == 6);
     CHECK(held.size() == 4);

@@ -20,9 +20,10 @@ using TextProvider = std::vector<text::Item> (*)(const show::TimelineFrame&, std
 // How the retro stage renders an effect's 1993 side. The stage caches the result by (chapter, effect,
 // retroFrame) and calls the builders and providers below only when it re-renders, so each of them must be a
 // pure function of the chapter and the retro frame. From the TimelineFrame they may read only what is fixed
-// for the whole chapter (chapter, chapterDuration, accentSeconds); the chapter-local time only as retroFrame
-// (that is, quantised to the retro frame), never localSeconds, showSeconds or the music signals, which change
-// within a retro frame and would make a cached frame differ from a fresh one.
+// for the whole chapter (chapter, chapterDuration, accentSeconds, and data fixed by the chapter alone, such
+// as its track's tracked beats from show::beatGrid, which GLENZ bounces on); the chapter-local time only as
+// retroFrame (that is, quantised to the retro frame), never localSeconds, showSeconds or the music signals,
+// which change within a retro frame and would make a cached frame differ from a fresh one.
 struct EffectInfo {
     // The compute shader's SPIR-V file in shaderDir(). It writes palette indices into the 320x200 R8_UINT
     // image (binding 0) with the push constants of shaders/retro/test_pattern.comp, and must be a pure
@@ -53,7 +54,8 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 
 // The registry (effects.cpp): the entry of every effect. Boot is the DOS prompt, Plasma the cycling plasma,
 // Credits the sine scroller on deep blue, Flyby the flat-shaded ship over a starfield with its greeting
-// scrolling over them, Dots the 512 morphing points, Tunnel the dot-ring tunnel that turns into a solid tube.
+// scrolling over them, Dots the 512 morphing points, Tunnel the dot-ring tunnel that turns into a solid tube,
+// Glenz Future Crew's translucent glenz vector bouncing over copper bars.
 // The other effects get their entries in later steps and show the test pattern in grey until then.
 const EffectInfo& effectFor(show::Effect effect);
 
