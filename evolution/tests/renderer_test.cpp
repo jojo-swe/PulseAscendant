@@ -472,7 +472,7 @@ void testHudItems() {
         }
     }
 
-    // A card too wide at 2 units is drawn at 1: the longest card at 640x360 (41 glyphs, 656 pixels at 2x),
+    // A card too wide at 2 units is drawn at 1: a 41-glyph card at 640x360 (656 pixels at 2x),
     // bottom-left with its shadow's bottom row on the margin. A 16:9 output has room for 38 glyphs at 2 units
     // whatever its size, so at 1280x720 it is drawn at 1 unit (scale 2) too.
     frame.transition = Transition::BeatSwap;

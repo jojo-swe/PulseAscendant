@@ -42,11 +42,13 @@ public:
 
     // Binds the pipeline and a descriptor set written with the given resources: `images` for the image and
     // sampler bindings and `buffers` for the buffer bindings, each in binding-list order. Between
-    // ring.begin() and ring.submit() only. Throws std::invalid_argument when the counts do not match.
+    // ring.begin() and ring.submit() only. Throws std::invalid_argument when the counts do not match. A
+    // pipeline with no bindings takes two empty spans and binds the pipeline alone: it allocates no
+    // descriptor set and creates no descriptor pool.
     void bind(VkCommandBuffer cmd, FrameRing& ring, std::span<const VkDescriptorImageInfo> images,
               std::span<const VkDescriptorBufferInfo> buffers);
     // Throws std::invalid_argument for more bytes than the pipeline's push constant range, or a size that is
-    // not a multiple of 4.
+    // not a multiple of 4. Zero bytes record nothing.
     void push(VkCommandBuffer cmd, const void* data, std::uint32_t bytes);
     // ceil(width / localX) x ceil(height / localY) workgroups; the shader must skip the pixels outside.
     void dispatch(VkCommandBuffer cmd, std::uint32_t width, std::uint32_t height, std::uint32_t localX = 8,

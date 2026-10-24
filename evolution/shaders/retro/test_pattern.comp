@@ -1,11 +1,14 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The 1993 test pattern every effect shows until it has its own shader: a palette index image of
+// The 1993 test pattern of the effects that have neither their own shader nor a text-only picture yet (BOOT
+// and CREDITS are text; FLYBY scrolls its greeting over this pattern): a palette index image of
 //   border  a 6-pixel frame of index 255 around the picture, so its edges show where the 4:3 box is;
-//   bands   horizontal bands running through all of 0..255 from the top inner row to the bottom one;
-//   block   a 40x40 block, a Bayer-dithered ramp to white over a shade, bouncing 3 px right and 2 px down
-//           per retro frame; the chapter seeds its start and its shade, so two chapters never look alike.
+//   bands   a ramp of indices 0..254 down the 188 inner rows, one row each (so about a quarter of the indices
+//           never appear), shown in the grey palette as a gradient from black to white;
+//   block   a 40x40 block, a Bayer-dithered ramp to white (index 255) along its diagonal over a shade of
+//           48..207, moving 3 px across and 2 px down per retro frame and bouncing off the edges; the chapter
+//           hashes to its start position and its shade, so neighbouring chapters look different.
 // A pure function of (chapter, retroFrame), like every retro effect.
 
 #include "common.glsl"

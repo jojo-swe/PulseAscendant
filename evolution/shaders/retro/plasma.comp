@@ -9,8 +9,8 @@
 //   nested  finer waves whose phase is itself a sine of the other axis, which bends them into the swirls.
 // The sum, in -1..1, is folded three times round the 224-entry colour ring at indices 32..255 (0..31 stay
 // free for black and shadows), which the CPU palette rotates by one entry per retro frame: the colours flow
-// while the field itself drifts slowly. The time is the retro frame at 35 Hz, so the image is a pure function
-// of retroFrame, like every retro effect.
+// while the field itself drifts slowly. The time is pc.retroSeconds, the retro frame over the effect's rate
+// (35 Hz), so the image is a pure function of retroFrame, like every retro effect.
 
 #include "common.glsl"
 
@@ -25,9 +25,7 @@ layout(push_constant) uniform PushConstants {
     float retroSeconds; // retroFrame / retroRate: the chapter-local time of this retro frame
 } pc;
 
-// Must match kPlasmaRetroRate (src/retro/effects.hpp) and kPlasmaFirstIndex / kPlasmaColours
-// (src/retro/palette.hpp).
-const float kRetroRate = 35.0;
+// Must match kPlasmaFirstIndex / kPlasmaColours (src/retro/palette.hpp).
 const uint kFirstIndex = 32u;
 const uint kColours = 224u;
 // How many times the field's range wraps round the colour ring: more bands of colour on screen.
@@ -40,7 +38,7 @@ void main() {
         return;
     }
 
-    float t = float(pc.retroFrame) / kRetroRate;
+    float t = pc.retroSeconds;
     vec2 p = vec2(pixel);
     vec2 screen = vec2(p.x, p.y * kPixelAspect); // squared up: where the rings are measured
 

@@ -113,7 +113,7 @@ TextPass::TextPass(gfx::Context& ctx, gfx::FrameRing& ring)
 TextPass::~TextPass() {
     // Frames in flight may still read the instance buffers and the atlas. Best effort, as in ~Renderer.
     try {
-        ring_.waitAll();
+        ring_.waitAll(); // shutdown
     } catch (const std::exception&) {
     }
 }

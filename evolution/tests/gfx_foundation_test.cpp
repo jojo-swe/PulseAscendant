@@ -271,6 +271,32 @@ void testDescriptorPoolsAreRecycled(Context& ctx) {
     other.wait(other.submit());
 }
 
+// A pipeline with no descriptor bindings binds with two empty spans and creates no descriptor pool; a push
+// of zero bytes records nothing (a zero-sized vkCmdPushConstants would be a validation error).
+void testNoBindings(Context& ctx) {
+    ComputePipeline pipeline(ctx, EVO_TEST_SPIRV_DIR "/test_no_bindings.comp.spv", {}, 4);
+    FrameRing ring(ctx);
+    for (int frame = 0; frame < 3; ++frame) {
+        VkCommandBuffer cmd = ring.begin();
+        pipeline.bind(cmd, ring, {}, {});
+        const std::uint32_t value = 7;
+        pipeline.push(cmd, &value, 0);
+        pipeline.push(cmd, &value, sizeof value);
+        pipeline.dispatch(cmd, 16, 16);
+        pipeline.bind(cmd, ring, {}, {});
+        pipeline.dispatch(cmd, 8, 8);
+        ring.wait(ring.submit());
+    }
+    CHECK(pipeline.descriptorPoolCount() == 0);
+
+    // A push of zero bytes is also accepted by a pipeline with bindings and no push constants.
+    const std::array<Binding, 1> bindings = {Binding{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}};
+    ComputePipeline fill(ctx, shaderDir() / "fill.comp.spv", bindings, 32);
+    VkCommandBuffer cmd = ring.begin();
+    fill.push(cmd, nullptr, 0);
+    ring.wait(ring.submit());
+}
+
 // (c) A host-visible buffer written on the CPU, copied through a device-local buffer and back.
 void testBufferRoundTrip(Context& ctx) {
     constexpr VkDeviceSize kSize = 256;
@@ -379,6 +405,7 @@ int main() {
             testImageTracksLayout(ctx);
             testFrameRingRendersFrames(ctx);
             testDescriptorPoolsAreRecycled(ctx);
+            testNoBindings(ctx);
             testBufferRoundTrip(ctx);
             testMisuseIsRefused(ctx);
             testSamplers(ctx);

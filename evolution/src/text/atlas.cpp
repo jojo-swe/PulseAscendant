@@ -29,7 +29,7 @@ Atlas::Atlas(gfx::Context& ctx)
     staging.flush();
 
     // immediate() waits for the copy, so the staging buffer may go when this returns.
-    ctx.immediate([&](VkCommandBuffer cmd) {
+    ctx.immediate([&](VkCommandBuffer cmd) { // setup: once, when the pass is built
         image_.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
                           VK_ACCESS_2_TRANSFER_WRITE_BIT);
         VkBufferImageCopy region{};

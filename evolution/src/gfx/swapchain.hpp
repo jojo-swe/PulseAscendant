@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace evo::gfx {
@@ -17,11 +18,18 @@ namespace evo::gfx {
 // window is minimised: the caller skips the frame.
 VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR& caps, int desiredWidth, int desiredHeight);
 
-// FIFO presentation of a finished image. Prefers B8G8R8A8_UNORM (else the surface's first format) and asks
-// for 3 images where the surface allows it. Each frame blits the source image into the acquired swapchain
-// image, so the renderer never draws into the swapchain directly. The frames themselves belong to a
-// FrameRing: the swapchain only adds the acquire semaphores (one per ring slot) and the present semaphores
-// (one per swapchain image) to the ring's submits.
+// Pure: the surface format the swapchain uses, from the surface's list. The renderer's output is linear
+// R8G8B8A8_UNORM bytes that are already display-encoded, so the blit must copy them unchanged into a UNORM
+// image: B8G8R8A8_UNORM first, then R8G8B8A8_UNORM, then any other UNORM colour format (A2B10G10R10, 16-bit
+// and packed ones), and only then the first entry (an sRGB format, which would encode the picture twice).
+// Throws std::runtime_error for an empty list.
+VkSurfaceFormatKHR chooseSurfaceFormat(std::span<const VkSurfaceFormatKHR> formats);
+
+// FIFO presentation of a finished image in the format chooseSurfaceFormat() picks; asks for 3 images where
+// the surface allows it. Each frame blits the source image into the acquired swapchain image, so the renderer
+// never draws into the swapchain directly. The frames themselves belong to a FrameRing: the swapchain only
+// adds the acquire semaphores (one per ring slot) and the present semaphores (one per swapchain image) to the
+// ring's submits.
 class Swapchain {
 public:
     Swapchain(Context& ctx, VkSurfaceKHR surface, int width, int height);

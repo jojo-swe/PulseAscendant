@@ -211,6 +211,19 @@ add_executable(gfx_foundation_test tests/gfx_foundation_test.cpp)
 target_link_libraries(gfx_foundation_test PRIVATE evo_gfx evo_show) # turns show times into FillParams
 target_compile_definitions(gfx_foundation_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(gfx_foundation_test Evolution_shaders) # loads fill.comp.spv from <build>/bin/shaders
+# A fixture shader with no descriptor bindings, compiled for the test only (not beside the executable).
+set(EVO_TEST_SPIRV_DIR "${CMAKE_BINARY_DIR}/test-shaders")
+add_custom_command(
+    OUTPUT "${EVO_TEST_SPIRV_DIR}/test_no_bindings.comp.spv"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -o "${EVO_TEST_SPIRV_DIR}/test_no_bindings.comp.spv"
+            "${CMAKE_SOURCE_DIR}/shaders/test/no_bindings.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/no_bindings.comp"
+    COMMENT "Compiling test shader test_no_bindings.comp"
+    VERBATIM)
+add_custom_target(gfx_foundation_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/test_no_bindings.comp.spv")
+add_dependencies(gfx_foundation_test gfx_foundation_test_shaders)
+target_compile_definitions(gfx_foundation_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME gfx_foundation COMMAND gfx_foundation_test)
 
 # The renderer's passes at small sizes, with the validation layer on; fails on any message it reports.
@@ -290,7 +303,7 @@ add_test(NAME exit_codes
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/exit_code_test.py $<TARGET_FILE:Evolution>)
 set_tests_properties(exit_codes PROPERTIES TIMEOUT 120)
 
-# The windowed loop and the renderer never wait for the whole GPU per frame (Review Focus 5).
+# The windowed loop and the renderer, text and retro code never stall the GPU per frame (Review Focus 5).
 add_test(NAME no_wait_idle
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/no_wait_idle_test.py ${CMAKE_SOURCE_DIR})
 
@@ -308,11 +321,11 @@ if(EVO_RUNTIME_TESTS)
 
     # A machine that cannot run EVOLUTION gets the message and exit code 2 from the window mode as well; the
     # Context is created before the window, so none opens.
+    # The exit code is checked as well as the message.
     add_test(NAME windowed_unsupported
-        COMMAND xvfb-run -a $<TARGET_FILE:Evolution> --duration 1 --width 320 --height 200)
-    set_tests_properties(windowed_unsupported PROPERTIES TIMEOUT 120
-        ENVIRONMENT "EVO_TEST_REQUIRE_DEVICE_EXTENSION=VK_EVO_nope"
-        PASS_REGULAR_EXPRESSION "EVOLUTION needs a Vulkan 1.3 GPU with ray tracing\\. Missing: VK_EVO_nope")
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/exit_code_test.py $<TARGET_FILE:Evolution>
+                --windowed)
+    set_tests_properties(windowed_unsupported PROPERTIES TIMEOUT 120)
 
     # With no usable audio driver the windowed run falls back to the monotonic clock, says SILENT MODE on
     # stderr and still exits 0 (Review Focus 3); on SDL's dummy driver it plays and says AUDIO.

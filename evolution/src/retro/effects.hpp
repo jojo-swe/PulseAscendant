@@ -44,7 +44,7 @@ inline constexpr const char* kTestPatternShader = "retro_test_pattern.comp.spv";
 inline constexpr std::uint32_t kDefaultRetroRate = 35;
 // Raytrace's 1993 side is a precalculated animation shown at a slower rate (step 3 renders it).
 inline constexpr std::uint32_t kRaytraceRetroRate = 10;
-// PLASMA's index image (shaders/retro/plasma.comp) and its rate, which the shader's clock assumes.
+// PLASMA's index image (shaders/retro/plasma.comp) and its rate; the shader's clock is retroSeconds.
 inline constexpr const char* kPlasmaShader = "retro_plasma.comp.spv";
 inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 

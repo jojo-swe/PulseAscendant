@@ -21,9 +21,9 @@ namespace evo {
 // Opens an SDL3 window (Vulkan, resizable) and presents the show until Esc, the window closes, or
 // --duration elapses. The time comes from a ShowClock (the music, or SILENT MODE on the system timer); its
 // status goes to stderr at the start and again whenever it switches between audio and SILENT MODE. Keys:
-// Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10, C CRT look, M mute, F11
-// fullscreen. The title
-// shows the chapter and the show time. Returns the process exit code.
+// Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10, C CRT look, H HUD (the epoch
+// cards and, only here, the chapter title), M mute, F11 fullscreen. The window title shows the chapter and
+// the show time. Returns the process exit code.
 int runWindowed(const Options& options);
 
 // Headless: renders frames 0..ceil(duration*fps)-1 at t = time + i/fps and writes each as raw top-down RGB

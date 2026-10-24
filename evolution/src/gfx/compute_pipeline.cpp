@@ -183,6 +183,10 @@ void ComputePipeline::bind(VkCommandBuffer cmd, FrameRing& ring,
                                     std::to_string(images.size()) + " and " + std::to_string(buffers.size()));
 
     attach(ring);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_);
+    if (bindings_.empty())
+        return; // nothing to bind: no set, and no pool to allocate it from
+
     const VkDescriptorSet set = allocateSet(ring.slot());
 
     std::vector<VkWriteDescriptorSet> writes;
@@ -203,7 +207,6 @@ void ComputePipeline::bind(VkCommandBuffer cmd, FrameRing& ring,
     vkUpdateDescriptorSets(ctx_.device(), static_cast<std::uint32_t>(writes.size()), writes.data(), 0,
                            nullptr);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout_, 0, 1, &set, 0, nullptr);
 }
 
@@ -212,6 +215,8 @@ void ComputePipeline::push(VkCommandBuffer cmd, const void* data, std::uint32_t 
         throw std::invalid_argument("ComputePipeline::push() of " + std::to_string(bytes) +
                                     " bytes into a range of " + std::to_string(pushConstantBytes_) +
                                     " (a multiple of 4 is required)");
+    if (bytes == 0)
+        return; // a zero-sized vkCmdPushConstants is invalid
     vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, bytes, data);
 }
 

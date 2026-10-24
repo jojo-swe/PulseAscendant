@@ -92,7 +92,7 @@ Renderer::~Renderer() {
     // The frames in flight still use the images and pipelines. Best effort, as in ~FrameRing: a wait that
     // fails (a lost device) has nothing left to protect.
     try {
-        ring_.waitAll();
+        ring_.waitAll(); // shutdown
     } catch (const std::exception&) {
     }
 }

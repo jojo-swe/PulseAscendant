@@ -12,27 +12,57 @@ namespace evo::gfx {
 
 namespace {
 
-constexpr VkFormat kPreferredFormat = VK_FORMAT_B8G8R8A8_UNORM;
 constexpr std::uint32_t kPreferredImageCount = 3;
 
-VkSurfaceFormatKHR chooseFormat(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
+// The UNORM colour formats a surface may report.
+bool isUnormColor(VkFormat format) {
+    switch (format) {
+    case VK_FORMAT_R8G8B8A8_UNORM:
+    case VK_FORMAT_B8G8R8A8_UNORM:
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+    case VK_FORMAT_R8G8B8_UNORM:
+    case VK_FORMAT_B8G8R8_UNORM:
+    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+    case VK_FORMAT_R16G16B16A16_UNORM:
+    case VK_FORMAT_R5G6B5_UNORM_PACK16:
+    case VK_FORMAT_B5G6R5_UNORM_PACK16:
+    case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
+    case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
+    case VK_FORMAT_R5G5B5A1_UNORM_PACK16:
+    case VK_FORMAT_B5G5R5A1_UNORM_PACK16:
+    case VK_FORMAT_A1R5G5B5_UNORM_PACK16:
+        return true;
+    default:
+        return false;
+    }
+}
+
+VkSurfaceFormatKHR surfaceFormat(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
     std::uint32_t count = 0;
     vkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &count, nullptr),
             "vkGetPhysicalDeviceSurfaceFormatsKHR");
     std::vector<VkSurfaceFormatKHR> formats(count);
     vkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &count, formats.data()),
             "vkGetPhysicalDeviceSurfaceFormatsKHR");
-    if (formats.empty())
-        throw std::runtime_error("the window surface offers no formats");
-
-    for (const auto& format : formats) {
-        if (format.format == kPreferredFormat)
-            return format;
-    }
-    return formats.front();
+    return chooseSurfaceFormat(formats);
 }
 
 } // namespace
+
+VkSurfaceFormatKHR chooseSurfaceFormat(std::span<const VkSurfaceFormatKHR> formats) {
+    if (formats.empty())
+        throw std::runtime_error("the window surface offers no formats");
+    const auto find = [&](auto matches) {
+        return std::find_if(formats.begin(), formats.end(), [&](const auto& f) { return matches(f.format); });
+    };
+    for (const VkFormat preferred : {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM})
+        if (auto it = find([&](VkFormat format) { return format == preferred; }); it != formats.end())
+            return *it;
+    if (auto it = find(isUnormColor); it != formats.end())
+        return *it;
+    return formats.front();
+}
 
 VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR& caps, int desiredWidth, int desiredHeight) {
     if (caps.currentExtent.width != std::numeric_limits<std::uint32_t>::max())
@@ -120,7 +150,7 @@ bool Swapchain::recreate(int width, int height) {
     if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT))
         throw std::runtime_error("the window surface does not accept transfer writes (blits)");
 
-    const VkSurfaceFormatKHR format = chooseFormat(physicalDevice, surface_);
+    const VkSurfaceFormatKHR format = surfaceFormat(physicalDevice, surface_);
     VkFormatProperties formatProperties{};
     vkGetPhysicalDeviceFormatProperties(physicalDevice, format.format, &formatProperties);
     if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
