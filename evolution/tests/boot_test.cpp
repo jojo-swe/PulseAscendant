@@ -265,7 +265,7 @@ void testImages(evo::gfx::Context& ctx) {
 
     // A test pattern frame first, which writes every pixel: BOOT must clear what it leaves.
     TimelineFrame pattern = evo::show::sampleTimeline(30.0);
-    pattern.effect = Effect::Dots;
+    pattern.effect = Effect::StudioNight; // Act II: its 1993 side stays the test pattern
     CHECK(fixture.render(pattern).count(0) < kWidth * kHeight / 2);
 
     // t = 0.5: the prompt and the cursor only; at 0.3 the cursor is blinked off.

@@ -119,6 +119,7 @@ add_library(evo_render STATIC
     src/retro/boot.cpp
     src/retro/effects.cpp
     src/retro/effects.hpp
+    src/retro/dots.cpp
     src/retro/flyby.cpp
     src/retro/palette.cpp
     src/retro/palettes.cpp
@@ -266,6 +267,12 @@ target_link_libraries(flyby_test PRIVATE evo_render)
 target_compile_definitions(flyby_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(flyby_test Evolution_shaders)
 add_test(NAME flyby COMMAND flyby_test)
+
+add_executable(dots_test tests/dots_test.cpp)
+target_link_libraries(dots_test PRIVATE evo_render)
+target_compile_definitions(dots_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(dots_test Evolution_shaders)
+add_test(NAME dots COMMAND dots_test)
 
 # The sine scroller: its glyph positions on the CPU, and CREDITS and FLYBY's greeting from the retro stage,
 # with the validation layer on; fails on any message it reports.

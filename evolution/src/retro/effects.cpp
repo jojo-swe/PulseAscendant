@@ -4,6 +4,7 @@
 #include "retro/effects.hpp"
 
 #include "retro/boot.hpp"
+#include "retro/dots.hpp"
 #include "retro/flyby.hpp"
 #include "retro/palette.hpp"
 #include "retro/scroller.hpp"
@@ -20,6 +21,7 @@ const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kPlasma{kPlasmaShader, kPlasmaRetroRate, plasmaPalette};
     static constexpr EffectInfo kFlyby{nullptr,   kFlybyRetroRate, flybyPalette,
                                        flybyText, nullptr,         flybyScene};
+    static constexpr EffectInfo kDots{nullptr, kDotsRetroRate, dotsPalette, nullptr, nullptr, dotsScene};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
                                          creditsBackground};
     switch (effect) {
@@ -27,6 +29,8 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kBoot;
     case show::Effect::Flyby:
         return kFlyby;
+    case show::Effect::Dots:
+        return kDots;
     case show::Effect::Plasma:
         return kPlasma;
     case show::Effect::Credits:
