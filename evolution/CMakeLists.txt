@@ -146,6 +146,13 @@ add_library(evo_render STATIC
 target_include_directories(evo_render PUBLIC src)
 target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
 
+# The 2026 side's procedural meshes (and, from later tasks, its scenes and path tracer). The shared GPU structs
+# in src/rt/gpu_types.hpp and the Mat34 helpers in src/modern/math.hpp are header-only.
+add_library(evo_modern STATIC
+    src/modern/mesh_builder.cpp)
+target_include_directories(evo_modern PUBLIC src)
+target_link_libraries(evo_modern PUBLIC evo_rt)
+
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.
 add_library(evo_app STATIC
@@ -459,6 +466,37 @@ add_test(NAME text_pass COMMAND text_pass_test)
 add_executable(swapchain_test tests/swapchain_test.cpp)
 target_link_libraries(swapchain_test PRIVATE evo_gfx)
 add_test(NAME swapchain COMMAND swapchain_test)
+
+# The procedural meshes (watertight, wound outwards, unit normals, uvs in [0, 1]) and the Mat34 helpers; CPU
+# only.
+add_executable(mesh_builder_test tests/mesh_builder_test.cpp)
+target_link_libraries(mesh_builder_test PRIVATE evo_modern)
+add_test(NAME mesh_builder COMMAND mesh_builder_test)
+
+# Materials and the shared GPU structs: every field of every struct read back through a test shader (Review
+# Focus 10), and the BSDFs of shaders/rt/bsdf.glsl sampled and evaluated by another (white furnace, pdf
+# consistency, reciprocity, finite outputs; Review Focus 8). Compute only, with the validation layer on;
+# fails on any message it reports.
+set(materialTestShaders "")
+foreach(fixture struct_layout bsdf_probe)
+    set(spirv "${EVO_TEST_SPIRV_DIR}/test_${fixture}.comp.spv")
+    add_custom_command(
+        OUTPUT "${spirv}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+        COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -o "${spirv}"
+                "${CMAKE_SOURCE_DIR}/shaders/test/${fixture}.comp"
+        DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/${fixture}.comp" "${CMAKE_SOURCE_DIR}/shaders/rt/types.glsl"
+                "${CMAKE_SOURCE_DIR}/shaders/rt/random.glsl" "${CMAKE_SOURCE_DIR}/shaders/rt/bsdf.glsl"
+        COMMENT "Compiling test shader test_${fixture}.comp"
+        VERBATIM)
+    list(APPEND materialTestShaders "${spirv}")
+endforeach()
+add_custom_target(material_test_shaders DEPENDS ${materialTestShaders})
+add_executable(material_test tests/material_test.cpp)
+target_link_libraries(material_test PRIVATE evo_rt)
+target_compile_definitions(material_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(material_test material_test_shaders)
+add_test(NAME material COMMAND material_test)
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
 # validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked).

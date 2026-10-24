@@ -1,0 +1,107 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_scalar_block_layout : require
+
+// Test fixture for material_test (compiled for the test only): copies every field of the structs the path
+// tracer shares with the CPU, in declaration order, into a word buffer, then the shared constants. The CPU
+// filled each field with its own sentinel, so a field whose scalar-layout offset differs from the C++
+// mirror's offsetof comes back with another field's value (Review Focus 10).
+
+#include "../rt/types.glsl"
+
+layout(local_size_x = 1) in;
+
+layout(scalar, set = 0, binding = 0) readonly buffer Materials { Material materials[]; };
+layout(scalar, set = 0, binding = 1) readonly buffer Lights { RectLight lights[]; };
+layout(scalar, set = 0, binding = 2) readonly buffer Instances { InstanceRecord instances[]; };
+layout(scalar, set = 0, binding = 3) readonly buffer Vertices { Vertex vertices[]; };
+layout(scalar, set = 0, binding = 4) readonly buffer MeshRecords { MeshRecord meshRecords[]; };
+layout(scalar, set = 0, binding = 5) writeonly buffer Words { uint words[]; };
+
+const uint kElements = 2;
+
+uint cursor = 0;
+
+void putU(uint v) {
+    words[cursor++] = v;
+}
+
+void putF(float v) {
+    putU(floatBitsToUint(v));
+}
+
+void put2(vec2 v) {
+    putF(v.x);
+    putF(v.y);
+}
+
+void put3(vec3 v) {
+    putF(v.x);
+    putF(v.y);
+    putF(v.z);
+}
+
+void main() {
+    for (uint e = 0; e < kElements; ++e) {
+        Material m = materials[e];
+        put3(m.baseColor);
+        putF(m.roughness);
+        putF(m.metallic);
+        putF(m.ior);
+        putF(m.transmission);
+        put3(m.emission);
+        putF(m.emissionScale);
+        putF(m.coat);
+        putF(m.coatRoughness);
+        putU(m.pattern);
+        putU(m.texture);
+        putF(m.patternScale);
+        put3(m.baseColor2);
+        putU(m.materialClass);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        RectLight l = lights[e];
+        put3(l.corner);
+        put3(l.edgeU);
+        put3(l.edgeV);
+        put3(l.emission);
+        putU(l.kind);
+        putF(l.selectWeight);
+        putF(l.area);
+        putU(l.pad);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        InstanceRecord r = instances[e];
+        putU(r.mesh);
+        putU(r.material);
+        putU(r.light);
+        putU(r.pad);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        Vertex v = vertices[e];
+        put3(v.position);
+        put3(v.normal);
+        put2(v.uv);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        MeshRecord r = meshRecords[e];
+        putU(r.firstVertex);
+        putU(r.vertexCount);
+        putU(r.firstIndex);
+        putU(r.indexCount);
+    }
+
+    putU(kMaterialPbr);
+    putU(kMaterialGlass);
+    putU(kMaterialEmissive);
+    putU(kMaterialChecker);
+    putU(kPatternNone);
+    putU(kPatternWoodPlanks);
+    putU(kPatternBrushedMetal);
+    putU(kNoTexture);
+    putU(kRetroScreenTexture);
+    putU(kNoLight);
+    putU(kLightEmitter);
+    putU(kLightRetroScreen);
+    putU(kLightPortal);
+}
