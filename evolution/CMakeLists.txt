@@ -130,6 +130,7 @@ evo_add_shaders(evo_post
     shaders/post/accumulate.comp
     shaders/post/atrous.comp
     shaders/post/combine.comp
+    shaders/post/firefly.comp
     shaders/post/tonemap.comp)
 
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the

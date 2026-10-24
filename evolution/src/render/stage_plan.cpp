@@ -1,5 +1,7 @@
 #include "render/stage_plan.hpp"
 
+#include <algorithm>
+
 namespace evo::render {
 
 StagePlan planStages(const show::TimelineFrame& frame, RenderMode mode, bool modernSamplesRetro) {
@@ -55,6 +57,22 @@ HistoryReset HistoryTracker::advance(const HistoryKey& key, bool skippedSinceLas
     resized_ = false;
     framesSinceReset_ = reset == HistoryReset::None ? framesSinceReset_ + 1 : 0;
     return reset;
+}
+
+std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset) {
+    if (mode != RenderMode::Interactive || framesSinceReset >= kResetSpp.size())
+        return spp;
+    return std::max(spp, kResetSpp[framesSinceReset]);
+}
+
+post::DenoiseSettings denoiseSettingsFor(const HistoryState& state) {
+    constexpr std::uint32_t kAtrousIterations = 3;
+    post::DenoiseSettings settings;
+    const bool interactive = state.mode == RenderMode::Interactive;
+    settings.temporal = interactive;
+    settings.atrousIterations = interactive || state.spp < kExportFilterSpp ? kAtrousIterations : 0u;
+    settings.fireflyFilter = !interactive && state.spp >= kExportFilterSpp;
+    return settings;
 }
 
 } // namespace evo::render

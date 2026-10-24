@@ -14,12 +14,9 @@ namespace {
 
 // The placeholder's exposure: fill_hdr.comp inverts the tonemap at 0 EV.
 constexpr float kPlaceholderExposureEV = 0.f;
-// A-trous iterations: always in the window; in exports only below kExportFilterSpp samples per pixel.
-constexpr std::uint32_t kAtrousIterations = 3;
-constexpr std::uint32_t kExportFilterSpp = 16;
-// post::Denoiser's images per pixel: eight RGBA16F images (the colour, moments, guides and a-trous ping-pong
-// pairs, denoiser.hpp). The denoiser does not report its own size; keep this in step with it.
-constexpr VkDeviceSize kDenoiserBytesPerPixel = 8 * 8;
+// post::Denoiser's images per pixel: ten RGBA16F images (the colour, moments, guides, a-trous and volume
+// ping-pong pairs, denoiser.cpp's createImages). The denoiser does not report its own size; keep this in step.
+constexpr VkDeviceSize kDenoiserBytesPerPixel = 10 * 8;
 // hdr_ (RGBA16F) and image_ (RGBA8).
 constexpr VkDeviceSize kStageBytesPerPixel = 8 + 4;
 
@@ -175,13 +172,11 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     tracer_->trace(cmd, *gpus_[indexOf(id)], scene, continues ? previousCamera_ : std::nullopt, trace,
                    retroImage);
 
-    post::DenoiseSettings denoise;
-    denoise.temporal = interactive;
-    denoise.atrousIterations = interactive || state.spp < kExportFilterSpp ? kAtrousIterations : 0u;
     if (state.reset != HistoryReset::None)
         denoiser_->resetHistory();
     modern::GBuffer& g = tracer_->gbuffer();
-    denoiser_->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion}, denoise, hdr_);
+    denoiser_->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion, g.volume},
+                       denoiseSettingsFor(state), hdr_);
     tonemap_.record(cmd, hdr_, image_, scene.exposureEV);
     previousCamera_ = scene.camera;
 }

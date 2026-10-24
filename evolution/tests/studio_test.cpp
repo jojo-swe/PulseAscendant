@@ -279,12 +279,13 @@ render::HistoryState exportState(const TimelineFrame& frame, std::uint32_t spp) 
 
 render::HistoryState interactiveState(const TimelineFrame& frame, render::HistoryReset reset,
                                       std::uint32_t framesSinceReset) {
-    return {reset,
-            framesSinceReset,
-            render::RenderMode::Interactive,
-            1,
-            render::kInteractiveMaxBounces,
-            modern::frameSeedFor(frame.showSeconds, framesSinceReset)};
+    return {
+        reset,
+        framesSinceReset,
+        render::RenderMode::Interactive,
+        render::frameSpp(render::RenderMode::Interactive, 1, framesSinceReset), // as the Renderer: 4, 2, 1
+        render::kInteractiveMaxBounces,
+        modern::frameSeedFor(frame.showSeconds, framesSinceReset)};
 }
 
 constexpr std::uint32_t kW = 320, kH = 180;
@@ -710,7 +711,8 @@ void renderLook(gfx::Context& ctx, const std::filesystem::path& dir, std::uint32
         const auto start = std::chrono::steady_clock::now();
         const TimelineFrame frame = chapterAt(still.chapter, still.fraction);
         if (spp == 0) {
-            // The window: 1 spp per frame, temporal history; frames 1 and 30 of a run ending at the still.
+            // The window: 1 spp per frame (4 and 2 on the first two after a reset), temporal history; frames
+            // 1, 2, 3, 6 and 30 of a run ending at the still.
             for (std::uint32_t i = 0; i < 30; ++i) {
                 const TimelineFrame f = show::sampleTimeline(frame.showSeconds - (29 - i) / 60.0);
                 const bool reset =
@@ -719,9 +721,9 @@ void renderLook(gfx::Context& ctx, const std::filesystem::path& dir, std::uint32
                 const Picture p = stages.render(
                     f, interactiveState(
                            f, reset ? render::HistoryReset::FirstFrame : render::HistoryReset::None, i));
-                if (i == 0 || i == 29)
+                if (i <= 2 || i == 5 || i == 29)
                     p.save(dir /
-                           (std::string("window_") + still.name + (i == 0 ? "_first" : "_30") + ".png"));
+                           (std::string("window_") + still.name + "_" + std::to_string(i + 1) + ".png"));
             }
             continue;
         }

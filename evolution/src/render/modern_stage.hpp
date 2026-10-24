@@ -45,11 +45,13 @@ namespace evo::render {
 // chapter change, so it never carries one scene into another.
 //
 // Path tracing follows the HistoryState the renderer hands over: TraceSettings {spp, maxBounces, frameSeed};
-// Interactive denoises temporally with 3 a-trous iterations; Export has no temporal history and filters with
-// 3 a-trous iterations below 16 spp and not at all from 16 (Decision 6 of step 4). The denoiser's history
-// starts over whenever state.reset is not None, and the motion guide uses the previous frame's camera only
-// while the history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the
-// history and the filter, so the screen stays sharp and current (Review Focus 5 of step 4).
+// the denoiser follows denoiseSettingsFor(state) (stage_plan.hpp): Interactive denoises temporally with 3
+// a-trous iterations; Export has no temporal history and filters with 3 below 16 spp and not at all from 16
+// (Decision 6), where the firefly filter clamps lone fireflies instead (step 5 Decision 16); 5 iterations
+// at history length <= 2 either way. The denoiser's history starts over
+// whenever state.reset is not None, and the motion guide uses the previous frame's camera only while the
+// history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the history
+// and the filter, so the screen stays sharp and current (Review Focus 5).
 //
 // A scene's GPU side is built by prepare(id) (or prepareAll()), which the window and the exports call before
 // their first frame, so that no chapter hitches. A stage that was not prepared builds it on the first frame

@@ -1,8 +1,9 @@
 // Export mode (Task 11 of step 4): what the renderer hands the modern stage and what comes out, at 160x90 in
-// STUDIO NIGHT at 40 %. Review Focus 6: with equal spp and bounces, the window's first frame after a history
-// reset equals an export frame byte for byte (one tonemap, display encoding exactly once, the export seed on
-// the first frame after a reset). Export purity: a frame is a pure function of (settings, show time), the
-// same in a fresh renderer as after other frames; the seed moves with the show time, frameSeed =
+// STUDIO NIGHT at 40 %. Review Focus 6 (step 5: Review Focus 3): with equal bounces, the window's first
+// frame after a history reset equals an export frame at spp max(--spp, 4) byte for byte (the window traces 4
+// spp on a reset frame and 2 on the next, kResetSpp; one tonemap, display encoding exactly once, the export
+// seed on the first frame after a reset). Export purity: a frame is a pure function of (settings, show time),
+// the same in a fresh renderer as after other frames; the seed moves with the show time, frameSeed =
 // pcg(llround(showSeconds * 48000)) in exports, plus 0x9E3779B9 per frame since the last reset in the window.
 // Runs with the validation layer on and fails on any message it reports.
 //
@@ -21,6 +22,7 @@
 
 #include "test_env.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <stdexcept>
@@ -122,17 +124,28 @@ void testSeeds(evo::gfx::Context& ctx) {
     CHECK(!window.stats().modernRendered && window.stats().frameSeed == 0);
 }
 
-// Review Focus 6: the window's first frame after a reset equals an export frame at equal spp and bounces,
-// on the very first frame and after a seek.
+// Review Focus 6 (step 5: 3): the window's first frame after a reset equals an export frame at equal bounces
+// and spp max(--spp, 4), on the very first frame and after a seek. The window reports the samples it traced:
+// 4, 2, then --spp (Task 7 of step 5); an export always --spp.
 void testWindowMatchesExport(evo::gfx::Context& ctx) {
     const TimelineFrame t = studioNight(0.4);
     for (const std::uint32_t spp : {1u, 2u, 5u}) { // 5: two trace dispatches
-        Harness exported(ctx, settings(RenderMode::Export, spp, 4));
+        Harness exported(ctx, settings(RenderMode::Export, std::max(spp, 4u), 4));
         const std::vector<std::uint8_t> reference = exported.render(t);
+        CHECK(exported.stats().spp == std::max(spp, 4u));
 
         Harness window(ctx, settings(RenderMode::Interactive, spp, 4));
         CHECK(window.render(t) == reference);
         CHECK(window.stats().historyReset == HistoryReset::FirstFrame);
+        CHECK(window.stats().spp == std::max(spp, 4u));
+        if (spp == 1) {
+            window.render(studioNight(0.4, kFrame));
+            CHECK(window.stats().historyReset == HistoryReset::None && window.stats().spp == 2);
+            window.render(studioNight(0.4, 2 * kFrame));
+            CHECK(window.stats().spp == 1);
+            window.render(evo::show::sampleTimeline(1.0)); // BOOT, 1993 only: nothing traced
+            CHECK(!window.stats().modernRendered && window.stats().spp == 0);
+        }
 
         Harness seeking(ctx, settings(RenderMode::Interactive, spp, 4));
         seeking.render(studioNight(0.1));

@@ -191,7 +191,7 @@ void testOnePipelineAndMemory(gfx::Context& ctx) {
     const VkDeviceSize shipBytes = stage.sceneGpu(SceneId::Ship)->bytes();
     CHECK(stage.gpuBytes() - studioBytes - shipBytes == images);
     CHECK(stage.imageBytes() == images);
-    CHECK(images == stage.tracer()->imageBytes() + VkDeviceSize(kWidth) * kHeight * (64 + 12));
+    CHECK(images == stage.tracer()->imageBytes() + VkDeviceSize(kWidth) * kHeight * (80 + 12));
     h.render(show::sampleTimeline(chapterTime(kStudioNight, 0.3)));
     h.render(forced2026(chapterTime(kFlyby, 0.3)));
     CHECK(modern::PathTracer::pipelinesCreated() - before == 1);

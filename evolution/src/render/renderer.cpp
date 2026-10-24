@@ -136,6 +136,7 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     stats_.modernRendered = plan.modern;
     stats_.historyReset = HistoryReset::None;
     stats_.frameSeed = 0;
+    stats_.spp = 0;
     if (plan.modern) {
         const HistoryKey key{
             frame.chapter, modern_.shotFor(frame), frame.showSeconds, size.width, size.height, mode_, spp_};
@@ -145,11 +146,12 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         const HistoryState state{stats_.historyReset,
                                  history_.framesSinceReset(),
                                  mode_,
-                                 spp_,
+                                 frameSpp(mode_, spp_, history_.framesSinceReset()),
                                  maxBounces_,
                                  modern::frameSeedFor(frame.showSeconds, seedFrames)};
         modern_.render(cmd, frame, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
+        stats_.spp = state.spp;
     }
     stats_.framesSinceReset = plan.modern ? history_.framesSinceReset() : 0u;
     modernRanLastFrame_ = plan.modern;
