@@ -121,6 +121,7 @@ add_library(evo_render STATIC
     src/retro/effects.hpp
     src/retro/dots.cpp
     src/retro/flyby.cpp
+    src/retro/tunnel.cpp
     src/retro/palette.cpp
     src/retro/palettes.cpp
     src/retro/scene.cpp
@@ -273,6 +274,15 @@ target_link_libraries(dots_test PRIVATE evo_render)
 target_compile_definitions(dots_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(dots_test Evolution_shaders)
 add_test(NAME dots COMMAND dots_test)
+
+# TUNNEL: the path, rings, dots and tube on the CPU (the tube's triangle budget on every frame, its painter's
+# order), and its index image from the retro stage, with the validation layer on; fails on any message it
+# reports.
+add_executable(tunnel_test tests/tunnel_test.cpp)
+target_link_libraries(tunnel_test PRIVATE evo_render)
+target_compile_definitions(tunnel_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(tunnel_test Evolution_shaders)
+add_test(NAME tunnel COMMAND tunnel_test)
 
 # The sine scroller: its glyph positions on the CPU, and CREDITS and FLYBY's greeting from the retro stage,
 # with the validation layer on; fails on any message it reports.
