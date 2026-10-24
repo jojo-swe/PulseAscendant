@@ -3,15 +3,17 @@ chapter, once forced into 1993 and once into 2026 (the app's diagnostic EVO_FORC
 grid per act.
 
     python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard
-    python3 tools/storyboard.py --app EXE --out DIR --width 320 --height 180 --chapters 0,3 --no-crt
+    python3 tools/storyboard.py --app EXE --out DIR --width 320 --height 180 --chapters 0,3 --no-crt --spp 2
 
 Each act's grid (act1.png, act2.png, act3.png; an act with no chosen chapter is skipped) has a row per
 chapter and six columns: 1993 at 20 %, accent and 80 %, then 2026 at the same three times. Every cell is the
 capture box-filtered down 2x (the HUD stays on, so the epoch card shows in the cells too; the chapter title is window-only).
 Layout, in grid pixels: a BAND-high text band on top names the columns; each row is a BAND-high label band
 (chapter number, title, transition, start-end and accent in show seconds), then the cells, then a GUTTER;
-cells sit GUTTER apart with a GUTTER before the first and after the last. See grid_size(). Prints the path of
-every grid it writes. Needs numpy; the PNGs are read and written here with zlib.
+cells sit GUTTER apart with a GUTTER before the first and after the last. See grid_size(). The path-traced
+chapters render at --spp samples per pixel (default 8: enough to judge a frame, far quicker than the app's
+export default of 64). Prints the path of every grid it writes. Needs numpy; the PNGs are read and written
+here with zlib.
 """
 
 import argparse
@@ -31,6 +33,8 @@ SAMPLES = (("20%", lambda c: c["start"] + 0.2 * c["duration"]),
            ("ACCENT", lambda c: c["accent"]),
            ("80%", lambda c: c["start"] + 0.8 * c["duration"]))
 ERAS = ((0, "1993"), (1, "2026"))
+DEFAULT_SPP = 8
+MIN_SPP, MAX_SPP = 1, 4096  # the app's --spp range
 
 GUTTER_RGB = (0x30, 0x30, 0x30)
 LABEL_RGB = (0xE0, 0xE0, 0xE0)
@@ -172,13 +176,19 @@ def show_info(app):
     return json.loads(result.stdout)
 
 
+def capture_command(app, directory, seconds, args):
+    """The app's command line for one capture at `seconds` with the tool's options."""
+    command = [app, "--capture-dir", directory, "--time", f"{seconds:.4f}", "--width", str(args.width),
+               "--height", str(args.height), "--spp", str(args.spp)]
+    if args.no_crt:
+        command.append("--no-crt")
+    return command
+
+
 def capture(app, directory, seconds, era, args):
     """One frame from the app at `seconds` forced into `era`; returns the decoded capture."""
     env = dict(os.environ, EVO_FORCE_ERA=str(era))
-    command = [app, "--capture-dir", directory, "--time", f"{seconds:.4f}", "--width", str(args.width),
-               "--height", str(args.height)]
-    if args.no_crt:
-        command.append("--no-crt")
+    command = capture_command(app, directory, seconds, args)
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=300)
     if result.returncode != 0:
         sys.exit(f"capture at {seconds:.4f} s (EVO_FORCE_ERA={era}) exited with {result.returncode}:\n"
@@ -202,7 +212,18 @@ def parse_chapters(text, count):
     return chosen
 
 
-def main(argv=None):
+def spp_value(text):
+    """--spp: an integer in the app's range MIN_SPP..MAX_SPP."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected an integer, got '{text}'")
+    if not MIN_SPP <= value <= MAX_SPP:
+        raise argparse.ArgumentTypeError(f"must be between {MIN_SPP} and {MAX_SPP}, got {value}")
+    return value
+
+
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--app", required=True, help="the Evolution executable")
     parser.add_argument("--out", required=True, help="directory for act1.png, act2.png and act3.png")
@@ -210,7 +231,13 @@ def main(argv=None):
     parser.add_argument("--height", type=int, default=360, help="capture height (cells are half)")
     parser.add_argument("--chapters", help="comma-separated chapter numbers (default: all)")
     parser.add_argument("--no-crt", action="store_true", help="capture the 1993 picture without the CRT look")
-    args = parser.parse_args(argv)
+    parser.add_argument("--spp", type=spp_value, default=DEFAULT_SPP,
+                        help=f"path-traced samples per pixel, {MIN_SPP}..{MAX_SPP} (default {DEFAULT_SPP})")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
 
     info = show_info(args.app)
     chapters = info["chapters"]

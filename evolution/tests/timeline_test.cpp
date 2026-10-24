@@ -130,7 +130,20 @@ void checkShowInfo() {
               "\"title\":\"DOTS\",\"effect\":\"Dots\",\"transition\":\"BeatSwap\",\"eras\":[1993,2026]") !=
           std::string::npos);
     CHECK(json.find("\"title\":\"NEBULA\",\"effect\":\"Nebula\",\"transition\":\"Cut\",\"eras\":[2026]") !=
-          std::string::npos);
+          std::string::npos); // No scene names given: no "scene" field. Given (main.cpp passes
+                              // modern::sceneFor's), every chapter
+    // ends with its scene, last.
+    CHECK(json.find("\"scene\"") == std::string::npos);
+    const std::string named = evo::show::showInfoJson([](evo::show::Effect effect) -> const char* {
+        return effect == evo::show::Effect::StudioNight ? "Studio" : "Placeholder";
+    });
+    CHECK(named.find("\"accent\":209.8,\"scene\":\"Studio\"}") != std::string::npos);
+    CHECK(named.find("\"scene\":\"Placeholder\"}]}") != std::string::npos);
+    std::size_t scenes = 0;
+    for (std::size_t at = named.find("\"scene\":"); at != std::string::npos;
+         at = named.find("\"scene\":", at + 1))
+        ++scenes;
+    CHECK(scenes == static_cast<std::size_t>(evo::show::chapterCount()));
 }
 
 } // namespace

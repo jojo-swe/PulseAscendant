@@ -48,9 +48,10 @@ int runCapture(const Options& options) {
     const auto height = static_cast<std::uint32_t>(options.height);
     gfx::Readback readback(ctx, width, height);
     gfx::FrameRing ring(ctx);
-    // Export: a pure function of the show time; no title, cards only.
+    // Export: a pure function of the show time (and --spp, 64 by default); no title, cards only.
     render::RenderSettings settings{width, height, options.crt, options.hud};
     settings.mode = render::RenderMode::Export;
+    settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     render::Renderer renderer(ctx, ring, settings);
     show::TimelineFrame frame = show::sampleTimeline(options.time);
     applyForcedEra(frame);

@@ -117,9 +117,28 @@ int main() {
         CHECK(!evo::parseOptions({"--render-stream", "--duration", "1", "--no-hud"}).hud);
         CHECK(evo::parseOptions({"--no-crt"}).hud);
 
+        // --spp: samples per pixel per frame, 1..4096. Unset by default, which means 1 in the window (the
+        // history accumulates more) and 64 in the exports (each frame stands alone).
+        CHECK(!defaults.spp.has_value());
+        CHECK(evo::samplesPerPixel(defaults) == 1);
+        CHECK(evo::samplesPerPixel(evo::parseOptions({"--capture-dir", "out"})) == 64);
+        CHECK(evo::samplesPerPixel(evo::parseOptions({"--render-stream", "--duration", "1"})) == 64);
+        const evo::Options spp16 = evo::parseOptions({"--spp", "16"});
+        CHECK(spp16.spp == 16);
+        CHECK(evo::samplesPerPixel(spp16) == 16);
+        CHECK(evo::samplesPerPixel(evo::parseOptions({"--capture-dir", "out", "--spp", "2"})) == 2);
+        CHECK(evo::parseOptions({"--spp", "1"}).spp == 1);
+        CHECK(evo::parseOptions({"--spp", "4096"}).spp == 4096);
+        CHECK(parseError({"--spp", "0"}) == "--spp must be between 1 and 4096, got 0");
+        CHECK(parseError({"--spp", "5000"}) == "--spp must be between 1 and 4096, got 5000");
+        CHECK(parseError({"--spp", "x"}) == "--spp expects an integer, got 'x'");
+        CHECK(!parseError({"--spp", "-1"}).empty());
+        CHECK(!parseError({"--spp", "2.5"}).empty());
+        CHECK(parseError({"--spp"}) == "--spp needs a value");
+
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
-        for (const char* flag :
-             {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt", "--no-hud"})
+        for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset",
+                                 "--no-crt", "--no-hud", "--spp"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);

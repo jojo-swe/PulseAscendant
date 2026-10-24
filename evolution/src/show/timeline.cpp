@@ -202,7 +202,7 @@ TimelineFrame sampleTimeline(double showSeconds) {
     return f;
 }
 
-std::string showInfoJson() {
+std::string showInfoJson(SceneNameFn sceneName) {
     std::ostringstream out;
     out << std::setprecision(12);
     out << "{\"title\":\"EVOLUTION\",\"version\":\"" << EVO_VERSION << "\",\"duration\":" << showDuration()
@@ -225,7 +225,10 @@ std::string showInfoJson() {
                 : cue.eraFixed == 0               ? "[1993]"
                                                   : "[2026]")
             << ",\"track\":" << d.track << ",\"start\":" << d.start << ",\"duration\":" << d.duration
-            << ",\"accent\":" << d.start + d.accent << '}';
+            << ",\"accent\":" << d.start + d.accent;
+        if (sceneName != nullptr)
+            out << ",\"scene\":\"" << sceneName(cue.effect) << '"';
+        out << '}';
     }
     out << "]}";
     return out.str();

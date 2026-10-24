@@ -15,8 +15,16 @@ it is forced.
 
 The stream runs at 64 fps, faster than every retro rate (35 and 10 Hz), so consecutive frames also hit the
 retro cache inside one retro frame; every time compared is a multiple of 1/64 s, so
-T - 5/64 + 5/64 is exactly T in double precision. Arguments after <tmpdir> (e.g. --validation) are passed to
-every run."""
+T - 5/64 + 5/64 is exactly T in double precision.
+
+Step 4 (Review Focus 2): the Studio chapters path trace, with the TLAS rebuilt every frame, and the export
+stays pure: no temporal history, the seed from the show time alone. Path tracing is what costs time on
+lavapipe, so the chapters come in two parts that CTest runs in parallel: "studio" (the chapters that show the
+Studio, Decision 1, and any chapter --show-info reports with a scene other than the placeholder) and "rest"
+(every other chapter); "all" runs both. CTest passes --spp 2 at 160x90.
+
+Usage: stream_capture_test.py <Evolution> <tmpdir> studio|rest|all [Evolution options...]; the options
+(e.g. --validation --spp 2) are passed to every run."""
 
 import json
 import os
@@ -32,6 +40,14 @@ LEAD = 5  # frames before T
 FRACTION = 0.5  # where in a chapter T lies
 NATURAL_EXTRA = 0.3  # where a chapter that shows both eras is compared unforced a second time
 ERA_VALUE = {1993: "0", 2026: "1"}  # EVO_FORCE_ERA
+# The chapters that show the Studio in step 4 (Decision 1): the "studio" part, path traced.
+STUDIO_CHAPTERS = ("FINALE", "PORTAL", "STUDIO NIGHT", "RETURN", "REBOOT")
+PARTS = ("studio", "rest", "all")
+
+
+def in_part(chapter, part):
+    studio = chapter["title"] in STUDIO_CHAPTERS or chapter["scene"] != "Placeholder"
+    return part == "all" or (part == "studio") == studio
 
 
 def run(command, env=None, stderr_out=None):
@@ -119,16 +135,24 @@ def compare(exe, extra, tmpdir, name, t, era, force, fresh=None):
     if streamed != fresh:
         sys.exit(f"{name} at {t:.6f} s ({what}): the streamed frame differs from a fresh capture in "
                  f"{differing_pixels(streamed, fresh)} of {WIDTH * HEIGHT} pixels")
-    print(f"stream_capture: {name:<29} at {t:9.6f} s ({what}): stream frame {LEAD} == fresh capture")
+    print(f"stream_capture: {name:<38} at {t:9.6f} s ({what}): stream frame {LEAD} == fresh capture")
 
 
-def main(exe, tmpdir, extra):
+def main(exe, tmpdir, part, extra):
     shutil.rmtree(tmpdir, ignore_errors=True)
     info = json.loads(run([exe, "--show-info"]))
+    titles = [chapter["title"] for chapter in info["chapters"]]
+    if any(title not in titles for title in STUDIO_CHAPTERS):
+        sys.exit(f"--show-info lacks a Studio chapter: expected {STUDIO_CHAPTERS} among {titles}")
+    chosen = [chapter for chapter in info["chapters"] if in_part(chapter, part)]
+    traced = [chapter["title"] for chapter in chosen if chapter["scene"] != "Placeholder"]
+    print(f"stream_capture: part '{part}', {len(chosen)} chapters, path traced: {', '.join(traced) or 'none'}")
     compared = {"unforced": 0, 1993: 0, 2026: 0}
-    for chapter in info["chapters"]:
+    for chapter in chosen:
         start, duration, eras = chapter["start"], chapter["duration"], chapter["eras"]
         name = f"chapter {chapter['index']} {chapter['title']}"
+        if chapter["scene"] != "Placeholder":
+            name += f" ({chapter['scene']})"
         times = [round((start + fraction * duration) * FPS) / FPS
                  for fraction in ([FRACTION] if chapter["transition"] == "Cut" else [FRACTION, NATURAL_EXTRA])]
         if not all(start + LEAD / FPS <= t < start + duration for t in times):
@@ -154,11 +178,12 @@ def main(exe, tmpdir, extra):
         for era in eras:
             compare(exe, extra, tmpdir, name, t, era, ERA_VALUE[era], forced[era])
             compared[era] += 1
-    print(f"stream_capture: {len(info['chapters'])} chapters match: {compared['unforced']} times unforced, "
-          f"{compared[1993]} forced to 1993, {compared[2026]} forced to 2026")
+    print(f"stream_capture: {len(chosen)} chapters match ({len(traced)} path traced): {compared['unforced']} "
+          f"times unforced, {compared[1993]} forced to 1993, {compared[2026]} forced to 2026")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        sys.exit("usage: stream_capture_test.py <Evolution executable> <tmpdir> [Evolution options...]")
-    main(sys.argv[1], sys.argv[2], sys.argv[3:])
+    if len(sys.argv) < 4 or sys.argv[3] not in PARTS:
+        sys.exit("usage: stream_capture_test.py <Evolution executable> <tmpdir> studio|rest|all "
+                 "[Evolution options...]")
+    main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:])

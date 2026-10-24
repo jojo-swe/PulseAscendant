@@ -50,9 +50,12 @@ one `context` provokes on purpose to check that messages are counted.
   `rotozoom`, `raytrace`, `city`, `finale`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon
   and point rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
   frame, every scene within the rasterisers' limits).
-- The executable end to end: `render_stream`, `capture`, `stream_capture` (a frame of a stream equals a fresh
-  capture at the same time, for every chapter), `storyboard` (into `build-out/storyboard_test`, so it never
-  touches the storyboards below), `exit_codes`, and `python_tools` (the music analysis pipeline).
+- The executable end to end, its exports at `--spp 2`: `render_stream`, `capture`, `stream_capture` and
+  `stream_capture_studio` (a frame of a stream equals a fresh capture at the same time, for every chapter; the
+  Studio chapters, path traced, in a part of their own that runs beside the rest), `export_mode` (the seeds,
+  export purity and the window's first frame after a reset equal to an export frame), `storyboard` (into
+  `build-out/storyboard_test`, so it never touches the storyboards below), `exit_codes`, and `python_tools`
+  (the music analysis pipeline).
 
 The `linux` test preset runs 8 tests at a time; `ctest --preset linux -j 1` runs them one by one.
 
@@ -209,8 +212,11 @@ cell; all 31 chapters at 640×360 take about 30 s on lavapipe.
 cd evolution
 python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard
 # options: --width 640 --height 360 (the capture size; the defaults), --chapters 0,3 (default: all),
-# --no-crt (the 1993 picture without the CRT look)
+# --no-crt (the 1993 picture without the CRT look), --spp 8 (path-traced samples per pixel; the default)
 ```
+
+The path-traced chapters cost most of the time on lavapipe; `--spp` trades their noise against it (the
+app's own export default, 64, is for real exports).
 
 The forcing is the diagnostic environment variable `EVO_FORCE_ERA`: set to `0` or `1`, it renders
 `--capture-dir` and `--render-stream` frames wholly in 1993 or 2026 (era 0 or 1, a wipe not started or
@@ -236,6 +242,9 @@ Options:
   --height N           Render height in pixels, 16..8192 (default 720)
   --fps N              Frames per second for headless output, 1..240 (default 60)
   --time S             Start time on the timeline in seconds, 0..86400 (default 0)
+  --spp N              Path-traced samples per pixel per frame, 1..4096 (default 1 in
+                       the window, which accumulates them over frames; 64 for
+                       --capture-dir and --render-stream, where every frame stands alone)
   --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
                        needs a duration greater than 0
   --headless           Render without opening a window
@@ -276,9 +285,23 @@ Evolution --render-stream --width 640 --height 360 --fps 30 --duration 2 |
 # The selected GPU as JSON
 Evolution --device-info
 
-# The show as JSON: duration, music file, tracks, and each chapter's effect, transition, start and accent
+# A path-traced frame (STUDIO NIGHT) at 256 samples per pixel instead of the export default of 64
+Evolution --capture-dir out --time 203 --spp 256
+
+# The show as JSON: duration, music file, tracks, and each chapter's effect, transition, start, accent and
+# 2026 scene ("Placeholder" or the path-traced "Studio")
 Evolution --show-info
 ```
+
+**Interactive and export.** The window is interactive: it path traces `--spp` samples per pixel per frame (1
+by default) and accumulates them over the frames since the last reset of its temporal history, which resets on
+a seek, a chapter change, a camera cut, a resize or a change of settings. The exports (`--capture-dir`,
+`--render-stream`) keep no history at all: every frame traces `--spp` samples (64 by default, in dispatches of
+4) at up to 6 bounces (the window: 4), filtered spatially (à-trous) only below 16 spp, and is a pure function
+of the options and its show time, so a streamed frame equals a fresh capture of the same time byte for byte.
+The random seed of a frame comes from the show time, `pcg(llround(seconds × 48000))` (the audio sample clock);
+the window adds `0x9E3779B9` per frame since its last reset, so its first frame after a reset uses the export
+seed and, at equal spp and bounces, equals the export frame byte for byte.
 
 In the window the time comes from the music: the clock is the position the listener hears (what SDL still
 has queued and the device's buffer are subtracted), and the show loops at its end. `--audio-offset` shifts
