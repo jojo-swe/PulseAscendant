@@ -90,7 +90,8 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 // Glenz Future Crew's translucent glenz vector bouncing over copper bars, Lens the rotozoomed logo texture
 // under a bouncing lens, Raytrace the dithered chrome spheres over a checkerboard at 10 fps, City the
 // gouraud vector city flown at sunset, Portal FLYBY's ship flying off inside a closing monitor bezel, Reboot
-// the prompt's second script, TheEnd the fading end screen, Finale the megamix cutting between FLYBY, DOTS,
+// the prompt's second script, StudioNight and Return the DOS prompt the demo exited to, shown on the Studio's
+// CRT (retro/dos_idle.hpp), TheEnd the fading end screen, Finale the megamix cutting between FLYBY, DOTS,
 // TUNNEL, GLENZ, LENS and RAYTRACE (retro/finale.hpp). The other effects get their entries in later steps and
 // show the test pattern in grey until then; Act III's planetary chapters (GALAXY to ASCENDANT) are 2026 only
 // and keep it for good (renderer_test and boot_test use GALAXY's and check that it is the test pattern).

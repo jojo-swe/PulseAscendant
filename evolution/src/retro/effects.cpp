@@ -5,6 +5,7 @@
 
 #include "retro/boot.hpp"
 #include "retro/city.hpp"
+#include "retro/dos_idle.hpp"
 #include "retro/dots.hpp"
 #include "retro/finale.hpp"
 #include "retro/flyby.hpp"
@@ -83,6 +84,9 @@ const EffectInfo& effectFor(show::Effect effect) {
                                         .scene = portalScene};
     static constexpr EffectInfo kReboot{
         .shader = nullptr, .retroRate = kBootRetroRate, .palette = bootPalette, .text = rebootText};
+    // The Studio's CRT in the 2026-only chapters that show the Studio: the DOS prompt the demo exited to.
+    static constexpr EffectInfo kDosIdle{
+        .shader = nullptr, .retroRate = kDosIdleRetroRate, .palette = bootPalette, .text = dosIdleText};
     static constexpr EffectInfo kTheEnd{
         .shader = nullptr, .retroRate = kTheEndRetroRate, .palette = theEndPalette, .text = theEndText};
     switch (effect) {
@@ -110,6 +114,9 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kRaytrace;
     case show::Effect::Portal:
         return kPortal;
+    case show::Effect::StudioNight:
+    case show::Effect::Return:
+        return kDosIdle;
     case show::Effect::Reboot:
         return kReboot;
     case show::Effect::TheEnd:
