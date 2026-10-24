@@ -20,7 +20,8 @@ constexpr std::uint32_t indexColour(std::uint8_t index) {
 } // namespace
 
 std::vector<text::Item> scrollerItems(std::string_view text, std::uint32_t retroFrame, float speedPxPerSec,
-                                      float amplitude, float wavelength, float baseY, std::uint8_t index) {
+                                      float amplitude, float wavelength, float baseY, std::uint8_t index,
+                                      bool shadow) {
     std::vector<text::Item> items;
     if (text.empty())
         return items;
@@ -46,6 +47,14 @@ std::vector<text::Item> scrollerItems(std::string_view text, std::uint32_t retro
             continue;
         items.push_back(
             {static_cast<float>(x), static_cast<float>(y), 1, indexColour(index), std::string(1, text[i])});
+    }
+    if (shadow) {
+        std::vector<text::Item> shadowed;
+        shadowed.reserve(2 * items.size());
+        for (const text::Item& glyph : items)
+            shadowed.push_back({glyph.x + 1, glyph.y + 1, 1, indexColour(kScrollerShadowIndex), glyph.text});
+        shadowed.insert(shadowed.end(), items.begin(), items.end());
+        return shadowed;
     }
     return items;
 }
@@ -73,7 +82,7 @@ std::vector<text::Item> creditsText(const show::TimelineFrame&, std::uint32_t re
 
 std::vector<text::Item> flybyText(const show::TimelineFrame&, std::uint32_t retroFrame) {
     return scrollerItems(kFlybyText, retroFrame, kFlybySpeed, kFlybyAmplitude, kFlybyWavelength, kFlybyBaseY,
-                         kFlybyIndex);
+                         kFlybyIndex, /*shadow=*/true);
 }
 
 } // namespace evo::retro

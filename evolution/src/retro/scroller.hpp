@@ -18,6 +18,8 @@ inline constexpr std::uint32_t kScrollerRetroRate = 35;
 
 // The palette index the scroller writes unless told otherwise: white in CREDITS' palette.
 inline constexpr std::uint8_t kScrollerIndex = 15;
+// The palette index of the scroller's optional drop shadow: black in every effect's palette.
+inline constexpr std::uint8_t kScrollerShadowIndex = 0;
 
 // The glyphs of `text` (ASCII, one byte a glyph) at time t = retroFrame / 35 s, each its own one-character
 // text::Item at scale 1. With s = speed * t, glyph i has its top-left corner at
@@ -27,10 +29,12 @@ inline constexpr std::uint8_t kScrollerIndex = 15;
 // its full width has passed (its last glyph has left at the left edge, s = 320 + 8 * size) it enters at the
 // right edge again, as s runs modulo 320 + 8 * size. Glyphs wholly outside the 320x200 image and blanks
 // (which draw nothing) are left out. The low byte of every item's rgba is `index`. wavelength must be
-// positive.
+// positive. With `shadow`, every glyph also gets a drop shadow, the same glyph in kScrollerShadowIndex one
+// pixel right and down: all the shadows come first, then the glyphs in the same order, so the text is drawn
+// over every shadow (two dispatches of the text pass).
 std::vector<text::Item> scrollerItems(std::string_view text, std::uint32_t retroFrame, float speedPxPerSec,
                                       float amplitude, float wavelength, float baseY,
-                                      std::uint8_t index = kScrollerIndex);
+                                      std::uint8_t index = kScrollerIndex, bool shadow = false);
 
 // CREDITS (chapter 29): a 1993 sine scroller on deep blue under a static EVOLUTION title. A text-only
 // effect at 35 retro frames per second.
@@ -55,7 +59,8 @@ std::uint8_t creditsBackground(const show::TimelineFrame& frame, std::uint32_t r
 std::vector<text::Item> creditsText(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
 // FLYBY's 1993 side keeps the test pattern (step 3 brings the flat-shaded ship) and scrolls this greeting
-// low over it, in white (index 255 of the grey ramp).
+// low over it, in white (index 255 of the grey ramp) with a black drop shadow, so it reads over the light
+// bands.
 inline constexpr std::string_view kFlybyText = "WE WERE THERE IN 1993 ...";
 inline constexpr float kFlybyBaseY = 180;
 inline constexpr float kFlybySpeed = 60;

@@ -157,6 +157,21 @@ void testPositions() {
     CHECK(scrollerItems("", frameAt(4), speed, amplitude, wavelength, baseY).empty());
     // Another index when asked.
     CHECK(scrollerItems("A", frameAt(4), speed, amplitude, wavelength, baseY, 255)[0].rgba == 0xFF0000FFu);
+
+    // The shadow: every glyph again in index 0 one pixel right and down, all of them before the glyphs,
+    // which are the items without a shadow.
+    for (std::uint32_t retroFrame : {frameAt(1), frameAt(4), frameAt(6)}) {
+        const std::vector<Item> plain =
+            scrollerItems("SHADOW TEST", retroFrame, speed, amplitude, wavelength, baseY, 255);
+        const std::vector<Item> shadowed =
+            scrollerItems("SHADOW TEST", retroFrame, speed, amplitude, wavelength, baseY, 255, true);
+        CHECK(!plain.empty() && shadowed.size() == 2 * plain.size());
+        CHECK(same({shadowed.begin() + static_cast<std::ptrdiff_t>(plain.size()), shadowed.end()}, plain));
+        for (std::size_t i = 0; i < plain.size(); ++i)
+            CHECK(shadowed[i].x == plain[i].x + 1 && shadowed[i].y == plain[i].y + 1 &&
+                  shadowed[i].rgba == 0xFF000000u && shadowed[i].text == plain[i].text &&
+                  shadowed[i].scale == 1);
+    }
 }
 
 // The registry entries and CREDITS' palette, and that the providers depend only on the retro frame.
@@ -200,7 +215,7 @@ void testRegistry() {
     CHECK(same({text.begin() + 1, text.end()}, scroller));
     // FLYBY's: the greeting low over the test pattern, white in the grey ramp.
     CHECK(same(evo::retro::flybyText(frame, 140),
-               scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 180, 255)));
+               scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 180, 255, true)));
 
     // Pure: the same retro frame gives the same items whatever else of the frame changes within it.
     TimelineFrame noisy = chapterFrame(kCreditsChapter, Effect::Credits, middleOf(140) + .01);
@@ -349,16 +364,43 @@ void testImages(evo::gfx::Context& ctx) {
     const Picture overlay = fixture.render(flyby, &rendered);
     CHECK(rendered && fixture.stage().retroFrame() == flybyFrame);
     const std::vector<Item> greeting = evo::retro::flybyText(flyby, flybyFrame);
-    CHECK(!greeting.empty());
+    CHECK(!greeting.empty() && greeting.size() % 2 == 0);
+    const std::size_t glyphs = greeting.size() / 2; // the shadows, then the glyphs
     checked = 0;
-    for (const Item& glyph : greeting)
-        if (wholeInside(glyph)) {
-            CHECK(glyph.y >= 174 && glyph.y <= 186);
-            CHECK(glyphAt(overlay, glyph, 255, -1));
+    for (std::size_t i = glyphs; i < greeting.size(); ++i)
+        if (wholeInside(greeting[i])) {
+            CHECK(greeting[i].y >= 174 && greeting[i].y <= 186);
+            CHECK(glyphAt(overlay, greeting[i], 255, -1));
             ++checked;
         }
-    std::printf("flyby: %zu greeting glyphs checked at t = 3\n", checked);
-    CHECK(checked >= 10);
+    // Each shadow pixel is black (index 0) unless a glyph's ink covers it; the test pattern has no index 0
+    // this low, so every 0 there is shadow.
+    std::size_t shadowPixels = 0;
+    for (std::size_t i = 0; i < glyphs; ++i) {
+        const Item& shadow = greeting[i];
+        if (!wholeInside(shadow))
+            continue;
+        const evo::text::GlyphRows& rows = evo::text::glyph(shadow.text[0]);
+        for (int row = 0; row < 8; ++row)
+            for (int col = 0; col < 8; ++col)
+                if (rows[row] & (0x80u >> col)) {
+                    const std::uint8_t index =
+                        overlay.at(static_cast<int>(shadow.x) + col, static_cast<int>(shadow.y) + row);
+                    CHECK(index == 0 || index == 255);
+                    shadowPixels += index == 0;
+                }
+    }
+    for (std::uint32_t y = 160; y < kHeight - 6; ++y)
+        for (std::uint32_t x = 6; x < kWidth - 6; ++x)
+            if (overlay.at(static_cast<int>(x), static_cast<int>(y)) == 0) {
+                const bool underShadow =
+                    std::any_of(greeting.begin(), greeting.begin() + glyphs, [&](const Item& s) {
+                        return x >= s.x && x < s.x + 8 && y >= s.y && y < s.y + 8;
+                    });
+                CHECK(underShadow);
+            }
+    std::printf("flyby: %zu greeting glyphs checked at t = 3, %zu shadow pixels\n", checked, shadowPixels);
+    CHECK(checked >= 10 && shadowPixels >= 100);
 }
 
 } // namespace
