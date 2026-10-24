@@ -1,5 +1,5 @@
-"""End to end: the placeholder through prepare_show.py into the four generated headers and receipts; the
-fade at the act joins of show.wav."""
+"""End to end: the placeholder through prepare_show.py into the four generated headers and receipts; two
+synthetic tracks through the multi-track direction; the fade at the act joins of show.wav."""
 import json
 import re
 import subprocess
@@ -32,6 +32,16 @@ def read_wav(path):
     with wave.open(str(path), 'rb') as audio:
         return np.frombuffer(audio.readframes(audio.getnframes()), dtype='<i2').reshape(-1, 2) / 32768
 
+
+def click_track(seconds, bpm=120, seed=0):
+    """Decaying 1.8 kHz clicks on every beat over faint noise, the same in both channels."""
+    rng = np.random.default_rng(seed)
+    signal = rng.normal(0, .002, int(seconds * RATE))
+    burst = np.arange(int(.03 * RATE))
+    tone = .5 * np.sin(2 * np.pi * 1800 * burst / RATE) * np.exp(-burst / (.008 * RATE))
+    for start in range(0, len(signal), int(60 / bpm * RATE)):
+        signal[start:start + len(burst)] += tone[:len(signal) - start]
+    return np.repeat(signal[:, None], 2, axis=1)
 
 
 def array(text, name):
@@ -117,6 +127,55 @@ class PipelineTests(unittest.TestCase):
         offsets = array(beat, 'beatOffsets')
         self.assertEqual(len(array(beat, 'beatTimes')), offsets[-1])
         self.assertEqual(len(array(beat, 'beatBar')), offsets[-1])
+
+
+class MultiTrackTests(unittest.TestCase):
+    """Two 30 s click tracks and three chapters, the last pinned to the second track's start."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temp.name)
+        tracks = [cls.root / 'in/first.wav', cls.root / 'in/second.wav']
+        for seed, track in enumerate(tracks):
+            write_wav(track, click_track(30, seed=seed))
+        targets = cls.root / 'targets.json'
+        targets.write_text(json.dumps(dict(max_chapter_seconds=40, chapters=[
+            dict(title='ONE', target=0, track=0), dict(title='TWO', target=12, track=0),
+            dict(title='THREE', target=30, track=1)])))
+        subprocess.run([sys.executable, str(ROOT / 'tools/prepare_show.py'), '--root', str(cls.root),
+                        '--targets', str(targets), *map(str, tracks)], check=True, capture_output=True, text=True)
+        cls.generated = cls.root / 'src/show/generated'
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def header(self, name):
+        return (self.generated / f'{name}.hpp').read_text()
+
+    def test_each_track_starts_its_first_chapter_exactly(self):
+        starts = array(self.header('cue_data'), 'chapterStarts')
+        self.assertEqual(len(starts), 3)
+        self.assertEqual(starts[0], 0)
+        self.assertLessEqual(abs(starts[1] - 12), 2.5)
+        self.assertEqual(starts[2], 30.0)
+        direction = json.loads((self.root / 'music/direction.json').read_text())
+        self.assertEqual([t['start_seconds'] for t in direction['tracks']], [0, 30.0])
+        self.assertEqual(direction['chapters'][2]['start'], 30.0)
+
+    def test_offset_arrays_have_one_entry_per_track_plus_one(self):
+        self.assertEqual(array(self.header('music_data'), 'trackFrames'), [30 * RATE] * 2)
+        for header, name in (('music_data', 'envelopeOffsets'), ('reactivity_data', 'reactivityOffsets'),
+                             ('beat_data', 'beatOffsets')):
+            offsets = array(self.header(header), name)
+            self.assertEqual(len(offsets), 3, name)
+            self.assertEqual(offsets[0], 0, name)
+            self.assertLess(offsets[0], offsets[1], name)
+            self.assertLess(offsets[1], offsets[2], name)
+        show = json.loads((self.root / 'music/show-audio.json').read_text())
+        self.assertEqual(show['track_start_frames'], [0, 30 * RATE])
+        self.assertEqual(show['frames'], 60 * RATE)
 
 
 class JoinFadeTests(unittest.TestCase):

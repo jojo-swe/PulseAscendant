@@ -221,6 +221,7 @@ add_test(NAME no_wait_idle
 # The Python music pipeline: beat tracker, placeholder song and the end-to-end header generation.
 add_test(NAME python_tools
     COMMAND Python3::Interpreter -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests -p "test_*.py")
+set_tests_properties(python_tools PROPERTIES TIMEOUT 600)
 
 # Opens a real window, so it needs an X server; off by default and run under Xvfb.
 option(EVO_RUNTIME_TESTS "Run tests that open a window (needs xvfb-run)" OFF)

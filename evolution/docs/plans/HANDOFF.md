@@ -66,11 +66,9 @@ Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 def
 - ~~`effectNames` storlek ej assertad~~ — redan åtgärdat (`static_assert` i `cues.hpp`).
 - WAV-läsarens felvägar saknar tester; `WAVE_FORMAT_EXTENSIBLE` avvisas.
 - `Transport` har hög minnestopp (~1,5 GiB vid taket).
-- Byte till tyst läge mitt i showen rapporteras inte på stderr.
+- ~~Byte till tyst läge mitt i showen rapporteras inte på stderr.~~ — åtgärdat i slutfixvågen (status skrivs vid varje byte).
 - `positionSeconds` kan bli lika med längden (viks av `ShowClock`).
-- `clock_test` sätter SDL-hint med fel prioritet (använd `SDL_HINT_OVERRIDE`).
-- Ordval om kapitel i `--help` och `app.hpp` (1–9/0 = kapitel 1–10 resp. index 0–9).
-- Multi-track `direct_show` otestad; `python_tools` saknar TIMEOUT.
+- ~~`clock_test` sätter SDL-hint med fel prioritet~~, ~~ordval om kapitel i `--help`/`app.hpp`~~, ~~multi-track `direct_show` otestad; `python_tools` saknar TIMEOUT~~ — åtgärdat i slutfixvågen, liksom UTF-8-sökvägar på Windows, enhetsbuffertens latens och `--audio-offset`.
 - DP-trackern kan hamna ur fas (rätt tempo, fel fas) på material med hi-hat på varje slag plus 3/16-eko (`test_hat_echo_on_every_beat_keeps_the_tempo` testar bara tempot).
 - När D kollapsar på kapitlets första beat blir det ett klipp utan flash (bara syntetiskt).
 - Raytraces bar-flippar följer trackerns etiketter (downbeat-lucka vid beat 298 flyttar dem ett slag).

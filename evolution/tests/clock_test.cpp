@@ -129,10 +129,11 @@ double secondsSince(std::uint64_t ticksNs) {
     return static_cast<double>(SDL_GetTicksNS() - ticksNs) / 1e9;
 }
 
-// SDL's dummy driver plays into nothing at real speed, so the player and the audio clock run anywhere.
+// SDL's dummy driver plays into nothing at real speed, so the player and the audio clock run anywhere. The
+// hint overrides an SDL_AUDIO_DRIVER in the environment.
 void checkPlayerOnDummyDriver(const std::filesystem::path& dir) {
     const std::filesystem::path halfSecond = dir / "half_second.wav";
-    SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
+    CHECK(SDL_SetHintWithPriority(SDL_HINT_AUDIO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
     evo::audio::Player player;
     CHECK(!player.active());
