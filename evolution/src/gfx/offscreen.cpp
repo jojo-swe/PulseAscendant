@@ -14,14 +14,33 @@ namespace {
 constexpr VkFormat kFormat = VK_FORMAT_R8G8B8A8_UNORM;
 constexpr std::uint32_t kGroupSize = 8; // local_size_x/y in fill.comp
 
-// Must match the push_constant block in fill.comp (16 bytes).
+// Must match the push_constant block in fill.comp (32 bytes).
 struct FillPushConstants {
     std::uint32_t width;
     std::uint32_t height;
-    float time;
-    float pad;
+    float localSeconds;
+    float era;
+    float kick;
+    float beatPhase;
+    float wipe;
+    // Bits 0-15: the chapter index; bits 16-31: the show::Transition, which the shader needs to tell a Wipe
+    // (split at the wipe edge) and a Portal (cross-fade) from the chapters that switch on era.
+    std::uint32_t chapter;
 };
-static_assert(sizeof(FillPushConstants) == 16);
+static_assert(sizeof(FillPushConstants) == 32);
+
+FillPushConstants pushConstants(const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height) {
+    const auto chapter = static_cast<std::uint32_t>(frame.chapter) & 0xffffu;
+    const auto transition = static_cast<std::uint32_t>(frame.transition);
+    return {width,
+            height,
+            static_cast<float>(frame.localSeconds),
+            frame.era,
+            frame.kick,
+            frame.beatPhase,
+            frame.wipe,
+            chapter | (transition << 16)};
+}
 
 const VkImageSubresourceRange kColorRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
@@ -197,9 +216,13 @@ void Offscreen::destroy() noexcept {
 }
 
 void Offscreen::render(double seconds) {
+    render(show::sampleTimeline(seconds));
+}
+
+void Offscreen::render(const show::TimelineFrame& frame) {
     const auto width = static_cast<std::uint32_t>(width_);
     const auto height = static_cast<std::uint32_t>(height_);
-    const FillPushConstants push{width, height, static_cast<float>(seconds), 0.0f};
+    const FillPushConstants push = pushConstants(frame, width, height);
 
     ctx_.immediate([&](VkCommandBuffer cmd) {
         // The shader overwrites every pixel, so the previous contents are discarded (oldLayout UNDEFINED).

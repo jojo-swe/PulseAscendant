@@ -232,7 +232,7 @@ int runWindowed(const Options& options) {
             title = std::move(newTitle);
             SDL_SetWindowTitle(window.handle, title.c_str());
         }
-        offscreen->render(now);
+        offscreen->render(show::sampleTimeline(now));
         if (!swapchain.present(offscreen->image(), offscreen->width(), offscreen->height()))
             needRecreate = true;
     }
@@ -255,7 +255,7 @@ int runRenderStream(const Options& options) {
     if (frames < 1)
         throw std::runtime_error("--duration is shorter than one frame"); // parseOptions rejects only 0
     for (long i = 0; i < frames; ++i) {
-        offscreen.render(options.time + static_cast<double>(i) / options.fps);
+        offscreen.render(show::sampleTimeline(options.time + static_cast<double>(i) / options.fps));
         const gfx::Frame frame = offscreen.readback();
         if (std::fwrite(frame.rgb.data(), 1, frame.rgb.size(), stdout) != frame.rgb.size())
             throw std::runtime_error("writing frame " + std::to_string(i) + " to stdout failed");

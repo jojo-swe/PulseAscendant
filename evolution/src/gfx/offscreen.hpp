@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gfx/context.hpp"
+#include "show/timeline.hpp"
 
 #include <volk.h>
 
@@ -17,8 +18,9 @@ struct Frame {
     std::vector<std::uint8_t> rgb;
 };
 
-// Renders the fill.comp test pattern into an RGBA8 storage image with a compute dispatch and copies it
-// to a host-visible buffer. Every render() waits for the GPU, so readback() always sees that frame.
+// Renders the fill.comp test pattern for a timeline frame into an RGBA8 storage image with a compute dispatch
+// and copies it to a host-visible buffer. Every render() waits for the GPU, so readback() always sees that
+// frame.
 class Offscreen {
 public:
     Offscreen(Context& ctx, int width, int height);
@@ -27,6 +29,9 @@ public:
     Offscreen& operator=(const Offscreen&) = delete;
 
     // Records, submits and waits: barrier -> dispatch ceil(w/8) x ceil(h/8) -> barrier -> copy to buffer.
+    // The pattern shows the frame's chapter, era, wipe, kick and beat phase.
+    void render(const show::TimelineFrame& frame);
+    // render(show::sampleTimeline(seconds)).
     void render(double seconds);
     // RGBA -> RGB conversion on the host of the last rendered frame.
     Frame readback() const;

@@ -3,6 +3,7 @@
 #include "gfx/context.hpp"
 #include "gfx/offscreen.hpp"
 #include "image/png.hpp"
+#include "show/timeline.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -26,7 +27,7 @@ int runCapture(const Options& options) {
     gfx::Context ctx = gfx::Context::create(contextOptions);
     gfx::Offscreen offscreen(ctx, options.width, options.height);
 
-    offscreen.render(options.time);
+    offscreen.render(show::sampleTimeline(options.time));
     const gfx::Frame frame = offscreen.readback();
 
     // writePng creates the missing parent directories and truncates an existing file.

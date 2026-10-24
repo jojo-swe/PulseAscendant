@@ -66,9 +66,10 @@ add_library(evo_gfx STATIC
     src/gfx/vk_check.hpp
     src/gfx/vma_impl.cpp)
 target_include_directories(evo_gfx PUBLIC src)
-# SDL3 provides SDL_GetBasePath() for locating the shaders beside the executable.
+# SDL3 provides SDL_GetBasePath() for locating the shaders beside the executable; evo_show the timeline
+# frame that Offscreen renders.
 target_link_libraries(evo_gfx PUBLIC
-    volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core SDL3::SDL3-static)
+    volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core evo_show SDL3::SDL3-static)
 target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
 set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
     COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
@@ -103,6 +104,21 @@ add_executable(Evolution
 target_link_libraries(Evolution PRIVATE evo_app SDL3::SDL3-static)
 # Places Evolution in <build>/bin with its compiled shaders in <build>/bin/shaders.
 evo_add_shaders(Evolution shaders/fill.comp)
+
+# The show's music (git-ignored; tools/prepare_show.py writes it) goes where Evolution looks for it, so a dev
+# build plays it with no flags: a symbolic link, or a copy on Windows, where links need extra privileges.
+set(EVO_SHOW_WAV "${CMAKE_SOURCE_DIR}/assets/music/show.wav")
+if(EXISTS "${EVO_SHOW_WAV}")
+    set(runtimeMusicDir "${EVO_RUNTIME_DIR}/assets/music")
+    file(MAKE_DIRECTORY "${runtimeMusicDir}")
+    if(WIN32)
+        file(COPY "${EVO_SHOW_WAV}" DESTINATION "${runtimeMusicDir}")
+        message(STATUS "Show music copied to ${runtimeMusicDir}/show.wav")
+    else()
+        file(CREATE_LINK "${EVO_SHOW_WAV}" "${runtimeMusicDir}/show.wav" SYMBOLIC)
+        message(STATUS "Show music linked: ${runtimeMusicDir}/show.wav -> ${EVO_SHOW_WAV}")
+    endif()
+endif()
 
 # --- Tests ------------------------------------------------------------------------------------------------
 
