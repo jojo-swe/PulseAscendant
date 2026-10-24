@@ -376,8 +376,10 @@ void testHudItems() {
     frame.thenCard = "";
     CHECK(hudItems(frame, 640, 360).size() == 2);
 
-    // Wipe: 2026 bottom-left, 1993 bottom-right on the same line when they fit...
+    // Wipe, while the wipe is under way: 2026 bottom-left, 1993 bottom-right on the same line when they
+    // fit...
     frame.transition = Transition::Wipe;
+    frame.wipe = .5f;
     frame.thenCard = "1993 \xC2\xB7 PALETTE CYCLING";
     frame.nowCard = "2026 \xC2\xB7 VOLUMETRIC NEBULA";
     items = hudItems(frame, 1280, 720);
@@ -393,11 +395,69 @@ void testHudItems() {
     items = hudItems(frame, 640, 360);
     CHECK(items.size() == 4 && items[3].text == frame.thenCard && items[3].y == 360 - 25);
 
-    // Every chapter of the show at the default size.
-    for (int i = 0; i < evo::show::chapterCount(); ++i) {
-        const TimelineFrame sample = evo::show::sampleTimeline(evo::show::chapterStart(i) + .5);
-        CHECK(inside(hudItems(sample, 1280, 720), 1280, 720));
+    // Before the wipe only the 1993 card, after it only the 2026 card, bottom-left like any other chapter,
+    // whatever the era says; both only strictly between.
+    frame.nowCard = "2026 \xC2\xB7 VOLUMETRIC NEBULA";
+    for (float era : {0.f, 1.f}) {
+        frame.era = era;
+        frame.wipe = 0.f;
+        items = hudItems(frame, 640, 360);
+        CHECK(items.size() == 4 && shadowed(items) && inside(items, 640, 360));
+        CHECK(items[3].text == frame.thenCard && items[3].x == 8 && items[3].y == 360 - 25);
+        frame.wipe = 1.f;
+        items = hudItems(frame, 640, 360);
+        CHECK(items.size() == 4 && items[3].text == frame.nowCard && items[3].x == 8 &&
+              items[3].y == 360 - 25);
     }
+    for (float wipe : {.001f, .999f}) {
+        frame.wipe = wipe;
+        CHECK(hudItems(frame, 640, 360).size() == 6);
+    }
+    // The show's Wipe chapters: one card at their start and end, both in the middle of the wipe.
+    for (int i = 0; i < evo::show::chapterCount(); ++i) {
+        if (evo::show::cues[i].transition != Transition::Wipe)
+            continue;
+        const double start = evo::show::chapterStart(i), end = evo::show::chapterStart(i + 1);
+        const TimelineFrame first = evo::show::sampleTimeline(start + .01);
+        const TimelineFrame last = evo::show::sampleTimeline(end - .01);
+        CHECK(first.wipe == 0.f && hudItems(first, 1280, 720).size() == 4);
+        CHECK(hudItems(first, 1280, 720)[3].text == std::string(first.thenCard));
+        CHECK(last.wipe == 1.f && hudItems(last, 1280, 720).size() == 4);
+        CHECK(hudItems(last, 1280, 720)[3].text == std::string(last.nowCard));
+        double t = start;
+        while (t < end && evo::show::sampleTimeline(t).wipe <= 0.f)
+            t += .01;
+        const TimelineFrame during = evo::show::sampleTimeline(t + .05);
+        CHECK(during.wipe > 0.f && during.wipe < 1.f && hudItems(during, 1280, 720).size() == 6);
+    }
+
+    // A card too wide at 2x is drawn at 1x: the longest card at 640x360 (41 glyphs, 656 pixels at 2x),
+    // bottom-left with its shadow's bottom row on the margin; at 1280x720 it fits at 2x.
+    frame.transition = Transition::BeatSwap;
+    frame.era = 1.f;
+    frame.nowCard = "2026 \xC2\xB7 REFRACTION \xC2\xB7 DISPERSION \xC2\xB7 CAUSTICS";
+    CHECK(evo::text::textWidth(frame.nowCard, 2) == 656);
+    items = hudItems(frame, 640, 360);
+    CHECK(items.size() == 4 && shadowed(items) && inside(items, 640, 360));
+    CHECK(items[3].text == frame.nowCard && items[3].scale == 1 && items[2].scale == 1);
+    CHECK(items[3].x == 8 && items[3].y == 360 - 8 - 8 - 1);
+    items = hudItems(frame, 1280, 720);
+    CHECK(items[3].scale == 2 && inside(items, 1280, 720));
+    // The same during a wipe, for either card.
+    frame.transition = Transition::Wipe;
+    frame.wipe = .5f;
+    frame.thenCard = "1993 \xC2\xB7 24 TRIANGLES \xC2\xB7 TRANSPARENT VECTORS";
+    items = hudItems(frame, 640, 360);
+    CHECK(items.size() == 6 && shadowed(items) && inside(items, 640, 360));
+    CHECK(items[3].scale == 1 && items[5].scale == 1 && items[5].y + 8 + 1 < items[3].y);
+
+    // Every chapter of the show at the default size and at 640x360, at its start and in its middle.
+    for (int i = 0; i < evo::show::chapterCount(); ++i)
+        for (double into : {.5, (evo::show::chapterStart(i + 1) - evo::show::chapterStart(i)) / 2}) {
+            const TimelineFrame sample = evo::show::sampleTimeline(evo::show::chapterStart(i) + into);
+            CHECK(inside(hudItems(sample, 1280, 720), 1280, 720));
+            CHECK(inside(hudItems(sample, 640, 360), 640, 360));
+        }
 }
 
 // The HUD drawn: only the title and card areas change, at least 8 pixels inside the output; H (setHud)

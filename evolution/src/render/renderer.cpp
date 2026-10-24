@@ -21,12 +21,20 @@ constexpr std::uint32_t kTitleColor = 0xFFFFFFFFu;
 constexpr std::uint32_t kCardColor = 0xFFE0E0E0u;
 constexpr std::uint32_t kShadowColor = 0xFF000000u;
 constexpr int kCardScale = 2;
+// The gap between the 1993 card raised above the 2026 card and the 2026 card, shadow included.
+constexpr int kCardLineGap = 3;
 
 // The item after its drop shadow.
 void addWithShadow(std::vector<text::Item>& items, float x, float y, float scale, std::uint32_t rgba,
                    const char* text) {
     items.push_back({x + 1, y + 1, scale, kShadowColor, text});
     items.push_back({x, y, scale, rgba, text});
+}
+
+// An epoch card's scale: 2x, or 1x when at 2x it would not fit between the margins at this width.
+int cardScale(const char* card, std::uint32_t width) {
+    const int available = static_cast<int>(width) - 2 * kHudMargin - 1; // the shadow's column included
+    return text::textWidth(card, kCardScale) <= available ? kCardScale : 1;
 }
 
 } // namespace
@@ -40,24 +48,35 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
     if (!empty(frame.title))
         addWithShadow(items, margin, margin, 1, kTitleColor, frame.title);
 
-    // The cards' bottom row, shadow included, is the last one inside the margin.
-    const float cardY = static_cast<float>(height) - margin - 8 * kCardScale - 1;
-    if (frame.transition == show::Transition::Wipe) {
-        const int nowWidth = empty(frame.nowCard) ? 0 : text::textWidth(frame.nowCard, kCardScale);
+    // A card's top row at a scale: its bottom row, shadow included, is the last one inside the margin.
+    const auto cardY = [height](int scale) {
+        return static_cast<float>(height) - margin - static_cast<float>(8 * scale) - 1;
+    };
+    // Both cards only while the wipe is under way; before it the 1993 card, after it the 2026 card.
+    const bool wiping = frame.transition == show::Transition::Wipe && frame.wipe > 0.f && frame.wipe < 1.f;
+    if (wiping) {
+        const int nowScale = empty(frame.nowCard) ? 0 : cardScale(frame.nowCard, width);
+        const int nowWidth = nowScale == 0 ? 0 : text::textWidth(frame.nowCard, nowScale);
         if (nowWidth > 0)
-            addWithShadow(items, margin, cardY, kCardScale, kCardColor, frame.nowCard);
+            addWithShadow(items, margin, cardY(nowScale), static_cast<float>(nowScale), kCardColor,
+                          frame.nowCard);
         if (!empty(frame.thenCard)) {
-            const int thenWidth = text::textWidth(frame.thenCard, kCardScale);
+            const int thenScale = cardScale(frame.thenCard, width);
+            const int thenWidth = text::textWidth(frame.thenCard, thenScale);
             const float thenX = static_cast<float>(width) - margin - 1 - static_cast<float>(thenWidth);
-            // Too narrow for both on one line: the 1993 card goes a line up.
-            const bool meets = nowWidth > 0 && thenX < margin + static_cast<float>(nowWidth + 8 * kCardScale);
-            const float thenY = meets ? cardY - 10 * kCardScale : cardY;
-            addWithShadow(items, thenX, thenY, kCardScale, kCardColor, frame.thenCard);
+            // Too narrow for both on one line: the 1993 card goes a line up, above the 2026 card.
+            const bool meets = nowWidth > 0 && thenX < margin + static_cast<float>(nowWidth + 8 * nowScale);
+            const float thenY = meets ? cardY(nowScale) - static_cast<float>(8 * thenScale + 1 + kCardLineGap)
+                                      : cardY(thenScale);
+            addWithShadow(items, thenX, thenY, static_cast<float>(thenScale), kCardColor, frame.thenCard);
         }
     } else {
-        const char* card = frame.era < .5f ? frame.thenCard : frame.nowCard;
-        if (!empty(card))
-            addWithShadow(items, margin, cardY, kCardScale, kCardColor, card);
+        const bool now = frame.transition == show::Transition::Wipe ? frame.wipe >= 1.f : frame.era >= .5f;
+        const char* card = now ? frame.nowCard : frame.thenCard;
+        if (!empty(card)) {
+            const int scale = cardScale(card, width);
+            addWithShadow(items, margin, cardY(scale), static_cast<float>(scale), kCardColor, card);
+        }
     }
     return items;
 }

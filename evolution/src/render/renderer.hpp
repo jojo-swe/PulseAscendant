@@ -24,9 +24,11 @@ struct RenderSettings {
 
 // The HUD of a frame at a width x height output, drop shadows included (each text item follows its shadow,
 // the same text in black one pixel right and down): the chapter title top-left at 1x and the epoch card
-// bottom-left at 2x, the 1993 card while era < 0.5 and the 2026 card from 0.5; during a Wipe the 2026 card
-// bottom-left and the 1993 card bottom-right (raised a line when the two would meet). Empty texts are left
-// out. Every pixel, shadows included, stays at least kHudMargin pixels inside the output edges.
+// bottom-left at 2x, the 1993 card while era < 0.5 and the 2026 card from 0.5. A Wipe chapter shows the
+// 1993 card before its wipe (wipe = 0) and the 2026 card after it (wipe = 1); while 0 < wipe < 1 it shows
+// both, the 2026 card bottom-left and the 1993 card bottom-right (raised a line when the two would meet).
+// A card too wide for the output at 2x is drawn at 1x. Empty texts are left out. Every pixel, shadows
+// included, stays at least kHudMargin pixels inside the output edges.
 inline constexpr int kHudMargin = 8;
 std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height);
 
