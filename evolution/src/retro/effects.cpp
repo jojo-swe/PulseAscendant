@@ -5,6 +5,7 @@
 
 #include "retro/boot.hpp"
 #include "retro/dots.hpp"
+#include "retro/finale.hpp"
 #include "retro/flyby.hpp"
 #include "retro/glenz.hpp"
 #include "retro/palette.hpp"
@@ -20,6 +21,11 @@ namespace evo::retro {
 // FLYBY's greeting scrolls by the retro frame at the scroller's rate.
 static_assert(kFlybyRetroRate == kScrollerRetroRate);
 
+EffectFrame resolveEffect(const EffectInfo& info, const show::TimelineFrame& frame,
+                          std::uint32_t retroFrame) {
+    return info.resolve ? info.resolve(frame, retroFrame) : EffectFrame{frame.effect, frame, retroFrame};
+}
+
 const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kTestPattern{kTestPatternShader, kDefaultRetroRate, grayPalette};
     static constexpr EffectInfo kRaytrace{kRaytraceShader, kRaytraceRetroRate, raytracePalette};
@@ -34,6 +40,9 @@ const EffectInfo& effectFor(show::Effect effect) {
                                        glenzScene};
     static constexpr EffectInfo kLens{kRotozoomShader, kRotozoomRetroRate, rotozoomPalette, nullptr, nullptr,
                                       nullptr,         rotozoomTexture};
+    // The megamix: its own entry is the white flash between two cuts.
+    static constexpr EffectInfo kFinale{nullptr,          kFinaleRetroRate, finalePalette, nullptr,
+                                        finaleBackground, nullptr,          nullptr,       finaleResolve};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
                                          creditsBackground};
     static constexpr EffectInfo kPortal{nullptr,    kPortalRetroRate, portalPalette,
@@ -55,6 +64,8 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kGlenz;
     case show::Effect::Lens:
         return kLens;
+    case show::Effect::Finale:
+        return kFinale;
     case show::Effect::Credits:
         return kCredits;
     case show::Effect::Raytrace:

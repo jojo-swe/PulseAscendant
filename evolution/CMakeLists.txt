@@ -120,6 +120,7 @@ add_library(evo_render STATIC
     src/retro/effects.cpp
     src/retro/effects.hpp
     src/retro/dots.cpp
+    src/retro/finale.cpp
     src/retro/flyby.cpp
     src/retro/glenz.cpp
     src/retro/rotozoom.cpp
@@ -320,6 +321,15 @@ add_dependencies(raytrace_test Evolution_shaders raytrace_test_shaders)
 target_compile_definitions(raytrace_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
                                                  EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME raytrace COMMAND raytrace_test)
+
+# FINALE: the megamix's cuts on the chapter's beats and every frame's sub-effect on the CPU, and its index images
+# from the retro stage against each sub-effect's own frames, with the validation layer on; fails on any message
+# it reports.
+add_executable(finale_test tests/finale_test.cpp)
+target_link_libraries(finale_test PRIVATE evo_render)
+target_compile_definitions(finale_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(finale_test Evolution_shaders)
+add_test(NAME finale COMMAND finale_test)
 
 # PORTAL, REBOOT and THE END, the 1993 side's closing chapters: their scripts, fade, camera and bezel on the
 # CPU, and their index images from the retro stage, with the validation layer on; fails on any message it

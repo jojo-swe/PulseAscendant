@@ -28,7 +28,8 @@ namespace evo::render {
 // palette_map.comp turns into a 320x200 RGBA8 image through the 256 colours the effect's palette builder
 // makes on the CPU. Both passes run only when the retro frame changes: retroFrame = floor(localSeconds *
 // retroRate), keyed together with the chapter (and the effect), so a chapter that starts on the same retro
-// frame number as the last one still renders its own picture.
+// frame number as the last one still renders its own picture. A megamix (EffectInfo::resolve) renders the
+// entry it resolves to under its own key; every shader and texture is made up front, so no cut stalls.
 class RetroStage {
 public:
     static constexpr std::uint32_t kWidth = 320;

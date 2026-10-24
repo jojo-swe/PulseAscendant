@@ -120,11 +120,20 @@ RetroStage::RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& 
 }
 
 bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
-    const retro::EffectInfo& effect = effects_(frame.effect);
-    retroFrame_ = retroFrameOf(frame, effect.retroRate);
+    const retro::EffectInfo& outer = effects_(frame.effect);
+    retroFrame_ = retroFrameOf(frame, outer.retroRate);
     const Key key{frame.chapter, static_cast<int>(frame.effect), retroFrame_};
     if (cached_ == key)
         return false;
+
+    // A megamix renders another entry with that entry's own frame and retro frame (its home chapter's), but
+    // keeps its key above and its own text below.
+    const retro::EffectFrame shown = retro::resolveEffect(outer, frame, retroFrame_);
+    const retro::EffectInfo& effect = effects_(shown.effect);
+    if (shown.effect != frame.effect && effect.resolve)
+        throw std::logic_error("an effect resolved to an effect that resolves again");
+    const show::TimelineFrame& at = shown.frame;
+    const std::uint32_t retroFrame = shown.retroFrame;
 
     // The effect: palette indices, from its shader, or for an effect without one a clear to its background
     // (index 0 by default) that the scene and text below draw on; nothing of the last frame may show through.
@@ -143,15 +152,15 @@ bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         } else {
             pass.bind(cmd, ring_, {&indexInfo, 1}, {});
         }
-        const RetroPushConstants push{retroFrame_, static_cast<std::uint32_t>(frame.chapter),
-                                      static_cast<float>(retroFrame_) / static_cast<float>(effect.retroRate)};
+        const RetroPushConstants push{retroFrame, static_cast<std::uint32_t>(at.chapter),
+                                      static_cast<float>(retroFrame) / static_cast<float>(effect.retroRate)};
         pass.push(cmd, &push, sizeof push);
         pass.dispatch(cmd, kWidth, kHeight);
     } else {
         index_.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_CLEAR_BIT,
                           VK_ACCESS_2_TRANSFER_WRITE_BIT);
         VkClearColorValue clear{};
-        clear.uint32[0] = effect.background ? effect.background(frame, retroFrame_) : 0u;
+        clear.uint32[0] = effect.background ? effect.background(at, retroFrame) : 0u;
         const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         vkCmdClearColorImage(cmd, index_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
     }
@@ -160,13 +169,14 @@ bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     // order; the rasteriser throws for a scene past its limits.
     if (effect.scene) {
         scene_.clear();
-        effect.scene(scene_, frame, retroFrame_);
+        effect.scene(scene_, at, retroFrame);
         raster_.draw(cmd, index_, scene_);
     }
 
-    // The effect's text over it; drawIndex leaves the image in GENERAL after its last write.
-    if (effect.text) {
-        const std::vector<text::Item> items = effect.text(frame, retroFrame_);
+    // The effect's own text over it (a megamix's, not the resolved entry's); drawIndex leaves the image in
+    // GENERAL after its last write.
+    if (outer.text) {
+        const std::vector<text::Item> items = outer.text(frame, retroFrame_);
         if (!items.empty())
             text_.drawIndex(cmd, index_, items);
     }
@@ -174,7 +184,7 @@ bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     // The palette, written into this slot's buffer: the ring's begin() waited for the submit that last used
     // it. The host write is visible to the GPU through the queue submit.
     retro::Palette palette{};
-    effect.palette(palette, frame, retroFrame_);
+    effect.palette(palette, at, retroFrame);
     palette[0] = retro::rgba(0, 0, 0); // index 0 is always black
     const gfx::Buffer& buffer = palettes_[ring_.slot()];
     std::memcpy(buffer.mapped(), palette.data(), kPaletteBytes);

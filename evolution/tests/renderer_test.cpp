@@ -166,7 +166,8 @@ TimelineFrame pattern(double localSeconds) {
     return retroFrame(0, localSeconds);
 }
 
-// The CPU side: every effect has a shader, text or a scene, a rate and a palette whose index 0 is black.
+// The CPU side: every effect has a shader, text, a scene or a resolver (a megamix), a rate and a palette
+// whose index 0 is black.
 void testEffectRegistry() {
     std::array<std::uint32_t, 256> palette{};
     evo::retro::grayPalette(palette, TimelineFrame{}, 0);
@@ -177,7 +178,8 @@ void testEffectRegistry() {
     for (int i = 0; i < evo::show::chapterCount(); ++i) {
         const TimelineFrame frame = evo::show::sampleTimeline(evo::show::chapterStart(i) + .5);
         const evo::retro::EffectInfo& info = evo::retro::effectFor(frame.effect);
-        CHECK((info.shader != nullptr || info.text != nullptr || info.scene != nullptr) &&
+        CHECK((info.shader != nullptr || info.text != nullptr || info.scene != nullptr ||
+               info.resolve != nullptr) &&
               info.retroRate > 0 && info.palette != nullptr);
         palette.fill(0x12345678u);
         info.palette(palette, frame, 7);

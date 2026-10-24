@@ -25,6 +25,18 @@ struct EffectTexture {
 };
 using TextureBuilder = EffectTexture (*)();
 
+// What renders one retro frame: an effect's entry with the frame and retro frame its providers and shader
+// see.
+struct EffectFrame {
+    show::Effect effect;
+    show::TimelineFrame frame;
+    std::uint32_t retroFrame;
+};
+// A megamix (FINALE) hands each retro frame to another entry: it returns that effect with a frame of the
+// effect's own chapter and its retro frame there, or its own effect, frame and retro frame to render its own
+// entry. A pure function of the chapter and the retro frame, like the providers.
+using EffectResolver = EffectFrame (*)(const show::TimelineFrame&, std::uint32_t retroFrame);
+
 // How the retro stage renders an effect's 1993 side. The stage caches the result by (chapter, effect,
 // retroFrame) and calls the builders and providers below only when it re-renders, so each of them must be a
 // pure function of the chapter and the retro frame. From the TimelineFrame they may read only what is fixed
@@ -53,7 +65,15 @@ struct EffectInfo {
     // The shader's texture, or nullptr for none. The stage builds and uploads it once, when it is made, and
     // keeps one image per builder (effects that name the same builder share it). Needs a shader.
     TextureBuilder texture = nullptr;
+    // For a megamix, the entry that renders each retro frame (see EffectResolver), or nullptr for this one.
+    // The stage still caches by this effect's (chapter, effect, retroFrame) and draws this entry's text, not
+    // the resolved entry's; everything else (shader, texture, push constants, background, scene, palette)
+    // comes from the resolved entry with its frame and retro frame. The resolved entry must not resolve.
+    EffectResolver resolve = nullptr;
 };
+
+// What renders retro frame `retroFrame` of `info` at `frame`: info.resolve's answer, or the effect itself.
+EffectFrame resolveEffect(const EffectInfo& info, const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
 inline constexpr const char* kTestPatternShader = "retro_test_pattern.comp.spv";
 inline constexpr std::uint32_t kDefaultRetroRate = 35;
@@ -69,7 +89,9 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 // Glenz Future Crew's translucent glenz vector bouncing over copper bars, Lens the rotozoomed logo texture
 // under a bouncing lens, Raytrace the dithered chrome spheres over a checkerboard at 10 fps, Portal FLYBY's
 // ship flying off inside a closing monitor bezel, Reboot the prompt's second script, TheEnd the fading end
-// screen. The other effects get their entries in later steps and show the test pattern in grey until then.
+// screen, Finale the megamix cutting between FLYBY, DOTS, TUNNEL, GLENZ, LENS and RAYTRACE
+// (retro/finale.hpp). The other effects get their entries in later steps and show the test pattern in grey
+// until then.
 const EffectInfo& effectFor(show::Effect effect);
 
 } // namespace evo::retro

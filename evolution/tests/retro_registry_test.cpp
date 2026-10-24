@@ -43,17 +43,25 @@ struct Output {
     std::vector<evo::text::Item> text;
     int background = -1; // -1: no provider
     evo::retro::RetroScene scene;
+    int resolved = -1;          // the effect that renders the frame (EffectInfo::resolve)
+    std::uint32_t retroFrame{}; // and its retro frame
 };
 
+// As the stage takes them: the text from the effect's own entry, the rest from the entry it resolves to (a
+// megamix's sub-effect, with its own frame and retro frame).
 Output outputOf(const EffectInfo& info, const TimelineFrame& frame, std::uint32_t retroFrame) {
     Output out;
-    info.palette(out.palette, frame, retroFrame);
     if (info.text)
         out.text = info.text(frame, retroFrame);
-    if (info.background)
-        out.background = info.background(frame, retroFrame);
-    if (info.scene)
-        info.scene(out.scene, frame, retroFrame);
+    const evo::retro::EffectFrame shown = evo::retro::resolveEffect(info, frame, retroFrame);
+    const EffectInfo& entry = evo::retro::effectFor(shown.effect);
+    entry.palette(out.palette, shown.frame, shown.retroFrame);
+    if (entry.background)
+        out.background = entry.background(shown.frame, shown.retroFrame);
+    if (entry.scene)
+        entry.scene(out.scene, shown.frame, shown.retroFrame);
+    out.resolved = static_cast<int>(shown.effect);
+    out.retroFrame = shown.retroFrame;
     return out;
 }
 
@@ -131,6 +139,7 @@ void testEveryEffectIsPure() {
                 CHECK(out.palette == reference.palette);
                 CHECK(sameItems(out.text, reference.text));
                 CHECK(out.background == reference.background);
+                CHECK(out.resolved == reference.resolved && out.retroFrame == reference.retroFrame);
                 CHECK(sameBytes(out.scene.triangles, reference.scene.triangles));
                 CHECK(sameBytes(out.scene.points, reference.scene.points));
                 CHECK(sameDoubles(out.scene.triangleDepth, reference.scene.triangleDepth));
@@ -148,16 +157,16 @@ void testEveryEffectIsPure() {
                 static_cast<int>(Effect::TheEnd) + 1, frames, scenes, texts);
 }
 
-// Every retro frame of every chapter whose effect has a scene provider passes retro::checkScene: within
-// kMaxTriangles and kMaxPoints and inside the guard band, as SceneRaster::draw requires (it throws
-// otherwise, which would end the show). Clipping can split one triangle into five, so the counts depend on
-// the frame and none can be skipped.
+// Every retro frame of every chapter whose effect has a scene provider (or resolves to one) passes
+// retro::checkScene: within kMaxTriangles and kMaxPoints and inside the guard band, as SceneRaster::draw
+// requires (it throws otherwise, which would end the show). Clipping can split one triangle into five, so the
+// counts depend on the frame and none can be skipped.
 void testEverySceneFrameFits() {
     std::size_t chapters = 0, frames = 0, maxTriangles = 0, maxPoints = 0;
     for (int chapter = 0; chapter < evo::show::chapterCount(); ++chapter) {
         const EffectInfo& info =
             evo::retro::effectFor(evo::show::cues[static_cast<std::size_t>(chapter)].effect);
-        if (info.scene == nullptr)
+        if (info.scene == nullptr && info.resolve == nullptr)
             continue;
         ++chapters;
         const double start = evo::show::chapterStart(chapter);
@@ -169,8 +178,12 @@ void testEverySceneFrameFits() {
             const double t = std::min(start + (retroFrame + 0.5) / info.retroRate, start + duration - 1e-6);
             const TimelineFrame frame = evo::show::sampleTimeline(t);
             CHECK(frame.chapter == chapter);
+            // A megamix's frames: the scene of the sub-effect it resolves to.
+            const evo::retro::EffectFrame shown = evo::retro::resolveEffect(info, frame, retroFrame);
+            const EffectInfo& entry = evo::retro::effectFor(shown.effect);
             scene.clear();
-            info.scene(scene, frame, retroFrame);
+            if (entry.scene)
+                entry.scene(scene, shown.frame, shown.retroFrame);
             try {
                 evo::retro::checkScene(scene);
             } catch (const std::exception& error) {
