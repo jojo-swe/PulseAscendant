@@ -24,17 +24,11 @@ struct FillPushConstants {
 };
 static_assert(sizeof(FillPushConstants) == 32);
 
-FillPushConstants pushConstants(const show::TimelineFrame& frame, VkExtent2D extent) {
-    const auto chapter = static_cast<std::uint32_t>(frame.chapter) & 0xffffu;
-    const auto transition = static_cast<std::uint32_t>(frame.transition);
-    return {extent.width,
-            extent.height,
-            static_cast<float>(frame.localSeconds),
-            frame.era,
-            frame.kick,
-            frame.beatPhase,
-            frame.wipe,
-            chapter | (transition << 16)};
+FillPushConstants pushConstants(const FillParams& params, VkExtent2D extent) {
+    return {extent.width,        extent.height,
+            params.localSeconds, params.era,
+            params.kick,         params.beatPhase,
+            params.wipe,         (params.chapter & 0xffffu) | (params.transition << 16)};
 }
 
 constexpr std::array<Binding, 1> kBindings = {Binding{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}};
@@ -44,12 +38,12 @@ constexpr std::array<Binding, 1> kBindings = {Binding{0, VK_DESCRIPTOR_TYPE_STOR
 FillPass::FillPass(Context& ctx)
     : pipeline_(ctx, shaderDir() / "fill.comp.spv", kBindings, sizeof(FillPushConstants)) {}
 
-void FillPass::record(VkCommandBuffer cmd, FrameRing& ring, Image& target, const show::TimelineFrame& frame) {
+void FillPass::record(VkCommandBuffer cmd, FrameRing& ring, Image& target, const FillParams& params) {
     target.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     const VkDescriptorImageInfo image{VK_NULL_HANDLE, target.view(), VK_IMAGE_LAYOUT_GENERAL};
     pipeline_.bind(cmd, ring, {&image, 1}, {});
-    const FillPushConstants push = pushConstants(frame, target.extent());
+    const FillPushConstants push = pushConstants(params, target.extent());
     pipeline_.push(cmd, &push, sizeof push);
     pipeline_.dispatch(cmd, target.extent().width, target.extent().height);
 }

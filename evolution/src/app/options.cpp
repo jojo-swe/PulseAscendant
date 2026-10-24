@@ -110,6 +110,8 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.mute = true;
         } else if (flag == "--audio-offset") {
             options.audioOffsetMs = parseAudioOffset(flag, nextValue());
+        } else if (flag == "--no-crt") {
+            options.crt = false;
         } else if (flag == "--show-info") {
             options.showInfo = true;
         } else if (flag == "--validation") {
@@ -160,6 +162,7 @@ std::string helpText() {
            "  --audio-offset MS    Calibrate A/V sync: milliseconds added to the music time the\n"
            "                       picture follows, -500..500 (default 0); raise it if the picture\n"
            "                       lags the sound\n"
+           "  --no-crt             Show the 1993 picture without the CRT look (C toggles)\n"
            "  --show-info          Print the show's chapters and music as JSON and exit\n"
            "  --validation         Enable the Vulkan validation layers\n"
            "  --device-info        Print information about the selected GPU and exit\n"
@@ -167,7 +170,7 @@ std::string helpText() {
            "  -h, --help           Show this help and exit\n"
            "\n"
            "Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,\n"
-           "M mute, F11 fullscreen, Esc quit\n";
+           "C CRT look, M mute, F11 fullscreen, Esc quit\n";
 }
 
 } // namespace evo

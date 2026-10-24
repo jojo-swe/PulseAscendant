@@ -64,7 +64,6 @@ add_library(evo_gfx STATIC
     src/gfx/fill_pass.cpp
     src/gfx/frame_ring.cpp
     src/gfx/image.cpp
-    src/gfx/offscreen.cpp
     src/gfx/paths.cpp
     src/gfx/readback.cpp
     src/gfx/shader.cpp
@@ -73,10 +72,10 @@ add_library(evo_gfx STATIC
     src/gfx/vk_check.hpp
     src/gfx/vma_impl.cpp)
 target_include_directories(evo_gfx PUBLIC src)
-# SDL3 provides SDL_GetBasePath() for locating the shaders beside the executable; evo_show the timeline
-# frame that the fill pass renders.
+# SDL3 provides SDL_GetBasePath() for locating the shaders beside the executable. gfx knows nothing of the
+# show: the renderer turns timeline frames into what its passes draw.
 target_link_libraries(evo_gfx PUBLIC
-    volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core evo_show SDL3::SDL3-static)
+    volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core SDL3::SDL3-static)
 target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
 set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
     COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
@@ -98,13 +97,26 @@ add_library(evo_show STATIC
 target_include_directories(evo_show PUBLIC src)
 target_compile_definitions(evo_show PRIVATE EVO_VERSION="${PROJECT_VERSION}")
 
+# The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
+# compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
+# registry and palette builders it draws on.
+add_library(evo_render STATIC
+    src/render/compositor.cpp
+    src/render/modern_stage.cpp
+    src/render/renderer.cpp
+    src/render/retro_stage.cpp
+    src/retro/effects.hpp
+    src/retro/palette.cpp)
+target_include_directories(evo_render PUBLIC src)
+target_link_libraries(evo_render PUBLIC evo_gfx evo_show)
+
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.
 add_library(evo_app STATIC
     src/app/app.cpp
     src/app/capture.cpp
     src/app/clock.cpp)
-target_link_libraries(evo_app PUBLIC evo_gfx evo_show evo_audio SDL3::SDL3-static)
+target_link_libraries(evo_app PUBLIC evo_render evo_gfx evo_show evo_audio SDL3::SDL3-static)
 
 add_executable(Evolution
     src/main.cpp)
@@ -113,7 +125,12 @@ if(WIN32)
     target_link_libraries(Evolution PRIVATE shell32) # CommandLineToArgvW, for UTF-8 arguments
 endif()
 # Places Evolution in <build>/bin with its compiled shaders in <build>/bin/shaders.
-evo_add_shaders(Evolution shaders/fill.comp)
+evo_add_shaders(Evolution
+    shaders/fill.comp
+    shaders/crt.comp
+    shaders/composite.comp
+    shaders/retro/palette_map.comp
+    shaders/retro/test_pattern.comp)
 
 # The show's music (git-ignored; tools/prepare_show.py writes it) goes where Evolution looks for it, so a dev
 # build plays it with no flags: a symbolic link, or a copy on Windows, where links need extra privileges.
@@ -174,20 +191,21 @@ add_executable(context_test tests/context_test.cpp)
 target_link_libraries(context_test PRIVATE evo_gfx)
 add_test(NAME context COMMAND context_test)
 
-add_executable(offscreen_test tests/offscreen_test.cpp)
-target_link_libraries(offscreen_test PRIVATE evo_gfx)
-target_compile_definitions(offscreen_test PRIVATE
-    EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
-    EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
-add_dependencies(offscreen_test Evolution_shaders) # the test loads fill.comp.spv from <build>/bin/shaders
-add_test(NAME offscreen COMMAND offscreen_test)
-
 # Runs with the validation layer and fails on any message it reports.
 add_executable(gfx_foundation_test tests/gfx_foundation_test.cpp)
-target_link_libraries(gfx_foundation_test PRIVATE evo_gfx)
+target_link_libraries(gfx_foundation_test PRIVATE evo_gfx evo_show) # turns show times into FillParams
 target_compile_definitions(gfx_foundation_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(gfx_foundation_test Evolution_shaders) # loads fill.comp.spv from <build>/bin/shaders
 add_test(NAME gfx_foundation COMMAND gfx_foundation_test)
+
+# The renderer's passes at small sizes, with the validation layer on; fails on any message it reports.
+add_executable(renderer_test tests/renderer_test.cpp)
+target_link_libraries(renderer_test PRIVATE evo_render)
+target_compile_definitions(renderer_test PRIVATE
+    EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+    EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+add_dependencies(renderer_test Evolution_shaders)
+add_test(NAME renderer COMMAND renderer_test)
 
 add_executable(swapchain_test tests/swapchain_test.cpp)
 target_link_libraries(swapchain_test PRIVATE evo_gfx)

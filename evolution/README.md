@@ -40,7 +40,7 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
 The 17 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` also numpy): `options`, `png`,
-`png_decode`, `context`, `offscreen`, `gfx_foundation`, `swapchain`, `render_stream`, `capture`, `exit_codes`,
+`png_decode`, `context`, `renderer`, `gfx_foundation`, `swapchain`, `render_stream`, `capture`, `exit_codes`,
 `no_wait_idle`, `python_tools`, `audio_transport`, `timeline`, `era`, `clock` and `show_info`. The three that open a
 window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default; configure with
 `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
@@ -99,8 +99,8 @@ runs the pipeline into a temporary directory on a 270 s, 134 BPM placeholder son
 ## Usage
 
 Run `Evolution` without arguments for a 1280×720 window that plays the show from the start. Keys:
-← / → previous / next chapter (wrapping around the show), 1–9 and 0 jump to chapters 1–10, M mutes,
-F11 toggles fullscreen, Esc quits. The window title shows the chapter and the show time.
+← / → previous / next chapter (wrapping around the show), 1–9 and 0 jump to chapters 1–10, C toggles
+the CRT look of the 1993 picture, M mutes, F11 toggles fullscreen, Esc quits. The window title shows the chapter and the show time.
 
 ```text
 Usage: Evolution [options]
@@ -122,6 +122,7 @@ Options:
   --audio-offset MS    Calibrate A/V sync: milliseconds added to the music time the
                        picture follows, -500..500 (default 0); raise it if the picture
                        lags the sound
+  --no-crt             Show the 1993 picture without the CRT look (C toggles)
   --show-info          Print the show's chapters and music as JSON and exit
   --validation         Enable the Vulkan validation layers
   --device-info        Print information about the selected GPU and exit
@@ -129,7 +130,7 @@ Options:
   -h, --help           Show this help and exit
 
 Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,
-M mute, F11 fullscreen, Esc quit
+C CRT look, M mute, F11 fullscreen, Esc quit
 ```
 
 Examples:

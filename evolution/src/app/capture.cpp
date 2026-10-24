@@ -1,13 +1,17 @@
 #include "app/capture.hpp"
 
 #include "gfx/context.hpp"
-#include "gfx/offscreen.hpp"
+#include "gfx/frame_ring.hpp"
 #include "gfx/paths.hpp"
+#include "gfx/readback.hpp"
 #include "image/png.hpp"
+#include "render/renderer.hpp"
 #include "show/timeline.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <vector>
 
 namespace evo {
 
@@ -26,14 +30,21 @@ int runCapture(const Options& options) {
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
     gfx::Context ctx = gfx::Context::create(contextOptions);
-    gfx::Offscreen offscreen(ctx, options.width, options.height);
 
-    offscreen.render(show::sampleTimeline(options.time));
-    const gfx::Frame frame = offscreen.readback();
+    const auto width = static_cast<std::uint32_t>(options.width);
+    const auto height = static_cast<std::uint32_t>(options.height);
+    gfx::Readback readback(ctx, width, height);
+    gfx::FrameRing ring(ctx);
+    render::Renderer renderer(ctx, ring, {width, height, options.crt});
+    VkCommandBuffer cmd = ring.begin();
+    renderer.render(cmd, show::sampleTimeline(options.time));
+    readback.record(cmd, renderer.output());
+    ring.wait(ring.submit());
+    const std::vector<std::uint8_t> rgb = readback.rgb();
 
     // writePng creates the missing parent directories and truncates an existing file.
     const std::filesystem::path path = options.captureDir / captureFileName(options.time);
-    image::writePng(path, frame.width, frame.height, frame.rgb.data());
+    image::writePng(path, options.width, options.height, rgb.data());
     std::printf("%s\n", gfx::pathToUtf8(path).c_str());
     return 0;
 }

@@ -23,6 +23,7 @@ struct Options {
     bool noAudio = false;             // run on the monotonic clock without opening an audio device
     bool mute = false;                // start muted (the music still drives the clock)
     double audioOffsetMs = 0.0;       // added to the music time the visuals follow (A/V calibration)
+    bool crt = true;                  // the CRT look on the 1993 picture (--no-crt, key C)
     std::filesystem::path captureDir; // empty = no capture
     std::filesystem::path music;      // empty = the show's music beside the executable
 };

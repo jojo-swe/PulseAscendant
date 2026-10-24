@@ -2,13 +2,12 @@
 
 #include "app/clock.hpp"
 #include "gfx/context.hpp"
-#include "gfx/fill_pass.hpp"
 #include "gfx/frame_ring.hpp"
-#include "gfx/image.hpp"
-#include "gfx/offscreen.hpp"
 #include "gfx/paths.hpp"
+#include "gfx/readback.hpp"
 #include "gfx/swapchain.hpp"
 #include "gfx/vk_check.hpp"
+#include "render/renderer.hpp"
 #include "show/timeline.hpp"
 
 #include <SDL3/SDL.h>
@@ -21,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #ifdef _WIN32
 #include <fcntl.h>
@@ -177,13 +177,16 @@ int runWindowed(const Options& options) {
     if (!SDL_GetWindowSizeInPixels(window.handle, &width, &height))
         throw sdlError("SDL_GetWindowSizeInPixels");
 
-    // Each frame records the fill pass into `target` and the swapchain's blit of it into one command buffer
-    // of the ring, with up to two frames in flight; begin() waits only for the frame whose slot it reuses.
-    // Declared before the swapchain so they are destroyed after it: ~Swapchain waits for the device, so no
-    // frame can still be using them when they go.
+    // Each frame records the renderer's passes and the swapchain's blit of its output into one command
+    // buffer of the ring, with up to two frames in flight; begin() waits only for the frame whose slot it
+    // reuses. The renderer renders at the drawable's size, so the 4:3 picture stays undistorted in any window
+    // shape. Declared after the ring (its destructor waits for the ring) and before the swapchain, so it is
+    // destroyed after it: ~Swapchain waits for the device, so no frame can still be using it.
     gfx::FrameRing ring(ctx);
-    gfx::FillPass fill(ctx);
-    gfx::Image target; // sized to the drawable; created on the first visible frame
+    render::Renderer renderer(ctx, ring,
+                              {static_cast<std::uint32_t>(width > 0 ? width : options.width),
+                               static_cast<std::uint32_t>(height > 0 ? height : options.height),
+                               options.crt});
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
@@ -214,6 +217,8 @@ int runWindowed(const Options& options) {
                 } else if (event.key.key == SDLK_M) {
                     muted = !muted;
                     clock.setMuted(muted);
+                } else if (event.key.key == SDLK_C) {
+                    renderer.setCrt(!renderer.crt());
                 } else if (const int chapter = chapterForKey(event.key.key, clock.now()); chapter >= 0) {
                     clock.seek(show::chapterStart(chapter));
                 }
@@ -243,14 +248,8 @@ int runWindowed(const Options& options) {
             SDL_Delay(kMinimisedPollMs);
             continue;
         }
-        const auto drawable =
-            VkExtent2D{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
-        if (target.extent().width != drawable.width || target.extent().height != drawable.height) {
-            ring.waitAll(); // resize: the frames in flight may still be reading the old image
-            target = gfx::Image(ctx, {drawable.width, drawable.height, VK_FORMAT_R8G8B8A8_UNORM,
-                                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1,
-                                      "window target"});
-        }
+        // A no-op unless the drawable changed size; then it waits for the frames in flight first.
+        renderer.resize(static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height));
 
         const show::TimelineFrame frame = show::sampleTimeline(clock.now());
         // The audio stream failed mid-show (or came back): say so, as at the start.
@@ -263,8 +262,8 @@ int runWindowed(const Options& options) {
             SDL_SetWindowTitle(window.handle, title.c_str());
         }
         VkCommandBuffer cmd = ring.begin();
-        fill.record(cmd, ring, target, frame);
-        if (!swapchain.present(ring, cmd, target)) // submits the frame in every case
+        renderer.render(cmd, frame);
+        if (!swapchain.present(ring, cmd, renderer.output())) // submits the frame in every case
             needRecreate = true;
     }
 
@@ -279,16 +278,24 @@ int runRenderStream(const Options& options) {
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
     gfx::Context ctx = gfx::Context::create(contextOptions);
-    gfx::Offscreen offscreen(ctx, options.width, options.height);
 
     // The epsilon keeps products like 0.7 * 10 = 7.000000000000001 from adding a frame.
     const long frames = static_cast<long>(std::ceil(options.duration * options.fps - 1e-9));
     if (frames < 1)
         throw std::runtime_error("--duration is shorter than one frame"); // parseOptions rejects only 0
+
+    const auto width = static_cast<std::uint32_t>(options.width);
+    const auto height = static_cast<std::uint32_t>(options.height);
+    gfx::Readback readback(ctx, width, height);
+    gfx::FrameRing ring(ctx);
+    render::Renderer renderer(ctx, ring, {width, height, options.crt});
     for (long i = 0; i < frames; ++i) {
-        offscreen.render(show::sampleTimeline(options.time + static_cast<double>(i) / options.fps));
-        const gfx::Frame frame = offscreen.readback();
-        if (std::fwrite(frame.rgb.data(), 1, frame.rgb.size(), stdout) != frame.rgb.size())
+        VkCommandBuffer cmd = ring.begin();
+        renderer.render(cmd, show::sampleTimeline(options.time + static_cast<double>(i) / options.fps));
+        readback.record(cmd, renderer.output());
+        ring.wait(ring.submit()); // the readback is complete: rgb() may read it
+        const std::vector<std::uint8_t> rgb = readback.rgb();
+        if (std::fwrite(rgb.data(), 1, rgb.size(), stdout) != rgb.size())
             throw std::runtime_error("writing frame " + std::to_string(i) + " to stdout failed");
         if ((i + 1) % 60 == 0 || i + 1 == frames)
             std::fprintf(stderr, "render-stream: frame %ld/%ld\n", i + 1, frames);

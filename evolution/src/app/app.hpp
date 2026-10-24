@@ -21,7 +21,8 @@ namespace evo {
 // Opens an SDL3 window (Vulkan, resizable) and presents the show until Esc, the window closes, or
 // --duration elapses. The time comes from a ShowClock (the music, or SILENT MODE on the system timer); its
 // status goes to stderr at the start and again whenever it switches between audio and SILENT MODE. Keys:
-// Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10, M mute, F11 fullscreen. The title
+// Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10, C CRT look, M mute, F11
+// fullscreen. The title
 // shows the chapter and the show time. Returns the process exit code.
 int runWindowed(const Options& options);
 

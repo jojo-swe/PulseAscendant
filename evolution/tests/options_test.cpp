@@ -106,11 +106,18 @@ int main() {
         CHECK(!parseError({"--audio-offset", "nan"}).empty());
         CHECK(parseError({"--audio-offset"}) == "--audio-offset needs a value");
 
+        // --no-crt: the 1993 picture without the CRT look; on by default.
+        CHECK(defaults.crt);
+        CHECK(!evo::parseOptions({"--no-crt"}).crt);
+        CHECK(!evo::parseOptions({"--capture-dir", "out", "--no-crt"}).crt);
+
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
-        for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset"})
+        for (const char* flag :
+             {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);
+        CHECK(evo::helpText().find("C CRT look") != std::string::npos);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "CHECK failed: %s\n", error.what());
         return 1;

@@ -10,6 +10,7 @@
 #include "gfx/image.hpp"
 #include "gfx/paths.hpp"
 #include "gfx/readback.hpp"
+#include "gfx/shader.hpp"
 #include "gfx/sync.hpp"
 #include "show/timeline.hpp"
 
@@ -95,10 +96,22 @@ void testImageTracksLayout(Context& ctx) {
     CHECK(assigned.handle() == handle);
 }
 
+// What fill.comp shows of the timeline at a show time.
+FillParams fillParams(double seconds) {
+    const evo::show::TimelineFrame frame = evo::show::sampleTimeline(seconds);
+    return {static_cast<float>(frame.localSeconds),
+            frame.era,
+            frame.kick,
+            frame.beatPhase,
+            frame.wipe,
+            static_cast<std::uint32_t>(frame.chapter),
+            static_cast<std::uint32_t>(frame.transition)};
+}
+
 std::vector<std::uint8_t> renderOnce(Context& ctx, FrameRing& ring, FillPass& fill, Image& target,
                                      Readback& readback, double seconds) {
     VkCommandBuffer cmd = ring.begin();
-    fill.record(cmd, ring, target, evo::show::sampleTimeline(seconds));
+    fill.record(cmd, ring, target, fillParams(seconds));
     readback.record(cmd, target);
     ring.wait(ring.submit());
     (void)ctx;
@@ -169,7 +182,7 @@ void testFrameRingRendersFrames(Context& ctx) {
         if (pending[slot])
             consume(slot);
         const std::size_t time = static_cast<std::size_t>(i) % times.size();
-        fill.record(cmd, ring, targets[slot], evo::show::sampleTimeline(times[time]));
+        fill.record(cmd, ring, targets[slot], fillParams(times[time]));
         readbacks[slot].record(cmd, targets[slot]);
         pending[slot] = Pending{ring.submit(), time};
         if (i == 1)
@@ -341,6 +354,19 @@ void testSamplers(Context& ctx) {
     CHECK(ctx.nearestSampler() != ctx.linearSampler());
 }
 
+// A shader that cannot be loaded names its path in the error.
+void testMissingShaderNamesPath(Context& ctx) {
+    const std::string missing = "/nonexistent/evo/missing.comp.spv";
+    bool threw = false;
+    try {
+        loadShaderModule(ctx.device(), missing);
+    } catch (const std::runtime_error& error) {
+        threw = true;
+        CHECK(std::string(error.what()).find(missing) != std::string::npos);
+    }
+    CHECK(threw);
+}
+
 } // namespace
 
 int main() {
@@ -356,6 +382,7 @@ int main() {
             testBufferRoundTrip(ctx);
             testMisuseIsRefused(ctx);
             testSamplers(ctx);
+            testMissingShaderNamesPath(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         // Also counts what the layer reported while the objects and the Context were destroyed.
