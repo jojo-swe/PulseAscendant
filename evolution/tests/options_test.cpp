@@ -92,9 +92,25 @@ int main() {
         CHECK(nonAscii.music == evo::gfx::pathFromUtf8(utf8Name));
         CHECK(evo::gfx::pathToUtf8(nonAscii.music) == utf8Name);
 
+        // --audio-offset: signed milliseconds within +-500, for calibrating A/V sync.
+        CHECK(defaults.audioOffsetMs == 0.0);
+        CHECK(evo::parseOptions({"--audio-offset", "120"}).audioOffsetMs == 120.0);
+        CHECK(evo::parseOptions({"--audio-offset", "-37.5"}).audioOffsetMs == -37.5);
+        CHECK(evo::parseOptions({"--audio-offset", "500"}).audioOffsetMs == 500.0);
+        CHECK(evo::parseOptions({"--audio-offset", "-500"}).audioOffsetMs == -500.0);
+        CHECK(parseError({"--audio-offset", "500.5"}) ==
+              "--audio-offset must be between -500 and 500 milliseconds, got 500.5");
+        CHECK(!parseError({"--audio-offset", "-501"}).empty());
+        CHECK(parseError({"--audio-offset", "soon"}) ==
+              "--audio-offset expects a number of milliseconds, got 'soon'");
+        CHECK(!parseError({"--audio-offset", "nan"}).empty());
+        CHECK(parseError({"--audio-offset"}) == "--audio-offset needs a value");
+
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
-        for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info"})
+        for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
+        CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
+        CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "CHECK failed: %s\n", error.what());
         return 1;

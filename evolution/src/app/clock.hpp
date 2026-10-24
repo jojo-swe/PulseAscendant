@@ -16,7 +16,11 @@ class ShowClock {
 public:
     // Starts at startAt (wrapped into the show). With audioWanted, plays wav, which must be showSeconds long
     // to within half a frame; any failure leaves the clock silent with the reason in status().
-    ShowClock(bool audioWanted, const std::filesystem::path& wav, double showSeconds, double startAt);
+    // audioOffsetSeconds (--audio-offset) is added to the music's position to give the show time, so the
+    // picture can be shifted against the sound; seeks and the start move the music the other way, so the
+    // show time still starts where asked. It has no effect while silent.
+    ShowClock(bool audioWanted, const std::filesystem::path& wav, double showSeconds, double startAt,
+              double audioOffsetSeconds = 0.0);
 
     // If the audio stream fails while running, the clock carries on silently from the last audio time.
     double now();
@@ -30,9 +34,11 @@ public:
 private:
     double wrap(double seconds) const;
     void restartTimer(double seconds);
+    void seekAudio(double showTime);
 
     audio::Player player_;
     double showSeconds_;
+    double audioOffset_;
     bool audio_ = false;
     double lastAudioSeconds_ = 0.0;
     double timerStart_ = 0.0;        // show time when the timer was last (re)started

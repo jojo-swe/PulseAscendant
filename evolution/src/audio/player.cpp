@@ -48,6 +48,15 @@ private:
     SDL_AudioStream* stream_;
 };
 
+// The device's own buffer, which plays after everything in the stream; 0 if SDL cannot say.
+double queryDeviceBufferSeconds(SDL_AudioStream* stream) {
+    SDL_AudioSpec spec{};
+    int sampleFrames = 0;
+    if (!SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(stream), &spec, &sampleFrames) || spec.freq <= 0)
+        return 0.0;
+    return std::max(0.0, static_cast<double>(sampleFrames) / spec.freq);
+}
+
 } // namespace
 
 Player::~Player() {
@@ -85,6 +94,8 @@ bool Player::start(const std::filesystem::path& wav, double expectedSeconds) {
                 failure = sdlError("cannot open the audio device");
             else if (!SDL_ResumeAudioStreamDevice(stream_))
                 failure = sdlError("cannot start the audio device");
+            else
+                deviceBufferSeconds_ = queryDeviceBufferSeconds(stream_);
         }
     }
 
@@ -110,6 +121,9 @@ void Player::stop() {
         audioInitialised_ = false;
     }
     failed_ = false;
+    deviceBufferSeconds_ = 0.0;
+    seekSeconds_ = 0.0;
+    framesSinceSeek_ = 0;
     status_ = "stopped";
 }
 
@@ -120,6 +134,8 @@ void Player::seek(double seconds) {
     // Drops what was rendered from the old position, so the new one is heard as soon as possible.
     SDL_ClearAudioStream(stream_);
     transport_->seek(seconds);
+    seekSeconds_ = transport_->positionSeconds();
+    framesSinceSeek_ = 0;
 }
 
 void Player::setMuted(bool muted) {
@@ -135,9 +151,12 @@ double Player::positionSeconds() const {
     double seconds = 0.0, duration = 1.0;
     {
         StreamLock lock(stream_);
+        // Of what was rendered since the seek, the queue and the device buffer are still to be heard.
         const int queuedBytes = std::max(0, SDL_GetAudioStreamQueued(stream_));
-        seconds =
-            transport_->positionSeconds() - static_cast<double>(queuedBytes) / kBytesPerFrame / kSampleRate;
+        const double unheard =
+            static_cast<double>(queuedBytes) / kBytesPerFrame / kSampleRate + deviceBufferSeconds_;
+        const double rendered = static_cast<double>(framesSinceSeek_) / kSampleRate;
+        seconds = seekSeconds_ + std::max(0.0, rendered - unheard);
         duration = transport_->durationSeconds();
     }
     const double wrapped = std::fmod(seconds, duration);
@@ -167,6 +186,7 @@ void Player::callback(void* userdata, SDL_AudioStream* stream, int additionalByt
     while (remaining > 0 && !player.failed_) {
         const std::size_t frames = std::min(remaining, buffer.size() / kChannels);
         player.transport_->render(buffer.data(), frames);
+        player.framesSinceSeek_ += frames;
         if (!SDL_PutAudioStreamData(stream, buffer.data(), static_cast<int>(frames * kBytesPerFrame)))
             player.failed_ = true;
         remaining -= frames;

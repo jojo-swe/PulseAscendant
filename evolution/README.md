@@ -119,14 +119,17 @@ Options:
                        executable); a WAV of another length than the show is refused
   --no-audio           Run without audio, on the system clock (SILENT MODE)
   --mute               Start muted (M toggles); the music still keeps the time
+  --audio-offset MS    Calibrate A/V sync: milliseconds added to the music time the
+                       picture follows, -500..500 (default 0); raise it if the picture
+                       lags the sound
   --show-info          Print the show's chapters and music as JSON and exit
   --validation         Enable the Vulkan validation layers
   --device-info        Print information about the selected GPU and exit
   --fullscreen         Start the window in fullscreen
   -h, --help           Show this help and exit
 
-Keys (window): Left/Right previous/next chapter, 1-9 and 0 chapters 1-10, M mute,
-F11 fullscreen, Esc quit
+Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,
+M mute, F11 fullscreen, Esc quit
 ```
 
 Examples:
@@ -146,10 +149,12 @@ Evolution --device-info
 Evolution --show-info
 ```
 
-In the window the time comes from the music: the clock is the position the listener hears, and the show
-loops at its end. If the music cannot play (no WAV, a WAV of the wrong length, no audio device, or
-`--no-audio`), EVOLUTION prints `SILENT MODE: <reason>` on stderr and runs on the monotonic clock from
-`--time`; otherwise it prints `AUDIO: <file>`. `--show-info` needs neither a GPU nor SDL video. The headless
+In the window the time comes from the music: the clock is the position the listener hears (what SDL still
+has queued and the device's buffer are subtracted), and the show loops at its end. `--audio-offset` shifts
+the picture against the sound for outputs with more latency than that. If the music cannot play (no WAV, a
+WAV of the wrong length, no audio device, or `--no-audio`), EVOLUTION prints `SILENT MODE: <reason>` on
+stderr and runs on the monotonic clock from `--time`; otherwise it prints `AUDIO: <file>`. If the audio
+stream fails mid-show, it prints the new `SILENT MODE` status and carries on from the music's position. `--show-info` needs neither a GPU nor SDL video. The headless
 modes never play audio and always render at `t = time + i / fps`.
 
 `--render-stream` writes frames `0 .. ceil(duration × fps) − 1` at `t = time + i / fps`, top-down,

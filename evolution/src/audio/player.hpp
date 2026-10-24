@@ -2,6 +2,7 @@
 
 #include "audio/transport.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -35,9 +36,12 @@ public:
     void setMuted(bool muted);
 
     // The position of the sample being heard: the transport's position minus what is still queued in the
-    // stream, wrapped into the music. 0 while not playing. Output latency after the stream (the device's
-    // own buffer) is not known exactly and not subtracted.
+    // stream and minus the device's buffer, wrapped into the music. Never before the last seek (or the
+    // start): until the first new sample can have reached the speaker it reads as the seek target. 0 while
+    // not playing.
     double positionSeconds() const;
+    // The device's buffer in seconds, as SDL reports it once the device runs; 0 while not playing.
+    double deviceBufferSeconds() const { return deviceBufferSeconds_; }
 
     // Playing, and the stream has not failed since start().
     bool active() const;
@@ -51,6 +55,9 @@ private:
     SDL_AudioStream* stream_ = nullptr;
     bool audioInitialised_ = false;
     bool failed_ = false; // set on the audio thread under the stream lock
+    double deviceBufferSeconds_ = 0.0;
+    double seekSeconds_ = 0.0;          // transport position at the last seek or the start
+    std::uint64_t framesSinceSeek_ = 0; // rendered since then; advanced on the audio thread under the lock
     std::string status_ = "not started";
 };
 

@@ -144,11 +144,11 @@ int chapterForKey(SDL_Keycode key, double now) {
     return -1;
 }
 
-std::string windowTitle(double now) {
-    const int seconds = static_cast<int>(now);
+std::string windowTitle(const show::TimelineFrame& frame) {
+    const int seconds = static_cast<int>(frame.showSeconds);
     char clock[16];
     std::snprintf(clock, sizeof clock, "%02d:%02d", seconds / 60, seconds % 60);
-    return std::string("EVOLUTION  ") + show::sampleTimeline(now).title + "  " + clock;
+    return std::string("EVOLUTION  ") + frame.title + "  " + clock;
 }
 
 std::string missingRequirementsMessage(const gfx::MissingRequirements& missing) {
@@ -188,8 +188,10 @@ int runWindowed(const Options& options) {
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
     // Started last, so the music begins with the first frame rather than during the device setup.
-    ShowClock clock(!options.noAudio, musicPath(options), show::showDuration(), options.time);
+    ShowClock clock(!options.noAudio, musicPath(options), show::showDuration(), options.time,
+                    options.audioOffsetMs / 1000.0);
     std::fprintf(stderr, "%s\n", clock.status().c_str());
+    bool silent = clock.silent();
     bool muted = options.mute;
     clock.setMuted(muted);
     std::string title;
@@ -250,13 +252,18 @@ int runWindowed(const Options& options) {
                                       "window target"});
         }
 
-        const double now = clock.now();
-        if (std::string newTitle = windowTitle(now); newTitle != title) {
+        const show::TimelineFrame frame = show::sampleTimeline(clock.now());
+        // The audio stream failed mid-show (or came back): say so, as at the start.
+        if (clock.silent() != silent) {
+            silent = clock.silent();
+            std::fprintf(stderr, "%s\n", clock.status().c_str());
+        }
+        if (std::string newTitle = windowTitle(frame); newTitle != title) {
             title = std::move(newTitle);
             SDL_SetWindowTitle(window.handle, title.c_str());
         }
         VkCommandBuffer cmd = ring.begin();
-        fill.record(cmd, ring, target, show::sampleTimeline(now));
+        fill.record(cmd, ring, target, frame);
         if (!swapchain.present(ring, cmd, target)) // submits the frame in every case
             needRecreate = true;
     }

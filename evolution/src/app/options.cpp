@@ -15,6 +15,7 @@ constexpr int kMaxSize = 8192;
 constexpr int kMinFps = 1;
 constexpr int kMaxFps = 240;
 constexpr int kMaxTime = 86400; // a day, in seconds: far past any timeline
+constexpr double kMaxAudioOffsetMs = 500.0;
 
 int parseInt(const std::string& flag, const std::string& text, int min, int max) {
     int value = 0;
@@ -39,6 +40,20 @@ double parseSeconds(const std::string& flag, const std::string& text) {
     }
     if (value < 0.0) {
         throw std::runtime_error(flag + " must not be negative, got " + text);
+    }
+    return value;
+}
+
+// --audio-offset: a signed number of milliseconds within +-kMaxAudioOffsetMs.
+double parseAudioOffset(const std::string& flag, const std::string& text) {
+    double value = 0.0;
+    const char* end = text.data() + text.size();
+    auto [ptr, error] = std::from_chars(text.data(), end, value);
+    if (error != std::errc() || ptr != end || !std::isfinite(value)) {
+        throw std::runtime_error(flag + " expects a number of milliseconds, got '" + text + "'");
+    }
+    if (std::abs(value) > kMaxAudioOffsetMs) {
+        throw std::runtime_error(flag + " must be between -500 and 500 milliseconds, got " + text);
     }
     return value;
 }
@@ -93,6 +108,8 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.noAudio = true;
         } else if (flag == "--mute") {
             options.mute = true;
+        } else if (flag == "--audio-offset") {
+            options.audioOffsetMs = parseAudioOffset(flag, nextValue());
         } else if (flag == "--show-info") {
             options.showInfo = true;
         } else if (flag == "--validation") {
@@ -140,14 +157,17 @@ std::string helpText() {
            "                       executable); a WAV of another length than the show is refused\n"
            "  --no-audio           Run without audio, on the system clock (SILENT MODE)\n"
            "  --mute               Start muted (M toggles); the music still keeps the time\n"
+           "  --audio-offset MS    Calibrate A/V sync: milliseconds added to the music time the\n"
+           "                       picture follows, -500..500 (default 0); raise it if the picture\n"
+           "                       lags the sound\n"
            "  --show-info          Print the show's chapters and music as JSON and exit\n"
            "  --validation         Enable the Vulkan validation layers\n"
            "  --device-info        Print information about the selected GPU and exit\n"
            "  --fullscreen         Start the window in fullscreen\n"
            "  -h, --help           Show this help and exit\n"
            "\n"
-           "Keys (window): Left/Right previous/next chapter, 1-9 and 0 chapters 1-10, M mute,\n"
-           "F11 fullscreen, Esc quit\n";
+           "Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,\n"
+           "M mute, F11 fullscreen, Esc quit\n";
 }
 
 } // namespace evo

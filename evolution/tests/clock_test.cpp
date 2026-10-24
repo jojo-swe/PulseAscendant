@@ -6,6 +6,7 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_timer.h>
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -124,6 +125,10 @@ void checkRefusedMusic(const std::filesystem::path& dir) {
     CHECK(t >= 0.0 && t < 0.5);
 }
 
+double secondsSince(std::uint64_t ticksNs) {
+    return static_cast<double>(SDL_GetTicksNS() - ticksNs) / 1e9;
+}
+
 // SDL's dummy driver plays into nothing at real speed, so the player and the audio clock run anywhere.
 void checkPlayerOnDummyDriver(const std::filesystem::path& dir) {
     const std::filesystem::path halfSecond = dir / "half_second.wav";
@@ -140,12 +145,26 @@ void checkPlayerOnDummyDriver(const std::filesystem::path& dir) {
     CHECK(player.active());
     CHECK(player.status() == halfSecond.string());
 
-    player.seek(0.25);
-    const double position = player.positionSeconds();
-    CHECK(position >= 0.0 && position < 0.5);
+    // The position is what is heard: the transport less the queue and the device's buffer. It never runs
+    // ahead of the time since the seek, and lags it by at most the device buffer plus scheduling slack.
+    const double buffer = player.deviceBufferSeconds();
+    std::printf("dummy device buffer: %.1f ms\n", buffer * 1000.0);
+    CHECK(buffer >= 0.0 && buffer < 0.2);
     player.setMuted(true);
+    const std::uint64_t beforePlayerSeek = SDL_GetTicksNS();
+    player.seek(0.25);
+    const std::uint64_t afterPlayerSeek = SDL_GetTicksNS();
+    CHECK(player.positionSeconds() == 0.25); // nothing new can have been heard yet
+    SDL_Delay(50);
+    const double atLeast = secondsSince(afterPlayerSeek);
+    const double position = player.positionSeconds();
+    const double atMost = secondsSince(beforePlayerSeek);
+    std::printf("after seek(0.25) and %.1f ms: position %.4f s\n", atLeast * 1000.0, position);
+    CHECK(position <= 0.25 + atMost);
+    CHECK(position >= 0.25 + atLeast - (buffer + 0.05));
     player.stop();
     CHECK(!player.active());
+    CHECK(player.deviceBufferSeconds() == 0.0);
 
     // The audio clock starts where asked and moves with the music. Two seconds of music leave room for a
     // slow machine before the position wraps.
@@ -161,6 +180,51 @@ void checkPlayerOnDummyDriver(const std::filesystem::path& dir) {
     SDL_Delay(200);
     const double later = clock.now();
     CHECK(later > afterSeek && later < 2.0);
+
+    // After a seek the clock reads the music: within one device buffer + 50 ms of the time since the seek,
+    // and never ahead of it.
+    const std::uint64_t beforeClockSeek = SDL_GetTicksNS();
+    clock.seek(0.5);
+    const std::uint64_t afterClockSeek = SDL_GetTicksNS();
+    for (int i = 0; i < 4; ++i) {
+        SDL_Delay(40);
+        const double atLeast = secondsSince(afterClockSeek);
+        const double t = clock.now();
+        const double atMost = secondsSince(beforeClockSeek);
+        CHECK(t <= 0.5 + atMost);
+        CHECK(t >= 0.5 + atLeast - (buffer + 0.05));
+    }
+}
+
+// A clock read right after a seek: at the target, or a few milliseconds of music past it.
+bool justAfter(double t, double target) {
+    return t >= target - 1e-9 && t < target + 0.05;
+}
+
+// --audio-offset: the show time is the music's position plus the offset, and a seek still lands where asked.
+void checkAudioOffset(const std::filesystem::path& dir) {
+    const std::filesystem::path twoSeconds = dir / "two_seconds.wav";
+    evo::ShowClock later(true, twoSeconds, 2.0, 0.5, 0.2);
+    CHECK(!later.silent());
+    later.setMuted(true);
+    CHECK(justAfter(later.now(), 0.5)); // the music was moved to 0.3
+    later.seek(1.0);
+    CHECK(justAfter(later.now(), 1.0));
+    // At the start a positive offset would need music from before it: the music starts at 0, the show at
+    // the offset.
+    later.seek(0.0);
+    CHECK(justAfter(later.now(), 0.2));
+
+    // A negative offset reads the end of the show just after the music loops.
+    evo::ShowClock earlier(true, twoSeconds, 2.0, 1.9, -0.2);
+    earlier.setMuted(true);
+    CHECK(justAfter(earlier.now(), 1.9)); // the music was moved to 0.1, past the loop
+    earlier.seek(0.0);
+    CHECK(justAfter(earlier.now(), 0.0));
+
+    // Without audio there is nothing to offset against.
+    evo::ShowClock silent(false, twoSeconds, 2.0, 0.5, 0.2);
+    CHECK(justAfter(silent.now(), 0.5));
 }
 
 // The window's keys pick where the clock jumps; its title shows where it is.
@@ -178,8 +242,8 @@ void checkControls() {
     CHECK(chapterForKey(SDLK_0, 0.0) == 9);
     CHECK(chapterForKey(SDLK_A, 0.0) == -1);
 
-    CHECK(evo::windowTitle(0.0) == "EVOLUTION  BOOT  00:00");
-    CHECK(evo::windowTitle(194.5) == "EVOLUTION  STUDIO NIGHT  03:14");
+    CHECK(evo::windowTitle(evo::show::sampleTimeline(0.0)) == "EVOLUTION  BOOT  00:00");
+    CHECK(evo::windowTitle(evo::show::sampleTimeline(194.5)) == "EVOLUTION  STUDIO NIGHT  03:14");
 }
 
 } // namespace
@@ -191,6 +255,7 @@ int main() {
         checkControls();
         checkRefusedMusic(dir);
         checkPlayerOnDummyDriver(dir);
+        checkAudioOffset(dir);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "CHECK failed: %s\n", error.what());
         return 1;
