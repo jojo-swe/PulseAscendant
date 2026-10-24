@@ -1,6 +1,6 @@
 """The windowed loop and the per-frame code must never stall the GPU: the frame ring waits on its timeline
-semaphore for the one frame it reuses, nothing more. In src/app/app.cpp and under src/render, src/text and
-src/retro, a vkQueueWaitIdle or vkDeviceWaitIdle, a Context::immediate( submit-and-wait, or a
+semaphore for the one frame it reuses, nothing more. In src/app/app.cpp and under src/render, src/text,
+src/retro and src/rt, a vkQueueWaitIdle or vkDeviceWaitIdle, a Context::immediate( submit-and-wait, or a
 FrameRing::waitAll( is allowed only on a line marked "// shutdown", "// resize" or "// setup" (built once,
 before the first frame). Calls are looked for in the code, not in comments; the marker is the comment."""
 
@@ -10,7 +10,7 @@ import sys
 
 STALL = re.compile(r"\bvk(QueueWaitIdle|DeviceWaitIdle)\b|\bimmediate\(|\bwaitAll\(")
 ALLOWED_MARKERS = ("// shutdown", "// resize", "// setup")
-SCANNED_DIRS = ("render", "text", "retro")
+SCANNED_DIRS = ("render", "text", "retro", "rt")
 SUFFIXES = (".cpp", ".hpp", ".h")
 
 

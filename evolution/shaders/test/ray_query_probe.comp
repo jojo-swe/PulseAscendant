@@ -1,0 +1,54 @@
+#version 460
+#extension GL_EXT_ray_query : require
+
+// A test fixture for the acceleration structures (tests/accel_test.cpp): casts a grid of rays along -z through
+// the TLAS with ray queries and writes, per ray, the closest hit's distance, instance custom index, primitive
+// index and facing, or -1 in all four for a miss.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
+
+struct ProbeHit {
+    float t;
+    int customIndex;
+    int primitiveId;
+    int frontFace;
+};
+layout(set = 0, binding = 1, std430) writeonly buffer Hits {
+    ProbeHit hits[];
+};
+
+// Ray (i, j) starts at (originX + spacing * i, originY + spacing * j, originZ).
+layout(push_constant) uniform Push {
+    float originX;
+    float originY;
+    float originZ;
+    float spacing;
+    uint gridWidth;
+    uint gridHeight;
+} pc;
+
+void main() {
+    const uvec2 id = gl_GlobalInvocationID.xy;
+    if (id.x >= pc.gridWidth || id.y >= pc.gridHeight) {
+        return;
+    }
+    const vec3 origin = vec3(pc.originX + pc.spacing * float(id.x), pc.originY + pc.spacing * float(id.y),
+                             pc.originZ);
+
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, tlas, gl_RayFlagsNoneEXT, 0xFF, origin, 0.0, vec3(0.0, 0.0, -1.0), 1000.0);
+    while (rayQueryProceedEXT(query)) {
+        // Every geometry is opaque, so no candidate needs confirming.
+    }
+
+    ProbeHit hit = ProbeHit(-1.0, -1, -1, -1);
+    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
+        hit.t = rayQueryGetIntersectionTEXT(query, true);
+        hit.customIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, true);
+        hit.primitiveId = rayQueryGetIntersectionPrimitiveIndexEXT(query, true);
+        hit.frontFace = rayQueryGetIntersectionFrontFaceEXT(query, true) ? 1 : 0;
+    }
+    hits[id.y * pc.gridWidth + id.x] = hit;
+}
