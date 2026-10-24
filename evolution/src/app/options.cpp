@@ -1,5 +1,7 @@
 #include "app/options.hpp"
 
+#include "gfx/paths.hpp"
+
 #include <charconv>
 #include <cmath>
 #include <stdexcept>
@@ -80,13 +82,13 @@ Options parseOptions(const std::vector<std::string>& args) {
             if (path.empty()) {
                 throw std::runtime_error(flag + " needs a non-empty path");
             }
-            options.captureDir = path;
+            options.captureDir = gfx::pathFromUtf8(path);
         } else if (flag == "--music") {
             const std::string& path = nextValue();
             if (path.empty()) {
                 throw std::runtime_error(flag + " needs a non-empty path");
             }
-            options.music = path;
+            options.music = gfx::pathFromUtf8(path);
         } else if (flag == "--no-audio") {
             options.noAudio = true;
         } else if (flag == "--mute") {

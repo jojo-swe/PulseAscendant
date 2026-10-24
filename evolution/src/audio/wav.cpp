@@ -1,5 +1,7 @@
 #include "audio/wav.hpp"
 
+#include "gfx/paths.hpp"
+
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
@@ -16,7 +18,7 @@ constexpr std::size_t kChunkHeaderSize = 8; // 4-byte tag + little-endian 32-bit
 using Bytes = std::vector<std::uint8_t>;
 
 [[noreturn]] void fail(const std::filesystem::path& path, const std::string& problem) {
-    throw std::runtime_error(path.string() + ": " + problem);
+    throw std::runtime_error(gfx::pathToUtf8(path) + ": " + problem);
 }
 
 std::uint16_t readU16(const Bytes& bytes, std::size_t offset) {

@@ -6,6 +6,7 @@
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
 #include "gfx/offscreen.hpp"
+#include "gfx/paths.hpp"
 #include "gfx/swapchain.hpp"
 #include "gfx/vk_check.hpp"
 #include "show/timeline.hpp"
@@ -114,8 +115,8 @@ gfx::Context createWindowedContext(const Options& options) {
 std::filesystem::path musicPath(const Options& options) {
     if (!options.music.empty())
         return options.music;
-    const char* base = SDL_GetBasePath(); // owned by SDL; ends with a separator
-    return base ? std::filesystem::path(base) / show::kMusicFile : std::filesystem::path(show::kMusicFile);
+    const char* base = SDL_GetBasePath(); // UTF-8, owned by SDL; ends with a separator
+    return base ? gfx::pathFromUtf8(base) / show::kMusicFile : std::filesystem::path(show::kMusicFile);
 }
 
 void toggleFullscreen(SDL_Window* window) {

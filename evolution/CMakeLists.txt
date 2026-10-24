@@ -109,6 +109,9 @@ target_link_libraries(evo_app PUBLIC evo_gfx evo_show evo_audio SDL3::SDL3-stati
 add_executable(Evolution
     src/main.cpp)
 target_link_libraries(Evolution PRIVATE evo_app SDL3::SDL3-static)
+if(WIN32)
+    target_link_libraries(Evolution PRIVATE shell32) # CommandLineToArgvW, for UTF-8 arguments
+endif()
 # Places Evolution in <build>/bin with its compiled shaders in <build>/bin/shaders.
 evo_add_shaders(Evolution shaders/fill.comp)
 

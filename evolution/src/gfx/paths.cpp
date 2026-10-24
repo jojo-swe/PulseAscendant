@@ -17,7 +17,7 @@ std::filesystem::path shaderDir() {
     const char* base = SDL_GetBasePath();
     if (!base)
         throw std::runtime_error(std::string("cannot locate the executable directory: ") + SDL_GetError());
-    return std::filesystem::path(base) / "shaders";
+    return pathFromUtf8(base) / "shaders";
 }
 
 } // namespace evo::gfx

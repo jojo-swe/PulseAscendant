@@ -1,6 +1,7 @@
 #include "audio/player.hpp"
 
 #include "audio/wav.hpp"
+#include "gfx/paths.hpp"
 
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_error.h>
@@ -92,7 +93,7 @@ bool Player::start(const std::filesystem::path& wav, double expectedSeconds) {
         status_ = failure;
         return false;
     }
-    status_ = wav.string();
+    status_ = gfx::pathToUtf8(wav);
     return true;
 }
 

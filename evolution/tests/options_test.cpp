@@ -1,4 +1,5 @@
 #include "app/options.hpp"
+#include "gfx/paths.hpp"
 
 #include <cstdio>
 #include <stdexcept>
@@ -80,6 +81,16 @@ int main() {
         CHECK(evo::parseOptions({"--music", "x.wav"}).music == "x.wav");
         CHECK(parseError({"--music"}) == "--music needs a value");
         CHECK(parseError({"--music", ""}) == "--music needs a non-empty path");
+
+        // Arguments are UTF-8 on every platform (main.cpp converts the Windows command line), and paths are
+        // made from them as UTF-8, so a non-ASCII name survives: "Jörgen/låt.wav".
+        const std::string utf8Name = "J\xC3\xB6rgen/l\xC3\xA5t.wav";
+        const std::u8string expected = u8"J\u00F6rgen/l\u00E5t.wav";
+        const evo::Options nonAscii = evo::parseOptions({"--music", utf8Name, "--capture-dir", utf8Name});
+        CHECK(nonAscii.music.u8string() == expected);
+        CHECK(nonAscii.captureDir.u8string() == expected);
+        CHECK(nonAscii.music == evo::gfx::pathFromUtf8(utf8Name));
+        CHECK(evo::gfx::pathToUtf8(nonAscii.music) == utf8Name);
 
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
         for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info"})

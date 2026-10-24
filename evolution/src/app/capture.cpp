@@ -2,6 +2,7 @@
 
 #include "gfx/context.hpp"
 #include "gfx/offscreen.hpp"
+#include "gfx/paths.hpp"
 #include "image/png.hpp"
 #include "show/timeline.hpp"
 
@@ -33,7 +34,7 @@ int runCapture(const Options& options) {
     // writePng creates the missing parent directories and truncates an existing file.
     const std::filesystem::path path = options.captureDir / captureFileName(options.time);
     image::writePng(path, frame.width, frame.height, frame.rgb.data());
-    std::printf("%s\n", path.string().c_str());
+    std::printf("%s\n", gfx::pathToUtf8(path).c_str());
     return 0;
 }
 
