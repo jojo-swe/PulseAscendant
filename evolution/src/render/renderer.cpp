@@ -135,7 +135,7 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
                                  spp_,
                                  maxBounces_,
                                  modern::frameSeedFor(frame.showSeconds, seedFrames)};
-        modern_.render(cmd, frame, state);
+        modern_.render(cmd, frame, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
     }
     stats_.framesSinceReset = plan.modern ? history_.framesSinceReset() : 0u;

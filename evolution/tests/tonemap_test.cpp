@@ -383,15 +383,22 @@ void testRejectsWrongImages(Context& ctx, Gpu& gpu) {
     CHECK(thrown == 3);
 }
 
-// (f) The scene registry: until the Studio (Task 10), every effect renders the placeholder.
+// (f) The scene registry: FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the Studio (Task 10), every
+// other effect the placeholder (studio_test pins the mapping in full).
 void testSceneRegistry() {
-    for (std::size_t effect = 0; effect < evo::show::kEffectCount; ++effect)
-        CHECK(evo::modern::sceneFor(static_cast<evo::show::Effect>(effect)) ==
-              evo::modern::SceneId::Placeholder);
+    using evo::show::Effect;
+    for (std::size_t effect = 0; effect < evo::show::kEffectCount; ++effect) {
+        const auto e = static_cast<Effect>(effect);
+        const bool studio = e == Effect::Finale || e == Effect::Portal || e == Effect::StudioNight ||
+                            e == Effect::Return || e == Effect::Reboot;
+        CHECK(evo::modern::sceneFor(e) ==
+              (studio ? evo::modern::SceneId::Studio : evo::modern::SceneId::Placeholder));
+    }
 }
 
 // (g) The placeholder through the HDR path looks as it did as a direct RGBA8 fill: within 1 per channel (the
-// dither) at every pixel, for frames across the 2026 chapters; the stage owns an RGBA16F HDR image.
+// dither) at every pixel, for frames across the 2026 chapters that show it; the stage owns an RGBA16F HDR
+// image.
 void testPlaceholderUnchanged(Context& ctx) {
     constexpr std::uint32_t kW = 160, kH = 90;
     Image direct(ctx, {kW, kH, VK_FORMAT_R8G8B8A8_UNORM,
@@ -417,7 +424,7 @@ void testPlaceholderUnchanged(Context& ctx) {
     }
 
     int worst = 0, frames = 0;
-    for (const int chapter : {11, 12, 14, 17, 19, 21, 27})
+    for (const int chapter : {12, 13, 14, 17, 18, 21, 27})
         for (const double fraction : {.1, .45, .8}) {
             const double t =
                 evo::show::chapterStart(chapter) +

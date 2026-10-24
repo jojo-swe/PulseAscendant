@@ -68,6 +68,9 @@ public:
     // resets its history (Resize), even after a resize back to the size it last rendered. Not between
     // ring.begin() and ring.submit(). A no-op for the current size.
     void resize(std::uint32_t width, std::uint32_t height);
+    // Builds the path-traced scenes' GPU side now instead of on the first frame that shows them, so that no
+    // chapter hitches (setup: before the first frame; the window calls it).
+    void prepare() { modern_.prepare(); }
     // Records all passes; output() is GENERAL afterwards.
     void render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
     gfx::Image& output() { return compositor_.output(); }

@@ -49,6 +49,9 @@ struct SceneFrame {
     std::vector<SceneInstance> instances;
     std::vector<rt::RectLight> lights;
     float exposureEV = 0;
+    // The luminance limit of a contribution after the first bounce (TraceSettings::clampIndirect), in the
+    // scene's own units: 64 by default; a scene lit far below that sets its own (the Studio, 2).
+    float clampIndirect = 64.f;
 };
 
 // The light of a quad(width, height) mesh placed by `transform`: corner = the quad's bottom-left corner,

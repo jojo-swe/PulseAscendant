@@ -145,6 +145,7 @@ add_library(evo_render STATIC
     src/render/stage_plan.cpp
     src/retro/boot.cpp
     src/retro/city.cpp
+    src/retro/dos_idle.cpp
     src/retro/effects.cpp
     src/retro/effects.hpp
     src/retro/dots.cpp
@@ -170,7 +171,9 @@ target_link_libraries(evo_render PUBLIC evo_modern evo_post)
 add_library(evo_modern STATIC
     src/modern/mesh_builder.cpp
     src/modern/path_tracer.cpp
-    src/modern/scene.cpp)
+    src/modern/scene.cpp
+    src/modern/scenes.cpp
+    src/modern/studio.cpp)
 target_include_directories(evo_modern PUBLIC src)
 target_link_libraries(evo_modern PUBLIC evo_rt)
 target_link_libraries(evo_modern PUBLIC evo_post evo_show) # the scene interface and registry (modern_scene.hpp)
@@ -729,3 +732,17 @@ target_compile_definitions(export_mode_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_S
 add_dependencies(export_mode_test Evolution_shaders evo_modern_shaders)
 add_test(NAME export_mode COMMAND export_mode_test)
 set_tests_properties(export_mode PROPERTIES TIMEOUT 120)
+
+# The Studio (Task 10 of step 4) at 320x180 in Export, 4 spp, with the validation layer on: STUDIO NIGHT lit
+# but not blown out, the CRT lighting the room, the screen following the retro picture on the next window frame
+# (Review Focus 5), the cameras and their cuts, the scene's instances and lights, the scene registry and the
+# DOS idle screen. Writes its captures to build-out/step4. `studio_test --look <dir> [spp] [w h] [name]`
+# renders stills of every shot to look at.
+add_executable(studio_test tests/studio_test.cpp)
+target_link_libraries(studio_test PRIVATE evo_render evo_modern)
+target_compile_definitions(studio_test PRIVATE
+    EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+    EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+add_dependencies(studio_test Evolution_shaders evo_modern_shaders)
+add_test(NAME studio COMMAND studio_test)
+set_tests_properties(studio PROPERTIES TIMEOUT 120)

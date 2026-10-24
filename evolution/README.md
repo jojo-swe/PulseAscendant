@@ -9,7 +9,8 @@ implementation plans live in [`docs/plans/`](docs/plans/), starting with
 > **Status:** steps 0–3 of the plan are done. The music drives a timeline of 31 chapters in three acts, and
 > every chapter with a 1993 side (act I, REBOOT, CREDITS and THE END) shows its 1993 effect through its own
 > pipeline (below). The act II and act III planetary chapters are 2026 only (forced into 1993 they show a grey
-> test pattern), and the 2026 side is still a placeholder gradient until steps 4 and 5.
+> test pattern). On the 2026 side, step 4 path traces the Studio in FINALE, PORTAL, STUDIO NIGHT, RETURN and
+> REBOOT; the other 2026 chapters show a placeholder gradient until step 5.
 
 ## Requirements
 
@@ -40,7 +41,7 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 `assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
-The 35 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
+The 49 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
 also numpy). Every GPU test runs with the validation layer on and fails on any message it reports, except the
 one `context` provokes on purpose to check that messages are counted.
 - The show and its music: `options`, `timeline`, `era`, `clock`, `audio_transport` and `show_info`.
@@ -50,6 +51,8 @@ one `context` provokes on purpose to check that messages are counted.
   `rotozoom`, `raytrace`, `city`, `finale`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon
   and point rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
   frame, every scene within the rasterisers' limits).
+- The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT lighting the room, the screen following
+  the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS prompt).
 - The executable end to end, its exports at `--spp 2`: `render_stream`, `capture`, `stream_capture` and
   `stream_capture_studio` (a frame of a stream equals a fresh capture at the same time, for every chapter; the
   Studio chapters, path traced, in a part of their own that runs beside the rest), `export_mode` (the seeds,
@@ -132,8 +135,14 @@ the exports read back:
 2. **CRT.** The 320×200 picture fills a centred 4:3 rectangle (its pixels are 1.2 times taller than wide),
    black around it. With the CRT look on it also gets a 2 % barrel, a little bloom, darker odd scanlines, a
    phosphor mask and a vignette. Key C or `--no-crt` turns the look off; the rectangle stays the same.
-3. **Modern stage.** The 2026 side; a placeholder gradient in the chapter's hue with a circle on kick and
-   beat until steps 4 and 5.
+3. **Modern stage.** The 2026 side, in HDR light tone mapped once (ACES). FINALE, PORTAL, STUDIO NIGHT,
+   RETURN and REBOOT path trace the Studio: a dark room at night around a 1993 PC on a wooden desk, whose CRT
+   shows the live 1993 picture (barrel-warped, with scanlines) and lights the room, with a warm desk lamp, a
+   moonlit window onto a procedural night sky, a 101-key keyboard, a chrome and a glass sphere, all built in
+   code. The path tracer's output goes through the denoiser (temporal in the window, spatial à-trous) and the
+   CRT's picture bypasses both, so it stays sharp and current. In STUDIO NIGHT and RETURN the CRT sits at the
+   DOS prompt the demo exited to. Every other 2026 chapter shows a placeholder gradient in the chapter's hue
+   with a circle on kick and beat until step 5.
 4. **Era compositor.** Blends the two by the timeline's era: a Cut or BeatSwap chapter shows one era whole,
    a Wipe sweeps 2026 in from the left behind a white seam, a Portal cross-fades for now, and a cut flashes
    white.
@@ -206,7 +215,8 @@ them). The primitive lists live in host-visible buffers per frame-in-flight slot
 into 1993 and once into 2026, and composes one PNG grid per act (`act1.png`, `act2.png`, `act3.png`): a row
 per chapter, labelled with its number, title, transition and times, and six columns (1993 at the three
 times, then 2026). Each cell is the capture at half size. It needs numpy and runs the executable once per
-cell; all 31 chapters at 640×360 take about 30 s on lavapipe.
+cell; all 31 chapters at 640×360 and the default `--spp 8` take about 2 minutes on lavapipe, most of it in
+the five path-traced Studio chapters.
 
 ```sh
 cd evolution

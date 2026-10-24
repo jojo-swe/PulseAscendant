@@ -717,11 +717,13 @@ void testTwoFramesInFlight(evo::gfx::Context& ctx) {
     }
 }
 
-// A STUDIO NIGHT frame: a 2026-only chapter, so the colourful placeholder fills the whole output.
-TimelineFrame studioNight(double localSeconds) {
-    const int chapter = 11;
+// An ASCENT frame: a 2026-only chapter that shows the placeholder (STUDIO NIGHT, the first 2026-only
+// chapter, path traces the Studio around the CRT since Task 10, so it runs the retro stage too), so the
+// colourful placeholder fills the whole output.
+TimelineFrame ascent(double localSeconds) {
+    const int chapter = 12;
     TimelineFrame frame = evo::show::sampleTimeline(evo::show::chapterStart(chapter) + localSeconds);
-    CHECK(frame.effect == Effect::StudioNight && frame.era == 1.f);
+    CHECK(frame.effect == Effect::Ascent && frame.era == 1.f);
     return frame;
 }
 
@@ -731,7 +733,7 @@ RenderSettings modeSettings(std::uint32_t width, std::uint32_t height, RenderMod
     return settings;
 }
 
-// (a) A frame runs only the stages it shows: BOOT records no modern pass, STUDIO NIGHT no retro pass (the
+// (a) A frame runs only the stages it shows: BOOT records no modern pass, ASCENT no retro pass (the
 // placeholder samples nothing of 1993), in both modes.
 void testStagesSkipped(evo::gfx::Context& ctx) {
     for (RenderMode mode : {RenderMode::Export, RenderMode::Interactive}) {
@@ -739,18 +741,18 @@ void testStagesSkipped(evo::gfx::Context& ctx) {
         harness.render(evo::show::sampleTimeline(1.0));
         CHECK(harness.renderer().lastStats().retroRendered && !harness.renderer().lastStats().modernRendered);
         CHECK(harness.renderer().lastStats().historyReset == HistoryReset::None);
-        harness.render(studioNight(2.0));
+        harness.render(ascent(2.0));
         CHECK(!harness.renderer().lastStats().retroRendered && harness.renderer().lastStats().modernRendered);
     }
 }
 
 // (b) Review Focus 7: a skipped stage's stale image never reaches the output. A colourful 2026 frame, then
-// BOOT at t = 1, equals a fresh renderer's BOOT at t = 1 byte for byte; BOOT, then STUDIO NIGHT with the
-// retro stage skipped, equals a fresh STUDIO NIGHT. With the CRT and the HUD on, as an export draws.
+// BOOT at t = 1, equals a fresh renderer's BOOT at t = 1 byte for byte; BOOT, then ASCENT with the
+// retro stage skipped, equals a fresh ASCENT. With the CRT and the HUD on, as an export draws.
 void testSkippedStageNeverShows(evo::gfx::Context& ctx) {
     const RenderSettings settings{320, 180, true, true};
     const TimelineFrame boot = evo::show::sampleTimeline(1.0);
-    const TimelineFrame night = studioNight(2.0);
+    const TimelineFrame night = ascent(2.0);
 
     Harness freshBoot(ctx, settings), freshNight(ctx, settings);
     const Picture bootAlone = freshBoot.render(boot);
@@ -789,44 +791,44 @@ void testInteractiveKeepsHiddenModernWarm(evo::gfx::Context& ctx) {
 void testHistoryResets(evo::gfx::Context& ctx) {
     Harness harness(ctx, modeSettings(160, 90, RenderMode::Interactive));
     const auto stats = [&] { return harness.renderer().lastStats(); };
-    harness.render(studioNight(2.0));
+    harness.render(ascent(2.0));
     CHECK(stats().historyReset == HistoryReset::FirstFrame && stats().framesSinceReset == 0);
-    harness.render(studioNight(2.0 + 1.0 / 60));
+    harness.render(ascent(2.0 + 1.0 / 60));
     CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
     harness.render(evo::show::sampleTimeline(1.0)); // BOOT: no modern pass
     CHECK(!stats().modernRendered && stats().historyReset == HistoryReset::None);
     CHECK(stats().framesSinceReset == 0); // zeroed while the modern stage is skipped
-    harness.render(studioNight(2.0 + 2.0 / 60));
+    harness.render(ascent(2.0 + 2.0 / 60));
     CHECK(stats().historyReset == HistoryReset::Skipped && stats().framesSinceReset == 0);
-    harness.render(studioNight(5.0));
+    harness.render(ascent(5.0));
     CHECK(stats().historyReset == HistoryReset::TimeJump);
     harness.resize(192, 108);
-    harness.render(studioNight(5.0 + 1.0 / 60));
+    harness.render(ascent(5.0 + 1.0 / 60));
     CHECK(stats().historyReset == HistoryReset::Resize);
-    harness.render(studioNight(5.0 + 2.0 / 60));
+    harness.render(ascent(5.0 + 2.0 / 60));
     CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
     CHECK(harness.renderer().maxBounces() == 4);
 
     // A resize A -> B -> A with no frame in between still resets; resizing to the current size does not.
     harness.resize(160, 90);
     harness.resize(192, 108);
-    harness.render(studioNight(5.0 + 3.0 / 60));
+    harness.render(ascent(5.0 + 3.0 / 60));
     CHECK(stats().historyReset == HistoryReset::Resize);
     harness.resize(192, 108);
-    harness.render(studioNight(5.0 + 4.0 / 60));
+    harness.render(ascent(5.0 + 4.0 / 60));
     CHECK(stats().historyReset == HistoryReset::None);
 }
 
 // The stats of a skipped stage are zero, not the last frame it rendered: retroFrame while the retro stage
-// does not run (STUDIO NIGHT), framesSinceReset while the modern stage does not (BOOT, in an export).
+// does not run (ASCENT), framesSinceReset while the modern stage does not (BOOT, in an export).
 void testSkippedStageStats(evo::gfx::Context& ctx) {
     Harness harness(ctx, modeSettings(160, 90, RenderMode::Export));
     const auto stats = [&] { return harness.renderer().lastStats(); };
     harness.render(plasmaFrame(70));
     CHECK(stats().retroRendered && stats().retroFrame == 70 && !stats().modernRendered);
     CHECK(stats().framesSinceReset == 0);
-    harness.render(studioNight(2.0));
-    harness.render(studioNight(2.0 + 1.0 / 60));
+    harness.render(ascent(2.0));
+    harness.render(ascent(2.0 + 1.0 / 60));
     CHECK(!stats().retroRendered && stats().retroFrame == 0);
     CHECK(stats().modernRendered && stats().framesSinceReset == 1);
     harness.render(plasmaFrame(71));

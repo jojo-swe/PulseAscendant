@@ -195,6 +195,7 @@ int runWindowed(const Options& options) {
     settings.mode = render::RenderMode::Interactive;
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     render::Renderer renderer(ctx, ring, settings);
+    renderer.prepare(); // the Studio's BLASes and pipeline now, not as a hitch in chapter 9
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 

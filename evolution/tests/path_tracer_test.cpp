@@ -457,14 +457,14 @@ Agreement compareBlocks(const Plane& plane, std::uint32_t channel, const std::ve
     return a;
 }
 
-// sky.glsl's skyRadiance below the horizon (the dark ground and the city's glow), the only part the window
-// scene's panel sees. A port: keep it equal to the shader.
+// sky.glsl's skyRadiance below the town's band of lights (the dark ground and half the town's glow), the only
+// part the window scene's panel sees. A port: keep it equal to the shader.
 Vec3 groundSkyRadiance(Vec3 direction) {
     const Vec3 d = modern::normalize(direction);
-    if (!(d.y < 0.f))
-        throw std::logic_error("groundSkyRadiance: a direction above the horizon");
-    const float glow = std::exp(-std::abs(d.y) * 12.f);
-    return Vec3{0.004f, 0.004f, 0.005f} + Vec3{0.10f, 0.055f, 0.025f} * glow;
+    if (!(d.y <= -0.06f)) // kTownDepth: above it the hashed town lights would need porting too
+        throw std::logic_error("groundSkyRadiance: a direction above the town's lights");
+    const float glow = std::exp(-std::abs(d.y) * 18.f);
+    return Vec3{0.0015f, 0.0018f, 0.003f} + Vec3{0.045f, 0.028f, 0.016f} * (0.5f * glow);
 }
 
 // The panel of windowScene seen through each pixel centre, lit directly through the window: albedo / pi times
@@ -865,11 +865,17 @@ void testRetroScreen(gfx::Context& ctx) {
         withGreen = tracer.trace(scene.frame, settings, green);
     }
     const float s = test::kScreenScale;
-    // Byte 255 is 1.0 and byte 128 is srgbToLinear(128 / 255) = 0.2158, decoded once by the sRGB view.
-    CHECK(std::abs(withRed.emission.at(sx, sy, 0) - 1.f * s) < 1e-3f * s);
-    CHECK(withRed.emission.at(sx, sy, 1) == 0.f && withRed.emission.at(sx, sy, 2) == 0.f);
-    CHECK(std::abs(withGreen.emission.at(sx, sy, 1) - 0.2158f * s) < 1e-3f * s);
-    CHECK(withGreen.emission.at(sx, sy, 0) == 0.f && withGreen.emission.at(sx, sy, 2) == 0.f);
+    // Byte 255 is 1.0 and byte 128 is srgbToLinear(128 / 255) = 0.2158, decoded once by the sRGB view. The
+    // screen shows them as a CRT (shaders/rt/screen.glsl): plus the glass's glow, times a scanline and
+    // vignette factor k in [0.75 * 0.95, 1] that is the same for both pictures (same seed, same samples).
+    const float glow[3] = {0.0012f, 0.0016f, 0.0018f}; // kScreenGlow
+    const float k = withRed.emission.at(sx, sy, 0) / ((1.f + glow[0]) * s);
+    std::printf("    screen factor at the centre pixel %.4f\n", k);
+    CHECK(k > 0.75f * 0.95f && k <= 1.f + 1e-4f);
+    CHECK(std::abs(withRed.emission.at(sx, sy, 1) - glow[1] * k * s) < 1e-3f * s);
+    CHECK(std::abs(withRed.emission.at(sx, sy, 2) - glow[2] * k * s) < 1e-3f * s);
+    CHECK(std::abs(withGreen.emission.at(sx, sy, 1) - (0.2158f + glow[1]) * k * s) < 1e-3f * s);
+    CHECK(std::abs(withGreen.emission.at(sx, sy, 0) - glow[0] * k * s) < 1e-3f * s);
     // The floor in front of the screen takes its colour.
     double redR = 0, redG = 0, greenR = 0, greenG = 0;
     for (std::uint32_t y = fy - 1; y <= fy + 1; ++y)

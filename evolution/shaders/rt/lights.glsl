@@ -5,6 +5,8 @@
 // angle densities that multiple importance sampling (power heuristic, beta = 2) weighs against the BSDF's.
 // A light emits from one side, along normalize(cross(edgeU, edgeV)). Needs common.glsl and sky.glsl.
 
+#include "screen.glsl"
+
 float lightSelectPdf(uint index) {
     return frame.lightWeightSum > 0.0 ? max(lights[index].selectWeight, 0.0) / frame.lightWeightSum : 0.0;
 }
@@ -47,7 +49,7 @@ vec3 lightRadiance(RectLight l, vec2 uv, vec3 wi) {
     }
     if (l.kind == kLightRetroScreen) {
         // The quad's own uv: (u, 1 - v), the picture's top left at the light's corner + edgeV.
-        return textureLod(retroScreen, vec2(uv.x, 1.0 - uv.y), kDiffuseTextureLod).rgb * l.emission;
+        return retroScreenPicture(vec2(uv.x, 1.0 - uv.y), kDiffuseTextureLod) * l.emission;
     }
     return l.emission;
 }

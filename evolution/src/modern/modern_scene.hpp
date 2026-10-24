@@ -3,6 +3,8 @@
 #include "show/cues.hpp"
 #include "show/timeline.hpp"
 
+#include <memory>
+
 namespace evo::modern {
 
 // The path tracer's scene description (src/modern/scene.hpp, Task 7): the meshes and materials built once,
@@ -23,13 +25,16 @@ public:
 };
 
 // What the modern stage renders for an effect. Placeholder: the fill.comp gradient and beat circle, through
-// the HDR image and the tonemap like every 2026 picture. Studio: the path-traced room (Task 10).
+// the HDR image and the tonemap like every 2026 picture. Studio: the path-traced room
+// (src/modern/studio.hpp).
 enum class SceneId { Placeholder, Studio };
 
-// The scene of an effect. Every effect is the placeholder until the Studio exists; Task 10 moves this into
-// src/modern/scenes.cpp with the Studio's chapters (Decision 1).
-inline SceneId sceneFor(show::Effect /*effect*/) {
-    return SceneId::Placeholder;
-}
+// The scene of an effect (src/modern/scenes.cpp): FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the
+// Studio (Decision 1 of step 4); every other effect is the placeholder until its own scene exists.
+SceneId sceneFor(show::Effect effect);
+
+// A new scene object for a path-traced scene: its meshes, materials and frame function (CPU only; the GPU
+// work is the path tracer's). nullptr for SceneId::Placeholder, which the modern stage fills without one.
+std::unique_ptr<ModernScene> makeScene(SceneId id);
 
 } // namespace evo::modern
