@@ -3,7 +3,7 @@
 // One à-trous iteration of the denoiser: a 5x5 B3 kernel (1/16, 1/4, 3/8) with taps `step` pixels apart,
 // each weighted by depth, normal and luminance edge stops; the variance travels with squared weights so the
 // next, wider iteration stops at a smaller luminance difference. A miss (depth <= 0) is copied unfiltered
-// and never taken as a tap.
+// and never taken as a tap (as is a non-finite depth).
 
 #extension GL_GOOGLE_include_directive : require
 
@@ -45,7 +45,7 @@ void main() {
 
     vec4 centre = imageLoad(source, p);
     float depth = imageLoad(depthImage, p).r;
-    if (depth <= 0.0) {
+    if (!isHit(depth)) {
         imageStore(target, p, centre);
         return;
     }
@@ -76,13 +76,12 @@ void main() {
             float w = 1.0; // the centre tap
             if (dx != 0 || dy != 0) {
                 float qDepth = imageLoad(depthImage, q).r;
-                if (qDepth <= 0.0) {
+                if (!isHit(qDepth)) {
                     continue;
                 }
                 tap = imageLoad(source, q);
                 vec3 qNormal = imageLoad(normalImage, q).xyz;
-                w = exp(-abs(depth - qDepth) / phiDepth) *
-                    pow(max(0.0, dot(normal, qNormal)), pc.sigmaNormal) *
+                w = exp(-abs(depth - qDepth) / phiDepth) * normalWeight(normal, qNormal, pc.sigmaNormal) *
                     exp(-abs(lum - luminance(tap.rgb)) / phiLuminance);
             }
             float kw = k * w;

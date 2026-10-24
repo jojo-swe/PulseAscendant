@@ -3,8 +3,10 @@
 #include "gfx/paths.hpp"
 
 #include <array>
+#include <cmath>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace evo::post {
 
@@ -75,6 +77,26 @@ void checkImage(const gfx::Image& image, const char* what, VkFormat format, std:
                                     ", the denoiser " + sizeText({width, height}));
 }
 
+void checkSettings(const DenoiseSettings& settings) {
+    if (settings.maxHistory == 0)
+        throw std::invalid_argument("Denoiser: maxHistory must be at least 1");
+    if (settings.atrousIterations > kMaxAtrousIterations)
+        throw std::invalid_argument("Denoiser: at most " + std::to_string(kMaxAtrousIterations) +
+                                    " a-trous iterations, got " + std::to_string(settings.atrousIterations));
+    // Written as positive tests so a NaN fails them.
+    for (const auto& [name, sigma] :
+         {std::pair{"sigmaDepth", settings.sigmaDepth}, std::pair{"sigmaNormal", settings.sigmaNormal},
+          std::pair{"sigmaLuminance", settings.sigmaLuminance}})
+        if (!(std::isfinite(sigma) && sigma > 0.0f))
+            throw std::invalid_argument(std::string("Denoiser: ") + name +
+                                        " must be positive and finite, got " + std::to_string(sigma));
+    for (const auto& [name, alpha] :
+         {std::pair{"alphaColor", settings.alphaColor}, std::pair{"alphaMoments", settings.alphaMoments}})
+        if (!(alpha > 0.0f && alpha <= 1.0f))
+            throw std::invalid_argument(std::string("Denoiser: ") + name + " must be in (0, 1], got " +
+                                        std::to_string(alpha));
+}
+
 void checkSize(std::uint32_t width, std::uint32_t height) {
     if (width == 0 || height == 0)
         throw std::invalid_argument("Denoiser needs a positive size, got " + sizeText({width, height}));
@@ -141,11 +163,7 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
     checkImage(gbuffer.depth, "depth", kDepthFormat, width_, height_);
     checkImage(gbuffer.motion, "motion", kHalfFormat, width_, height_);
     checkImage(hdrOut, "hdrOut", kHalfFormat, width_, height_);
-    if (settings.maxHistory == 0)
-        throw std::invalid_argument("Denoiser: maxHistory must be at least 1");
-    if (settings.atrousIterations > kMaxAtrousIterations)
-        throw std::invalid_argument("Denoiser: at most " + std::to_string(kMaxAtrousIterations) +
-                                    " a-trous iterations, got " + std::to_string(settings.atrousIterations));
+    checkSettings(settings);
 
     const std::uint32_t previous = current_;
     current_ = 1 - current_;
