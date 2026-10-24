@@ -192,8 +192,9 @@ Candidate evaluate(VkPhysicalDevice device, const std::vector<const char*>& exte
 }
 
 std::string versionString(uint32_t version) {
-    return std::to_string(VK_API_VERSION_MAJOR(version)) + "." + std::to_string(VK_API_VERSION_MINOR(version)) +
-           "." + std::to_string(VK_API_VERSION_PATCH(version));
+    return std::to_string(VK_API_VERSION_MAJOR(version)) + "." +
+           std::to_string(VK_API_VERSION_MINOR(version)) + "." +
+           std::to_string(VK_API_VERSION_PATCH(version));
 }
 
 std::string jsonEscape(const std::string& text) {
@@ -267,6 +268,22 @@ Context Context::create(const ContextOptions& options) {
     }
     const VkDebugUtilsMessengerCreateInfoEXT debugInfo = messengerInfo();
 
+    // Synchronization validation is switched on through VK_EXT_validation_features, which the layer provides.
+    const VkValidationFeatureEnableEXT syncFeature =
+        VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+    VkValidationFeaturesEXT validationFeatures{VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT};
+    validationFeatures.enabledValidationFeatureCount = 1;
+    validationFeatures.pEnabledValidationFeatures = &syncFeature;
+    if (options.syncValidation && ctx.validation_) {
+        const char* name = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
+        if (hasInstanceExtension(kValidationLayer, name) || hasInstanceExtension(nullptr, name)) {
+            instanceExtensions.push_back(name);
+            ctx.syncValidation_ = true;
+        } else {
+            std::fprintf(stderr, "warning: %s unavailable; no synchronization validation\n", name);
+        }
+    }
+
     VkApplicationInfo appInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     appInfo.pApplicationName = "Evolution";
     appInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
@@ -276,6 +293,10 @@ Context Context::create(const ContextOptions& options) {
     VkInstanceCreateInfo instanceInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     // Chained here, the messenger also reports problems in vkCreateInstance and vkDestroyInstance.
     instanceInfo.pNext = useMessenger ? &debugInfo : nullptr;
+    if (ctx.syncValidation_) {
+        validationFeatures.pNext = instanceInfo.pNext;
+        instanceInfo.pNext = &validationFeatures;
+    }
     instanceInfo.pApplicationInfo = &appInfo;
     instanceInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
     instanceInfo.ppEnabledLayerNames = layers.data();
@@ -331,6 +352,19 @@ Context Context::create(const ContextOptions& options) {
     ctx.physicalDevice_ = chosen->device;
     ctx.queueFamily_ = chosen->queueFamily;
 
+    // --- Ray tracing properties, as the driver reports them ---
+    VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
+    rtProperties.pNext = &accelProperties;
+    VkPhysicalDeviceProperties2 properties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    properties2.pNext = &rtProperties;
+    vkGetPhysicalDeviceProperties2(ctx.physicalDevice_, &properties2);
+    ctx.rayTracing_ = {rtProperties.shaderGroupHandleSize, rtProperties.shaderGroupHandleAlignment,
+                       rtProperties.shaderGroupBaseAlignment, rtProperties.maxRayRecursionDepth,
+                       accelProperties.minAccelerationStructureScratchOffsetAlignment};
+
     // --- Logical device: enable exactly the required features ---
     FeatureChain enabled;
     for (auto& [name, flag] : enabled.required())
@@ -385,24 +419,35 @@ Context Context::create(const ContextOptions& options) {
     samplerInfo.minFilter = VK_FILTER_LINEAR;
     vkCheck(vkCreateSampler(ctx.device_, &samplerInfo, nullptr, &ctx.linearSampler_),
             "vkCreateSampler(linear)");
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
+    vkCheck(vkCreateSampler(ctx.device_, &samplerInfo, nullptr, &ctx.trilinearSampler_),
+            "vkCreateSampler(trilinear)");
     ctx.setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(ctx.nearestSampler_),
                       "nearest");
     ctx.setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(ctx.linearSampler_), "linear");
+    ctx.setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(ctx.trilinearSampler_),
+                      "trilinear");
 
     return ctx;
 }
 
-Context::~Context() { destroy(); }
+Context::~Context() {
+    destroy();
+}
 
 Context::Context(Context&& other) noexcept
     : instance_(std::exchange(other.instance_, VK_NULL_HANDLE)),
       messenger_(std::exchange(other.messenger_, VK_NULL_HANDLE)),
       physicalDevice_(std::exchange(other.physicalDevice_, VK_NULL_HANDLE)),
-      device_(std::exchange(other.device_, VK_NULL_HANDLE)), queue_(std::exchange(other.queue_, VK_NULL_HANDLE)),
-      queueFamily_(other.queueFamily_), allocator_(std::exchange(other.allocator_, VK_NULL_HANDLE)),
+      device_(std::exchange(other.device_, VK_NULL_HANDLE)),
+      queue_(std::exchange(other.queue_, VK_NULL_HANDLE)), queueFamily_(other.queueFamily_),
+      allocator_(std::exchange(other.allocator_, VK_NULL_HANDLE)),
       commandPool_(std::exchange(other.commandPool_, VK_NULL_HANDLE)),
       nearestSampler_(std::exchange(other.nearestSampler_, VK_NULL_HANDLE)),
-      linearSampler_(std::exchange(other.linearSampler_, VK_NULL_HANDLE)), validation_(other.validation_),
+      linearSampler_(std::exchange(other.linearSampler_, VK_NULL_HANDLE)),
+      trilinearSampler_(std::exchange(other.trilinearSampler_, VK_NULL_HANDLE)),
+      rayTracing_(other.rayTracing_), validation_(other.validation_), syncValidation_(other.syncValidation_),
       validationMessagesBefore_(other.validationMessagesBefore_), live_(std::exchange(other.live_, false)) {}
 
 Context& Context::operator=(Context&& other) noexcept {
@@ -418,7 +463,10 @@ Context& Context::operator=(Context&& other) noexcept {
         commandPool_ = std::exchange(other.commandPool_, VK_NULL_HANDLE);
         nearestSampler_ = std::exchange(other.nearestSampler_, VK_NULL_HANDLE);
         linearSampler_ = std::exchange(other.linearSampler_, VK_NULL_HANDLE);
+        trilinearSampler_ = std::exchange(other.trilinearSampler_, VK_NULL_HANDLE);
+        rayTracing_ = other.rayTracing_;
         validation_ = other.validation_;
+        syncValidation_ = other.syncValidation_;
         validationMessagesBefore_ = other.validationMessagesBefore_;
         live_ = std::exchange(other.live_, false);
     }
@@ -432,6 +480,8 @@ void Context::destroy() noexcept {
             vkDestroySampler(device_, nearestSampler_, nullptr);
         if (linearSampler_)
             vkDestroySampler(device_, linearSampler_, nullptr);
+        if (trilinearSampler_)
+            vkDestroySampler(device_, trilinearSampler_, nullptr);
         if (commandPool_)
             vkDestroyCommandPool(device_, commandPool_, nullptr);
         if (allocator_)
@@ -448,6 +498,7 @@ void Context::destroy() noexcept {
     commandPool_ = VK_NULL_HANDLE;
     nearestSampler_ = VK_NULL_HANDLE;
     linearSampler_ = VK_NULL_HANDLE;
+    trilinearSampler_ = VK_NULL_HANDLE;
     allocator_ = VK_NULL_HANDLE;
     if (live_) {
         live_ = false;
@@ -480,8 +531,14 @@ std::string Context::deviceInfoJson() const {
     // A context only exists when every ray-tracing requirement was met, so rayTracing is always true.
     return std::string("{\"device\":\"") + jsonEscape(properties.properties.deviceName) + "\",\"driver\":\"" +
            jsonEscape(std::string(driver.driverName) + " " + driver.driverInfo) + "\",\"api\":\"" +
-           versionString(properties.properties.apiVersion) + "\",\"rayTracing\":true,\"validation\":" +
-           (validation_ ? "true" : "false") + "}";
+           versionString(properties.properties.apiVersion) +
+           "\",\"rayTracing\":true,\"rayTracingProperties\":{\"shaderGroupHandleSize\":" +
+           std::to_string(rayTracing_.shaderGroupHandleSize) +
+           ",\"shaderGroupHandleAlignment\":" + std::to_string(rayTracing_.shaderGroupHandleAlignment) +
+           ",\"shaderGroupBaseAlignment\":" + std::to_string(rayTracing_.shaderGroupBaseAlignment) +
+           ",\"maxRayRecursionDepth\":" + std::to_string(rayTracing_.maxRayRecursionDepth) +
+           ",\"minScratchOffsetAlignment\":" + std::to_string(rayTracing_.minScratchOffsetAlignment) +
+           "},\"validation\":" + (validation_ ? "true" : "false") + "}";
 }
 
 void Context::setObjectName(VkObjectType type, std::uint64_t handle, const char* name) const {
