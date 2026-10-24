@@ -1,12 +1,15 @@
-// The ACES tonemap (Review Focus 6: one tonemap, display encoding exactly once): HDR RGBA16F ramps and colour
-// patches uploaded from the CPU, tone mapped on the GPU into RGBA8 and compared with tonemapReference, the
-// CPU mirror (within 1 per channel); black stays 0 and white 255 at every pixel whatever the dither; the ramp
-// is monotonic once the dither is taken out; +1 EV equals the input doubled, +2 EV quadrupled and -1 EV
-// halved, byte for byte; the dither is static; golden anchors computed independently of this code (mid grey,
-// white, black, saturated primaries, the sRGB OETF) hold on the CPU and the GPU; negative and non-finite
-// light is black. Then the scene registry (every effect is the placeholder until the Studio arrives) and the
-// modern stage's placeholder through the HDR path: its picture must match the old direct RGBA8 fill within 1
-// per channel. Runs with the validation layer on and fails on any message it reports.
+// The tonemap, Khronos PBR Neutral (Review Focus 6: one tonemap, display encoding exactly once): HDR RGBA16F
+// ramps and colour patches uploaded from the CPU, tone mapped on the GPU into RGBA8 and compared with
+// tonemapReference, the CPU mirror (within 1 per channel); black stays 0 at every pixel whatever the dither
+// and white 255 once it is bright enough for the curve's asymptote (64 rounds to 255, 16384 is 255 at every
+// pixel); the ramp is monotonic once the dither is taken out; +1 EV equals the input doubled, +2 EV
+// quadrupled and -1 EV halved, byte for byte; the dither is static; golden anchors computed independently of
+// this code (mid grey, white, black, saturated primaries, both offset branches, the compression knee, the CRT
+// red, the sRGB OETF) hold on the CPU and the GPU; the hue is kept (exactly below the knee, in the plane of
+// the input and white above it); negative light counts as 0 and non-finite light is black. Then the scene
+// registry and the modern stage's placeholder through the HDR path: its picture must match the old direct
+// RGBA8 fill within 1 per channel wherever the curve can reach the fill's colour. Runs with the validation
+// layer on and fails on any message it reports.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -233,17 +236,29 @@ void testMatchesReference(Gpu& gpu) {
     }
 }
 
-// (b) 0 -> 0 and white -> 255 at every pixel, whatever the dither; the reference agrees.
+// (b) 0 -> 0 at every pixel, whatever the dither. White approaches 1 asymptotically under PBR Neutral (64 ->
+// 0.99909 linear, 254.90 encoded): white x 64 rounds to 255 without the dither and is 255 or 254 with it (254
+// only where the dither is below -0.398, about 2 % of the pixels); white x 16384 (0.9999965 linear) is 255 at
+// every pixel. The reference agrees.
 void testBlackAndWhite(Gpu& gpu) {
     const std::vector<std::uint8_t> black = gpu.run(uniformPicture(0.f), 0.f);
     CHECK(std::all_of(black.begin(), black.end(), [](std::uint8_t v) { return v == 0; }));
-    const std::vector<std::uint8_t> white = gpu.run(uniformPicture(kRampTop), 0.f);
+    constexpr float kBrightWhite = 16384.f;
+    const std::vector<std::uint8_t> white = gpu.run(uniformPicture(kBrightWhite), 0.f);
     CHECK(std::all_of(white.begin(), white.end(), [](std::uint8_t v) { return v == 255; }));
-    const float zero[3] = {0, 0, 0}, top[3] = {kRampTop, kRampTop, kRampTop};
+    const std::vector<std::uint8_t> top = gpu.run(uniformPicture(kRampTop), 0.f);
+    CHECK(std::all_of(top.begin(), top.end(), [](std::uint8_t v) { return v >= 254; }));
+    const auto full = std::count(top.begin(), top.end(), std::uint8_t{255});
+    std::printf("white x %.0f: %td of %zu channels 255\n", kRampTop, full, top.size());
+    CHECK(full * 100 >= static_cast<std::ptrdiff_t>(top.size()) * 95);
+
+    const float zero[3] = {0, 0, 0}, white64[3] = {kRampTop, kRampTop, kRampTop},
+                bright[3] = {kBrightWhite, kBrightWhite, kBrightWhite};
+    CHECK(std::floor(evo::post::tonemapDisplay(white64, 0.f)[0] * 255.f + .5f) == 255.f);
     for (std::uint32_t y = 0; y < 64; ++y)
         for (std::uint32_t x = 0; x < 64; ++x) {
             CHECK(evo::post::tonemapReference(zero, 0.f, x, y) == (std::array<std::uint8_t, 3>{0, 0, 0}));
-            CHECK(evo::post::tonemapReference(top, 0.f, x, y) ==
+            CHECK(evo::post::tonemapReference(bright, 0.f, x, y) ==
                   (std::array<std::uint8_t, 3>{255, 255, 255}));
         }
 }
@@ -291,22 +306,67 @@ void testExposure(Gpu& gpu) {
     CHECK(gpu.run(picture, -1.f) == gpu.run(picture.scaled(.5f), 0.f));
 }
 
-// (h) Golden anchors, independent of this code: computed in float64 with numpy from Stephen Hill's published
-// ACES fit (BakingLab ACES.hlsl: ACESInputMat, RRTAndODTFit, ACESOutputMat) and the sRGB OETF, rounded to
-// bytes without dither. The reference's display value must be within 1e-4, the GPU's dithered bytes (of the
-// half-rounded inputs) within 1 of the literal byte, at every pixel.
+// (h) Golden anchors, independent of this code: computed in float64 with numpy (golden.py, in the Task 5
+// report) from the Khronos PBR Neutral specification (KhronosGroup/ToneMapping, PBR_Neutral/README.md: F90 =
+// 0.04, Ks = 0.8 - F90, Kd = 0.15, the offset f = x - x^2 / (4 F90) for x <= 2 F90) and the sRGB OETF,
+// rounded to bytes without dither. The reference's linear and display values must be within 1e-4, the GPU's
+// dithered bytes (of the half-rounded inputs) within 1 of the literal byte, at every pixel.
 struct Golden {
     std::array<float, 3> hdr;
-    std::array<float, 3> display;
+    std::array<float, 3> linear;  // PBR Neutral's output
+    std::array<float, 3> display; // its sRGB encoding
     std::array<int, 3> bytes;
 };
-constexpr std::array<Golden, 6> kGolden = {{
-    {{.18f, .18f, .18f}, {.35845739f, .35845739f, .35845567f}, {91, 91, 91}}, // mid grey
-    {{64.f, 64.f, 64.f}, {1.f, 1.f, 1.f}, {255, 255, 255}},
-    {{0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}, {0, 0, 0}},
-    {{2.f, 0.f, 0.f}, {1.f, .15927376f, .10099596f}, {255, 41, 26}}, // saturated patches
-    {{0.f, 2.f, 0.f}, {.64484654f, .91410403f, .40926638f}, {164, 233, 104}},
-    {{0.f, 0.f, 2.f}, {.05609214f, 0.f, .91734403f}, {14, 0, 234}},
+constexpr std::array<Golden, 11> kGolden = {{
+    // Mid grey: the offset's constant branch (0.18 - 0.04), below the knee.
+    {{.18f, .18f, .18f},
+     {.14000000f, .14000000f, .14000000f},
+     {.41002090f, .41002090f, .41002090f},
+     {105, 105, 105}},
+    {{0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}, {0, 0, 0}},
+    // White: the asymptote.
+    {{64.f, 64.f, 64.f},
+     {.99909206f, .99909206f, .99909206f},
+     {.99960078f, .99960078f, .99960078f},
+     {255, 255, 255}},
+    {{16384.f, 16384.f, 16384.f},
+     {.99999648f, .99999648f, .99999648f},
+     {.99999845f, .99999845f, .99999845f},
+     {255, 255, 255}},
+    // Saturated primaries: compressed, then desaturated towards the new peak in the plane of the input and
+    // white.
+    {{2.f, 0.f, 0.f},
+     {.96108108f, .12957942f, .12957942f},
+     {.98269360f, .39527290f, .39527290f},
+     {251, 101, 101}},
+    {{0.f, 2.f, 0.f},
+     {.12957942f, .96108108f, .12957942f},
+     {.39527290f, .98269360f, .39527290f},
+     {101, 251, 101}},
+    {{0.f, 0.f, 2.f},
+     {.12957942f, .12957942f, .96108108f},
+     {.39527290f, .39527290f, .98269360f},
+     {101, 101, 251}},
+    // The offset's quadratic branch (min 0.05 < 0.08), below the knee.
+    {{.5f, .2f, .05f},
+     {.46562500f, .16562500f, .01562500f},
+     {.71224532f, .44375613f, .13149941f},
+     {182, 113, 34}},
+    // Above the knee with a non-zero minimum.
+    {{1.5f, .6f, .3f},
+     {.93872340f, .40202365f, .22312373f},
+     {.97256620f, .66670097f, .50969402f},
+     {248, 170, 130}},
+    // The knee itself: 0.8 - 0.04 = Ks, where both branches meet.
+    {{.8f, .8f, .8f},
+     {.76000000f, .76000000f, .76000000f},
+     {.88600397f, .88600397f, .88600397f},
+     {226, 226, 226}},
+    // The CRT red (0.8, 0.1, 0.1) at the Studio's white level 6.8 (see testCrtRed).
+    {{5.44f, .68f, .68f},
+     {.98819672f, .46401055f, .46401055f},
+     {.99479350f, .71113576f, .71113576f},
+     {254, 181, 181}},
 }};
 
 void testGoldenAnchors(Gpu& gpu) {
@@ -323,9 +383,12 @@ void testGoldenAnchors(Gpu& gpu) {
         }
     const std::vector<std::uint8_t> rgb = gpu.run(picture, 0.f);
     for (const Golden& golden : kGolden) {
+        const std::array<float, 3> linear = evo::post::pbrNeutral(golden.hdr);
         const std::array<float, 3> display = evo::post::tonemapDisplay(golden.hdr.data(), 0.f);
-        for (int c = 0; c < 3; ++c)
+        for (int c = 0; c < 3; ++c) {
+            CHECK(std::fabs(linear[c] - golden.linear[c]) < 1e-4f);
             CHECK(std::fabs(display[c] - golden.display[c]) < 1e-4f);
+        }
     }
     for (std::uint32_t y = 0; y < kHeight; ++y)
         for (std::uint32_t x = 0; x < kWidth; ++x)
@@ -333,8 +396,126 @@ void testGoldenAnchors(Gpu& gpu) {
                 CHECK(std::abs(byteAt(rgb, x, y, c) - kGolden[x % kGolden.size()].bytes[c]) <= 1);
 }
 
-// (i) Light the tonemap cannot show is black, never a bright speckle: negative light (clamped in AP1, after
-// the input matrix) and NaN or infinite components, on the GPU and in the reference.
+// The HSV hue of linear RGB in degrees, [0, 360); -1 for a grey (no hue).
+double hsvHue(const std::array<double, 3>& c) {
+    const double high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]});
+    const double chroma = high - low;
+    if (chroma <= 1e-12 * std::max(high, 1.0))
+        return -1.0;
+    double h;
+    if (high == c[0])
+        h = std::fmod((c[1] - c[2]) / chroma + 6.0, 6.0);
+    else if (high == c[1])
+        h = (c[2] - c[0]) / chroma + 2.0;
+    else
+        h = (c[0] - c[1]) / chroma + 4.0;
+    return 60.0 * h;
+}
+
+double hueDistance(double a, double b) {
+    const double d = std::fabs(a - b);
+    return std::min(d, 360.0 - d);
+}
+
+// (j) The hue is kept. Over a sweep of colours (12 hues x 6 saturations x 18 intensities, 2^-8 .. 2^9): where
+// the peak after the offset is below the knee (0.76), the output's HSV hue equals the input's within 1
+// degree; above it the output stays in the plane spanned by the input and white (the normalised determinant
+// [input, output, white] below 1e-4) on the input's side of the grey axis, so its hue is the input's within 1
+// degree too while it has any chroma left (where the desaturation has not turned it grey). PBR Neutral on its
+// own, from the reference (the GPU equals it within 1 per channel, (a)).
+void testHueKept() {
+    int below = 0, above = 0;
+    for (int hueStep = 0; hueStep < 12; ++hueStep)
+        for (const double saturation : {.05, .2, .5, .8, .95, 1.0})
+            for (int stop = 0; stop < 18; ++stop) {
+                const double value = std::exp2(-8.0 + stop);
+                // HSV -> RGB at hue 30 * hueStep.
+                const double h = hueStep / 2.0, f = h - std::floor(h);
+                const double p = value * (1 - saturation), q = value * (1 - saturation * f),
+                             t = value * (1 - saturation * (1 - f));
+                std::array<double, 3> in{};
+                switch (static_cast<int>(std::floor(h)) % 6) {
+                case 0:
+                    in = {value, t, p};
+                    break;
+                case 1:
+                    in = {q, value, p};
+                    break;
+                case 2:
+                    in = {p, value, t};
+                    break;
+                case 3:
+                    in = {p, q, value};
+                    break;
+                case 4:
+                    in = {t, p, value};
+                    break;
+                default:
+                    in = {value, p, q};
+                    break;
+                }
+                const std::array<float, 3> inF = {static_cast<float>(in[0]), static_cast<float>(in[1]),
+                                                  static_cast<float>(in[2])};
+                const std::array<float, 3> outF = evo::post::pbrNeutral(inF);
+                const std::array<double, 3> inD = {inF[0], inF[1], inF[2]}, out = {outF[0], outF[1], outF[2]};
+                for (const double v : out)
+                    CHECK(v >= 0.0 && v <= 1.0);
+                const double low = std::min({inD[0], inD[1], inD[2]});
+                const double offset = low < .08 ? low - 6.25 * low * low : .04;
+                const double peak = std::max({inD[0], inD[1], inD[2]}) - offset;
+                const double inHue = hsvHue(inD), outHue = hsvHue(out);
+                if (peak < .76) {
+                    ++below;
+                    CHECK((inHue < 0) == (outHue < 0));
+                    if (inHue >= 0)
+                        CHECK(hueDistance(inHue, outHue) <= 1.0);
+                } else {
+                    ++above;
+                    // det [in, out, (1, 1, 1)] / (|in| |out| sqrt 3): 0 when out lies in the plane of in and
+                    // white.
+                    const double det =
+                        inD[0] * (out[1] - out[2]) - inD[1] * (out[0] - out[2]) + inD[2] * (out[0] - out[1]);
+                    const double norm = std::hypot(inD[0], inD[1], inD[2]) *
+                                        std::hypot(out[0], out[1], out[2]) * std::sqrt(3.0);
+                    CHECK(std::fabs(det) / norm < 1e-4);
+                    const double outChroma =
+                        std::max({out[0], out[1], out[2]}) - std::min({out[0], out[1], out[2]});
+                    if (inHue >= 0 && outChroma > 1e-3)
+                        CHECK(hueDistance(inHue, outHue) <= 1.0);
+                }
+            }
+    std::printf("hue kept: %d colours below the knee, %d above\n", below, above);
+    CHECK(below > 100 && above > 100);
+}
+
+// (k) The CRT red. (0.8, 0.1, 0.1) is a saturated 1993 red on the Studio's screen, and 6.8 the screen's white
+// level before the tonemap (emission 1.2 x 2^2.5 EV). Under ACES (step 4) it came out as (255, 204, 195): the
+// green byte 9 above the blue, a hue shift of 8 degrees towards orange, as well as washed out. Under PBR
+// Neutral green and blue stay equal at every pixel (the hue stays exactly red) and the red leads green by at
+// least 70 (golden: 254, 181, 181). The plan asked for r >= 2 g here: PBR Neutral's desaturation (Kd = 0.15)
+// cannot give that at 6.8 (r >= 2 g in bytes holds up to 2.4x, under ACES up to 2.1x), so the test pins the
+// hue and the margin over ACES's washed-out green instead.
+void testCrtRed(Gpu& gpu) {
+    const float crt[3] = {.8f * 6.8f, .1f * 6.8f, .1f * 6.8f};
+    HdrPicture picture(kWidth, kHeight);
+    for (std::uint32_t y = 0; y < kHeight; ++y)
+        for (std::uint32_t x = 0; x < kWidth; ++x)
+            picture.set(x, y, crt[0], crt[1], crt[2]);
+    const std::vector<std::uint8_t> rgb = gpu.run(picture, 0.f);
+    for (std::uint32_t y = 0; y < kHeight; ++y)
+        for (std::uint32_t x = 0; x < kWidth; ++x) {
+            const int r = byteAt(rgb, x, y, 0), g = byteAt(rgb, x, y, 1), b = byteAt(rgb, x, y, 2);
+            CHECK(g == b);
+            CHECK(r - g >= 70);
+            CHECK(g < 204); // less washed out than ACES's 204
+        }
+    const std::array<float, 3> linear = evo::post::pbrNeutral({crt[0], crt[1], crt[2]});
+    CHECK(hsvHue({linear[0], linear[1], linear[2]}) < 1e-3);
+}
+
+// (i) Light the tonemap cannot show is black, never a bright speckle: negative light (each component clamped
+// to 0 before the curve, which is defined on non-negative light) and NaN or infinite components, on the GPU
+// and in the reference. A negative component next to positive ones counts as 0.
 void testNegativeAndNonFinite(Gpu& gpu) {
     const float inf = std::numeric_limits<float>::infinity();
     const float nan = std::numeric_limits<float>::quiet_NaN();
@@ -360,6 +541,23 @@ void testNegativeAndNonFinite(Gpu& gpu) {
                 CHECK(evo::post::tonemapReference(hdr.data(), exposure, x, 3) ==
                       (std::array<std::uint8_t, 3>{0, 0, 0}));
     }
+
+    // Mixed: (0.5, -3, 0.2) is (0.5, 0, 0.2), and (-1, 2, NaN) is (0, 2, 0), on the GPU and in the reference.
+    HdrPicture mixed(kWidth, kHeight), clamped(kWidth, kHeight);
+    for (std::uint32_t y = 0; y < kHeight; ++y)
+        for (std::uint32_t x = 0; x < kWidth; ++x) {
+            if (x % 2 == 0) {
+                mixed.set(x, y, .5f, -3.f, .2f);
+                clamped.set(x, y, .5f, 0.f, .2f);
+            } else {
+                mixed.set(x, y, -1.f, 2.f, nan);
+                clamped.set(x, y, 0.f, 2.f, 0.f);
+            }
+        }
+    CHECK(gpu.run(mixed, 0.f) == gpu.run(clamped, 0.f));
+    for (std::uint32_t x = 0; x < 16; ++x)
+        CHECK(evo::post::tonemapReference(mixed.at(x, 0), 0.f, x, 0) ==
+              evo::post::tonemapReference(clamped.at(x, 0), 0.f, x, 0));
 }
 
 // (e) The record() contract: RGBA16F in, RGBA8 UNORM out, the same size.
@@ -396,9 +594,13 @@ void testSceneRegistry() {
     }
 }
 
-// (g) The placeholder through the HDR path looks as it did as a direct RGBA8 fill: within 1 per channel (the
-// dither) at every pixel, for frames across the 2026 chapters that show it; the stage owns an RGBA16F HDR
-// image.
+// (g) The placeholder through the HDR path looks as it did as a direct RGBA8 fill, for frames across the 2026
+// chapters that show it; the stage owns an RGBA16F HDR image. Within 1 per channel (the dither) at every
+// pixel whose brightest channel is at most 226 (0.76 linear, PBR Neutral's knee: every colour below it is the
+// image of some light, which fill_hdr.comp finds exactly). Above the knee the curve's desaturation cannot
+// reach a bright colour with a low minimum (the top of the placeholder's glow); fill_hdr.comp gives it the
+// nearest colour the curve can show with the same hue, a little darker: within 4 per channel, and at most 1 %
+// of the channels differ by more than 1.
 void testPlaceholderUnchanged(Context& ctx) {
     constexpr std::uint32_t kW = 160, kH = 90;
     Image direct(ctx, {kW, kH, VK_FORMAT_R8G8B8A8_UNORM,
@@ -423,7 +625,7 @@ void testPlaceholderUnchanged(Context& ctx) {
         CHECK(refused);
     }
 
-    int worst = 0, frames = 0;
+    int worst = 0, worstBelowKnee = 0, off = 0, channels = 0, frames = 0;
     for (const int chapter : {12, 13, 14, 17, 18, 21, 27})
         for (const double fraction : {.1, .45, .8}) {
             const double t =
@@ -445,12 +647,27 @@ void testPlaceholderUnchanged(Context& ctx) {
             ring.wait(ring.submit());
 
             const std::vector<std::uint8_t> now = stageReadback.rgb(), before = directReadback.rgb();
-            for (std::size_t i = 0; i < now.size(); ++i)
-                worst = std::max(worst, std::abs(now[i] - before[i]));
+            for (std::size_t pixel = 0; pixel < now.size() / 3; ++pixel) {
+                const std::uint8_t* direct = &before[pixel * 3];
+                const bool belowKnee = std::max({direct[0], direct[1], direct[2]}) <= 226;
+                for (std::size_t c = pixel * 3; c < pixel * 3 + 3; ++c) {
+                    const int diff = std::abs(now[c] - before[c]);
+                    worst = std::max(worst, diff);
+                    if (belowKnee)
+                        worstBelowKnee = std::max(worstBelowKnee, diff);
+                    off += diff > 1 ? 1 : 0;
+                    ++channels;
+                }
+            }
             ++frames;
         }
-    std::printf("placeholder through HDR + tonemap vs the direct fill: %d frames, worst %d\n", frames, worst);
-    CHECK(worst <= 1);
+    std::printf(
+        "placeholder through HDR + tonemap vs the direct fill: %d frames, worst %d (below the knee %d), "
+        "%d of %d channels off by more than 1\n",
+        frames, worst, worstBelowKnee, off, channels);
+    CHECK(worstBelowKnee <= 1);
+    CHECK(worst <= 4);
+    CHECK(off * 100 <= channels);
 }
 
 } // namespace
@@ -459,6 +676,7 @@ int main() {
     try {
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR); // the build's compiled shaders
         testSceneRegistry();
+        testHueKept();
         {
             auto ctx = Context::create({.validation = true});
             if (!ctx.validationEnabled())
@@ -470,6 +688,7 @@ int main() {
                 testMonotonic(gpu);
                 testExposure(gpu);
                 testGoldenAnchors(gpu);
+                testCrtRed(gpu);
                 testNegativeAndNonFinite(gpu);
                 testRejectsWrongImages(ctx, gpu);
             }

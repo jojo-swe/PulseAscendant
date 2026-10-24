@@ -29,7 +29,7 @@ class Denoiser;
 namespace evo::render {
 
 // The 2026 side. Every frame renders HDR linear light into an RGBA16F image at the render resolution, then
-// the one tonemap (post::Tonemap: ACES, the sRGB OETF and a static dither) writes the display-encoded RGBA8
+// the one tonemap (post::Tonemap: PBR Neutral, sRGB OETF, static dither) writes the display-encoded RGBA8
 // image the compositor reads. The scene comes from the scene map (modern::sceneFor in the show):
 //   Placeholder  the fill.comp pattern's 2026 look (a smooth gradient in the chapter's hue with the circle
 //                that follows kick and beat) as HDR light that the tonemap maps back to that look

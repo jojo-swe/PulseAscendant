@@ -9,27 +9,9 @@ namespace evo::post {
 
 namespace {
 
-// Stephen Hill's ACES fit (BakingLab, ACES.hlsl), row-major: out[i] = sum_j m[i][j] * in[j]. Must match
-// shaders/post/aces.glsl.
-// sRGB -> AP1, with the RRT's saturation adjustment folded in.
-constexpr float kInput[3][3] = {
-    {0.59719f, 0.35458f, 0.04823f},
-    {0.07600f, 0.90834f, 0.01566f},
-    {0.02840f, 0.13383f, 0.83777f},
-};
-// AP1 -> sRGB, with the ODT's saturation adjustment folded in.
-constexpr float kOutput[3][3] = {
-    {1.60475f, -0.53108f, -0.07367f},
-    {-0.10208f, 1.10813f, -0.00605f},
-    {-0.00327f, -0.07276f, 1.07602f},
-};
-
-// The RRT + ODT curve.
-float rrtAndOdtFit(float v) {
-    const float a = v * (v + 0.0245786f) - 0.000090537f;
-    const float b = v * (0.983729f * v + 0.4329510f) + 0.238081f;
-    return a / b;
-}
+// Khronos PBR Neutral's constants (pbrNeutral.glsl). Must match shaders/post/neutral.glsl.
+constexpr float kStartCompression = 0.8f - 0.04f;
+constexpr float kDesaturation = 0.15f;
 
 // A uniform in (0, 1) from the hash's top 23 bits plus a half step: exact in float, never 0 or 1.
 float openUnit(std::uint32_t h) {
@@ -37,6 +19,25 @@ float openUnit(std::uint32_t h) {
 }
 
 } // namespace
+
+std::array<float, 3> pbrNeutral(const std::array<float, 3>& rgb) {
+    std::array<float, 3> color = rgb;
+    const float x = std::min({color[0], color[1], color[2]});
+    const float offset = x < 0.08f ? x - 6.25f * x * x : 0.04f;
+    for (float& c : color)
+        c -= offset;
+
+    const float peak = std::max({color[0], color[1], color[2]});
+    if (peak < kStartCompression)
+        return color;
+
+    constexpr float d = 1.f - kStartCompression;
+    const float newPeak = 1.f - d * d / (peak + d - kStartCompression);
+    const float g = 1.f - 1.f / (kDesaturation * (peak - newPeak) + 1.f);
+    for (float& c : color)
+        c = (c * (newPeak / peak)) * (1.f - g) + newPeak * g; // mix(color * newPeak / peak, newPeak, g)
+    return color;
+}
 
 // Exactly 1 at 1 (1.055 - 0.055 rounds below 1 in float, which would make white 254).
 float srgbOetf(float v) {
@@ -47,25 +48,16 @@ float srgbOetf(float v) {
 
 std::array<float, 3> tonemapDisplay(const float rgb[3], float exposureEV) {
     const float scale = std::exp2(exposureEV);
-    float hdr[3];
+    // Negative light is clamped to 0 per component: PBR Neutral is defined on non-negative light (a negative
+    // minimum would make its offset negative and lift the other channels).
+    std::array<float, 3> hdr{};
     for (int i = 0; i < 3; ++i)
-        hdr[i] = std::isfinite(rgb[i]) ? rgb[i] * scale : 0.f;
+        hdr[i] = std::isfinite(rgb[i]) ? std::max(rgb[i] * scale, 0.f) : 0.f;
 
-    // Negative light (in AP1, after the input matrix) is clamped to 0: the curve's lower root lies below 0
-    // and its other branch rises again, so -1 grey would come out white. Not before the matrix: the
-    // placeholder's inverse tonemap feeds negative RGB whose AP1 components are all positive (at least
-    // 0.0033).
-    float fitted[3];
-    for (int i = 0; i < 3; ++i)
-        fitted[i] = rrtAndOdtFit(
-            std::max(kInput[i][0] * hdr[0] + kInput[i][1] * hdr[1] + kInput[i][2] * hdr[2], 0.f));
-
+    const std::array<float, 3> linear = pbrNeutral(hdr);
     std::array<float, 3> display{};
-    for (int i = 0; i < 3; ++i) {
-        const float linear =
-            kOutput[i][0] * fitted[0] + kOutput[i][1] * fitted[1] + kOutput[i][2] * fitted[2];
-        display[i] = srgbOetf(std::clamp(linear, 0.f, 1.f));
-    }
+    for (int i = 0; i < 3; ++i)
+        display[i] = srgbOetf(std::clamp(linear[i], 0.f, 1.f));
     return display;
 }
 

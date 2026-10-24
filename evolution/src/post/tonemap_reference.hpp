@@ -7,11 +7,19 @@ namespace evo::post {
 
 // The tonemap on the CPU, the mirror shaders/post/tonemap.comp is tested against (Review Focus 6). For linear
 // Rec. 709 light `rgb` (a non-finite component counts as 0):
-//   hdr * 2^exposureEV -> ACES fit (Hill: sRGB -> AP1 input matrix, max(0) in AP1, RRT + ODT rational fit,
-//   output matrix) -> clamp [0, 1] -> sRGB OETF -> round(v * 255 + d), d a triangular dither in (-0.5, 0.5)
-//   from pcg(x, y), clamped to [0, 255]. Black stays 0 and white 255; the dither is static per pixel (no
-//   temporal shimmer) and the same for the three channels (greys stay grey).
+//   hdr * 2^exposureEV -> max(0) per component -> Khronos PBR Neutral -> clamp [0, 1] -> sRGB OETF
+//   -> round(v * 255 + d), d a triangular dither in (-0.5, 0.5) from pcg(x, y), clamped to [0, 255].
+// Black stays 0; white approaches 255 (64 rounds to it, 16384 is 255 whatever the dither); the dither is
+// static per pixel (no temporal shimmer) and the same for the three channels (greys stay grey). PBR Neutral
+// keeps the hue: below its knee it only subtracts the same offset from every channel, above it the colour
+// moves in the plane of the input and white.
 
+// Khronos PBR Neutral (KhronosGroup/ToneMapping, PBR_Neutral/pbrNeutral.glsl) for non-negative linear light:
+// x = the smallest component, offset = x < 0.08 ? x - 6.25 x^2 : 0.04, subtracted from every component; if
+// the peak p is then at least startCompression = 0.76, the colour is scaled to the new peak 1 - d^2 / (p + d
+// - 0.76) (d = 0.24) and mixed towards that peak's white by 1 - 1 / (0.15 (p - newPeak) + 1). Linear, in [0,
+// 1). Must match shaders/post/neutral.glsl.
+std::array<float, 3> pbrNeutral(const std::array<float, 3>& rgb);
 // The display value in [0, 1] before quantisation: everything above except the dither and the rounding.
 std::array<float, 3> tonemapDisplay(const float rgb[3], float exposureEV);
 // The sRGB OETF (linear -> encoded) for v in [0, 1]; exactly 1 at 1.
