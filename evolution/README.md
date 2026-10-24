@@ -117,8 +117,10 @@ the exports read back:
 4. **Era compositor.** Blends the two by the timeline's era: a Cut or BeatSwap chapter shows one era whole,
    a Wipe sweeps 2026 in from the left behind a white seam, a Portal cross-fades for now, and a cut flashes
    white.
-5. **HUD.** The chapter title top-left and the epoch card bottom-left (both cards during a wipe), in the
-   demo's own 8×8 font with a drop shadow. Key H or `--no-hud` hides it.
+5. **HUD.** The epoch card bottom-left (both cards during a wipe), in the demo's own 8×8 font with a drop
+   shadow, scaled with the output in whole steps (one step per 360 lines: 2× at 640×360, 4× at 1280×720,
+   8× at 2560×1440, at 1× of the step when a card would not fit). The window also shows the chapter title
+   top-left as a development aid; captures and `--render-stream` never do. Key H or `--no-hud` hides it.
 
 The effects so far:
 
@@ -180,7 +182,7 @@ Options:
                        picture follows, -500..500 (default 0); raise it if the picture
                        lags the sound
   --no-crt             Show the 1993 picture without the CRT look (C toggles)
-  --no-hud             Hide the chapter title and the epoch cards (H toggles)
+  --no-hud             Hide the epoch cards and the window's chapter title (H toggles)
   --show-info          Print the show's chapters and music as JSON and exit
   --validation         Enable the Vulkan validation layers
   --device-info        Print information about the selected GPU and exit

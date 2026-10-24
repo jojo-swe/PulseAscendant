@@ -111,7 +111,7 @@ int main() {
         CHECK(!evo::parseOptions({"--no-crt"}).crt);
         CHECK(!evo::parseOptions({"--capture-dir", "out", "--no-crt"}).crt);
 
-        // --no-hud: no chapter title or epoch cards; shown by default.
+        // --no-hud: no epoch cards (nor the window's chapter title); shown by default.
         CHECK(defaults.hud);
         CHECK(!evo::parseOptions({"--no-hud"}).hud);
         CHECK(!evo::parseOptions({"--render-stream", "--duration", "1", "--no-hud"}).hud);

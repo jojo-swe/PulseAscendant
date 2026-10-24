@@ -19,18 +19,26 @@ namespace evo::render {
 struct RenderSettings {
     std::uint32_t width = 0, height = 0; // the render resolution (the output image)
     bool crt = true;                     // the CRT look on the 1993 picture
-    bool hud = true;                     // the chapter title and the epoch cards
+    bool hud = true;                     // the epoch cards (and the chapter title, when hudTitle is set)
+    bool hudTitle = false;               // the chapter title: a development aid, set only in the window
 };
 
-// The HUD of a frame at a width x height output, drop shadows included (each text item follows its shadow,
-// the same text in black one pixel right and down): the chapter title top-left at 1x and the epoch card
-// bottom-left at 2x, the 1993 card while era < 0.5 and the 2026 card from 0.5. A Wipe chapter shows the
-// 1993 card before its wipe (wipe = 0) and the 2026 card after it (wipe = 1); while 0 < wipe < 1 it shows
-// both, the 2026 card bottom-left and the 1993 card bottom-right (raised a line when the two would meet).
-// A card too wide for the output at 2x is drawn at 1x. Empty texts are left out. Every pixel, shadows
-// included, stays at least kHudMargin pixels inside the output edges.
-inline constexpr int kHudMargin = 8;
-std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height);
+// The HUD scales with the output height in whole steps: unit = max(1, round(height / 360)), so 1 at 640x360,
+// 2 at 1280x720, 4 at 2560x1440 and 6 at 3840x2160. Every margin is kHudMarginUnits units and every drop
+// shadow is the same text in black one unit right and down.
+inline constexpr int kHudMarginUnits = 8;
+int hudUnit(std::uint32_t height);
+
+// The HUD of a frame at a width x height output, drop shadows included (each text item follows its shadow):
+// the chapter title top-left at scale unit when `title` is set, and the epoch card bottom-left at scale
+// 2 * unit, the 1993 card while era < 0.5 and the 2026 card from 0.5. A Wipe chapter shows the 1993 card
+// before its wipe (wipe = 0) and the 2026 card after it (wipe = 1); while 0 < wipe < 1 it shows both, the
+// 2026 card bottom-left and the 1993 card bottom-right (raised a line when the two would meet). A card that
+// at 2 * unit would cross the right margin is drawn at scale unit. Empty texts are left out. Every pixel,
+// shadows included, stays at least kHudMarginUnits * unit pixels inside the output edges (a card too wide
+// even at scale unit, in a very narrow output, is the exception).
+std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height,
+                                 bool title);
 
 // Renders a timeline frame into one R8G8B8A8_UNORM image at the render resolution: the retro stage (only
 // when its retro frame changes), the modern stage, then the compositor's CRT and era passes. Every pass is a
@@ -55,6 +63,7 @@ public:
     gfx::Image& output() { return compositor_.output(); }
     void setCrt(bool crt) { crt_ = crt; }
     bool crt() const { return crt_; }
+    // The whole HUD, the title included when the settings asked for it (key H in the window).
     void setHud(bool hud) { hud_ = hud; }
     bool hud() const { return hud_; }
 
@@ -68,6 +77,7 @@ private:
     gfx::FrameRing& ring_;
     bool crt_;
     bool hud_;
+    bool hudTitle_;
     text::TextPass text_; // before the stages that draw with it
     RetroStage retro_;
     ModernStage modern_;

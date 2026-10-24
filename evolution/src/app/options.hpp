@@ -24,7 +24,7 @@ struct Options {
     bool mute = false;                // start muted (the music still drives the clock)
     double audioOffsetMs = 0.0;       // added to the music time the visuals follow (A/V calibration)
     bool crt = true;                  // the CRT look on the 1993 picture (--no-crt, key C)
-    bool hud = true;                  // the chapter title and epoch cards (--no-hud, key H)
+    bool hud = true;                  // the epoch cards (and the window's chapter title)
     std::filesystem::path captureDir; // empty = no capture
     std::filesystem::path music;      // empty = the show's music beside the executable
 };

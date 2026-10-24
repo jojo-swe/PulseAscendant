@@ -49,7 +49,7 @@ int runCapture(const Options& options) {
     const auto height = static_cast<std::uint32_t>(options.height);
     gfx::Readback readback(ctx, width, height);
     gfx::FrameRing ring(ctx);
-    render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud});
+    render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud}); // no title: cards only
     show::TimelineFrame frame = show::sampleTimeline(options.time);
     applyForcedEra(frame);
     VkCommandBuffer cmd = ring.begin();

@@ -180,13 +180,14 @@ int runWindowed(const Options& options) {
     // Each frame records the renderer's passes and the swapchain's blit of its output into one command
     // buffer of the ring, with up to two frames in flight; begin() waits only for the frame whose slot it
     // reuses. The renderer renders at the drawable's size, so the 4:3 picture stays undistorted in any window
-    // shape. Declared after the ring (its destructor waits for the ring) and before the swapchain, so it is
-    // destroyed after it: ~Swapchain waits for the device, so no frame can still be using it.
+    // shape; only the window draws the chapter title in its HUD. Declared after the ring (its destructor
+    // waits for the ring) and before the swapchain, so it is destroyed after it: ~Swapchain waits for the
+    // device, so no frame can still be using it.
     gfx::FrameRing ring(ctx);
     render::Renderer renderer(ctx, ring,
                               {static_cast<std::uint32_t>(width > 0 ? width : options.width),
                                static_cast<std::uint32_t>(height > 0 ? height : options.height), options.crt,
-                               options.hud});
+                               options.hud, /*hudTitle=*/true});
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
@@ -290,7 +291,7 @@ int runRenderStream(const Options& options) {
     const auto height = static_cast<std::uint32_t>(options.height);
     gfx::Readback readback(ctx, width, height);
     gfx::FrameRing ring(ctx);
-    render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud});
+    render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud}); // no title: cards only
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();
         renderer.render(cmd, show::sampleTimeline(options.time + static_cast<double>(i) / options.fps));

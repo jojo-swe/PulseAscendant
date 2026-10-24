@@ -165,7 +165,7 @@ std::string helpText() {
            "                       picture follows, -500..500 (default 0); raise it if the picture\n"
            "                       lags the sound\n"
            "  --no-crt             Show the 1993 picture without the CRT look (C toggles)\n"
-           "  --no-hud             Hide the chapter title and the epoch cards (H toggles)\n"
+           "  --no-hud             Hide the epoch cards and the window's chapter title (H toggles)\n"
            "  --show-info          Print the show's chapters and music as JSON and exit\n"
            "  --validation         Enable the Vulkan validation layers\n"
            "  --device-info        Print information about the selected GPU and exit\n"

@@ -7,7 +7,7 @@ grid per act.
 
 Each act's grid (act1.png, act2.png, act3.png; an act with no chosen chapter is skipped) has a row per
 chapter and six columns: 1993 at 20 %, accent and 80 %, then 2026 at the same three times. Every cell is the
-capture box-filtered down 2x (the HUD stays on, so the chapter title and epoch card show in the cells too).
+capture box-filtered down 2x (the HUD stays on, so the epoch card shows in the cells too; the chapter title is window-only).
 Layout, in grid pixels: a BAND-high text band on top names the columns; each row is a BAND-high label band
 (chapter number, title, transition, start-end and accent in show seconds), then the cells, then a GUTTER;
 cells sit GUTTER apart with a GUTTER before the first and after the last. See grid_size(). Prints the path of
