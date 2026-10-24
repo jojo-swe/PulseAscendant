@@ -3,6 +3,8 @@
 #include "show/cues.hpp"
 
 #include <array>
+#include <cstddef>
+#include <span>
 #include <string>
 
 namespace evo::show {
@@ -59,6 +61,8 @@ public:
     double beatTime(int beat) const;
     int bar(int beat) const;
     int count() const { return count_; }
+    // All beat times, in order.
+    std::span<const double> times() const { return {times_, static_cast<std::size_t>(count_)}; }
 
 private:
     const double* times_;

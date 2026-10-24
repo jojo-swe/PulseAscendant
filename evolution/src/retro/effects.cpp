@@ -30,8 +30,8 @@ const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kDots{nullptr, kDotsRetroRate, dotsPalette, nullptr, nullptr, dotsScene};
     static constexpr EffectInfo kTunnel{nullptr, kTunnelRetroRate, tunnelPalette,
                                         nullptr, nullptr,          tunnelScene};
-    static constexpr EffectInfo kGlenz{kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr,
-                                       glenzScene};
+    static constexpr EffectInfo kGlenzEffect{
+        kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr, glenzScene};
     static constexpr EffectInfo kLens{kRotozoomShader, kRotozoomRetroRate, rotozoomPalette, nullptr, nullptr,
                                       nullptr,         rotozoomTexture};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
@@ -52,7 +52,7 @@ const EffectInfo& effectFor(show::Effect effect) {
     case show::Effect::Tunnel:
         return kTunnel;
     case show::Effect::Glenz:
-        return kGlenz;
+        return kGlenzEffect;
     case show::Effect::Lens:
         return kLens;
     case show::Effect::Credits:

@@ -41,12 +41,22 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 `assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
-The 23 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
-also numpy): `options`, `png`, `png_decode`, `audio_transport`, `timeline`, `era`, `clock`, `context`,
-`gfx_foundation`, `renderer`, `boot`, `plasma`, `scroller`, `font`, `text_pass`, `swapchain`, `render_stream`,
-`capture`, `storyboard`, `show_info`, `exit_codes`, `no_wait_idle` and `python_tools`. The three that open a
-window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default; configure with
-`-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
+The 33 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
+also numpy). Every GPU test runs with the validation layer on and fails on any message it reports, except the
+one `context` provokes on purpose to check that messages are counted.
+- The show and its music: `options`, `timeline`, `era`, `clock`, `audio_transport` and `show_info`.
+- The render foundation: `png`, `png_decode`, `context`, `gfx_foundation`, `renderer`, `swapchain`, `font`,
+  `text_pass` and `no_wait_idle`.
+- The 1993 side: one test per effect (`boot`, `plasma`, `scroller`, `flyby`, `dots`, `tunnel`, `glenz`,
+  `rotozoom`, `raytrace`, and `closing` for PORTAL, REBOOT and THE END), `raster` (the polygon and point
+  rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
+  frame, every scene within the rasterisers' limits).
+- The executable end to end: `render_stream`, `capture`, `stream_capture` (a frame of a stream equals a fresh
+  capture at the same time, for every chapter), `storyboard`, `exit_codes`, and `python_tools` (the music
+  analysis pipeline).
+
+The three that open a window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default;
+configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
 
 ## Build on Windows
 
