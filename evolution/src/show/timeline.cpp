@@ -1,5 +1,6 @@
 #include "show/timeline.hpp"
 
+#include "show/era.hpp"
 #include "show/generated/beat_data.hpp"
 #include "show/generated/cue_data.hpp"
 #include "show/music_curves.hpp"
@@ -196,6 +197,8 @@ TimelineFrame sampleTimeline(double showSeconds) {
     const double chapterTrackSeconds = d.start - trackOffset;
     f.flowSeconds = d.flowStart + f.localSeconds * baseFlowRate(cue) + smoothFlow(d.track, f.trackSeconds) -
                     smoothFlow(d.track, chapterTrackSeconds);
+
+    applyEra(f, beatGrid(f.track));
     return f;
 }
 

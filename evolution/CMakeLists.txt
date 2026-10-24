@@ -82,6 +82,7 @@ target_include_directories(evo_audio PUBLIC src)
 # The directed show: the cue sheet, the music curves sampled from the generated tables and the timeline that
 # turns a show time into everything a frame needs. No SDL or Vulkan here.
 add_library(evo_show STATIC
+    src/show/era.cpp
     src/show/music_curves.cpp
     src/show/timeline.cpp)
 target_include_directories(evo_show PUBLIC src)
@@ -129,6 +130,10 @@ add_test(NAME audio_transport COMMAND audio_transport_test)
 add_executable(timeline_test tests/timeline_test.cpp)
 target_link_libraries(timeline_test PRIVATE evo_show)
 add_test(NAME timeline COMMAND timeline_test)
+
+add_executable(era_test tests/era_test.cpp)
+target_link_libraries(era_test PRIVATE evo_show)
+add_test(NAME era COMMAND era_test)
 
 add_executable(context_test tests/context_test.cpp)
 target_link_libraries(context_test PRIVATE evo_gfx)
