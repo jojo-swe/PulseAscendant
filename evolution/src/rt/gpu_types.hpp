@@ -62,6 +62,46 @@ struct InstanceRecord { // 16 bytes; index = gl_InstanceCustomIndexEXT
     std::uint32_t mesh, material, light, pad;
 };
 
+// --- The path tracer's frame -------------------------------------------------------------------------------
+
+// FrameUniforms::flags.
+inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u;
+
+// What the path tracer's raygen reads once per frame (one buffer per ring slot). The camera is an orthonormal
+// basis: right, up and forward unit vectors (forward looks into the picture, up is the picture's up); a pixel
+// (x, y) with y down maps to forward + ((2 (x + 0.5) / width - 1) aspect right + (1 - 2 (y + 0.5) / height)
+// up) tanHalfFovY. `aperture` is the thin lens's diameter (0: a pinhole), focused at focusDistance along
+// forward. The prev* fields are the previous frame's camera for the motion guide (prevValid 0: none).
+// pixelSpread is the ray cone's spread angle, atan(2 tanHalfFovY / height).
+struct FrameUniforms { // 176 bytes, scalar
+    float cameraPosition[3];
+    float tanHalfFovY;
+    float cameraRight[3];
+    float aspect;
+    float cameraUp[3];
+    float aperture;
+    float cameraForward[3];
+    float focusDistance;
+    float prevPosition[3];
+    float prevTanHalfFovY;
+    float prevRight[3];
+    float prevAspect;
+    float prevUp[3];
+    std::uint32_t prevValid;
+    float prevForward[3];
+    float pixelSpread;
+    std::uint32_t width, height;
+    std::uint32_t frameSeed;
+    std::uint32_t spp; // samples of the whole frame, over every dispatch
+    std::uint32_t maxBounces;
+    std::uint32_t flags; // kTraceFlag*
+    std::uint32_t lightCount;
+    std::uint32_t instanceCount;
+    float clampIndirect;  // luminance limit of one contribution after the first bounce
+    float lightWeightSum; // the sum of every light's selectWeight
+    std::uint32_t pad0, pad1;
+};
+
 // --- Layout pins -------------------------------------------------------------------------------------------
 
 template <typename T>
@@ -85,5 +125,22 @@ static_assert(offsetof(RectLight, corner) == 0 && offsetof(RectLight, edgeU) == 
 static_assert(kGpuMirror<InstanceRecord> && sizeof(InstanceRecord) == 16);
 static_assert(offsetof(InstanceRecord, mesh) == 0 && offsetof(InstanceRecord, material) == 4 &&
               offsetof(InstanceRecord, light) == 8 && offsetof(InstanceRecord, pad) == 12);
+
+static_assert(kGpuMirror<FrameUniforms> && sizeof(FrameUniforms) == 176);
+static_assert(offsetof(FrameUniforms, cameraPosition) == 0 && offsetof(FrameUniforms, tanHalfFovY) == 12 &&
+              offsetof(FrameUniforms, cameraRight) == 16 && offsetof(FrameUniforms, aspect) == 28 &&
+              offsetof(FrameUniforms, cameraUp) == 32 && offsetof(FrameUniforms, aperture) == 44 &&
+              offsetof(FrameUniforms, cameraForward) == 48 && offsetof(FrameUniforms, focusDistance) == 60 &&
+              offsetof(FrameUniforms, prevPosition) == 64 && offsetof(FrameUniforms, prevTanHalfFovY) == 76 &&
+              offsetof(FrameUniforms, prevRight) == 80 && offsetof(FrameUniforms, prevAspect) == 92 &&
+              offsetof(FrameUniforms, prevUp) == 96 && offsetof(FrameUniforms, prevValid) == 108 &&
+              offsetof(FrameUniforms, prevForward) == 112 && offsetof(FrameUniforms, pixelSpread) == 124 &&
+              offsetof(FrameUniforms, width) == 128 && offsetof(FrameUniforms, height) == 132 &&
+              offsetof(FrameUniforms, frameSeed) == 136 && offsetof(FrameUniforms, spp) == 140 &&
+              offsetof(FrameUniforms, maxBounces) == 144 && offsetof(FrameUniforms, flags) == 148 &&
+              offsetof(FrameUniforms, lightCount) == 152 && offsetof(FrameUniforms, instanceCount) == 156 &&
+              offsetof(FrameUniforms, clampIndirect) == 160 &&
+              offsetof(FrameUniforms, lightWeightSum) == 164 && offsetof(FrameUniforms, pad0) == 168 &&
+              offsetof(FrameUniforms, pad1) == 172);
 
 } // namespace evo::rt

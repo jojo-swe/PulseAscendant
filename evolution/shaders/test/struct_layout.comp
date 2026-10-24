@@ -3,10 +3,12 @@
 #extension GL_EXT_scalar_block_layout : require
 
 // Test fixture for material_test (compiled for the test only): copies every field of the structs the path
-// tracer shares with the CPU, in declaration order, into a word buffer, then the shared constants. The CPU
+// tracer shares with the CPU, in declaration order, into a word buffer, then the shared constants and
+// random.glsl's pcgHash of a few inputs (the CPU mirror rt::pcgHash must agree). The CPU
 // filled each field with its own sentinel, so a field whose scalar-layout offset differs from the C++
 // mirror's offsetof comes back with another field's value (Review Focus 10).
 
+#include "../rt/random.glsl"
 #include "../rt/types.glsl"
 
 layout(local_size_x = 1) in;
@@ -17,6 +19,7 @@ layout(scalar, set = 0, binding = 2) readonly buffer Instances { InstanceRecord 
 layout(scalar, set = 0, binding = 3) readonly buffer Vertices { Vertex vertices[]; };
 layout(scalar, set = 0, binding = 4) readonly buffer MeshRecords { MeshRecord meshRecords[]; };
 layout(scalar, set = 0, binding = 5) writeonly buffer Words { uint words[]; };
+layout(scalar, set = 0, binding = 6) readonly buffer Frames { FrameUniforms frames[]; };
 
 const uint kElements = 2;
 
@@ -90,6 +93,37 @@ void main() {
         putU(r.firstIndex);
         putU(r.indexCount);
     }
+    for (uint e = 0; e < kElements; ++e) {
+        FrameUniforms f = frames[e];
+        put3(f.cameraPosition);
+        putF(f.tanHalfFovY);
+        put3(f.cameraRight);
+        putF(f.aspect);
+        put3(f.cameraUp);
+        putF(f.aperture);
+        put3(f.cameraForward);
+        putF(f.focusDistance);
+        put3(f.prevPosition);
+        putF(f.prevTanHalfFovY);
+        put3(f.prevRight);
+        putF(f.prevAspect);
+        put3(f.prevUp);
+        putU(f.prevValid);
+        put3(f.prevForward);
+        putF(f.pixelSpread);
+        putU(f.width);
+        putU(f.height);
+        putU(f.frameSeed);
+        putU(f.spp);
+        putU(f.maxBounces);
+        putU(f.flags);
+        putU(f.lightCount);
+        putU(f.instanceCount);
+        putF(f.clampIndirect);
+        putF(f.lightWeightSum);
+        putU(f.pad0);
+        putU(f.pad1);
+    }
 
     putU(kMaterialPbr);
     putU(kMaterialGlass);
@@ -104,4 +138,12 @@ void main() {
     putU(kLightEmitter);
     putU(kLightRetroScreen);
     putU(kLightPortal);
+    putU(kTraceFlagNee);
+    putU(kTraceFlagRussianRoulette);
+
+    // random.glsl's hash, against the CPU mirror rt::pcgHash (material_test's kHashInputs).
+    const uint hashInputs[8] = uint[8](0u, 1u, 2u, 48000u, 0x9E3779B9u, 0x7FFFFFFFu, 0xFFFFFFFFu, 123456789u);
+    for (uint i = 0; i < 8; ++i) {
+        putU(pcgHash(hashInputs[i]));
+    }
 }

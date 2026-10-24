@@ -168,10 +168,23 @@ target_link_libraries(evo_render PUBLIC evo_modern evo_post)
 # The 2026 side's procedural meshes (and, from later tasks, its scenes and path tracer). The shared GPU structs
 # in src/rt/gpu_types.hpp and the Mat34 helpers in src/modern/math.hpp are header-only.
 add_library(evo_modern STATIC
-    src/modern/mesh_builder.cpp)
+    src/modern/mesh_builder.cpp
+    src/modern/path_tracer.cpp
+    src/modern/scene.cpp)
 target_include_directories(evo_modern PUBLIC src)
 target_link_libraries(evo_modern PUBLIC evo_rt)
 target_link_libraries(evo_modern PUBLIC evo_post evo_show) # the scene interface and registry (modern_scene.hpp)
+
+# The path tracer's shaders (rt_<name>.<stage>.spv beside the executable); anything linking evo_modern builds
+# them.
+evo_add_shaders(evo_modern
+    shaders/rt/pathtrace.rgen
+    shaders/rt/sky.rmiss
+    shaders/rt/shadow.rmiss
+    shaders/rt/pbr.rchit
+    shaders/rt/glass.rchit
+    shaders/rt/emissive.rchit
+    shaders/rt/checker.rchit)
 
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.
@@ -345,6 +358,20 @@ foreach(variant IN LISTS sbtProbeVariants)
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
         COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 ${define} -o "${spirv}" "${source}"
         DEPENDS "${source}"
+        COMMENT "Compiling test shader ${spirv}"
+        VERBATIM)
+    list(APPEND sbtProbeShaders "${spirv}")
+endforeach()
+# Deliberately invalid shaders the pipeline must refuse: a closest-hit and a miss that trace (recursion depth 1)
+# and a raygen that executes a callable.
+foreach(offender recursive_hit.rchit recursive_miss.rmiss callable.rgen)
+    set(spirv "${EVO_TEST_SPIRV_DIR}/test_${offender}.spv")
+    add_custom_command(
+        OUTPUT "${spirv}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+        COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -o "${spirv}"
+                "${CMAKE_SOURCE_DIR}/shaders/test/${offender}"
+        DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/${offender}"
         COMMENT "Compiling test shader ${spirv}"
         VERBATIM)
     list(APPEND sbtProbeShaders "${spirv}")
@@ -537,7 +564,7 @@ add_test(NAME mesh_builder COMMAND mesh_builder_test)
 # consistency, reciprocity, finite outputs; Review Focus 8). Compute only, with the validation layer on;
 # fails on any message it reports.
 set(materialTestShaders "")
-foreach(fixture struct_layout bsdf_probe)
+foreach(fixture struct_layout bsdf_probe bsdf_quadrature)
     set(spirv "${EVO_TEST_SPIRV_DIR}/test_${fixture}.comp.spv")
     add_custom_command(
         OUTPUT "${spirv}"
@@ -573,6 +600,19 @@ target_link_libraries(tonemap_test PRIVATE evo_render evo_post evo_modern)
 target_compile_definitions(tonemap_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(tonemap_test Evolution_shaders)
 add_test(NAME tonemap COMMAND tonemap_test)
+
+# The path tracer (Task 7 of step 4) at 64x64 on lavapipe with validation and synchronization validation:
+# emission and guides, MIS against analytic and NEE-off references, the furnace, determinism per seed, the
+# stress scene staying finite, dispatch batching (Windows TDR) and the retro screen as a textured light. Writes
+# its pictures to build-out/step4. `path_tracer_test --look <dir> [spp]` renders a larger scene to look at.
+add_executable(path_tracer_test tests/path_tracer_test.cpp)
+target_link_libraries(path_tracer_test PRIVATE evo_modern)
+target_compile_definitions(path_tracer_test PRIVATE
+    EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+    EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+add_dependencies(path_tracer_test evo_modern_shaders)
+add_test(NAME path_tracer COMMAND path_tracer_test)
+set_tests_properties(path_tracer PROPERTIES TIMEOUT 120)
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
 # validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked).

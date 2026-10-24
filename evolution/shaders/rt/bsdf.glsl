@@ -278,6 +278,17 @@ vec3 evalRoughDielectricLocal(vec3 tint, float a, float eta, vec3 wo, vec3 wi, o
 
 // --- Public interface --------------------------------------------------------------------------------------
 
+// Whether any lobe is not a delta, i.e. whether bsdfEval can be non-zero: only then may next-event
+// estimation (and MIS) contribute. False for smooth glass and for a smooth metal without a rough coat.
+bool bsdfHasNonDeltaLobe(Surface s) {
+    if (isDielectric(s)) {
+        return !dielectricIsSmooth(s);
+    }
+    bool deltaSpec = s.roughness < kDeltaRoughness;
+    bool deltaCoat = s.coatRoughness < kDeltaRoughness;
+    return !deltaSpec || (s.coat > 0.0 && !deltaCoat) || s.metallic < 1.0;
+}
+
 // f cos(wi) and the pdf bsdfSample would give wi from wo (0 for delta lobes); n is the shading normal, wo and
 // wi point away from the surface.
 vec3 bsdfEval(Surface s, vec3 n, vec3 wo, vec3 wi, out float pdf) {
@@ -335,6 +346,7 @@ bool bsdfSample(Surface s, vec3 n, vec3 wo, vec3 u, out vec3 wi, out vec3 weight
     float eta = 1.0;
     float alpha = 1.0;
     vec3 tint = clamp(s.baseColor, 0.0, 1.0);
+    bool reflected = true; // rough glass: the sampled event (reflection about h, or refraction through it)
 
     if (isDielectric(s)) {
         float ior = bsdfIor(s);
@@ -359,7 +371,8 @@ bool bsdfSample(Surface s, vec3 n, vec3 wo, vec3 u, out vec3 wi, out vec3 weight
         if (!(woh > 0.0)) {
             return false;
         }
-        if (u.x < fresnelDielectric(woh, eta)) {
+        reflected = u.x < fresnelDielectric(woh, eta);
+        if (reflected) {
             wiL = 2.0 * woh * h - woL;
         } else {
             float sin2T = eta * eta * (1.0 - woh * woh);
@@ -402,9 +415,15 @@ bool bsdfSample(Surface s, vec3 n, vec3 wo, vec3 u, out vec3 wi, out vec3 weight
     }
 
     wi = normalize(t * wiL.x + b * wiL.y + n * (side * wiL.z));
-    // The direction as bsdfEval will see it; a microfacet sample on the wrong side of the surface, or a grazing
-    // one that rounding moved across it, produces nothing (eval is 0 there).
+    // The direction as bsdfEval will see it. A microfacet sample that lands on the wrong side of the surface
+    // for its event (a reflection about h below it, a refraction through h above it), or a grazing one that
+    // rounding moved across, is dropped: for an opaque lobe eval is 0 there anyway, but for glass eval would
+    // return the other event's f and pdf, which is not the density this sample was drawn with.
     vec3 wiE = vec3(dot(wi, t), dot(wi, b), side * dot(wi, n));
+    if (isDielectric(s) && (reflected ? !(wiE.z > 0.0) : !(wiE.z < 0.0))) {
+        pdf = 0.0;
+        return false;
+    }
     vec3 f;
     if (isDielectric(s)) {
         f = evalRoughDielectricLocal(tint, alpha, eta, woL, wiE, pdf);

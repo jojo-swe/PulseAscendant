@@ -5,8 +5,10 @@
 
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace evo::gfx {
 
@@ -93,7 +95,17 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         std::vector<VkPipelineShaderStageCreateInfo> stages;
         std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups;
         const auto addStage = [&](const std::filesystem::path& spv, VkShaderStageFlagBits stage) {
-            modules.modules.push_back(loadShaderModule(device, spv));
+            const std::vector<std::uint32_t> words = loadSpirv(spv);
+            // Recursion depth 1, mechanically: only the raygen traces, and nothing calls a callable (there is
+            // no callable region). Neither lavapipe nor the validation layer enforces
+            // maxPipelineRayRecursionDepth; an RTX GPU would hang.
+            if (stage != VK_SHADER_STAGE_RAYGEN_BIT_KHR && spirvHasOpcode(words, kSpirvOpTraceRayKHR))
+                throw std::invalid_argument("RayTracingPipeline: " + spv.filename().string() +
+                                            " traces a ray, but only the raygen may (recursion depth 1)");
+            if (spirvHasOpcode(words, kSpirvOpExecuteCallableKHR))
+                throw std::invalid_argument("RayTracingPipeline: " + spv.filename().string() +
+                                            " executes a callable shader; the pipeline has none");
+            modules.modules.push_back(createShaderModule(device, words, spv));
             VkPipelineShaderStageCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
             info.stage = stage;
             info.module = modules.modules.back();

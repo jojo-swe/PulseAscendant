@@ -13,6 +13,7 @@
 //   8    largest reciprocity error of f              9    largest |weight - f cos / pdf| / max(weight)
 //   10   non-delta samples   11 delta samples   12 rejected samples   13 samples with a non-finite output
 //   14   non-delta samples with pdf <= 0             15   largest | |wi| - 1 |
+//   16   bsdfHasNonDeltaLobe(s) (1 or 0)
 
 #include "../rt/types.glsl"
 #include "../rt/random.glsl"
@@ -36,7 +37,7 @@ layout(push_constant) uniform PushConstants {
     uint caseCount;
 } pc;
 
-const uint kResultFloats = 16;
+const uint kResultFloats = 17;
 
 bool finite1(float x) {
     return !isnan(x) && !isinf(x);
@@ -162,4 +163,5 @@ void main() {
     results[base + 13] = nonFinite;
     results[base + 14] = badPdf;
     results[base + 15] = maxUnitError;
+    results[base + 16] = bsdfHasNonDeltaLobe(s) ? 1.0 : 0.0;
 }
