@@ -38,7 +38,7 @@ HistoryReset HistoryTracker::advance(const HistoryKey& key, bool skippedSinceLas
     } else {
         const HistoryKey& last = *last_;
         const double dt = key.showSeconds - last.showSeconds;
-        if (key.width != last.width || key.height != last.height)
+        if (resized_ || key.width != last.width || key.height != last.height)
             reset = HistoryReset::Resize;
         else if (key.mode != last.mode || key.spp != last.spp)
             reset = HistoryReset::Settings;
@@ -52,6 +52,7 @@ HistoryReset HistoryTracker::advance(const HistoryKey& key, bool skippedSinceLas
             reset = HistoryReset::Skipped;
     }
     last_ = key;
+    resized_ = false;
     framesSinceReset_ = reset == HistoryReset::None ? framesSinceReset_ + 1 : 0;
     return reset;
 }

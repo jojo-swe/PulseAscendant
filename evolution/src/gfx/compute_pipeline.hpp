@@ -51,6 +51,8 @@ public:
     // ceil(width / localX) x ceil(height / localY) workgroups; the shader must skip the pixels outside.
     void dispatch(VkCommandBuffer cmd, std::uint32_t width, std::uint32_t height, std::uint32_t localX = 8,
                   std::uint32_t localY = 8);
+    // How many dispatch() calls this pipeline has recorded; for tests that pin that a pass was skipped.
+    std::uint64_t dispatchCount() const { return dispatches_; }
 
     VkPipeline handle() const { return pipeline_; }
     VkPipelineLayout layout() const { return layout_; }
@@ -67,6 +69,7 @@ private:
     VkPipelineLayout layout_ = VK_NULL_HANDLE;
     VkPipeline pipeline_ = VK_NULL_HANDLE;
     DescriptorAllocator descriptors_;
+    std::uint64_t dispatches_ = 0;
 };
 
 } // namespace evo::gfx

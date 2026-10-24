@@ -11,7 +11,8 @@
 
 namespace evo::gfx {
 
-// Copies an R8G8B8A8_UNORM image of the given size into a host-visible buffer, for export only
+// Copies mip level 0 of an R8G8B8A8_UNORM (or _SRGB: the bytes as stored) image of the given size into a
+// host-visible buffer, for export only
 // (--render-stream, --capture-dir, tests); the window never reads frames back.
 class Readback {
 public:

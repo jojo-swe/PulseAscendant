@@ -64,17 +64,26 @@ struct HistoryState {
 };
 
 // Decides, frame by frame, whether the temporal history continues. A reset on the first frame (and after
-// invalidate()), a resize, a change of mode or spp, a chapter change, a shot change, a time jump, and when
-// the modern stage did not run in the previous frame; the first matching reason in that order is reported.
+// invalidate()), a resize (a changed size, or markResize()), a change of mode or spp, a chapter change, a
+// shot change, a time jump, and when the modern stage did not run in the previous frame; the first matching
+// reason in that order is reported.
 class HistoryTracker {
 public:
     // Called once per frame in which the modern stage runs; `skippedSinceLast` = it did not run last frame.
     HistoryReset advance(const HistoryKey& key, bool skippedSinceLast);
     std::uint32_t framesSinceReset() const { return framesSinceReset_; } // 0 on the frame that reset
-    void invalidate() { last_.reset(); }                                 // next advance() returns FirstFrame
+    // Next advance() returns FirstFrame.
+    void invalidate() {
+        last_.reset();
+        resized_ = false;
+    }
+    // The output was resized: the next advance() reports Resize (after FirstFrame) even when the size it
+    // sees equals the last one, as after a resize A -> B -> A with no frame in between.
+    void markResize() { resized_ = true; }
 
 private:
     std::optional<HistoryKey> last_;
+    bool resized_ = false; // markResize() since the last advance()
     std::uint32_t framesSinceReset_ = 0;
 };
 

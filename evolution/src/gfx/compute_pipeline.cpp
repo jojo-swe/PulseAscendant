@@ -140,6 +140,7 @@ void ComputePipeline::push(VkCommandBuffer cmd, const void* data, std::uint32_t 
 void ComputePipeline::dispatch(VkCommandBuffer cmd, std::uint32_t width, std::uint32_t height,
                                std::uint32_t localX, std::uint32_t localY) {
     vkCmdDispatch(cmd, (width + localX - 1) / localX, (height + localY - 1) / localY, 1);
+    ++dispatches_;
 }
 
 } // namespace evo::gfx

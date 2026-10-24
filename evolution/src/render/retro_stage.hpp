@@ -26,10 +26,19 @@ namespace evo::render {
 // shader, or a clear for an effect without one, then the triangles and points of its scene drawn by the
 // SceneRaster, then its text drawn with the text pass), which
 // palette_map.comp turns into a 320x200 RGBA8 image through the 256 colours the effect's palette builder
-// makes on the CPU. Both passes run only when the retro frame changes: retroFrame = floor(localSeconds *
-// retroRate), keyed together with the chapter (and the effect), so a chapter that starts on the same retro
-// frame number as the last one still renders its own picture. A megamix (EffectInfo::resolve) renders the
-// entry it resolves to under its own key; every shader and texture is made up front, so no cut stalls.
+// makes on the CPU, after which the colour image's mip levels are generated. The colour image holds the
+// sRGB-encoded bytes the palette gives: it is an R8G8B8A8_SRGB image with kRetroMipLevels levels, written
+// through its R8G8B8A8_UNORM storage view (view(), level 0, byte for byte as before) and sampled through
+// sampledView(), which decodes to linear light; its mips are averaged in linear light too (the blits of an
+// sRGB image are), so a minified CRT keeps its brightness. All three run only when the retro frame changes:
+// retroFrame = floor(localSeconds * retroRate), keyed together with the chapter (and the effect), so a
+// chapter that starts on the same retro frame number as the last one still renders its own picture. A megamix
+// (EffectInfo::resolve) renders the entry it resolves to under its own key; every shader and texture is made
+// up front, so no cut stalls. The colour image's mip levels: a full chain from 320x200 down to 1x1, for the
+// Studio's CRT to sample.
+inline constexpr std::uint32_t kRetroMipLevels = 9;
+static_assert(kRetroMipLevels == gfx::mipLevelsFor(320, 200));
+
 class RetroStage {
 public:
     static constexpr std::uint32_t kWidth = 320;
@@ -56,7 +65,7 @@ public:
     // The retro frame of the last render(), of the frame's own effect at its rate: for a megamix, FINALE's
     // (outer) frame, not the home frame of the sub-effect it resolved to.
     std::uint32_t retroFrame() const { return retroFrame_; }
-    gfx::Image& image() { return color_; }      // RGBA8 320x200
+    gfx::Image& image() { return color_; }      // RGBA8 320x200, kRetroMipLevels levels (see above)
     gfx::Image& indexImage() { return index_; } // R8_UINT 320x200
 
 private:
