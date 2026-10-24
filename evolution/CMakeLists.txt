@@ -274,6 +274,13 @@ add_test(NAME capture
             ${CMAKE_BINARY_DIR}/build-out/capture --validation)
 set_tests_properties(capture PROPERTIES TIMEOUT 120)
 
+# The storyboard tool on two chapters: one grid for Act I, of the documented size, its 1993 and 2026 cells
+# forced through EVO_FORCE_ERA (needs numpy).
+add_test(NAME storyboard
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/storyboard_test.py $<TARGET_FILE:Evolution>
+            ${CMAKE_BINARY_DIR}/build-out/storyboard)
+set_tests_properties(storyboard PROPERTIES TIMEOUT 300)
+
 # --show-info prints the show as JSON without touching SDL video or Vulkan.
 add_test(NAME show_info COMMAND Evolution --show-info)
 set_tests_properties(show_info PROPERTIES PASS_REGULAR_EXPRESSION "\"duration\":711\\.16[,}]")

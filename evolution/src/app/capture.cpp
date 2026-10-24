@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <vector>
 
@@ -24,6 +26,18 @@ std::filesystem::path captureFileName(double seconds) {
     return name;
 }
 
+// Diagnostic: EVO_FORCE_ERA=0 or 1 holds the frame in 1993 or 2026 (the era, a wipe not started or finished,
+// no cut flash), so a capture shows either era at any show time. Any other value is ignored.
+void applyForcedEra(show::TimelineFrame& frame) {
+    const char* value = std::getenv("EVO_FORCE_ERA");
+    if (value == nullptr || (std::strcmp(value, "0") != 0 && std::strcmp(value, "1") != 0))
+        return;
+    const float era = value[0] == '1' ? 1.f : 0.f;
+    frame.era = era;
+    frame.wipe = era;
+    frame.eraCut = 0.f;
+}
+
 } // namespace
 
 int runCapture(const Options& options) {
@@ -36,8 +50,10 @@ int runCapture(const Options& options) {
     gfx::Readback readback(ctx, width, height);
     gfx::FrameRing ring(ctx);
     render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud});
+    show::TimelineFrame frame = show::sampleTimeline(options.time);
+    applyForcedEra(frame);
     VkCommandBuffer cmd = ring.begin();
-    renderer.render(cmd, show::sampleTimeline(options.time));
+    renderer.render(cmd, frame);
     readback.record(cmd, renderer.output());
     ring.wait(ring.submit());
     const std::vector<std::uint8_t> rgb = readback.rgb();

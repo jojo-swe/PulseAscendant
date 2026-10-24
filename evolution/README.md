@@ -6,9 +6,10 @@ as a hard requirement. It is a standalone project inside PulseAscendant; the des
 implementation plans live in [`docs/plans/`](docs/plans/), starting with
 [`2026-10-21-evolution-design.md`](docs/plans/2026-10-21-evolution-design.md).
 
-> **Status:** step 1 of the plan is complete. The music plays and drives a timeline of 31 chapters in
-> three acts, but the build still renders a compute-shader test pattern that shows the timeline state
-> (chapter, 1993/2026 era, transition, beat and kick). Step 2 brings the 1993 pipeline.
+> **Status:** step 2 of the plan is complete. The music drives a timeline of 31 chapters in three acts, and
+> the 1993 side renders through its own pipeline (below): BOOT, PLASMA and the CREDITS sine scroller are
+> finished on the 1993 side, the other effects show a grey test pattern there, and the 2026 side is still a
+> placeholder gradient. Step 3 brings the rest of Act I's 1993 effects.
 
 ## Requirements
 
@@ -39,9 +40,10 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 `assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
-The 17 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` also numpy): `options`, `png`,
-`png_decode`, `context`, `renderer`, `gfx_foundation`, `swapchain`, `render_stream`, `capture`, `exit_codes`,
-`no_wait_idle`, `python_tools`, `audio_transport`, `timeline`, `era`, `clock` and `show_info`. The three that open a
+The 23 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` and `storyboard`
+also numpy): `options`, `png`, `png_decode`, `audio_transport`, `timeline`, `era`, `clock`, `context`,
+`gfx_foundation`, `renderer`, `boot`, `plasma`, `scroller`, `font`, `text_pass`, `swapchain`, `render_stream`,
+`capture`, `storyboard`, `show_info`, `exit_codes`, `no_wait_idle` and `python_tools`. The three that open a
 window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default; configure with
 `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
 
@@ -96,11 +98,66 @@ rather than trusting the autocorrelation, which reads them at 2/3 of their tempo
 runs the pipeline into a temporary directory on a 270 s, 134 BPM placeholder song synthesised by
 `tools/make_placeholder.py`, with `tools/show_targets_placeholder.json`.
 
+## The 1993 pipeline
+
+Every frame is rendered by compute passes into one RGBA8 image at the output size, which the window shows and
+the exports read back:
+
+1. **Retro stage.** The chapter's 1993 effect writes palette indices into a 320×200 8-bit image, as a VGA
+   mode 13h screen would hold them, and a second pass maps them through the 256 colours that the effect's
+   palette builder makes on the CPU. Palette cycling happens there, never in a shader. Each effect has its
+   own retro frame rate (35 Hz, the Raytrace placeholder 10 Hz); the stage renders only when the retro frame
+   changes, and everything it draws is a function of the chapter and the retro frame alone, so seeking,
+   playback and export give the same picture.
+2. **CRT.** The 320×200 picture fills a centred 4:3 rectangle (its pixels are 1.2 times taller than wide),
+   black around it. With the CRT look on it also gets a 2 % barrel, a little bloom, darker odd scanlines, a
+   phosphor mask and a vignette. Key C or `--no-crt` turns the look off; the rectangle stays the same.
+3. **Modern stage.** The 2026 side; a placeholder gradient in the chapter's hue with a circle on kick and
+   beat until steps 4 and 5.
+4. **Era compositor.** Blends the two by the timeline's era: a Cut or BeatSwap chapter shows one era whole,
+   a Wipe sweeps 2026 in from the left behind a white seam, a Portal cross-fades for now, and a cut flashes
+   white.
+5. **HUD.** The chapter title top-left and the epoch card bottom-left (both cards during a wipe), in the
+   demo's own 8×8 font with a drop shadow. Key H or `--no-hud` hides it.
+
+The effects so far:
+
+- **BOOT** (chapter 0): a DOS prompt types the demo's start-up in light grey on black, 40 columns, with a
+  blinking cursor, and cuts to FLYBY with two white frames.
+- **PLASMA** (chapter 3): the classic plasma, sine waves in three octaves folded round a 224-colour ring that
+  the palette rotates one entry per retro frame, until the wipe brings 2026 in.
+- **Scrollers**: CREDITS (chapter 29, now a 1993 chapter) rolls the credits on a sine wave over deep blue
+  under a static EVOLUTION title; FLYBY scrolls its greeting over the test pattern.
+
+## Storyboard
+
+`tools/storyboard.py` captures every chapter at 20 %, at its accent and at 80 % of its length, once forced
+into 1993 and once into 2026, and composes one PNG grid per act (`act1.png`, `act2.png`, `act3.png`): a row
+per chapter, labelled with its number, title, transition and times, and six columns (1993 at the three
+times, then 2026). Each cell is the capture at half size. It needs numpy and runs the executable once per
+cell, so all 31 chapters take a few minutes on lavapipe.
+
+```sh
+cd evolution
+python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard
+# options: --width 640 --height 360 (the capture size; the defaults), --chapters 0,3 (default: all),
+# --no-crt (the 1993 picture without the CRT look)
+```
+
+The forcing is the diagnostic environment variable `EVO_FORCE_ERA`: set to `0` or `1`, it renders a
+`--capture-dir` frame wholly in 1993 or 2026 (era 0 or 1, a wipe not started or finished, no cut flash).
+Any other value is ignored, and the window and `--render-stream` never read it.
+
+```sh
+EVO_FORCE_ERA=1 Evolution --capture-dir out --time 50   # PLASMA's chapter, its 2026 side
+```
+
 ## Usage
 
 Run `Evolution` without arguments for a 1280×720 window that plays the show from the start. Keys:
 ← / → previous / next chapter (wrapping around the show), 1–9 and 0 jump to chapters 1–10, C toggles
-the CRT look of the 1993 picture, H shows or hides the chapter title and the epoch cards, M mutes, F11 toggles fullscreen, Esc quits. The window title shows the chapter and the show time.
+the CRT look of the 1993 picture, H shows or hides the chapter title and the epoch cards, M mutes, F11
+toggles fullscreen, Esc quits. The window title shows the chapter and the show time.
 
 ```text
 Usage: Evolution [options]
@@ -132,6 +189,9 @@ Options:
 
 Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,
 C CRT look, H HUD, M mute, F11 fullscreen, Esc quit
+
+Environment (diagnostic): EVO_FORCE_ERA=0 or 1 renders a --capture-dir frame wholly in
+1993 or 2026 (no wipe split, no cut flash); other values are ignored
 ```
 
 Examples:

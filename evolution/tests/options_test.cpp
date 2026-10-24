@@ -125,6 +125,7 @@ int main() {
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);
         CHECK(evo::helpText().find("C CRT look") != std::string::npos);
         CHECK(evo::helpText().find("H HUD") != std::string::npos);
+        CHECK(evo::helpText().find("EVO_FORCE_ERA") != std::string::npos);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "CHECK failed: %s\n", error.what());
         return 1;

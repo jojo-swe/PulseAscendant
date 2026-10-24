@@ -173,7 +173,10 @@ std::string helpText() {
            "  -h, --help           Show this help and exit\n"
            "\n"
            "Keys (window): Left/Right previous/next chapter, keys 1-9 and 0 jump to chapters 1-10,\n"
-           "C CRT look, H HUD, M mute, F11 fullscreen, Esc quit\n";
+           "C CRT look, H HUD, M mute, F11 fullscreen, Esc quit\n"
+           "\n"
+           "Environment (diagnostic): EVO_FORCE_ERA=0 or 1 renders a --capture-dir frame wholly in\n"
+           "1993 or 2026 (no wipe split, no cut flash); other values are ignored\n";
 }
 
 } // namespace evo
