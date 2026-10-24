@@ -20,7 +20,9 @@ struct BufferDesc {
                                 // 0 = what the buffer's memory requirements ask for
 };
 
-// A VMA buffer. Throws std::invalid_argument for a size of 0 or an alignment that is not a power of two. A
+// A VMA buffer. Throws std::invalid_argument for a size of 0 or an alignment that is not a power of two, and
+// std::runtime_error if a buffer with an alignment and SHADER_DEVICE_ADDRESS usage did not get an aligned
+// device address. A
 // host-visible buffer is persistently mapped and may be non-coherent: flush() after the CPU writes it and
 // invalidate() before the CPU reads what the GPU wrote.
 class Buffer {
@@ -54,8 +56,10 @@ private:
 
 // A device-local buffer of `desc` (which must not be host-visible) filled with `data` from its start through
 // a staging copy in an immediate submit, for setup work: the copy is complete and visible to every later
-// command when this returns. Adds TRANSFER_DST to the usage. Throws std::invalid_argument for more data than
-// desc.size or a host-visible desc.
+// command when this returns. Adds TRANSFER_DST to the usage and nothing else: the caller supplies what the
+// buffer is used as (SHADER_DEVICE_ADDRESS, ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR, STORAGE_BUFFER,
+// ...). Bytes beyond data.size() are undefined. Throws std::invalid_argument for more data than desc.size or
+// a host-visible desc.
 Buffer createDeviceBuffer(Context& ctx, const BufferDesc& desc, std::span<const std::byte> data);
 
 } // namespace evo::gfx

@@ -997,7 +997,7 @@ int main() {
             if (!ctx.validationEnabled())
                 std::printf("warning: validation layer unavailable; only the results are checked\n");
             else if (!ctx.syncValidationEnabled())
-                std::printf("warning: synchronization validation unavailable\n");
+                std::printf("SKIP sync validation: the layer's synchronization validation is unavailable\n");
             // Between tests the queue goes idle: the installed layer's synchronization validation does not
             // credit host waits on the timeline semaphore, so memory VMA hands from one test's images to the
             // next would look like a hazard. Within a test nothing a frame uses is freed.

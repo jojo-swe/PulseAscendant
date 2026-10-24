@@ -190,6 +190,7 @@ void DescriptorAllocator::resetSlot(std::uint32_t slot) {
 }
 
 DescriptorAllocator::Pool DescriptorAllocator::createPool(const Counts& needs) {
+    static_assert(kTypes.size() == kTypeCount, "a pool counts every supported descriptor type");
     Pool pool;
     std::vector<VkDescriptorPoolSize> sizes;
     for (std::size_t i = 0; i < kTypes.size(); ++i) {

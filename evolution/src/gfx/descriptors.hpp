@@ -71,7 +71,7 @@ private:
 // The first allocate() ties the allocator to that ring; allocating with a second live ring throws
 // std::logic_error, and once the ring is gone the allocator attaches to the next ring it allocates with.
 // Like a ComputePipeline, an allocator must outlive every submit that used its sets: declare the FrameRing
-// after it.
+// after it. Not thread-safe: an allocator, like its ring, is used from one thread.
 class DescriptorAllocator {
 public:
     explicit DescriptorAllocator(Context& ctx);

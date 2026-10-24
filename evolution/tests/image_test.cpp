@@ -3,7 +3,9 @@
 // the per-level barriers of generateMips are checked too) and fails on any message it reports.
 
 #include "gfx/buffer.hpp"
+#include "gfx/compute_pipeline.hpp"
 #include "gfx/context.hpp"
+#include "gfx/descriptors.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
 #include "gfx/sync.hpp"
@@ -14,6 +16,7 @@
 #include "test_env.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -256,6 +259,100 @@ void testSrgbMips(Context& ctx, FrameRing& ring) {
     CHECK(single.layout() == VK_IMAGE_LAYOUT_GENERAL && single.mipGenerations() == 1);
 }
 
+// The retro-style image (R8G8B8A8_SRGB with an R8G8B8A8_UNORM storage view) read the two ways shaders read
+// it: textureLod through sampledView() returns linear light (the encoded byte 188 is 0.5029; a black/white
+// checker's level 1 is the linear mid grey), while imageLoad through view() returns the encoded bytes as they
+// are (188 / 255). Nothing may decode the sampled values a second time.
+void testSampledViewIsLinear(Context& ctx, FrameRing& ring) {
+    const std::array<Binding, 3> bindings = {Binding{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+                                             Binding{1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+                                             Binding{2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}};
+    ComputePipeline probe(ctx, EVO_TEST_SPIRV_DIR "/test_sampled_view_probe.comp.spv", bindings,
+                          sizeof(float));
+    const auto read = [&](Image& image, float lod) {
+        Buffer& output =
+            retained.emplace_back(ctx, BufferDesc{sizeof(float) * 8, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true,
+                                                  "sampled view probe"});
+        VkCommandBuffer cmd = ring.begin();
+        image.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                         VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+        const std::array<DescriptorWrite, 3> writes = {
+            DescriptorWrite::image(0, {ctx.trilinearSampler(), image.sampledView(), VK_IMAGE_LAYOUT_GENERAL}),
+            DescriptorWrite::image(1, {VK_NULL_HANDLE, image.view(), VK_IMAGE_LAYOUT_GENERAL}),
+            DescriptorWrite::buffer(2, {output.handle(), 0, VK_WHOLE_SIZE})};
+        probe.bind(cmd, ring, writes);
+        probe.push(cmd, &lod, sizeof lod);
+        probe.dispatch(cmd, 1, 1);
+        bufferBarrier2(cmd, output.handle(), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT,
+                       VK_ACCESS_2_HOST_READ_BIT);
+        ring.wait(ring.submit());
+        output.invalidate();
+        std::array<float, 8> values{};
+        std::memcpy(values.data(), output.mapped(), sizeof values);
+        return values;
+    };
+    const ImageDesc desc{8,
+                         8,
+                         VK_FORMAT_R8G8B8A8_SRGB,
+                         kMipUsage | VK_IMAGE_USAGE_STORAGE_BIT,
+                         4,
+                         "retro-style",
+                         VK_FORMAT_R8G8B8A8_UNORM};
+
+    Image grey(ctx, desc);
+    upload(ctx, grey, [](std::uint32_t, std::uint32_t) { return 188; });
+    mip(ring, grey);
+    const std::array<float, 8> level0 = read(grey, 0.0f);
+    std::printf("sampled view: byte 188 samples %.4f (linear), loads %.4f (encoded, 188/255 = %.4f)\n",
+                level0[0], level0[4], 188.0 / 255.0);
+    for (int c = 0; c < 3; ++c) {
+        CHECK(std::fabs(level0[c] - 0.5f) <= 0.01f);
+        CHECK(std::fabs(level0[4 + c] - 188.0f / 255.0f) <= 1.0f / 512.0f);
+    }
+    CHECK(level0[3] == 1.0f && level0[7] == 1.0f); // alpha is never encoded
+
+    Image checker(ctx, desc);
+    upload(ctx, checker, [](std::uint32_t x, std::uint32_t y) { return (x + y) % 2 == 0 ? 0 : 255; });
+    mip(ring, checker);
+    const std::array<float, 8> level1 = read(checker, 1.0f);
+    std::printf("sampled view: a black/white checker's level 1 samples %.4f\n", level1[0]);
+    for (int c = 0; c < 3; ++c) {
+        CHECK(std::fabs(level1[c] - 0.5f) <= 0.01f);
+        CHECK(level1[4 + c] == 0.0f); // texel (0, 0) of level 0 is black
+    }
+}
+
+// A two-format image whose combination the device does not support is refused with a clear error before
+// vkCreateImage (which the validation layer would report): an extent beyond the maximum the device reports
+// for that format, usage and format list.
+void testRefusesUnsupportedMutableImage(Context& ctx) {
+    const auto refused = [&](const ImageDesc& desc) {
+        try {
+            Image image(ctx, desc);
+        } catch (const std::runtime_error& error) {
+            std::printf("  refused: %s\n", error.what());
+            return true;
+        }
+        return false;
+    };
+    std::printf("expecting a refused two-format image:\n");
+    CHECK(refused({1u << 20, 1, VK_FORMAT_R8G8B8A8_SRGB,
+                   VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, "too wide",
+                   VK_FORMAT_R8G8B8A8_UNORM}));
+    CHECK(ctx.validationMessageCount() == 0);
+}
+
+// A one-level image has nothing to blit: generateMips() only transitions it, whatever its format and usage
+// (no linear blit or transfer usage needed), and counts as a generation.
+void testSingleLevelNeedsNoBlit(Context& ctx, FrameRing& ring) {
+    Image image(ctx, {16, 16, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, 1, "one-level uint"});
+    VkCommandBuffer cmd = ring.begin();
+    image.generateMips(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+    ring.wait(ring.submit());
+    CHECK(image.layout() == VK_IMAGE_LAYOUT_GENERAL && image.mipGenerations() == 1);
+}
+
 // generateMips needs a format that can be blitted with a linear filter: an integer format is refused before
 // anything is recorded.
 void testRefusesUnfilterableFormat(Context& ctx, FrameRing& ring) {
@@ -285,8 +382,8 @@ void testRefusesUnfilterableFormat(Context& ctx, FrameRing& ring) {
     ring.wait(ring.submit());
 }
 
-// A D32_SFLOAT depth image: the depth aspect, its views, a depth attachment layout, and a clear to 1.0 read
-// back. The other depth formats report their aspects.
+// A D32_SFLOAT depth image: the depth aspect, its views, the depth/stencil attachment layout, and a clear
+// to 1.0 read back. The other depth formats report their aspects.
 void testDepth(Context& ctx, FrameRing& ring) {
     Image depth(ctx, {64, 32, VK_FORMAT_D32_SFLOAT,
                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -296,10 +393,11 @@ void testDepth(Context& ctx, FrameRing& ring) {
     CHECK(depth.view() != VK_NULL_HANDLE && depth.sampledView() == depth.view());
 
     VkCommandBuffer cmd = ring.begin();
-    CHECK(depth.transition(cmd, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+    // DEPTH_STENCIL_ATTACHMENT_OPTIMAL: DEPTH_ATTACHMENT_OPTIMAL needs separateDepthStencilLayouts.
+    CHECK(depth.transition(cmd, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                            VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
                            VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT));
-    CHECK(depth.layout() == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    CHECK(depth.layout() == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     depth.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_CLEAR_BIT,
                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
     const VkClearDepthStencilValue clear{1.f, 0};
@@ -403,13 +501,20 @@ int main() {
             if (!ctx.validationEnabled())
                 std::printf("warning: validation layer unavailable; only the pixels are checked\n");
             else if (!ctx.syncValidationEnabled())
-                std::printf("warning: synchronization validation unavailable\n");
+                std::printf("SKIP sync validation: the layer's synchronization validation is unavailable\n");
             FrameRing ring(ctx);
+            // On a failure, the retained buffers go before the Context (every frame was waited for).
+            struct ReleaseRetained {
+                ~ReleaseRetained() { retained.clear(); }
+            } releaseRetained;
             testRejectsTooManyLevels(ctx);
             testCheckerMips(ctx, ring);
             testHalvesMips(ctx, ring);
             testSrgbMips(ctx, ring);
+            testSampledViewIsLinear(ctx, ring);
+            testRefusesUnsupportedMutableImage(ctx);
             testRefusesUnfilterableFormat(ctx, ring);
+            testSingleLevelNeedsNoBlit(ctx, ring);
             testDepth(ctx, ring);
             testRetroStageMips(ctx, ring);
             ring.waitAll(); // shutdown

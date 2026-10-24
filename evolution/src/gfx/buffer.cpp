@@ -45,6 +45,16 @@ Buffer::Buffer(Context& ctx, const BufferDesc& desc) : ctx_(&ctx), size_(desc.si
         throw std::runtime_error("Buffer '" + std::string(desc.name) + "' is not host-mapped");
     }
 
+    // The promise the alignment exists for: acceleration structure inputs and scratch at aligned addresses.
+    if (desc.alignment > 0 && (desc.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) &&
+        address() % desc.alignment != 0) {
+        const VkDeviceAddress misaligned = address();
+        destroy();
+        throw std::runtime_error("Buffer '" + std::string(desc.name) + "': device address " +
+                                 std::to_string(misaligned) + " is not aligned to " +
+                                 std::to_string(desc.alignment));
+    }
+
     vmaSetAllocationName(ctx.allocator(), allocation_, desc.name);
     ctx.setObjectName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<std::uint64_t>(buffer_), desc.name);
 }

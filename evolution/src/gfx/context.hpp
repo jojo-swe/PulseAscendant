@@ -16,7 +16,8 @@ struct ContextOptions {
     bool validation = false;                        // enable VK_LAYER_KHRONOS_validation if present, and
                                                     // route its messages to stderr via VK_EXT_debug_utils
     bool syncValidation = false;                    // with validation: also the layer's synchronization
-                                                    // validation (VK_EXT_validation_features); slow
+                                                    // validation (VK_EXT_validation_features); slow.
+                                                    // Without validation: ignored, with a warning
     std::vector<const char*> instanceExtensions;    // from SDL when windowed; empty headless
     std::vector<const char*> extraDeviceExtensions; // appended to the required list (swapchain, tests)
     PFN_vkGetInstanceProcAddr loader = nullptr;     // nullptr -> volkInitialize()

@@ -1,0 +1,22 @@
+#version 460
+
+// A test fixture for Image's two views (tests/image_test.cpp): samples the sampled view (every mip level, in
+// the image's own format) at the centre with an explicit level of detail, as the ray tracing shaders sample
+// the retro image, and loads texel (0, 0) of level 0 through the storage view; writes both out.
+
+layout(local_size_x = 1, local_size_y = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D sampledView;
+layout(set = 0, binding = 1, rgba8) uniform readonly image2D storageView;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    vec4 values[2];
+} outData;
+
+layout(push_constant) uniform PushConstants {
+    float lod;
+} pc;
+
+void main() {
+    outData.values[0] = textureLod(sampledView, vec2(0.5), pc.lod);
+    outData.values[1] = imageLoad(storageView, ivec2(0, 0));
+}

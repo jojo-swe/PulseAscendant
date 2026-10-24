@@ -291,6 +291,10 @@ add_dependencies(descriptors_test Evolution_shaders descriptors_test_shaders)
 target_compile_definitions(descriptors_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
                                                     EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME descriptors COMMAND descriptors_test)
+# MALLOC_PERTURB_ fills freed heap memory, so a descriptor write chained to freed memory reads as garbage; a
+# machine without synchronization validation reports the test as skipped, not passed.
+set_tests_properties(descriptors PROPERTIES ENVIRONMENT "MALLOC_PERTURB_=165"
+                                            SKIP_REGULAR_EXPRESSION "SKIP sync validation")
 
 # The geometry store, compacted BLASes and the per-frame TLAS against a CPU intersection through a ray-query
 # probe (test-only shader), including 64 frames with two in flight and a moving instance (Review Focus 3),
@@ -556,6 +560,7 @@ add_executable(denoiser_test tests/denoiser_test.cpp)
 target_link_libraries(denoiser_test PRIVATE evo_post)
 target_compile_definitions(denoiser_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_test(NAME denoiser COMMAND denoiser_test)
+set_tests_properties(denoiser PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
 # validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked).
@@ -633,9 +638,21 @@ add_dependencies(compositor_test Evolution_shaders)
 add_test(NAME compositor COMMAND compositor_test)
 
 # Images with mip levels, depth formats and sampled views, and the retro colour image as a mipmapped texture;
-# with the validation layer (and its synchronization validation) on, fails on any message it reports.
+# with the validation layer (and its synchronization validation) on, fails on any message it reports. The
+# sampled-view probe shader is test-only.
 add_executable(image_test tests/image_test.cpp)
 target_link_libraries(image_test PRIVATE evo_render)
-target_compile_definitions(image_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
-add_dependencies(image_test Evolution_shaders)
+add_custom_command(
+    OUTPUT "${EVO_TEST_SPIRV_DIR}/test_sampled_view_probe.comp.spv"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -o "${EVO_TEST_SPIRV_DIR}/test_sampled_view_probe.comp.spv"
+            "${CMAKE_SOURCE_DIR}/shaders/test/sampled_view_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/sampled_view_probe.comp"
+    COMMENT "Compiling test shader test_sampled_view_probe.comp")
+add_custom_target(image_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/test_sampled_view_probe.comp.spv")
+target_compile_definitions(image_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+                                              EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(image_test Evolution_shaders image_test_shaders)
 add_test(NAME image COMMAND image_test)
+# A machine without the layer's synchronization validation reports the test as skipped, not passed.
+set_tests_properties(image PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
