@@ -4,6 +4,7 @@
 #include "retro/effects.hpp"
 
 #include "retro/boot.hpp"
+#include "retro/city.hpp"
 #include "retro/dots.hpp"
 #include "retro/finale.hpp"
 #include "retro/flyby.hpp"
@@ -36,8 +37,10 @@ const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kDots{nullptr, kDotsRetroRate, dotsPalette, nullptr, nullptr, dotsScene};
     static constexpr EffectInfo kTunnel{nullptr, kTunnelRetroRate, tunnelPalette,
                                         nullptr, nullptr,          tunnelScene};
-    static constexpr EffectInfo kGlenz{kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr,
-                                       glenzScene};
+    static constexpr EffectInfo kGlenzEffect{
+        kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr, glenzScene};
+    static constexpr EffectInfo kCity{nullptr, kCityRetroRate, cityPalette,
+                                      nullptr, cityBackground, cityScene};
     static constexpr EffectInfo kLens{kRotozoomShader, kRotozoomRetroRate, rotozoomPalette, nullptr, nullptr,
                                       nullptr,         rotozoomTexture};
     // The megamix: its own entry is the white flash between two cuts.
@@ -61,11 +64,13 @@ const EffectInfo& effectFor(show::Effect effect) {
     case show::Effect::Tunnel:
         return kTunnel;
     case show::Effect::Glenz:
-        return kGlenz;
+        return kGlenzEffect;
     case show::Effect::Lens:
         return kLens;
     case show::Effect::Finale:
         return kFinale;
+    case show::Effect::City:
+        return kCity;
     case show::Effect::Credits:
         return kCredits;
     case show::Effect::Raytrace:

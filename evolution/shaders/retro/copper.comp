@@ -42,12 +42,12 @@ void main() {
     float nearest = -2.0;
     for (uint i = 0u; i < kBars; ++i) {
         float angle = t * 1.3 + float(i) * kTau / float(kBars);
-        float distance = abs(y - (100.0 + amplitude * sin(angle)));
+        float offset = abs(y - (100.0 + amplitude * sin(angle)));
         float depth = cos(angle);
-        if (distance < kHalfHeight && depth > nearest) {
+        if (offset < kHalfHeight && depth > nearest) {
             nearest = depth;
-            uint step = kSteps - 1u - min(kSteps - 1u, uint(distance / (kHalfHeight / float(kSteps))));
-            index = 1u + (i % kColours) * kSteps + step;
+            uint shade = kSteps - 1u - min(kSteps - 1u, uint(offset / (kHalfHeight / float(kSteps))));
+            index = 1u + (i % kColours) * kSteps + shade;
         }
     }
     imageStore(indexImage, ivec2(pixel), uvec4(index));

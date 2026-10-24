@@ -56,8 +56,9 @@ constexpr int kDotsChapter = 2;
 constexpr std::uint32_t kRate = evo::retro::kDotsRetroRate;
 constexpr std::size_t kCount = evo::retro::kDotsPoints;
 // The flow bounds: a morph's mean pair distance over a random pairing's (measured 0.33..0.46 between solids,
-// 0.71..0.75 to and from the year).
-constexpr double kSolidFlow = 0.48, kYearFlow = 0.78;
+// 0.71..0.75 to and from the year). The solid bound leaves room above the largest (0.463, sphere to torus)
+// for libm differences between platforms (MSVC's sin/cos are not glibc's).
+constexpr double kSolidFlow = 0.52, kYearFlow = 0.78;
 
 // A DOTS frame at `local` seconds into the chapter.
 TimelineFrame dots(double local) {

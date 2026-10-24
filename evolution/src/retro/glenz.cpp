@@ -60,24 +60,43 @@ const GlenzMesh& glenzMesh() {
     return mesh;
 }
 
+double glenzBeatPhaseAt(std::span<const double> beats, double t) {
+    constexpr double kOnBeat = 1e-9; // a beat this close ahead counts as reached (BeatGridView::beatAt)
+    const auto after = std::upper_bound(beats.begin(), beats.end(), t + kOnBeat);
+    double previous = 0, length = 0;
+    if (after == beats.begin()) { // before the first beat: the first beat length repeats backwards
+        const auto second = std::upper_bound(beats.begin(), beats.end(), beats.empty() ? 0.0 : beats.front());
+        if (second == beats.end())
+            return 0;
+        previous = beats.front();
+        length = *second - previous;
+    } else if (after == beats.end()) { // after the last beat: the last beat length repeats
+        previous = beats.back();
+        const auto last = std::lower_bound(beats.begin(), beats.end(), previous);
+        if (last == beats.begin())
+            return 0;
+        length = previous - *(last - 1);
+    } else { // upper_bound skips duplicates, so the next beat is strictly later
+        previous = *(after - 1);
+        length = *after - previous;
+    }
+    if (t < previous && t >= previous - kOnBeat)
+        return 0;
+    const double phase = (t - previous) / length;
+    return phase - std::floor(phase);
+}
+
+double glenzBounceAt(std::span<const double> beats, double t) {
+    const double p = std::clamp(glenzBeatPhaseAt(beats, t), 0.0, 1.0);
+    return 4 * p * (1 - p);
+}
+
 double glenzBeatPhase(const show::TimelineFrame& frame, double seconds) {
     // An allowed fixed fact (retro/effects.hpp): the chapter's start in its track and that track's tracked
     // beats are data of the chapter alone, like chapterDuration; nothing here reads the frame's music.
     const double start = show::chapterStart(frame.chapter);
     const int track = show::trackAt(start);
-    const show::BeatGridView grid = show::beatGrid(track);
-    if (grid.count() < 2)
-        return 0;
-    const double t = start - show::trackStart(track) + seconds;
-    const int i = std::clamp(grid.beatAt(t), 0, grid.count() - 2);
-    const double previous = grid.beatTime(i), length = grid.beatTime(i + 1) - previous;
-    if (length <= 0)
-        return 0;
-    // Before the first beat or after the last, the nearest beat length repeats.
-    const double phase = (t - previous) / length;
-    if (phase < 0 && phase > -1e-9) // on the beat, within beatAt's tolerance
-        return 0;
-    return std::max(0.0, phase - std::floor(phase));
+    return glenzBeatPhaseAt(show::beatGrid(track).times(), start - show::trackStart(track) + seconds);
 }
 
 double glenzBounce(const show::TimelineFrame& frame, double seconds) {
@@ -140,7 +159,7 @@ void glenzScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32
     const Camera camera = glenzCamera();
     const GlenzVertices world = glenzWorldVertices(frame, retroFrame);
     const GlenzMesh& mesh = glenzMesh();
-    // Back faces first, then front faces (the OR does not care, but this is the order the original drew).
+    // Back faces first, then front faces: nominal, as OR is commutative, but the order the original drew.
     for (const bool frontPass : {false, true})
         for (std::size_t f = 0; f < kGlenzTriangles; ++f) {
             const auto& tri = mesh.triangles[f];
@@ -151,7 +170,8 @@ void glenzScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32
             const double v[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
             const double n[3] = {u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2],
                                  u[0] * v[1] - u[1] * v[0]};
-            // The clockwise winding makes n point inwards: a front face's n points away from the eye.
+            // The winding (clockwise on the y-down screen) makes the right-handed normal n point inward: a
+            // front face's n points away from the eye.
             const double toFace[3] = {a[0] - camera.eye[0], a[1] - camera.eye[1], a[2] - camera.eye[2]};
             const bool front = n[0] * toFace[0] + n[1] * toFace[1] + n[2] * toFace[2] > 0;
             if (front != frontPass)

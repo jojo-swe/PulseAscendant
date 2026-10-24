@@ -133,15 +133,31 @@ void testPalette() {
         CHECK(palette[copper | kCodes] != palette[copper | kCodes | kGlenzFrontB]);
         CHECK(palette[copper | kCodes] != palette[copper | kCodes | kGlenzBackB]);
     }
+    // Every index the scene can produce (a copper step, at most one front face colour and at most one back
+    // face colour: copper | {0, F, F|FB} | {0, B, B|BB}, 144 in all) is a colour of its own, and a front
+    // face never looks like a back face over the same copper.
+    std::set<std::array<int, 3>> colours;
+    std::size_t reachable = 0;
+    for (int copper = 0; copper < 16; ++copper) {
+        for (int front : {0, int{kGlenzFront}, kGlenzFront | kGlenzFrontB})
+            for (int back : {0, int{kGlenzBack}, kGlenzBack | kGlenzBackB}) {
+                colours.insert(rgbOf(palette[static_cast<std::size_t>(copper | front | back)]));
+                ++reachable;
+            }
+        CHECK(palette[copper | kGlenzFront] != palette[copper | kGlenzBack]);
+        CHECK(palette[copper | kGlenzFront | kGlenzFrontB] != palette[copper | kGlenzBack | kGlenzBackB]);
+    }
+    std::printf("glenz: %zu reachable indices, %zu distinct colours\n", reachable, colours.size());
+    CHECK(reachable == 144 && colours.size() == 144);
     Palette later{};
     glenzPalette(later, glenz(12), 400);
     CHECK(later == palette);
 }
 
 // Future Crew's mesh: 14 vertices, 24 triangles, every edge shared by exactly two triangles (closed), each
-// directed edge used once (consistent winding), wound clockwise from outside as in the original (every
-// face's right-handed normal points towards the centre, which the star shape keeps inside every face's
-// plane).
+// directed edge used once (consistent winding), wound as in the original: clockwise on the y-down screen
+// seen from outside (every face's right-handed normal points inward, towards the centre, which the star
+// shape keeps inside every face's plane).
 void testMesh() {
     using namespace evo::retro;
     const GlenzMesh& mesh = glenzMesh();
@@ -232,6 +248,64 @@ void testBounce() {
             y += p[1];
         CHECK(std::abs(y / 14 - (kGlenzFloor + kGlenzLift * h)) < 1e-9);
     }
+}
+
+// The bounce on explicit beat lists, at the edges the chapter never shows: before the first beat and after
+// the last, no beats or one, duplicate beat times, irregular spacing. Phase and height stay finite and in
+// [0, 1], the height moves continuously (at most 4 / L per second for the shortest beat length L), and the
+// phase is 0 on every beat.
+void testBounceEdges() {
+    using namespace evo::retro;
+    struct Case {
+        const char* name;
+        std::vector<double> beats;
+        double shortest; // the shortest beat length, 0 when there is none
+    };
+    const std::vector<Case> cases = {
+        {"none", {}, 0},
+        {"one", {2.0}, 0},
+        {"two", {1.0, 1.5}, 0.5},
+        {"even", {0.5, 1.0, 1.5, 2.0, 2.5}, 0.5},
+        {"duplicates", {0.5, 0.5, 1.0, 1.4, 1.4, 1.4, 2.0}, 0.4},
+        {"all duplicates", {1.0, 1.0, 1.0}, 0},
+        {"irregular", {0.3, 0.45, 1.2, 1.25, 2.9, 3.0}, 0.05},
+    };
+    constexpr double kStep = 1e-3;
+    for (const Case& c : cases) {
+        double previous = glenzBounceAt(c.beats, -3.0);
+        double maxStep = 0;
+        for (int i = 0; i <= 9000; ++i) { // -3 s .. 6 s: well before the first beat and after the last
+            const double t = -3.0 + i * kStep;
+            const double p = glenzBeatPhaseAt(c.beats, t), h = glenzBounceAt(c.beats, t);
+            CHECK(std::isfinite(p) && p >= 0 && p <= 1);
+            CHECK(std::isfinite(h) && h >= 0 && h <= 1);
+            CHECK(std::abs(h - 4 * p * (1 - p)) < 1e-12);
+            maxStep = std::max(maxStep, std::abs(h - previous));
+            previous = h;
+        }
+        const double bound = c.shortest > 0 ? 4 * kStep / c.shortest * 1.001 + 1e-9 : 1e-12;
+        std::printf("glenz: beats %-14s largest height step %.5f over 1 ms (bound %.5f)\n", c.name, maxStep,
+                    bound);
+        CHECK(maxStep <= bound);
+        for (double beat : c.beats) {
+            CHECK(glenzBeatPhaseAt(c.beats, beat) < 1e-6);
+            CHECK(glenzBeatPhaseAt(c.beats, beat - 1e-12) < 1e-6); // on the beat within 1e-9
+        }
+        if (c.shortest > 0) {
+            // Before the first beat and after the last, the nearest beat length repeats.
+            const double first = c.beats.front(), last = c.beats.back();
+            const double firstLength = *std::upper_bound(c.beats.begin(), c.beats.end(), first) - first;
+            const double lastLength = last - *(std::lower_bound(c.beats.begin(), c.beats.end(), last) - 1);
+            CHECK(std::abs(glenzBeatPhaseAt(c.beats, first - 2.5 * firstLength) - 0.5) < 1e-9);
+            CHECK(std::abs(glenzBeatPhaseAt(c.beats, last + 3.25 * lastLength) - 0.25) < 1e-9);
+        } else {
+            CHECK(maxStep == 0 && glenzBounceAt(c.beats, 0.77) == 0);
+        }
+    }
+    // Irregular spacing: halfway through each interval is the top, whatever its length.
+    const std::vector<double> irregular = {0.3, 0.45, 1.2, 1.25, 2.9, 3.0};
+    for (std::size_t i = 0; i + 1 < irregular.size(); ++i)
+        CHECK(std::abs(glenzBounceAt(irregular, (irregular[i] + irregular[i + 1]) / 2) - 1) < 1e-9);
 }
 
 // Whether a pixel centre is covered by a triangle, with polys.comp's top-left rule (scene.hpp).
@@ -433,6 +507,7 @@ int main() {
         testPalette();
         testMesh();
         testBounce();
+        testBounceEdges();
         testScene();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
