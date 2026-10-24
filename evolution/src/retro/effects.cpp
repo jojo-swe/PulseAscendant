@@ -4,17 +4,22 @@
 #include "retro/effects.hpp"
 
 #include "retro/boot.hpp"
+#include "retro/flyby.hpp"
 #include "retro/palette.hpp"
 #include "retro/scroller.hpp"
 
 namespace evo::retro {
+
+// FLYBY's greeting scrolls by the retro frame at the scroller's rate.
+static_assert(kFlybyRetroRate == kScrollerRetroRate);
 
 const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kTestPattern{kTestPatternShader, kDefaultRetroRate, grayPalette};
     static constexpr EffectInfo kRaytrace{kTestPatternShader, kRaytraceRetroRate, grayPalette};
     static constexpr EffectInfo kBoot{nullptr, kBootRetroRate, bootPalette, bootText, bootBackground};
     static constexpr EffectInfo kPlasma{kPlasmaShader, kPlasmaRetroRate, plasmaPalette};
-    static constexpr EffectInfo kFlyby{kTestPatternShader, kScrollerRetroRate, grayPalette, flybyText};
+    static constexpr EffectInfo kFlyby{nullptr,   kFlybyRetroRate, flybyPalette,
+                                       flybyText, nullptr,         flybyScene};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
                                          creditsBackground};
     switch (effect) {

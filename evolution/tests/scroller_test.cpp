@@ -9,6 +9,7 @@
 #include "gfx/sync.hpp"
 #include "render/retro_stage.hpp"
 #include "retro/effects.hpp"
+#include "retro/flyby.hpp"
 #include "retro/palette.hpp"
 #include "retro/scroller.hpp"
 #include "show/timeline.hpp"
@@ -183,8 +184,8 @@ void testRegistry() {
     CHECK(credits.background == &evo::retro::creditsBackground);
 
     const evo::retro::EffectInfo& flyby = evo::retro::effectFor(Effect::Flyby);
-    CHECK(flyby.shader != nullptr && std::string(flyby.shader) == evo::retro::kTestPatternShader);
-    CHECK(flyby.retroRate == 35 && flyby.palette == &evo::retro::grayPalette);
+    CHECK(flyby.shader == nullptr && flyby.scene == &evo::retro::flybyScene);
+    CHECK(flyby.retroRate == 35 && flyby.palette == &evo::retro::flybyPalette);
     CHECK(flyby.text == &evo::retro::flybyText);
 
     // The credits, verbatim.
@@ -213,7 +214,7 @@ void testRegistry() {
     CHECK(text[0].rgba == 0xFF00000Fu && text[0].scale == 1);
     const std::vector<Item> scroller = scrollerItems(evo::retro::kCreditsText, 140, 60, 24, 40, 100);
     CHECK(same({text.begin() + 1, text.end()}, scroller));
-    // FLYBY's: the greeting low over the test pattern, white in the grey ramp.
+    // FLYBY's: the greeting low over the ship and the stars, white (255) in FLYBY's palette.
     CHECK(same(evo::retro::flybyText(frame, 140),
                scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 180, 255, true)));
 
@@ -357,7 +358,7 @@ void testImages(evo::gfx::Context& ctx) {
     CHECK(rendered && fixture.stage().retroFrame() == retroFrame);
     CHECK(repeat.indices == picture.indices && repeat.rgb == picture.rgb);
 
-    // FLYBY at t = 3, before its portal: the test pattern with the greeting in white over it.
+    // FLYBY at t = 3, before its portal: the ship and the stars with the greeting in white over them.
     const std::uint32_t flybyFrame = frameAt(3);
     const TimelineFrame flyby = chapterFrame(kFlybyChapter, Effect::Flyby, middleOf(flybyFrame));
     CHECK(flyby.era == 0.f);
@@ -373,8 +374,7 @@ void testImages(evo::gfx::Context& ctx) {
             CHECK(glyphAt(overlay, greeting[i], 255, -1));
             ++checked;
         }
-    // Each shadow pixel is black (index 0) unless a glyph's ink covers it; the test pattern has no index 0
-    // this low, so every 0 there is shadow.
+    // Each shadow pixel is black (index 0) unless a glyph's ink covers it.
     std::size_t shadowPixels = 0;
     for (std::size_t i = 0; i < glyphs; ++i) {
         const Item& shadow = greeting[i];
@@ -390,15 +390,6 @@ void testImages(evo::gfx::Context& ctx) {
                     shadowPixels += index == 0;
                 }
     }
-    for (std::uint32_t y = 160; y < kHeight - 6; ++y)
-        for (std::uint32_t x = 6; x < kWidth - 6; ++x)
-            if (overlay.at(static_cast<int>(x), static_cast<int>(y)) == 0) {
-                const bool underShadow =
-                    std::any_of(greeting.begin(), greeting.begin() + glyphs, [&](const Item& s) {
-                        return x >= s.x && x < s.x + 8 && y >= s.y && y < s.y + 8;
-                    });
-                CHECK(underShadow);
-            }
     std::printf("flyby: %zu greeting glyphs checked at t = 3, %zu shadow pixels\n", checked, shadowPixels);
     CHECK(checked >= 10 && shadowPixels >= 100);
 }

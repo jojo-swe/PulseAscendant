@@ -58,9 +58,8 @@ void creditsPalette(Palette& palette, const show::TimelineFrame& frame, std::uin
 std::uint8_t creditsBackground(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 std::vector<text::Item> creditsText(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
-// FLYBY's 1993 side keeps the test pattern (step 3 brings the flat-shaded ship) and scrolls this greeting
-// low over it, in white (index 255 of the grey ramp) with a black drop shadow, so it reads over the light
-// bands.
+// FLYBY's 1993 side (retro/flyby.hpp) scrolls this greeting low over the ship and the stars, in white (index
+// 255 of FLYBY's palette) with a black drop shadow, so it reads over the ship's light faces.
 inline constexpr std::string_view kFlybyText = "WE WERE THERE IN 1993 ...";
 inline constexpr float kFlybyBaseY = 180;
 inline constexpr float kFlybySpeed = 60;

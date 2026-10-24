@@ -52,8 +52,9 @@ inline constexpr const char* kPlasmaShader = "retro_plasma.comp.spv";
 inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 
 // The registry (effects.cpp): the entry of every effect. Boot is the DOS prompt, Plasma the cycling plasma,
-// Credits the sine scroller on deep blue; Flyby keeps the test pattern until step 3 but scrolls its greeting
-// over it. The other effects get their entries in later steps and show the test pattern in grey until then.
+// Credits the sine scroller on deep blue, Flyby the flat-shaded ship over a starfield with its greeting
+// scrolling over them. The other effects get their entries in later steps and show the test pattern in grey
+// until then.
 const EffectInfo& effectFor(show::Effect effect);
 
 } // namespace evo::retro
