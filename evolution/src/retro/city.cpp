@@ -1,35 +1,20 @@
 #include "retro/city.hpp"
 
+#include "retro/math.hpp"
 #include "retro/vec3.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
-#include <numbers>
 
 namespace evo::retro {
 
 namespace {
 
-constexpr double kPi = std::numbers::pi;
-
-double radians(double degrees) {
-    return degrees * kPi / 180;
-}
-
-double smoothstep(double x) {
-    x = std::clamp(x, 0.0, 1.0);
-    return x * x * (3 - 2 * x);
-}
-
 // The integral of smoothstep from 0 to u (u clamped to [0, 1]).
 double smoothstepIntegral(double u) {
     u = std::clamp(u, 0.0, 1.0);
     return u * u * u - u * u * u * u / 2;
-}
-
-double unit(std::uint32_t h) {
-    return h / 4294967296.0;
 }
 
 double accentOf(const show::TimelineFrame& frame) {
@@ -115,8 +100,10 @@ constexpr int kDomeSegments = 24;
 // kSunRadius): the gaps between them narrow upwards.
 constexpr std::array<std::array<double, 2>, 4> kSunSlices = {
     {{-0.39, -0.30}, {-0.24, -0.12}, {-0.07, 0.08}, {0.12, 1.0}}};
-// Lit windows, on walls within kWindowDistance.
-constexpr double kWindowDistance = 90, kWindowWidth = 1.3, kWindowHeight = 1.8, kWindowOut = 0.08;
+// Lit windows, on walls whose middle is within kWindowDistance; from kWindowFade on they shrink about their
+// centres and fade into the haze, gone at kWindowDistance, so they never pop in or out.
+constexpr double kWindowDistance = 90, kWindowFade = 70, kWindowWidth = 1.3, kWindowHeight = 1.8,
+                 kWindowOut = 0.08;
 constexpr int kWindowsPerWall = 10;
 
 // Sky ramp position (0 horizon haze .. 1 zenith) of an elevation in degrees.
@@ -124,20 +111,18 @@ double skyAt(double elevation) {
     return std::sqrt(std::clamp((elevation + 3) / 93, 0.0, 1.0));
 }
 
-// The camera's view basis and the frustum's half-space slopes, widened a little: a primitive wholly outside
-// one of them would come out of addTriangle empty, so it is left out early.
+// The camera's view basis (addTriangle's, from viewBasis) and the frustum's half-space slopes, the screen's
+// half extents over the focal lengths, widened a little: a primitive wholly outside one of them would come
+// out of addTriangle empty, so it is left out early.
 struct Frustum {
     Vec3 eye, right, up, forward;
     double kx, ky;
 
     explicit Frustum(const Camera& camera) {
-        eye = {camera.eye[0], camera.eye[1], camera.eye[2]};
-        forward = normalize(sub({camera.target[0], camera.target[1], camera.target[2]}, eye));
-        right = normalize(cross({camera.up[0], camera.up[1], camera.up[2]}, forward));
-        up = cross(forward, right);
-        const double tanY = std::tan(radians(camera.fovYDegrees / 2));
-        ky = 1.05 * tanY;
-        kx = 1.05 * tanY * (kScreenWidth / 2.0) / ((kScreenHeight / 2.0) * kPixelAspect);
+        const ViewBasis view = viewBasis(camera);
+        eye = view.eye, right = view.right, up = view.up, forward = view.forward;
+        kx = 1.05 * (kScreenWidth / 2.0) / view.focalX;
+        ky = 1.05 * (kScreenHeight / 2.0) / view.focalY;
     }
 
     template <typename Points> bool hidden(const Points& points) const {
@@ -283,10 +268,11 @@ void addGround(Builder& b, std::int32_t i, std::int32_t m) {
     groundTile(b, x - h, x + h, z - h, z + h, kCityRoad);
 }
 
-// The main street's centre line: dashes 3.5 long every 9 units, within 120 units of the eye, not on the
-// crossings; just above the road.
+// The main street's centre line: dashes 3.5 long every 9 units whose middle lies within kReach of the eye
+// on the ground, not on the crossings; just above the road. From kFade on they narrow and fade into the
+// haze, gone at kReach, so they never pop in or out.
 void addMarkings(Builder& b) {
-    constexpr double kLift = 0.02, kHalfWidth = 0.2, kDash = 3.5, kPitch = 9, kReach = 120;
+    constexpr double kLift = 0.02, kHalfWidth = 0.2, kDash = 3.5, kPitch = 9, kReach = 120, kFade = 90;
     const Vec3& eye = b.eye();
     if (std::abs(eye[0]) > kReach)
         return;
@@ -295,11 +281,14 @@ void addMarkings(Builder& b) {
         const double local = z0 - kCityCell * std::floor(z0 / kCityCell); // 0..42 from a crossing's middle
         if (local < kCityStreet / 2 || local + kDash > kCityCell - kCityStreet / 2)
             continue;
-        const Vec3 p[4] = {{-kHalfWidth, kLift, z0},
-                           {kHalfWidth, kLift, z0},
-                           {kHalfWidth, kLift, z1},
-                           {-kHalfWidth, kLift, z1}};
-        const std::uint8_t index = rampIndex(kCityMarking, kCityMarkingShades, b.haze({0, 0, (z0 + z1) / 2}));
+        const double reach = std::hypot(eye[0], (z0 + z1) / 2 - eye[2]);
+        if (reach >= kReach)
+            continue;
+        const double fade = smoothstep((reach - kFade) / (kReach - kFade));
+        const double w = kHalfWidth * (1 - fade);
+        const Vec3 p[4] = {{-w, kLift, z0}, {w, kLift, z0}, {w, kLift, z1}, {-w, kLift, z1}};
+        const std::uint8_t index =
+            rampIndex(kCityMarking, kCityMarkingShades, std::max(b.haze({0, 0, (z0 + z1) / 2}), fade));
         b.quad(p[0], p[1], p[2], p[3], {index, index, index, index}, kFlat);
     }
 }
@@ -357,8 +346,11 @@ void addBox(Builder& b, const CityBox& box, std::int32_t i, std::int32_t m, std:
         const Vec3 along = normalize(sub(r, l));
         const double width = std::sqrt(dot(sub(r, l), sub(r, l)));
         const Vec3 middle = {(l[0] + r[0]) / 2, (box.y0 + box.y1) / 2, (l[2] + r[2]) / 2};
-        if (std::sqrt(dot(sub(middle, eye), sub(middle, eye))) > kWindowDistance)
+        const double reach = std::sqrt(dot(sub(middle, eye), sub(middle, eye)));
+        if (reach >= kWindowDistance)
             continue;
+        const double fade = smoothstep((reach - kWindowFade) / (kWindowDistance - kWindowFade));
+        const double halfW = kWindowWidth / 2 * (1 - fade), halfH = kWindowHeight / 2 * (1 - fade);
         int lit = 0;
         for (int floor = 0; lit < kWindowsPerWall; ++floor) {
             const double y0 = box.y0 + 2.2 + 3.4 * floor, y1 = y0 + kWindowHeight;
@@ -377,9 +369,12 @@ void addBox(Builder& b, const CityBox& box, std::int32_t i, std::int32_t m, std:
                     return Vec3{l[0] + along[0] * u + wall.normal[0] * kWindowOut, y,
                                 l[2] + along[2] * u + wall.normal[2] * kWindowOut};
                 };
-                const Vec3 centre = at((u0 + u1) / 2, (y0 + y1) / 2);
-                const std::uint8_t index = rampIndex(kCityWindow, kCityGroundShades, b.haze(centre));
-                b.quad(at(u0, y0), at(u1, y0), at(u1, y1), at(u0, y1), {index, index, index, index}, kFlat);
+                const double uc = (u0 + u1) / 2, yc = (y0 + y1) / 2;
+                const std::uint8_t windowIndex =
+                    rampIndex(kCityWindow, kCityGroundShades, std::max(b.haze(at(uc, yc)), fade));
+                b.quad(at(uc - halfW, yc - halfH), at(uc + halfW, yc - halfH), at(uc + halfW, yc + halfH),
+                       at(uc - halfW, yc + halfH), {windowIndex, windowIndex, windowIndex, windowIndex},
+                       kFlat);
             }
         }
     }

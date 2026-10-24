@@ -78,7 +78,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     {116, Effect::Raytrace, Transition::BeatSwap, 1.f, 0, "RAYTRACE",
         "1993 · PRECALCULATED · 10 FPS", "2026 · REAL-TIME PATH TRACING · 60 FPS"},
     {150, Effect::City, Transition::Wipe, .9f, 0, "VECTOR CITY",
-        "1993 · 200 POLYGONS · GOURAUD", "2026 · MILLIONS OF WINDOWS · WET STREETS"},
+        "1993 · 300 POLYGONS · GOURAUD", "2026 · MILLIONS OF WINDOWS · WET STREETS"},
     {168, Effect::Finale, Transition::BeatSwap, 1.f, 0, "FINALE", "1993 · ALL EFFECTS", "2026 · THE STUDIO"},
     // The pull-back out of the CRT into the Studio: the era reaches 2026 and Act I ends there.
     {182, Effect::Portal, Transition::Portal, .7f, 0, "PORTAL",
@@ -129,18 +129,22 @@ constexpr bool effectsInChapterOrder() {
 }
 static_assert(effectsInChapterOrder(), "cues must list one effect per chapter in Effect order");
 
-inline constexpr std::array<const char*, 31> effectNames = {"Boot",        "Flyby",        "Dots",
-                                                            "Plasma",      "Tunnel",       "Glenz",
-                                                            "Lens",        "Raytrace",     "City",
-                                                            "Finale",      "Portal",       "StudioNight",
-                                                            "Ascent",      "CityNight",    "Nebula",
-                                                            "Cathedral",   "Ocean",        "SphereStorm",
-                                                            "Singularity", "Return",       "Reboot",
-                                                            "Galaxy",      "PlasmaPlanet", "Wormhole",
-                                                            "CrystalCity", "LensOfGod",    "RaytraceInfinity",
-                                                            "Metropolis",  "Ascendant",    "Credits",
-                                                            "TheEnd"};
-static_assert(effectNames.size() == cues.size(), "one name per effect");
+// How many effects (and chapters) there are: Effect's values run from 0 to kEffectCount - 1.
+inline constexpr std::size_t kEffectCount = cues.size();
+static_assert(static_cast<std::size_t>(Effect::TheEnd) + 1 == kEffectCount, "TheEnd is the last effect");
+
+inline constexpr std::array<const char*, kEffectCount> effectNames = {
+    "Boot",        "Flyby",        "Dots",
+    "Plasma",      "Tunnel",       "Glenz",
+    "Lens",        "Raytrace",     "City",
+    "Finale",      "Portal",       "StudioNight",
+    "Ascent",      "CityNight",    "Nebula",
+    "Cathedral",   "Ocean",        "SphereStorm",
+    "Singularity", "Return",       "Reboot",
+    "Galaxy",      "PlasmaPlanet", "Wormhole",
+    "CrystalCity", "LensOfGod",    "RaytraceInfinity",
+    "Metropolis",  "Ascendant",    "Credits",
+    "TheEnd"};
 
 constexpr const char* effectName(Effect effect) {
     return effectNames[static_cast<int>(effect)];

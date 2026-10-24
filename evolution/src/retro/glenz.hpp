@@ -39,12 +39,13 @@ inline constexpr const char* kGlenzCopperShader = "retro_copper.comp.spv";
 // overlap. A closed mesh puts a front and a back face over every pixel of its silhouette, so the code is 3
 // there; the faces alternate between two colours, as in the original, so the facets and the far side's edges
 // show through the near side.
-// The star-cube is not convex, so a pixel may lie under two faces of the same side; their codes OR to that
-// side's second checker colour whenever either face carries it: lossy, but deterministic.
-// The scene draws back faces first only nominally: OR is commutative, so the order changes nothing.
 inline constexpr std::uint8_t kGlenzCopperMask = 0x0f;
 inline constexpr std::uint8_t kGlenzCopperBars = 3;
 inline constexpr std::uint8_t kGlenzCopperSteps = 5;
+// The face codes. The star-cube is not convex, so a pixel may lie under two faces of the same side; their
+// codes OR to that side's second checker colour (kGlenzFrontB, kGlenzBackB) whenever either face carries it:
+// lossy, but deterministic. The scene draws the back faces before the front ones only nominally: OR is
+// commutative, so the order changes nothing.
 inline constexpr std::uint8_t kGlenzFront = 0x10;
 inline constexpr std::uint8_t kGlenzBack = 0x20;
 inline constexpr std::uint8_t kGlenzFrontB = 0x40;
@@ -57,8 +58,8 @@ using GlenzPoint = std::array<double, 3>;
 using GlenzVertices = std::array<GlenzPoint, kGlenzVertices>;
 
 // The mesh in model space: the cube's corners at +-1, the pyramids' tips at 1.7 on the axes. The triangles
-// keep the original's vertex order: a face seen from outside winds clockwise on the y-down screen (its
-// right-handed normal points inward).
+// keep the original's vertex order: a face seen from outside runs counter-clockwise on the screen (its cross
+// product in y-down pixel coordinates is negative), and its right-handed normal points inward.
 struct GlenzMesh {
     GlenzVertices vertices;
     std::array<std::array<int, 3>, kGlenzTriangles> triangles;

@@ -1,5 +1,6 @@
 #include "retro/dots.hpp"
 
+#include "retro/math.hpp"
 #include "text/font8x8.hpp"
 
 #include <algorithm>
@@ -130,10 +131,6 @@ std::array<Step, kMorphs> schedule(const show::TimelineFrame& frame) {
         steps[m] = {std::max(from, to > frames ? to - frames : 0u), to};
     }
     return steps;
-}
-
-double smoothstep(double s) {
-    return s * s * (3 - 2 * s);
 }
 
 // The order in which the points of `world` pair up with another shape's: sorted by height (highest first)

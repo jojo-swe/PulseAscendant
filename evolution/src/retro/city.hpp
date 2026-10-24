@@ -22,8 +22,8 @@ namespace evo::retro {
 // each a box (some with a set-back tower on top), their heights, splits and ramps drawn from cityHash, a
 // small integer hash of (i, m) and kCitySeed (no std random engine or distribution: those are
 // implementation-defined). Only the cells within kCityDrawDistance of the eye are drawn, fading through a
-// distance haze into the background, so a frame draws about 200 to 300 polygons of buildings and streets
-// (plus some lit windows), drawn as triangles through addTriangle, which clips and culls them.
+// distance haze into the background, so a frame draws about 300 polygons (at most about 400): walls, roofs,
+// street tiles, markings and lit windows, drawn as triangles through addTriangle, which clips and culls them.
 inline constexpr std::uint32_t kCityRetroRate = 35;
 inline constexpr std::uint32_t kCitySeed = 0x19930714u;
 inline constexpr double kCityCell = 42;
@@ -41,7 +41,8 @@ inline constexpr double kCityHazeNear = 70; // the haze starts here and is total
 // kCityTurn[0] A, its yaw rate easing (smoothstep) up to kCityTurnRate by kCityTurn[1] A; the bank (roll) is
 // kCityBank times the yaw rate over kCityTurnRate (plus a 1.5 degree sway while in the street). After A the
 // turn eases out over kCityTurnEase seconds and the camera flies on level. The speed is kCitySpeed
-// throughout; the heading is integrated from the turn's start by Simpson's rule on every call.
+// throughout. The heading is closed form; the position is integrated from the heading by Simpson's rule
+// (steps of at most 1/200 s) from the turn's start on every call, so it too is a pure function of t.
 inline constexpr double kCityMinAccent = 5, kCityMaxAccent = 40;
 inline constexpr double kCitySpeed = 24;   // units a second
 inline constexpr double kCityStartZ = -30; // where the camera is at retro frame 0, on the main street

@@ -11,7 +11,8 @@
 
 namespace evo::retro {
 
-// The palette index a text-only effect's screen is cleared to before its text is drawn.
+// The palette index the screen of an effect without a shader is cleared to before its scene and text are
+// drawn (BOOT's black, CITY's haze, FINALE's flash).
 using BackgroundProvider = std::uint8_t (*)(const show::TimelineFrame&, std::uint32_t retroFrame);
 // The strings an effect draws into its index image with the 8x8 font (text::TextPass::drawIndex; the low byte
 // of an item's rgba is its palette index), after its shader or its background.
@@ -91,7 +92,8 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 // gouraud vector city flown at sunset, Portal FLYBY's ship flying off inside a closing monitor bezel, Reboot
 // the prompt's second script, TheEnd the fading end screen, Finale the megamix cutting between FLYBY, DOTS,
 // TUNNEL, GLENZ, LENS and RAYTRACE (retro/finale.hpp). The other effects get their entries in later steps and
-// show the test pattern in grey until then.
+// show the test pattern in grey until then; Act III's planetary chapters (GALAXY to ASCENDANT) are 2026 only
+// and keep it for good (renderer_test and boot_test use GALAXY's and check that it is the test pattern).
 const EffectInfo& effectFor(show::Effect effect);
 
 } // namespace evo::retro

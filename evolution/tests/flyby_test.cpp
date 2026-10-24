@@ -15,6 +15,7 @@
 #include "retro/scroller.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 
 #include <algorithm>
 #include <array>
@@ -47,14 +48,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr std::uint32_t kWidth = RetroStage::kWidth, kHeight = RetroStage::kHeight;
 constexpr std::size_t kPixels = std::size_t{kWidth} * kHeight;
@@ -518,7 +511,7 @@ void testImages(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testPalette();
         testScene();

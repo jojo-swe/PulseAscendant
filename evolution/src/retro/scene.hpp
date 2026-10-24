@@ -1,5 +1,6 @@
 #pragma once
 
+#include "retro/vec3.hpp"
 #include "show/timeline.hpp"
 
 #include <cstddef>
@@ -95,6 +96,15 @@ struct Camera {
 
 inline constexpr double kNearPlane = 0.1;   // view-space z of the near clipping plane
 inline constexpr double kPixelAspect = 1.2; // pixel height over width on the 4:3 display
+
+// A camera's view basis (unit vectors in world space; view x = dot(p - eye, right) and so on) and its focal
+// lengths in pixels: a view-space point (x, y, z) projects to (160 + focalX x / z, 100 - focalY y / z).
+// project and addTriangle use it, and so do the effects that cull against the view frustum themselves.
+struct ViewBasis {
+    Vec3 eye, right, up, forward;
+    double focalX, focalY;
+};
+ViewBasis viewBasis(const Camera& camera);
 
 // Where the 2D clipper cuts triangles that reach far off the screen, in pixels: inside this band every edge
 // function of polys.comp fits in 32 bits. Only triangles crossing it are cut, and the cut lies off screen.

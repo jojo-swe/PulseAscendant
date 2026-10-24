@@ -2,6 +2,7 @@
 // See retro/flyby.hpp for the layout of the palette and the shape of the flight.
 
 #include "retro/flyby.hpp"
+#include "retro/math.hpp"
 #include "retro/vec3.hpp"
 
 #include <algorithm>
@@ -18,10 +19,6 @@ namespace {
 
 double lerp(double a, double b, double t) {
     return a + (b - a) * t;
-}
-
-double radians(double degrees) {
-    return degrees * std::numbers::pi / 180.0;
 }
 
 // --- The ship ------------------------------------------------------------------------------------------
@@ -200,11 +197,6 @@ std::uint32_t hash(std::uint32_t x) {
     x *= 0x846ca68bU;
     x ^= x >> 16;
     return x;
-}
-
-// A number in [0, 1) from a hash.
-double unit(std::uint32_t h) {
-    return static_cast<double>(h) / 4294967296.0;
 }
 
 // A 3x3 rotation, row by row.

@@ -45,6 +45,9 @@
             "configurePreset": "linux",
             "output": {
                 "outputOnFailure": true
+            },
+            "execution": {
+                "jobs": 8
             }
         },
         {

@@ -457,7 +457,7 @@ set_tests_properties(stream_capture PROPERTIES TIMEOUT 300)
 # forced through EVO_FORCE_ERA (needs numpy).
 add_test(NAME storyboard
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/storyboard_test.py $<TARGET_FILE:Evolution>
-            ${CMAKE_BINARY_DIR}/build-out/storyboard)
+            ${CMAKE_BINARY_DIR}/build-out/storyboard_test)
 set_tests_properties(storyboard PROPERTIES TIMEOUT 300)
 
 # --show-info prints the show as JSON without touching SDL video or Vulkan.

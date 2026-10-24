@@ -7,7 +7,6 @@
 #include "retro/vec3.hpp"
 
 #include <cmath>
-#include <numbers>
 
 namespace evo::test {
 
@@ -20,19 +19,12 @@ struct Ray {
 
 // The ray from the camera's eye through screen point (px, py) in pixels, with addTriangle's projection.
 inline Ray rayThrough(const retro::Camera& camera, double px, double py) {
-    const Vec3 eye = {camera.eye[0], camera.eye[1], camera.eye[2]};
-    const Vec3 forward =
-        retro::normalize(retro::sub({camera.target[0], camera.target[1], camera.target[2]}, eye));
-    const Vec3 right = retro::normalize(retro::cross({camera.up[0], camera.up[1], camera.up[2]}, forward));
-    const Vec3 up = retro::cross(forward, right);
-    const double focalY =
-        (retro::kScreenHeight / 2.0) / std::tan(camera.fovYDegrees * std::numbers::pi / 360.0);
-    const double focalX = focalY * retro::kPixelAspect;
-    const double vx = (px - retro::kScreenWidth / 2.0) / focalX;
-    const double vy = (retro::kScreenHeight / 2.0 - py) / focalY;
-    return {eye, retro::normalize({forward[0] + right[0] * vx + up[0] * vy,
-                                   forward[1] + right[1] * vx + up[1] * vy,
-                                   forward[2] + right[2] * vx + up[2] * vy})};
+    const retro::ViewBasis view = retro::viewBasis(camera);
+    const double vx = (px - retro::kScreenWidth / 2.0) / view.focalX;
+    const double vy = (retro::kScreenHeight / 2.0 - py) / view.focalY;
+    return {view.eye, retro::normalize({view.forward[0] + view.right[0] * vx + view.up[0] * vy,
+                                        view.forward[1] + view.right[1] * vx + view.up[1] * vy,
+                                        view.forward[2] + view.right[2] * vx + view.up[2] * vy})};
 }
 
 // The distance along the ray to the triangle (either side facing), or a negative number for a miss.

@@ -7,6 +7,7 @@
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
 #include "gfx/sync.hpp"
+#include "test_env.hpp"
 #include "text/font8x8.hpp"
 #include "text/text_pass.hpp"
 
@@ -34,14 +35,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 // A test target: an image the text pass draws into, cleared to a colour first and read back after.
 class Target {
@@ -352,7 +345,7 @@ void testEmpty(evo::gfx::Context& ctx, Fixture& fixture) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testSplitBatches();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
