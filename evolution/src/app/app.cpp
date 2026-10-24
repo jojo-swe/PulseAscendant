@@ -185,7 +185,7 @@ int runWindowed(const Options& options) {
     // waits for the ring) and before the swapchain, so it is destroyed after it: ~Swapchain waits for the
     // device, so no frame can still be using it.
     gfx::FrameRing ring(ctx);
-    // Interactive: the window keeps temporal history between frames.
+    // Interactive: the window keeps temporal history between frames, at --spp per frame (1 by default).
     render::RenderSettings settings;
     settings.width = static_cast<std::uint32_t>(width > 0 ? width : options.width);
     settings.height = static_cast<std::uint32_t>(height > 0 ? height : options.height);
@@ -193,6 +193,7 @@ int runWindowed(const Options& options) {
     settings.hud = options.hud;
     settings.hudTitle = true;
     settings.mode = render::RenderMode::Interactive;
+    settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     render::Renderer renderer(ctx, ring, settings);
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
@@ -297,9 +298,10 @@ int runRenderStream(const Options& options) {
     const auto height = static_cast<std::uint32_t>(options.height);
     gfx::Readback readback(ctx, width, height);
     gfx::FrameRing ring(ctx);
-    // Export: every frame a pure function of its show time; no title, cards only.
+    // Export: every frame a pure function of its show time (and --spp, 64 by default); no title, cards only.
     render::RenderSettings settings{width, height, options.crt, options.hud};
     settings.mode = render::RenderMode::Export;
+    settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     render::Renderer renderer(ctx, ring, settings);
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();

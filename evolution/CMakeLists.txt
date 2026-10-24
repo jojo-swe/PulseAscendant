@@ -620,23 +620,29 @@ add_test(NAME path_tracer COMMAND path_tracer_test)
 set_tests_properties(path_tracer PROPERTIES TIMEOUT 120)
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
-# validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked).
+# validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked). The
+# exports path trace at --spp 2 (the default, 64, is for real exports).
 add_test(NAME render_stream
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_stream_test.py $<TARGET_FILE:Evolution>
-            --validation)
+            --validation --spp 2)
 set_tests_properties(render_stream PROPERTIES TIMEOUT 300)
 
 add_test(NAME capture
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/capture_test.py $<TARGET_FILE:Evolution>
-            ${CMAKE_BINARY_DIR}/build-out/capture --validation)
-set_tests_properties(capture PROPERTIES TIMEOUT 120)
+            ${CMAKE_BINARY_DIR}/build-out/capture --validation --spp 2)
+set_tests_properties(capture PROPERTIES TIMEOUT 300)
 
 # Seeking and export agree: in every chapter, a frame streamed after five others equals a fresh capture of the
-# same time, byte for byte (Review Focus 4 of step 3).
+# same time, byte for byte (Review Focus 4 of step 3; Review Focus 2 of step 4 in the path-traced Studio
+# chapters). Two parts, so CTest runs the path-traced chapters beside the others.
 add_test(NAME stream_capture
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/stream_capture_test.py $<TARGET_FILE:Evolution>
-            ${CMAKE_BINARY_DIR}/build-out/stream_capture --validation)
-set_tests_properties(stream_capture PROPERTIES TIMEOUT 300)
+            ${CMAKE_BINARY_DIR}/build-out/stream_capture rest --validation --spp 2)
+set_tests_properties(stream_capture PROPERTIES TIMEOUT 600)
+add_test(NAME stream_capture_studio
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/stream_capture_test.py $<TARGET_FILE:Evolution>
+            ${CMAKE_BINARY_DIR}/build-out/stream_capture_studio studio --validation --spp 2)
+set_tests_properties(stream_capture_studio PROPERTIES TIMEOUT 600)
 
 # The storyboard tool on two chapters: one grid for Act I, of the documented size, its 1993 and 2026 cells
 # forced through EVO_FORCE_ERA (needs numpy).
@@ -713,3 +719,13 @@ add_dependencies(image_test Evolution_shaders image_test_shaders)
 add_test(NAME image COMMAND image_test)
 # A machine without the layer's synchronization validation reports the test as skipped, not passed.
 set_tests_properties(image PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
+
+# Export mode (Task 11 of step 4) at 160x90 in STUDIO NIGHT: the seeds the renderer hands the modern stage,
+# the window's first frame after a reset equal to an export frame at equal spp and bounces (Review Focus 6),
+# and export frames a pure function of the show time. With the validation layer on; fails on any message.
+add_executable(export_mode_test tests/export_mode_test.cpp)
+target_link_libraries(export_mode_test PRIVATE evo_render evo_modern)
+target_compile_definitions(export_mode_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(export_mode_test Evolution_shaders evo_modern_shaders)
+add_test(NAME export_mode COMMAND export_mode_test)
+set_tests_properties(export_mode PROPERTIES TIMEOUT 120)

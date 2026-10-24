@@ -1,5 +1,6 @@
 #include "render/renderer.hpp"
 
+#include "modern/path_tracer.hpp"
 #include "text/font8x8.hpp"
 
 #include <algorithm>
@@ -121,11 +122,21 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
 
     stats_.modernRendered = plan.modern;
     stats_.historyReset = HistoryReset::None;
+    stats_.frameSeed = 0;
     if (plan.modern) {
         const HistoryKey key{
             frame.chapter, modern_.shotFor(frame), frame.showSeconds, size.width, size.height, mode_, spp_};
         stats_.historyReset = history_.advance(key, !modernRanLastFrame_);
-        modern_.render(cmd, frame, {stats_.historyReset, history_.framesSinceReset()});
+        // Export frames stand alone: the seed depends on the show time only, not on the frames before.
+        const std::uint32_t seedFrames = mode_ == RenderMode::Export ? 0u : history_.framesSinceReset();
+        const HistoryState state{stats_.historyReset,
+                                 history_.framesSinceReset(),
+                                 mode_,
+                                 spp_,
+                                 maxBounces_,
+                                 modern::frameSeedFor(frame.showSeconds, seedFrames)};
+        modern_.render(cmd, frame, state);
+        stats_.frameSeed = state.frameSeed;
     }
     stats_.framesSinceReset = plan.modern ? history_.framesSinceReset() : 0u;
     modernRanLastFrame_ = plan.modern;

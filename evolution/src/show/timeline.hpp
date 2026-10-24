@@ -87,7 +87,10 @@ TimelineFrame sampleTimeline(double showSeconds);
 
 // The show as JSON for --show-info: duration, music file, tracks and every chapter with its start, duration,
 // accent (accent in show seconds) and the eras it shows ([1993], [2026] or [1993,2026]: a Cut holds its
-// eraFixed, the other transitions show both).
-std::string showInfoJson();
+// eraFixed, the other transitions show both). With `sceneName`, every chapter also names the 2026 scene its
+// effect renders ("scene", last in the chapter): the show does not know the scenes, so main() passes
+// modern::sceneFor's names in.
+using SceneNameFn = const char* (*)(Effect effect);
+std::string showInfoJson(SceneNameFn sceneName = nullptr);
 
 } // namespace evo::show

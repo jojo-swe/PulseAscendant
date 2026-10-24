@@ -79,6 +79,8 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.height = parseInt(flag, nextValue(), kMinSize, kMaxSize);
         } else if (flag == "--fps") {
             options.fps = parseInt(flag, nextValue(), kMinFps, kMaxFps);
+        } else if (flag == "--spp") {
+            options.spp = parseInt(flag, nextValue(), kMinSpp, kMaxSpp);
         } else if (flag == "--time") {
             const std::string& text = nextValue();
             options.time = parseSeconds(flag, text);
@@ -144,6 +146,11 @@ Options parseOptions(const std::vector<std::string>& args) {
     return options;
 }
 
+int samplesPerPixel(const Options& options) {
+    const bool exporting = options.renderStream || !options.captureDir.empty();
+    return options.spp.value_or(exporting ? kExportSpp : kWindowSpp);
+}
+
 std::string helpText() {
     return "Usage: Evolution [options]\n"
            "\n"
@@ -152,6 +159,9 @@ std::string helpText() {
            "  --height N           Render height in pixels, 16..8192 (default 720)\n"
            "  --fps N              Frames per second for headless output, 1..240 (default 60)\n"
            "  --time S             Start time on the timeline in seconds, 0..86400 (default 0)\n"
+           "  --spp N              Path-traced samples per pixel per frame, 1..4096 (default 1 in\n"
+           "                       the window, which accumulates them over frames; 64 for\n"
+           "                       --capture-dir and --render-stream, where every frame stands alone)\n"
            "  --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream\n"
            "                       needs a duration greater than 0\n"
            "  --headless           Render without opening a window\n"

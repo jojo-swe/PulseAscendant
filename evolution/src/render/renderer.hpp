@@ -85,6 +85,8 @@ public:
         // The modern stage's history on the last render(): None and 0 when the stage did not run.
         HistoryReset historyReset = HistoryReset::None;
         std::uint32_t framesSinceReset = 0;
+        // The seed handed to the modern stage (HistoryState::frameSeed); 0 when the stage did not run.
+        std::uint32_t frameSeed = 0;
     };
     Stats lastStats() const { return stats_; }
     RenderMode mode() const { return mode_; }

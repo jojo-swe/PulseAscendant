@@ -57,10 +57,18 @@ struct HistoryKey {
     std::uint32_t spp;
 };
 
-// What the modern stage needs to know about its history on a frame.
+// What the modern stage needs to know about a frame besides the timeline: whether its temporal history
+// continues, and how to sample it. The renderer fills in its mode, spp and resolved bounce limit (never 0),
+// and the frame seed: frameSeedFor(showSeconds, 0) in Export, whatever frames came before (a pure function
+// of the show time), and frameSeedFor(showSeconds, framesSinceReset) in Interactive, so the window's first
+// frame after a reset uses the export seed (modern/path_tracer.hpp).
 struct HistoryState {
     HistoryReset reset = HistoryReset::FirstFrame;
     std::uint32_t framesSinceReset = 0;
+    RenderMode mode = RenderMode::Export;
+    std::uint32_t spp = 1;
+    std::uint32_t maxBounces = kExportMaxBounces;
+    std::uint32_t frameSeed = 0;
 };
 
 // Decides, frame by frame, whether the temporal history continues. A reset on the first frame (and after

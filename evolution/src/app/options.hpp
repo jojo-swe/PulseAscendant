@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -27,7 +28,18 @@ struct Options {
     bool hud = true;                  // the epoch cards (and the window's chapter title)
     std::filesystem::path captureDir; // empty = no capture
     std::filesystem::path music;      // empty = the show's music beside the executable
+    // Samples per pixel per frame (--spp, kMinSpp..kMaxSpp); unset = the mode's default (samplesPerPixel).
+    std::optional<int> spp;
 };
+
+inline constexpr int kMinSpp = 1;
+inline constexpr int kMaxSpp = 4096;
+inline constexpr int kWindowSpp = 1;  // the window: its temporal history accumulates more over frames
+inline constexpr int kExportSpp = 64; // --capture-dir and --render-stream: every frame stands alone
+
+// The samples per pixel a run renders each frame with: --spp, or kExportSpp for the exports (--capture-dir,
+// --render-stream) and kWindowSpp for the window.
+int samplesPerPixel(const Options& options);
 
 // Parses the arguments after the program name. Throws std::runtime_error on bad input.
 Options parseOptions(const std::vector<std::string>& args);

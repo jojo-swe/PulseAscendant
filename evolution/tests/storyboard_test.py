@@ -1,7 +1,9 @@
 """Run tools/storyboard.py on chapters 0 and 3 at 320x180: it must write act1.png (both chapters are in Act I)
 and no other act, the grid must decode to the documented layout's size, and the forced 1993 and 2026 cells of
-each row must differ, which shows that EVO_FORCE_ERA reached the captures. It empties <outdir> first, so CTest
-gives it build-out/storyboard_test, never the build-out/storyboard that README and HANDOFF have people fill."""
+each row must differ, which shows that EVO_FORCE_ERA reached the captures. The tool captures at --spp 8 unless
+told otherwise, passes its --spp to every capture, and refuses a value outside 1..4096; the test runs it at
+--spp 2. It empties <outdir> first, so CTest gives it build-out/storyboard_test, never the build-out/storyboard
+that README and HANDOFF have people fill."""
 
 import os
 import shutil
@@ -18,11 +20,29 @@ WIDTH, HEIGHT = 320, 180
 CHAPTERS = [0, 3]
 
 
+def check_spp(exe, outdir):
+    """--spp: 8 by default, passed to every capture, 1..4096."""
+    if storyboard.parse_args(["--app", exe, "--out", outdir]).spp != 8:
+        sys.exit("storyboard.py: the default --spp is not 8")
+    args = storyboard.parse_args(["--app", exe, "--out", outdir, "--spp", "3", "--no-crt"])
+    command = storyboard.capture_command(exe, outdir, 12.5, args)
+    if command[command.index("--spp") + 1] != "3" or "--no-crt" not in command:
+        sys.exit(f"storyboard.capture_command does not pass --spp 3 and --no-crt: {command}")
+    for bad in ("0", "4097", "x"):
+        refused = subprocess.run(
+            [sys.executable, os.path.join(TOOLS, "storyboard.py"), "--app", exe, "--out", outdir, "--spp", bad],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        if refused.returncode == 0 or b"--spp" not in refused.stderr:
+            sys.exit(f"storyboard.py --spp {bad}: expected a refusal naming --spp, got exit {refused.returncode}")
+    print("storyboard: --spp defaults to 8, reaches the captures and is checked")
+
+
 def main(exe, outdir):
     shutil.rmtree(outdir, ignore_errors=True)
+    check_spp(exe, outdir)
     result = subprocess.run(
         [sys.executable, os.path.join(TOOLS, "storyboard.py"), "--app", exe, "--out", outdir, "--width",
-         str(WIDTH), "--height", str(HEIGHT), "--chapters", ",".join(map(str, CHAPTERS))],
+         str(WIDTH), "--height", str(HEIGHT), "--chapters", ",".join(map(str, CHAPTERS)), "--spp", "2"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=280)
     sys.stderr.write(result.stderr.decode(errors="replace"))
     if result.returncode != 0:
