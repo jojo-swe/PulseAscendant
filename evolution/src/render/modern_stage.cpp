@@ -15,7 +15,8 @@ namespace {
 // The placeholder's exposure: fill_hdr.comp inverts the tonemap at 0 EV.
 constexpr float kPlaceholderExposureEV = 0.f;
 // post::Denoiser's images per pixel: ten RGBA16F images (the colour, moments, guides, a-trous and volume
-// ping-pong pairs, denoiser.cpp's createImages). The denoiser does not report its own size; keep this in step.
+// ping-pong pairs, denoiser.cpp's createImages). The denoiser does not report its own size; keep this in
+// step.
 constexpr VkDeviceSize kDenoiserBytesPerPixel = 10 * 8;
 // hdr_ (RGBA16F) and image_ (RGBA8).
 constexpr VkDeviceSize kStageBytesPerPixel = 8 + 4;
