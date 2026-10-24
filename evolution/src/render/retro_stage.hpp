@@ -37,10 +37,12 @@ public:
     // The effect registry the stage renders from: retro::effectFor, or a test's own.
     using EffectLookup = const retro::EffectInfo& (*)(show::Effect);
 
-    // Loads every effect shader of the registry up front, so no chapter hitches on its first frame. Throws
-    // std::runtime_error if the GPU cannot store to an R8_UINT image.
-    // The text pass draws the palette indices of text-only effects and text overlays (drawIndex); it must
-    // outlive the stage.
+    // Loads every effect shader of the registry up front, so no chapter hitches on its first frame, and
+    // builds and uploads every effect texture (EffectInfo::texture) once. Throws std::runtime_error if the
+    // GPU cannot store to an R8_UINT image, std::invalid_argument for a texture without a shader, of no
+    // texels or of a size other than width x height, and std::logic_error for a shader named both with and
+    // without one. The text pass draws the palette indices of text-only effects and text overlays
+    // (drawIndex); it must outlive the stage.
     RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text,
                EffectLookup effects = retro::effectFor);
 
@@ -69,7 +71,14 @@ private:
     gfx::Image color_;
     // One palette per frame in flight: the CPU writes the slot being recorded, whose last submit is done.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> palettes_;
-    std::map<std::string, std::unique_ptr<gfx::ComputePipeline>> shaders_; // by SPIR-V file name
+    struct EffectShader {
+        std::unique_ptr<gfx::ComputePipeline> pipeline;
+        bool textured; // binds an effect texture at binding 1
+    };
+    std::map<std::string, EffectShader> shaders_; // by SPIR-V file name
+    // The effects' textures (R8_UINT, read at binding 1), one per builder, uploaded at construction. Declared
+    // before raster_, whose destructor waits for the ring, so they outlive every submit that read them.
+    std::map<retro::TextureBuilder, gfx::Image> textures_;
     gfx::ComputePipeline paletteMap_;
     SceneRaster raster_;      // draws the effects' scenes (EffectInfo::scene)
     retro::RetroScene scene_; // the last scene built, kept for its capacity

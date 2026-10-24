@@ -49,10 +49,11 @@ inline constexpr std::array<TunnelWave, 2> kTunnelPathY = {{{1.6, 0.17, 0.6}, {0
 inline constexpr double kTunnelTwistRate = 0.35;     // radians per second
 inline constexpr double kTunnelTwistPerDepth = 0.08; // radians per unit of depth
 
-// The dots: shade (0 far .. 63 near) = round(63 * f^1.5), f = (kTunnelFar - z) / (kTunnelFar - kTunnelNear),
-// so the far end sinks into the dark; size 3 nearer than kTunnelDotsLarge, 2 nearer than kTunnelDotsMedium,
-// else 1. Before the tube all 96 x 64 = 6144 dots are added each frame; addPoint leaves out those whose
-// square lies off the screen (100..200 of the nearest rings' dots in this chapter).
+// The dots: shade (0 far .. 63 near) = round(63 * f^1.5), f = (kTunnelFar - z) / (kTunnelFar - kTunnelNear)
+// clamped to 0..1, so the far end sinks into the dark; size 3 nearer than kTunnelDotsLarge, 2 nearer than
+// kTunnelDotsMedium, else 1. Before the tube all 96 x 64 = 6144 dots go to addPoint each frame, which leaves
+// out those whose square lies off the screen (some of the nearest rings' dots: 5946..6015 remain in this
+// chapter).
 inline constexpr double kTunnelDotsLarge = 2.5;
 inline constexpr double kTunnelDotsMedium = 6.0;
 
@@ -62,10 +63,13 @@ inline constexpr double kTunnelDotsMedium = 6.0;
 // Over kTunnelTubeSweepSeconds the tube's front sweeps (smoothstep) from kTunnelFar to kTunnelTubeNear:
 // bands wholly beyond the front (and within kTunnelTubeFar) are drawn, and only the dots of rings nearer
 // than it. Each quad is two flat triangles in one index: ramp A where m + k is even, B where odd (a checker
-// that scrolls with the flight), its shade fading from 31 near to 0 at kTunnelTubeFar, times a light. A
-// triangle is culled when the camera sees its outside. The bands go far to near (painter's order: each band
-// is a slab of depth, nearer slabs drawn later). At most 40 bands x 16 quads x 2 = 1280 triangles before
-// culling and clipping; about 800..930 drawn.
+// that scrolls with the flight), its shade fading from 31 near to 0 at kTunnelTubeFar, times a light on the
+// side the camera sees. The bands go far to near (painter's order: each band is a slab of depth, nearer
+// slabs drawn later), each band's faces seen from inside before those seen from outside (a band is convex).
+// A face seen from outside is culled when it projects wholly inside the mouth (the nearest band's near ring),
+// since a ray through the mouth meets the inside of a wall first; so the tube's outside shows only during
+// the sweep, where the far end bends out of the mouth's view. At most 40 bands x 16 quads x 2 = 1280
+// triangles before culling and clipping; 780..927 drawn in this chapter once the tube is whole.
 inline constexpr std::size_t kTunnelSegments = 16;
 inline constexpr double kTunnelBandLength = 2 * kTunnelRingSpacing;
 inline constexpr double kTunnelTubeNear = 0.2;
@@ -87,6 +91,9 @@ std::array<double, 2> tunnelPath(double w);
 std::array<double, 2> tunnelPathSlope(double w);
 // How far the camera has travelled at a retro frame.
 double tunnelTravel(std::uint32_t retroFrame);
+// C(z): the centre in view space of the ring at view depth z once the camera has travelled s. C(0) = 0 and
+// C'(0) = 0, so the nearest rings sit on the view axis.
+std::array<double, 2> tunnelRingCentre(double s, double z);
 // The twist angle of the tunnel at depth w at a retro frame.
 double tunnelTwist(std::uint32_t retroFrame, double w);
 
@@ -103,12 +110,14 @@ std::vector<TunnelRing> tunnelRings(std::uint32_t retroFrame);
 std::uint32_t tunnelTubeFrame(const show::TimelineFrame& frame);
 double tunnelTubeFront(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
-// One face of the tube in view space as tunnelScene hands it to addTriangle, in drawing order.
+// One face of the tube in view space as tunnelScene hands it to addTriangle, in drawing order. With cull
+// false, also the faces seen from outside that the mouth hides, which the scene leaves out (for tests).
 struct TunnelFace {
     double world[3][3];
     std::uint8_t index;
 };
-std::vector<TunnelFace> tunnelTubeFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame);
+std::vector<TunnelFace> tunnelTubeFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame,
+                                        bool cull = true);
 
 // The fixed camera at the origin, looking along +z.
 Camera tunnelCamera();

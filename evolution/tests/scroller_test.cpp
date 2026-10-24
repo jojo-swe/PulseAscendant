@@ -345,7 +345,9 @@ void testImages(evo::gfx::Context& ctx) {
     // visible glyphs included), so no stray white leaks out of the text pass or the scene.
     const auto onInk = [&](int x, int y) {
         for (std::size_t i = glyphs; i < greeting.size(); ++i) {
-            const int col = x - static_cast<int>(greeting[i].x), row = y - static_cast<int>(greeting[i].y);
+            // Floored like the text pass places a glyph (a glyph partly off the left edge has x < 0).
+            const int col = x - static_cast<int>(std::floor(greeting[i].x));
+            const int row = y - static_cast<int>(std::floor(greeting[i].y));
             if (col >= 0 && col < 8 && row >= 0 && row < 8 &&
                 (evo::text::glyph(greeting[i].text[0])[row] & (0x80u >> col)))
                 return true;

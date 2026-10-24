@@ -8,9 +8,9 @@ implementation plans live in [`docs/plans/`](docs/plans/), starting with
 
 > **Status:** step 3 of the plan (the 1993 effects) is under way. The music drives a timeline of 31 chapters
 > in three acts, and the 1993 side renders through its own pipeline (below): BOOT, FLYBY, DOTS, PLASMA,
-> TUNNEL, GLENZ, RAYTRACE, PORTAL, REBOOT, the CREDITS sine scroller and THE END are finished on the 1993
-> side, the other effects still show a grey test pattern there, and the 2026 side is still a placeholder
-> gradient.
+> TUNNEL, GLENZ, LENS, RAYTRACE, PORTAL, REBOOT, the CREDITS sine scroller and THE END are finished on the
+> 1993 side, the other effects still show a grey test pattern there, and the 2026 side is still a
+> placeholder gradient.
 
 ## Requirements
 
@@ -137,6 +137,8 @@ The effects so far:
 - **GLENZ** (chapter 5): Future Crew's 24-triangle glenz vector from Second Reality (credited, Unlicense),
   spinning on three axes and bouncing on the chapter's beats, its translucent faces ORed into the palette
   index over moving copper bars, so the bars and the far side show through, tinted.
+- **LENS** (chapter 6): a rotozoomer, an original 128×128 checker texture with EVOLUTION stamped from the
+  font, swung and zoomed in 16.16 fixed point, under a bouncing glass lens that magnifies 2× at its middle.
 - **RAYTRACE** (chapter 7): a "precalculated" ray-traced animation at 10 fps: chrome spheres and a
   glass-coloured one bouncing round a big chrome sphere over a red and white checkerboard, hard shadows, two
   reflection bounces, one ray per pixel, dithered into a fixed 6×6×6 colour cube and 24 greys.
