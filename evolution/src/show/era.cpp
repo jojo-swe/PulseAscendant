@@ -30,10 +30,13 @@ Window window(const TimelineFrame& f, const BeatGridView& grid) {
     w.accent = w.start + f.accentSeconds;
     w.downbeat = w.accent;
 
+    // D never lies before the chapter start: the walk back stops at the chapter's first beat, which then
+    // stands in for the downbeat. Without a beat between the chapter start and A, the transition happens on
+    // A.
     int beat = grid.beatAt(w.accent);
-    if (beat < 0)
-        return w; // no beat before the accent: the transition happens on A itself
-    while (beat > 0 && grid.bar(beat) != 0)
+    if (beat < 0 || grid.beatTime(beat) < w.start - chapterEdge)
+        return w;
+    while (beat > 0 && grid.bar(beat) != 0 && grid.beatTime(beat - 1) >= w.start - chapterEdge)
         --beat;
     w.downbeatBeat = beat;
     w.downbeat = grid.beatTime(beat);
@@ -67,13 +70,14 @@ void wipe(TimelineFrame& f, const Window& w) {
     f.era = f.wipe;
 }
 
-void beatSwap(TimelineFrame& f, const Window& w, const BeatGridView& grid) {
-    const double t = f.trackSeconds;
-    if (w.downbeatBeat < 0) { // no grid to swap on: a hard cut at A
-        f.era = t >= w.accent ? 1.f : 0.f;
-        return;
-    }
+// The BeatSwap flips at or before `until`: bar lines from the window start, then every beat up to and
+// including D. A beat on the chapter start never flips, so every chapter opens in 1993.
+struct Flips {
+    int count = 0;
+    double last = 0;
+};
 
+Flips countFlips(const Window& w, const BeatGridView& grid, double until, int skip) {
     // Beats within half a beat of a window edge belong to it, so tracker jitter cannot drop a flip.
     const double tolerance = w.bar / 8;
     const double fourBarsOut = w.downbeat - 4 * w.bar;
@@ -81,25 +85,39 @@ void beatSwap(TimelineFrame& f, const Window& w, const BeatGridView& grid) {
     const double from = fullWindow ? fourBarsOut : w.start;
     const double beatFlipsFrom = fullWindow ? w.downbeat - 2 * w.bar : w.start;
 
-    // Count the flips at or before t: bar lines from the window start, then every beat up to and including D.
-    // A beat on the chapter start never flips, so every chapter opens in 1993.
-    int flips = 0;
-    double lastFlip = 0;
+    Flips flips;
     for (int beat = grid.beatAt(std::max(from - tolerance, w.start + chapterEdge)) + 1;
          beat <= w.downbeatBeat; ++beat) {
         const double time = grid.beatTime(beat);
-        if (time > t + onBeat)
+        if (time > until + onBeat)
             break;
-        const bool beatFlip = time >= beatFlipsFrom - tolerance;
-        if (beatFlip || grid.bar(beat) == 0) {
-            ++flips;
-            lastFlip = time;
+        if (time < beatFlipsFrom - tolerance && grid.bar(beat) != 0)
+            continue; // between bar lines, before the beat flips start
+        if (skip > 0) {
+            --skip;
+            continue;
         }
+        ++flips.count;
+        flips.last = time;
+    }
+    return flips;
+}
+
+void beatSwap(TimelineFrame& f, const Window& w, const BeatGridView& grid) {
+    const double t = f.trackSeconds;
+    if (w.downbeatBeat < 0) { // no grid to swap on: a hard cut at A
+        f.era = t >= w.accent ? 1.f : 0.f;
+        return;
     }
 
-    f.swapCount = flips;
-    f.era = t >= w.downbeat - onBeat ? 1.f : float(flips % 2);
-    f.eraCut = flips > 0 ? float(std::min(1.0, std::exp(-10 * (t - lastFlip)))) : 0.f;
+    // The era starts at 0 and the flip on D must land on 1, so the schedule needs an odd number of flips:
+    // when it has an even number, the earliest one is dropped.
+    const int skip = countFlips(w, grid, w.downbeat, 0).count % 2 == 0 ? 1 : 0;
+    const Flips flips = countFlips(w, grid, t, skip);
+
+    f.swapCount = flips.count;
+    f.era = t >= w.downbeat - onBeat ? 1.f : float(flips.count % 2);
+    f.eraCut = flips.count > 0 ? float(std::min(1.0, std::exp(-10 * (t - flips.last)))) : 0.f;
 }
 
 } // namespace

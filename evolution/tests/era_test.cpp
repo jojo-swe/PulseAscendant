@@ -168,10 +168,13 @@ void checkBeatSwap() {
         CHECK(at(m, m.start + .01).era == 0.f);
         CHECK(at(m, m.start + .01).swapCount == 0);
 
+        // The flip on D is a visible cut from 1993 to 2026.
         const TimelineFrame onDownbeat = at(m, m.downbeat);
-        CHECK(onDownbeat.swapCount >= 10);
+        CHECK(at(m, m.downbeat - .01).era == 0.f);
         CHECK(onDownbeat.era == 1.f);
         CHECK(onDownbeat.eraCut == 1.f);
+        CHECK(onDownbeat.swapCount % 2 == 1);
+        CHECK(onDownbeat.swapCount >= (chapter == 7 ? 10 : 9));
         CHECK(at(m, m.accent + .01).era == 1.f);
         CHECK(at(m, m.end - .01).era == 1.f);
         CHECK(at(m, m.end - .01).swapCount == onDownbeat.swapCount);
@@ -191,16 +194,19 @@ void checkBeatSwap() {
             // Nothing flips before the window; before the beat flips only bar lines flip it.
             for (double t = m.start; t < m.downbeat - 4 * m.bar - .25; t += .01)
                 CHECK(at(m, t).swapCount == 0 && at(m, t).era == 0.f);
+            // The last two bars hold nine flips (eight beats and D).
             const TimelineFrame twoBarsOut = at(m, grid.beatTime(m.downbeatBeat - 8) - .01);
             CHECK(at(m, grid.beatTime(m.downbeatBeat - 9) + .01).swapCount == twoBarsOut.swapCount);
-            CHECK(twoBarsOut.swapCount >= 1);
+            CHECK(twoBarsOut.swapCount == onDownbeat.swapCount - 9);
         } else {
-            // Review Focus 5 on the real show (Finale): every beat after the chapter start flips it.
+            // Review Focus 5 on the real show (Finale): every beat after the chapter start flips it, less
+            // the first when that keeps the count odd.
             ++shortChapters;
-            int expected = 0;
-            for (int beat = grid.beatAt(m.start + 1e-6) + 1; beat <= m.downbeatBeat; ++beat)
-                CHECK(at(m, grid.beatTime(beat) + .01).swapCount == ++expected);
-            CHECK(expected == onDownbeat.swapCount);
+            const int first = grid.beatAt(m.start + 1e-6) + 1;
+            const int skip = (m.downbeatBeat - first + 1) % 2 == 0 ? 1 : 0;
+            for (int beat = first; beat <= m.downbeatBeat; ++beat)
+                CHECK(at(m, grid.beatTime(beat) + .01).swapCount == std::max(0, beat - first + 1 - skip));
+            CHECK(m.downbeatBeat - first + 1 - skip == onDownbeat.swapCount);
         }
     }
     CHECK(shortChapters == 1); // Finale, whose accent comes less than four bars in
@@ -220,15 +226,18 @@ void checkShortChapters() {
         while (downbeat > 0 && grid.bar(downbeat) != 0)
             --downbeat;
         CHECK(grid.beatTime(downbeat) > m.start);
-        const int first = grid.beatAt(m.start + 1e-6) + 1; // the first beat after the chapter start
-        int expected = 0;
+        const int first = grid.beatAt(m.start + 1e-6) + 1;        // the first beat after the chapter start
+        const int skip = (downbeat - first + 1) % 2 == 0 ? 1 : 0; // keeps the flip on D landing on 2026
         for (int beat = first; beat <= downbeat; ++beat) {
             frame.trackSeconds = grid.beatTime(beat) + .01;
             evo::show::applyEra(frame, grid);
-            ++expected;
+            const int expected = std::max(0, beat - first + 1 - skip);
             CHECK(frame.swapCount == expected);
             CHECK(frame.era == (beat == downbeat ? 1.f : float(expected % 2)));
         }
+        frame.trackSeconds = grid.beatTime(downbeat) - .01;
+        evo::show::applyEra(frame, grid);
+        CHECK(frame.era == 0.f);
         frame.trackSeconds = grid.beatTime(first) - .01;
         evo::show::applyEra(frame, grid);
         CHECK(frame.swapCount == 0 && frame.era == 0.f);
@@ -254,6 +263,39 @@ void checkShortChapters() {
         evo::show::applyEra(frame, grid);
         CHECK(frame.wipe == 1.f && frame.era == 1.f);
     }
+}
+
+// Grids the tracker never produces still give finite values in range: no beats at all, and beats far closer
+// than any tempo, through all four transitions and accents at, inside and past the chapter.
+void checkDegenerateGrids() {
+    const double start = evo::show::chapterStart(7); // Raytrace, on track 0: track seconds are show seconds
+    std::vector<double> times;
+    std::vector<unsigned char> bars;
+    for (int i = 0; i < 80000; ++i) {
+        times.push_back(start - 5 + i * .0005);
+        bars.push_back(static_cast<unsigned char>(i % 4));
+    }
+    const evo::show::BeatGridView grids[] = {
+        evo::show::BeatGridView(nullptr, nullptr, 0),
+        evo::show::BeatGridView(times.data(), bars.data(), int(times.size())),
+    };
+    const Transition transitions[] = {Transition::Cut, Transition::Portal, Transition::Wipe,
+                                      Transition::BeatSwap};
+    for (const evo::show::BeatGridView& grid : grids)
+        for (Transition transition : transitions)
+            for (double accent : {0.0, .0003, 3.0, 20.0, 60.0}) {
+                TimelineFrame frame = sampleTimeline(start + .01);
+                frame.transition = transition;
+                frame.accentSeconds = accent;
+                for (double t = start - 1; t < start + 40; t += .0007) {
+                    frame.trackSeconds = t;
+                    evo::show::applyEra(frame, grid);
+                    CHECK(std::isfinite(frame.era) && frame.era >= 0.f && frame.era <= 1.f);
+                    CHECK(std::isfinite(frame.wipe) && frame.wipe >= 0.f && frame.wipe <= 1.f);
+                    CHECK(std::isfinite(frame.eraCut) && frame.eraCut >= 0.f && frame.eraCut <= 1.f);
+                    CHECK(frame.swapCount >= 0);
+                }
+            }
 }
 
 // (e) Cut: the chapter holds its fixed era.
@@ -305,6 +347,7 @@ int main() {
         checkWipe();
         checkBeatSwap();
         checkShortChapters();
+        checkDegenerateGrids();
         checkCut();
         checkFinite();
     } catch (const std::exception& error) {
