@@ -51,8 +51,10 @@ one `context` provokes on purpose to check that messages are counted.
   and point rasterisers against a CPU reference) and `retro_registry` (every effect a pure function of its retro
   frame, every scene within the rasterisers' limits).
 - The executable end to end: `render_stream`, `capture`, `stream_capture` (a frame of a stream equals a fresh
-  capture at the same time, for every chapter), `storyboard`, `exit_codes`, and `python_tools` (the music
-  analysis pipeline).
+  capture at the same time, for every chapter), `storyboard` (into `build-out/storyboard_test`, so it never
+  touches the storyboards below), `exit_codes`, and `python_tools` (the music analysis pipeline).
+
+The `linux` test preset runs 8 tests at a time; `ctest --preset linux -j 1` runs them one by one.
 
 The three that open a window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default;
 configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
@@ -121,7 +123,9 @@ the exports read back:
    An effect may own a texture, built once on the CPU and read by its shader as an R8_UINT storage image
    (LENS's 128×128 logo checker). Each effect has its own retro frame rate (35 Hz, RAYTRACE 10 Hz); the stage
    renders only when the retro frame changes, and everything it draws is a function of the chapter and the
-   retro frame alone, so seeking, playback and export give the same picture.
+   retro frame alone, so seeking, playback and export give the same picture. That holds within one build on
+   one machine: the C library's `sin`, `atan2` or `pow` may differ in the last bit between platforms (and the
+   shaders' float maths between GPUs), which can move a pixel at a rounding edge between Linux and Windows.
 2. **CRT.** The 320×200 picture fills a centred 4:3 rectangle (its pixels are 1.2 times taller than wide),
    black around it. With the CRT look on it also gets a 2 % barrel, a little bloom, darker odd scanlines, a
    phosphor mask and a vignette. Key C or `--no-crt` turns the look off; the rectangle stays the same.
@@ -165,9 +169,10 @@ them). The primitive lists live in host-visible buffers per frame-in-flight slot
   the palette rotates one entry per retro frame, until the wipe brings 2026 in.
 - **TUNNEL** (chapter 4): a twisting tunnel of 96 dot rings along a winding path, which turns into a solid
   checkered tube halfway through.
-- **GLENZ** (chapter 5): Future Crew's 24-triangle glenz vector from Second Reality (credited, Unlicense),
-  spinning on three axes and bouncing on the chapter's beats, its translucent faces ORed into the palette
-  index over moving copper bars, so the bars and the far side show through, tinted.
+- **GLENZ** (chapter 5): Future Crew's 24-triangle glenz vector from Second Reality (Unlicense; credited in
+  [`licenses/FUTURE-CREW-NOTICE.md`](licenses/FUTURE-CREW-NOTICE.md)), spinning on three axes and bouncing
+  on the chapter's beats, its translucent faces ORed into the palette index over moving copper bars, so the
+  bars and the far side show through, tinted.
 - **LENS** (chapter 6): a rotozoomer, an original 128×128 checker texture with EVOLUTION stamped from the
   font, swung and zoomed in 16.16 fixed point, under a bouncing glass lens that magnifies 2× at its middle.
 - **RAYTRACE** (chapter 7): a "precalculated" ray-traced animation at 10 fps: chrome spheres and a
@@ -176,7 +181,8 @@ them). The primitive lists live in host-visible buffers per frame-in-flight slot
 - **VECTOR CITY** (chapter 8): a gouraud-shaded city at sunset, generated from a fixed seed on an endless
   street grid. The camera flies low down the main street towards a striped sun at its vanishing point, then
   climbs over the roofs and banks into a turn as the wipe brings 2026 in; the city fades into the haze with
-  distance, so a frame draws about 200 polygons of buildings and streets plus a few lit windows.
+  distance, so a frame draws about 300 polygons on average (at most about 390): walls, roofs and street
+  tiles, plus some 45 lit windows and centre-line dashes, which shrink into the haze before they are cut.
 - **FINALE** (chapter 9): a megamix that cuts every two beats between FLYBY, DOTS, TUNNEL, GLENZ, LENS and
   RAYTRACE, with one white flash frame on each cut. It is one registry entry with a resolve hook: for each
   retro frame it hands the stage another effect's entry with a frame of that effect's own (home) chapter and
@@ -279,8 +285,9 @@ has queued and the device's buffer are subtracted), and the show loops at its en
 the picture against the sound for outputs with more latency than that. If the music cannot play (no WAV, a
 WAV of the wrong length, no audio device, or `--no-audio`), EVOLUTION prints `SILENT MODE: <reason>` on
 stderr and runs on the monotonic clock from `--time`; otherwise it prints `AUDIO: <file>`. If the audio
-stream fails mid-show, it prints the new `SILENT MODE` status and carries on from the music's position. `--show-info` needs neither a GPU nor SDL video. The headless
-modes never play audio and always render at `t = time + i / fps`.
+stream fails mid-show, it prints the new `SILENT MODE` status and carries on from the music's position.
+`--show-info` needs neither a GPU nor SDL video. The headless modes never play audio and always render at
+`t = time + i / fps`.
 
 `--render-stream` writes frames `0 .. ceil(duration × fps) − 1` at `t = time + i / fps`, top-down,
 3 bytes per pixel, with progress on stderr. `--capture-dir` creates missing directories and overwrites

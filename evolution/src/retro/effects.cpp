@@ -1,5 +1,5 @@
-// The retro effect registry: which shader, rate, palette, text and background each chapter's 1993 side uses.
-// Kept out of retro/effects.hpp so the header pulls in no effect's own header.
+// The retro effect registry: which shader, rate, palette, text, background, scene, texture and resolver each
+// chapter's 1993 side uses. Kept out of retro/effects.hpp so the header pulls in no effect's own header.
 
 #include "retro/effects.hpp"
 
@@ -23,6 +23,8 @@ namespace evo::retro {
 static_assert(kFlybyRetroRate == kScrollerRetroRate);
 // PORTAL reuses FLYBY's ship, stars and flicker, all keyed by FLYBY's retro frame.
 static_assert(kPortalRetroRate == kFlybyRetroRate);
+// PORTAL's caption types with BOOT's prompt engine (promptWritten, promptCursorOn), keyed by BOOT's rate.
+static_assert(kPortalRetroRate == kBootRetroRate);
 
 EffectFrame resolveEffect(const EffectInfo& info, const show::TimelineFrame& frame,
                           std::uint32_t retroFrame) {

@@ -170,8 +170,8 @@ void glenzScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32
             const double v[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
             const double n[3] = {u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2],
                                  u[0] * v[1] - u[1] * v[0]};
-            // The winding (clockwise on the y-down screen) makes the right-handed normal n point inward: a
-            // front face's n points away from the eye.
+            // The winding (counter-clockwise on the screen seen from outside) makes the right-handed normal
+            // n point inward: a front face's n points away from the eye.
             const double toFace[3] = {a[0] - camera.eye[0], a[1] - camera.eye[1], a[2] - camera.eye[2]};
             const bool front = n[0] * toFace[0] + n[1] * toFace[1] + n[2] * toFace[2] > 0;
             if (front != frontPass)

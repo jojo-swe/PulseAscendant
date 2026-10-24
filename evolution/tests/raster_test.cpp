@@ -16,6 +16,7 @@
 #include "retro/scene.hpp"
 #include "show/cues.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 #include "text/text_pass.hpp"
 
 #include <algorithm>
@@ -46,14 +47,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr int kWidth = evo::retro::kScreenWidth, kHeight = evo::retro::kScreenHeight;
 constexpr std::size_t kPixels = std::size_t{kWidth} * kHeight;
@@ -945,7 +938,7 @@ void testStage(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testProjection();
         testAddTriangle();
         testAddPoint();

@@ -18,35 +18,18 @@ Vec3 toVec(const double v[3]) {
     return {v[0], v[1], v[2]};
 }
 
-// The camera's view basis and its focal lengths in pixels.
-struct View {
-    Vec3 eye, right, up, forward;
-    double focalX, focalY;
-};
-
-View viewOf(const Camera& camera) {
-    View view;
-    view.eye = toVec(camera.eye);
-    view.forward = normalize(sub(toVec(camera.target), view.eye));
-    view.right = normalize(cross(toVec(camera.up), view.forward));
-    view.up = cross(view.forward, view.right);
-    view.focalY = (kScreenHeight / 2.0) / std::tan(camera.fovYDegrees * std::numbers::pi / 360.0);
-    view.focalX = view.focalY * kPixelAspect;
-    return view;
-}
-
 // A polygon vertex while it is clipped: (x, y, z) in view space before projection, (x, y) on the screen in
 // pixels after it (z still the view depth); the palette index interpolates along clipped edges.
 struct Vertex {
     double x, y, z, index;
 };
 
-Vertex toView(const View& view, const double world[3], double index) {
+Vertex toView(const ViewBasis& view, const double world[3], double index) {
     const Vec3 d = sub(toVec(world), view.eye);
     return {dot(d, view.right), dot(d, view.up), dot(d, view.forward), index};
 }
 
-Vertex toScreen(const View& view, const Vertex& v) {
+Vertex toScreen(const ViewBasis& view, const Vertex& v) {
     return {kScreenWidth / 2.0 + view.focalX * v.x / v.z, kScreenHeight / 2.0 - view.focalY * v.y / v.z, v.z,
             v.index};
 }
@@ -102,8 +85,19 @@ constexpr std::int32_t kFirstCentre = kSubpixel / 2;
 
 } // namespace
 
+ViewBasis viewBasis(const Camera& camera) {
+    ViewBasis view;
+    view.eye = toVec(camera.eye);
+    view.forward = normalize(sub(toVec(camera.target), view.eye));
+    view.right = normalize(cross(toVec(camera.up), view.forward));
+    view.up = cross(view.forward, view.right);
+    view.focalY = (kScreenHeight / 2.0) / std::tan(camera.fovYDegrees * std::numbers::pi / 360.0);
+    view.focalX = view.focalY * kPixelAspect;
+    return view;
+}
+
 Projected project(const Camera& camera, const double world[3]) {
-    const View view = viewOf(camera);
+    const ViewBasis view = viewBasis(camera);
     const Vertex v = toView(view, world, 0);
     const Vertex s = toScreen(view, v);
     return {v.x, v.y, v.z, s.x, s.y};
@@ -139,7 +133,7 @@ void checkScene(const RetroScene& scene) {
 
 void addTriangle(RetroScene& scene, const Camera& camera, const double world[3][3],
                  const std::uint8_t index[3], std::uint8_t mode) {
-    const View view = viewOf(camera);
+    const ViewBasis view = viewBasis(camera);
     std::vector<Vertex> polygon;
     double depth = 0;
     for (int v = 0; v < 3; ++v) {
@@ -198,7 +192,7 @@ void addTriangle(RetroScene& scene, const Camera& camera, const double world[3][
 
 void addPoint(RetroScene& scene, const Camera& camera, const double world[3], std::uint8_t index,
               std::uint8_t size) {
-    const View view = viewOf(camera);
+    const ViewBasis view = viewBasis(camera);
     const Vertex v = toView(view, world, index);
     if (!(v.z >= kNearPlane) || size == 0)
         return;

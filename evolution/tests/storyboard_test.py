@@ -1,6 +1,7 @@
 """Run tools/storyboard.py on chapters 0 and 3 at 320x180: it must write act1.png (both chapters are in Act I)
 and no other act, the grid must decode to the documented layout's size, and the forced 1993 and 2026 cells of
-each row must differ, which shows that EVO_FORCE_ERA reached the captures."""
+each row must differ, which shows that EVO_FORCE_ERA reached the captures. It empties <outdir> first, so CTest
+gives it build-out/storyboard_test, never the build-out/storyboard that README and HANDOFF have people fill."""
 
 import os
 import shutil

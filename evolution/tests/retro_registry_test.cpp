@@ -55,6 +55,8 @@ Output outputOf(const EffectInfo& info, const TimelineFrame& frame, std::uint32_
         out.text = info.text(frame, retroFrame);
     const evo::retro::EffectFrame shown = evo::retro::resolveEffect(info, frame, retroFrame);
     const EffectInfo& entry = evo::retro::effectFor(shown.effect);
+    // The stage's recursion guard: an entry another effect resolves to must not resolve again.
+    CHECK(shown.effect == frame.effect || entry.resolve == nullptr);
     entry.palette(out.palette, shown.frame, shown.retroFrame);
     if (entry.background)
         out.background = entry.background(shown.frame, shown.retroFrame);
@@ -100,7 +102,7 @@ int chapterOf(Effect effect) {
 // with its music signals pushed to their extremes, give the same output.
 void testEveryEffectIsPure() {
     std::size_t frames = 0, scenes = 0, texts = 0;
-    for (int e = 0; e <= static_cast<int>(Effect::TheEnd); ++e) {
+    for (std::size_t e = 0; e < evo::show::kEffectCount; ++e) {
         const auto effect = static_cast<Effect>(e);
         const EffectInfo& info = evo::retro::effectFor(effect);
         CHECK(info.palette != nullptr);
@@ -153,8 +155,8 @@ void testEveryEffectIsPure() {
             texts += !reference.text.empty();
         }
     }
-    std::printf("retro_registry: %d effects pure over %zu retro frames (%zu with a scene, %zu with text)\n",
-                static_cast<int>(Effect::TheEnd) + 1, frames, scenes, texts);
+    std::printf("retro_registry: %zu effects pure over %zu retro frames (%zu with a scene, %zu with text)\n",
+                evo::show::kEffectCount, frames, scenes, texts);
 }
 
 // Every retro frame of every chapter whose effect has a scene provider (or resolves to one) passes
@@ -181,6 +183,7 @@ void testEverySceneFrameFits() {
             // A megamix's frames: the scene of the sub-effect it resolves to.
             const evo::retro::EffectFrame shown = evo::retro::resolveEffect(info, frame, retroFrame);
             const EffectInfo& entry = evo::retro::effectFor(shown.effect);
+            CHECK(shown.effect == frame.effect || entry.resolve == nullptr); // resolves once at most
             scene.clear();
             if (entry.scene)
                 entry.scene(scene, shown.frame, shown.retroFrame);

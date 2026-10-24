@@ -10,11 +10,14 @@
 #include "ray_cast.hpp"
 #include "retro/city.hpp"
 #include "retro/effects.hpp"
+#include "retro/math.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
 #include "retro/vec3.hpp"
 #include "retro_stage_fixture.hpp"
+#include "show/cues.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 
 #include <algorithm>
 #include <array>
@@ -27,6 +30,7 @@
 #include <map>
 #include <numbers>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -50,14 +54,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr int kWidth = static_cast<int>(RetroStageFixture::kWidth);
 constexpr int kHeight = static_cast<int>(RetroStageFixture::kHeight);
@@ -247,38 +243,54 @@ double distanceTo(const CityBox& box, const evo::retro::Camera& camera) {
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-// The flight on every retro frame: it starts on the main street and stays on it, low, until the climb; it
-// moves at the flight speed without jumps; the eye keeps at least 2 units from every building; it banks
-// at least 25 degrees before the accent (the wipe to 2026 ends there) and is above every roof once it turns.
-void testFlight() {
+// The flight at accent `a` (the chapter's frame with its accent replaced), over every retro frame of the
+// chapter and at least up to kCityTurnEase + 2 s past the accent: it starts on the main street and stays on
+// it, low, until the climb; it moves at the flight speed without jumps; the eye keeps at least 2 units from
+// every building; it banks at least 25 degrees by the accent (the wipe to 2026 ends there). On every
+// `sceneEvery`-th frame the scene passes checkScene within the triangle budget. Returns the nearest
+// building's distance. The chapter's frame with its accent replaced (the flight reads only the accent from
+// it).
+TimelineFrame withAccent(double a) {
+    TimelineFrame frame = city(0);
+    frame.accentSeconds = a;
+    return frame;
+}
+
+double checkFlight(double a, std::uint32_t sceneEvery) {
     using namespace evo::retro;
-    const double a = accent();
-    std::printf("city: %u retro frames, accent at %.2f s\n", frameCount(), a);
-    CHECK(a > kCityMinAccent && a < kCityMaxAccent);
+    const TimelineFrame base = withAccent(a);
+    const auto frames =
+        std::max(frameCount(), static_cast<std::uint32_t>(std::ceil((a + kCityTurnEase + 2) * kRate)));
     double nearest = 1e9, maxRoll = 0, rollAtAccent = 0;
-    CityPose previous = cityPose(frameOf(0), 0);
+    std::size_t maxTriangles = 0;
+    CityPose previous = cityPose(base, 0);
     CHECK(previous.x == 0 && previous.z == kCityStartZ && previous.y == kCityFlightHeight);
-    for (std::uint32_t f = 0; f < frameCount(); ++f) {
-        const TimelineFrame frame = frameOf(f);
-        const CityPose pose = cityPose(frame, f);
+    // The most the bank may change in a retro frame, with 20 % to spare: the turn's smoothstep (slope 1.5)
+    // over its ramp in or its ease out, plus the street sway (1.5 degrees at 1.1 radians a second) and its
+    // fade over the climb.
+    const double rollStep =
+        1.2 *
+        (radians(kCityBank) * 1.5 / std::min((kCityTurn[1] - kCityTurn[0]) * a, kCityTurnEase) +
+         radians(1.5) * (1.1 + 1.5 / ((kCityClimb[1] - kCityClimb[0]) * a))) /
+        kRate;
+    for (std::uint32_t f = 0; f < frames; ++f) {
+        const CityPose pose = cityPose(base, f);
         const double t = static_cast<double>(f) / kRate;
         CHECK(std::isfinite(pose.x) && std::isfinite(pose.y) && std::isfinite(pose.z));
         const double step = std::hypot(pose.x - previous.x, pose.z - previous.z);
         if (f > 0)
             CHECK(std::abs(step - kCitySpeed / kRate) < 1e-3);
-        CHECK(std::abs(pose.yaw - previous.yaw) < 0.02 && std::abs(pose.roll - previous.roll) < 0.02);
+        CHECK(std::abs(pose.yaw - previous.yaw) < 0.02 && std::abs(pose.roll - previous.roll) < rollStep);
         previous = pose;
         if (t < kCityClimb[0] * a)
             CHECK(pose.x == 0 && pose.y == kCityFlightHeight);
         if (t <= kCityTurn[0] * a)
             CHECK(pose.yaw == 0 && pose.x == 0);
-        else
-            CHECK(pose.y > kCityMaxHeight || std::abs(pose.x) < 1); // out of the street only above the roofs
         if (t <= a)
             maxRoll = std::max(maxRoll, pose.roll);
         if (f == frameAt(a))
             rollAtAccent = pose.roll;
-        const Camera camera = cityCamera(frame, f);
+        const Camera camera = cityCamera(base, f);
         const auto cell = [](double v) {
             return static_cast<std::int32_t>(std::floor((v + kCityStreet / 2) / kCityCell));
         };
@@ -289,12 +301,41 @@ void testFlight() {
                     if (b.tower)
                         nearest = std::min(nearest, distanceTo(b.top, camera));
                 }
+        if (f % sceneEvery == 0) {
+            RetroScene scene;
+            cityScene(scene, base, f);
+            checkScene(scene);
+            maxTriangles = std::max(maxTriangles, scene.triangles.size());
+        }
     }
     const double degrees = 180 / std::numbers::pi;
-    std::printf("city: nearest building %.2f units from the eye; bank %.1f deg at most, %.1f at the accent\n",
-                nearest, maxRoll * degrees, rollAtAccent * degrees);
+    std::printf(
+        "city: accent %5.2f s: nearest building %.2f units from the eye; bank %.1f deg at most, %.1f at "
+        "the accent; at most %zu triangles\n",
+        a, nearest, maxRoll * degrees, rollAtAccent * degrees, maxTriangles);
     CHECK(nearest >= 2);
     CHECK(maxRoll * degrees >= 25 && rollAtAccent * degrees >= 25);
+    CHECK(maxTriangles <= kTriangleBudget);
+    return nearest;
+}
+
+// The flight at the chapter's own accent (every retro frame of the chapter, from its timeline frames) and
+// at accents across the whole clamped range kCityMinAccent .. kCityMaxAccent, so a retimed chapter keeps
+// the flight safe; past the range the accent is clamped.
+void testFlight() {
+    using namespace evo::retro;
+    const double a = accent();
+    std::printf("city: %u retro frames, accent at %.2f s\n", frameCount(), a);
+    CHECK(a > kCityMinAccent && a < kCityMaxAccent);
+    for (std::uint32_t f = 0; f < frameCount(); f += 37) // every timeline frame carries the same accent
+        CHECK(cityPose(frameOf(f), f).yaw == cityPose(withAccent(a), f).yaw);
+    checkFlight(a, 5); // testScenes checks every scene at this accent
+    for (double sweep : {kCityMinAccent, 6.5, 8.0, 12.0, 16.0, 20.0, 25.0, 30.0, 35.0, kCityMaxAccent})
+        checkFlight(sweep, 5);
+    for (std::uint32_t f : {0u, 100u, 300u, 1500u}) {
+        CHECK(cityPose(withAccent(1), f).yaw == cityPose(withAccent(kCityMinAccent), f).yaw);
+        CHECK(cityPose(withAccent(100), f).x == cityPose(withAccent(kCityMaxAccent), f).x);
+    }
 }
 
 // View depth of a world point.
@@ -302,15 +343,38 @@ double viewDepth(const evo::retro::Camera& camera, const double p[3]) {
     return evo::retro::project(camera, p).z;
 }
 
+// A palette ramp, first and last index.
+struct Ramp {
+    std::uint8_t first, last;
+};
+
+int rampOf(std::uint8_t index, std::span<const Ramp> ramps) {
+    for (std::size_t r = 0; r < ramps.size(); ++r)
+        if (index >= ramps[r].first && index <= ramps[r].last)
+            return static_cast<int>(r);
+    return -1;
+}
+
 // Every retro frame: the scene is exactly cityFaces through addTriangle, in order; it stays within the
-// triangle budget; the same retro frame always gives the same bytes. Near-plane clipping: faces that cross
-// view depth kNearPlane and still put pieces on the screen occur on at least 100 frames and two
-// thirds of the street frames (the road under the camera shows once it reaches about 6 units ahead).
+// triangle budget; the same retro frame always gives the same bytes. A gouraud face's three indices lie in
+// one ramp (sky, sun, building A or B, road, lot), so the interpolation never leaks into a neighbouring
+// ramp; a flat face is a marking or a window. Near-plane clipping: faces that cross view depth kNearPlane
+// and still put pieces on the screen occur on at least 100 frames and two thirds of the street frames (the
+// road under the camera shows once it reaches about 6 units ahead). The polygons of the city (walls, roofs,
+// street tiles, markings and windows; two triangles each, the sky and sun left out) average about the
+// number the epoch card states.
 void testScenes() {
     using namespace evo::retro;
+    const auto ramp = [](std::uint8_t first, int shades) {
+        return Ramp{first, static_cast<std::uint8_t>(first + shades - 1)};
+    };
+    const Ramp gouraudRamps[] = {ramp(kCitySky, kCitySkyShades),     ramp(kCitySun, kCitySunShades),
+                                 ramp(kCityRampA, kCityRampShades),  ramp(kCityRampB, kCityRampShades),
+                                 ramp(kCityRoad, kCityGroundShades), ramp(kCityLot, kCityGroundShades)};
+    const Ramp flatRamps[] = {ramp(kCityMarking, kCityMarkingShades), ramp(kCityWindow, kCityGroundShades)};
     std::size_t maxTriangles = 0, minTriangles = 1u << 30, crossingFrames = 0, streetFrames = 0,
                 streetCrossing = 0;
-    std::size_t crossingTotal = 0, cityFacesTotal = 0, cityFacesMax = 0;
+    std::size_t crossingTotal = 0, cityFacesTotal = 0, cityFacesMax = 0, detailTotal = 0;
     const double a = accent();
     for (std::uint32_t f = 0; f < frameCount(); ++f) {
         const TimelineFrame frame = frameOf(f);
@@ -320,6 +384,15 @@ void testScenes() {
         std::size_t crossing = 0, cityFaceCount = 0;
         for (const CityFace& face : faces) {
             CHECK(face.mode == kFlat || face.mode == kGouraud);
+            if (face.mode == kGouraud) {
+                const int r = rampOf(face.index[0], gouraudRamps);
+                CHECK(r >= 0 && rampOf(face.index[1], gouraudRamps) == r &&
+                      rampOf(face.index[2], gouraudRamps) == r);
+            } else {
+                CHECK(rampOf(face.index[0], flatRamps) >= 0);
+                CHECK(face.index[1] == face.index[0] && face.index[2] == face.index[0]);
+                ++detailTotal;
+            }
             const std::size_t before = expected.triangles.size();
             addTriangle(expected, camera, face.world, face.index, face.mode);
             const double z[3] = {viewDepth(camera, face.world[0]), viewDepth(camera, face.world[1]),
@@ -328,7 +401,7 @@ void testScenes() {
                 std::min({z[0], z[1], z[2]}) < kNearPlane && std::max({z[0], z[1], z[2]}) > kNearPlane;
             if (crosses && expected.triangles.size() > before)
                 ++crossing;
-            if (face.index[0] >= kCityRoad || (face.index[0] >= kCityRampA && face.index[0] < kCityRoad))
+            if (face.index[0] >= kCityRampA) // not the sky or the sun
                 ++cityFaceCount;
         }
         cityScene(scene, frame, f);
@@ -352,30 +425,120 @@ void testScenes() {
             CHECK(sameScene(again, scene));
         }
     }
+    const double polygons = static_cast<double>(cityFacesTotal) / 2 / frameCount();
     std::printf(
         "city: %zu..%zu triangles a frame (budget %zu, limit %zu); city polygons %.0f a frame on "
-        "average, %zu at most; %zu frames clip at the near plane (%zu faces in all; %zu of the %zu street "
-        "frames)\n",
-        minTriangles, maxTriangles, kTriangleBudget, kMaxTriangles,
-        static_cast<double>(cityFacesTotal) / 2 / frameCount(), cityFacesMax / 2, crossingFrames,
-        crossingTotal, streetCrossing, streetFrames);
+        "average (%.0f of them markings and windows), %zu at most; %zu frames clip at the near plane (%zu "
+        "faces in all; %zu of the %zu street frames)\n",
+        minTriangles, maxTriangles, kTriangleBudget, kMaxTriangles, polygons,
+        static_cast<double>(detailTotal) / 2 / frameCount(), cityFacesMax / 2, crossingFrames, crossingTotal,
+        streetCrossing, streetFrames);
+    const std::string card = evo::show::cues[kCityChapter].thenCard;
+    CHECK(card.find("300 POLYGONS") != std::string::npos && polygons > 250 && polygons < 350);
     CHECK(maxTriangles <= kTriangleBudget);
     CHECK(minTriangles >= 100);
     CHECK(crossingFrames >= 100 && streetCrossing * 3 >= streetFrames * 2);
 }
 
+// An independent reference for what a ray must show: the nearest of the ground plane and every building box
+// (cityLot) in the cells within kCityDrawDistance of the eye, by a slab test, with no culling, ordering or
+// faces involved. t is the distance along the ray (infinity for a miss: the ray goes to the sky), cosine
+// the absolute cosine between the ray and the surface's normal there.
+struct Surface {
+    double t = std::numeric_limits<double>::infinity();
+    double cosine = 1;
+};
+
+void hitBox(const evo::test::Ray& ray, const CityBox& box, Surface& nearest) {
+    const double lo[3] = {box.x0, box.y0, box.z0}, hi[3] = {box.x1, box.y1, box.z1};
+    double enter = -std::numeric_limits<double>::infinity(), leave = std::numeric_limits<double>::infinity();
+    int axis = -1;
+    for (int k = 0; k < 3; ++k) {
+        const double o = ray.origin[static_cast<std::size_t>(k)],
+                     d = ray.direction[static_cast<std::size_t>(k)];
+        if (d == 0) {
+            if (o < lo[k] || o > hi[k])
+                return;
+            continue;
+        }
+        const double t0 = std::min((lo[k] - o) / d, (hi[k] - o) / d),
+                     t1 = std::max((lo[k] - o) / d, (hi[k] - o) / d);
+        if (t0 > enter)
+            enter = t0, axis = k;
+        leave = std::min(leave, t1);
+    }
+    if (axis >= 0 && enter <= leave && enter > 0 && enter < nearest.t)
+        nearest = {enter, std::abs(ray.direction[static_cast<std::size_t>(axis)])};
+}
+
+class CityReference {
+public:
+    explicit CityReference(const evo::retro::Camera& camera)
+        : eye_{camera.eye[0], camera.eye[1], camera.eye[2]} {
+        using namespace evo::retro;
+        const std::int32_t i0 = cellOf(eye_[0] - kCityDrawDistance), i1 = cellOf(eye_[0] + kCityDrawDistance);
+        const std::int32_t m0 = cellOf(eye_[2] - kCityDrawDistance), m1 = cellOf(eye_[2] + kCityDrawDistance);
+        for (std::int32_t i = i0; i <= i1; ++i)
+            for (std::int32_t m = m0; m <= m1; ++m) {
+                if (!inReach(i, m))
+                    continue;
+                for (const CityBuilding& b : cityLot(i, m)) {
+                    boxes_.push_back(b.base);
+                    if (b.tower)
+                        boxes_.push_back(b.top);
+                }
+            }
+    }
+
+    Surface nearest(const evo::test::Ray& ray) const {
+        Surface surface;
+        if (ray.direction[1] < 0) { // the ground, where the city has a cell
+            const double t = -ray.origin[1] / ray.direction[1];
+            const double x = ray.origin[0] + t * ray.direction[0], z = ray.origin[2] + t * ray.direction[2];
+            if (inReach(cellOf(x), cellOf(z)))
+                surface = {t, -ray.direction[1]};
+        }
+        for (const CityBox& box : boxes_)
+            hitBox(ray, box, surface);
+        return surface;
+    }
+
+private:
+    static std::int32_t cellOf(double v) {
+        using namespace evo::retro;
+        return static_cast<std::int32_t>(std::floor((v + kCityStreet / 2) / kCityCell));
+    }
+    // A cell (its lot and the streets at its lower x and z) within the draw distance of the eye on the
+    // ground.
+    bool inReach(std::int32_t i, std::int32_t m) const {
+        using namespace evo::retro;
+        const double x0 = kCityCell * i - kCityStreet / 2, z0 = kCityCell * m - kCityStreet / 2;
+        const double dx = std::max({x0 - eye_[0], 0.0, eye_[0] - (x0 + kCityCell)});
+        const double dz = std::max({z0 - eye_[2], 0.0, eye_[2] - (z0 + kCityCell)});
+        return dx * dx + dz * dz <= kCityDrawDistance * kCityDrawDistance;
+    }
+
+    Vec3 eye_;
+    std::vector<CityBox> boxes_;
+};
+
 // The painter's order on the CPU: on every 9th retro frame, a ray through each pixel centre of an 80 x 50
-// grid against the frame's faces (beyond the near plane): the face drawn last among those it hits must be
-// the nearest (or tie with it: the two triangles of a quad, tiles that share an edge).
+// grid against the frame's faces (beyond the near plane). The face drawn last among those it hits must be
+// the nearest (or tie with it: the two triangles of a quad, tiles that share an edge). And it must be what
+// the independent reference (CityReference) sees: the sky or the sun (or nothing, the haze) where the
+// reference misses; otherwise a face at the reference's distance, or up to 0.1 units in front of the
+// reference's surface (a window 0.08 out from its wall, a marking 0.02 above the road), measured along the
+// surface's normal. That catches faces or cells culled that the camera can see, which the first check
+// cannot. Rays whose reference hit is within twice the near plane are left out (clipped).
 void testPainter() {
     using namespace evo::retro;
-    std::size_t rays = 0, wrong = 0, buildingRays = 0;
+    std::size_t rays = 0, wrong = 0, buildingRays = 0, referenced = 0, skyRays = 0, mismatched = 0;
     for (std::uint32_t f = 2; f < frameCount(); f += 9) {
         const TimelineFrame frame = frameOf(f);
         const Camera camera = cityCamera(frame, f);
         const std::vector<CityFace> faces = cityFaces(frame, f);
-        const Vec3 forward = normalize(sub({camera.target[0], camera.target[1], camera.target[2]},
-                                           {camera.eye[0], camera.eye[1], camera.eye[2]}));
+        const CityReference reference(camera);
+        const Vec3 forward = viewBasis(camera).forward;
         for (int gy = 0; gy < 50; ++gy)
             for (int gx = 0; gx < 80; ++gx) {
                 const evo::test::Ray ray = evo::test::rayThrough(camera, gx * 4 + 1.5, gy * 4 + 1.5);
@@ -390,6 +553,28 @@ void testPainter() {
                         nearest = static_cast<int>(i), nearestT = t;
                     last = static_cast<int>(i), lastT = t;
                 }
+
+                const Surface expected = reference.nearest(ray);
+                if (expected.t * cosine >= 2 * kNearPlane) {
+                    ++referenced;
+                    bool matches = false;
+                    if (!std::isfinite(expected.t)) {
+                        ++skyRays;
+                        matches = last < 0 || faces[static_cast<std::size_t>(last)].index[0] < kCityHaze;
+                    } else if (last >= 0) {
+                        const double slack = 0.1 / std::max(expected.cosine, 1e-3);
+                        matches = lastT <= expected.t * (1 + 1e-9) + 1e-9 && lastT >= expected.t - slack;
+                    }
+                    if (!matches) {
+                        if (mismatched < 5)
+                            std::printf(
+                                "city: frame %u, ray (%d, %d): last face %d at %.4f, reference %.4f\n", f, gx,
+                                gy, last < 0 ? -1 : faces[static_cast<std::size_t>(last)].index[0],
+                                last < 0 ? 0.0 : lastT, expected.t);
+                        ++mismatched;
+                    }
+                }
+
                 if (last < 0)
                     continue;
                 ++rays;
@@ -400,9 +585,14 @@ void testPainter() {
                     ++wrong;
             }
     }
-    std::printf("city: painter's order: %zu rays, %zu on buildings, %zu wrong\n", rays, buildingRays, wrong);
+    std::printf(
+        "city: painter's order: %zu rays, %zu on buildings, %zu wrong; against the reference: %zu rays "
+        "(%zu to the sky), %zu mismatched\n",
+        rays, buildingRays, wrong, referenced, skyRays, mismatched);
     CHECK(rays >= 200000 && buildingRays >= 50000);
     CHECK(wrong == 0);
+    CHECK(referenced >= 200000 && skyRays >= 20000);
+    CHECK(mismatched == 0);
 }
 
 bool isSky(std::uint8_t index) {
@@ -487,7 +677,7 @@ void testImages(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testPalette();
         testGeneration();

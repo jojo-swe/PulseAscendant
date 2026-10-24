@@ -18,6 +18,7 @@
 #include "show/cues.hpp"
 #include "show/music_curves.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 
 #include <algorithm>
 #include <array>
@@ -46,14 +47,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr int kFinaleChapter = 9;
 constexpr std::uint32_t kRate = evo::retro::kFinaleRetroRate;
@@ -246,12 +239,11 @@ void testHomeStarts() {
 
 // The own frame of a sub-effect without its text, as FINALE shows it.
 const EffectInfo& withoutText(Effect effect) {
-    constexpr int kEffects = static_cast<int>(Effect::TheEnd) + 1;
-    static const std::array<EffectInfo, kEffects> entries = [] {
-        std::array<EffectInfo, kEffects> all{};
-        for (int e = 0; e < kEffects; ++e) {
-            all[static_cast<std::size_t>(e)] = evo::retro::effectFor(static_cast<Effect>(e));
-            all[static_cast<std::size_t>(e)].text = nullptr;
+    static const std::array<EffectInfo, evo::show::kEffectCount> entries = [] {
+        std::array<EffectInfo, evo::show::kEffectCount> all{};
+        for (std::size_t e = 0; e < evo::show::kEffectCount; ++e) {
+            all[e] = evo::retro::effectFor(static_cast<Effect>(e));
+            all[e].text = nullptr;
         }
         return all;
     }();
@@ -314,7 +306,7 @@ void testImages(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testFirstBeat();
         testCutsOnTheBeatGrid();

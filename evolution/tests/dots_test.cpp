@@ -11,6 +11,7 @@
 #include "retro/scene.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 #include "text/font8x8.hpp"
 
 #include <algorithm>
@@ -43,14 +44,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr int kDotsChapter = 2;
 constexpr std::uint32_t kRate = evo::retro::kDotsRetroRate;
@@ -128,8 +121,9 @@ void testPalette() {
     CHECK(evo::retro::kDotsShades == 32);
     for (std::size_t i = first; i < last; ++i)
         CHECK(brightness(palette[i + 1]) > brightness(palette[i]));
-    const std::uint32_t far = palette[first];
-    CHECK(brightness(far) > 0 && (far >> 16 & 0xff) > (far & 0xff) && (far >> 16 & 0xff) > (far >> 8 & 0xff));
+    const std::uint32_t farthest = palette[first];
+    CHECK(brightness(farthest) > 0 && (farthest >> 16 & 0xff) > (farthest & 0xff) &&
+          (farthest >> 16 & 0xff) > (farthest >> 8 & 0xff));
     CHECK(palette[last] == evo::retro::rgba(255, 255, 255));
     for (std::size_t i = 1; i < 255; ++i)
         if (i < first || i > last)
@@ -516,7 +510,7 @@ void testImages(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testPalette();
         testShapes();

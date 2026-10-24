@@ -1,7 +1,7 @@
 // GLENZ, chapter 5: the registry entry, the palette, Future Crew's mesh (14 vertices, 24 triangles, closed
-// and wound outwards), the beat bounce on the chapter's tracked beats, the silhouette over the chapter, and
-// the 320x200 palette index image from the retro stage on the GPU: copper bars per row, every glenz pixel the
-// copper index ORed with the codes of the faces covering it (a CPU reference), front-and-back overlaps at
+// and consistently wound), the beat bounce on the chapter's tracked beats, the silhouette over the chapter,
+// and the 320x200 palette index image from the retro stage on the GPU: copper bars per row, every glenz pixel
+// the copper index ORed with the codes of the faces covering it (a CPU reference), front-and-back overlaps at
 // code 3, deterministic per retro frame. Runs with the validation layer on and fails on any message it
 // reports.
 
@@ -13,6 +13,7 @@
 #include "retro_stage_fixture.hpp"
 #include "show/music_curves.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 
 #include <algorithm>
 #include <array>
@@ -44,14 +45,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr int kWidth = static_cast<int>(RetroStageFixture::kWidth);
 constexpr int kHeight = static_cast<int>(RetroStageFixture::kHeight);
@@ -155,9 +148,10 @@ void testPalette() {
 }
 
 // Future Crew's mesh: 14 vertices, 24 triangles, every edge shared by exactly two triangles (closed), each
-// directed edge used once (consistent winding), wound as in the original: clockwise on the y-down screen
-// seen from outside (every face's right-handed normal points inward, towards the centre, which the star
-// shape keeps inside every face's plane).
+// directed edge used once (consistent winding), wound as in the original: every face's right-handed normal
+// points inward, towards the centre, which the star shape keeps inside every face's plane. Seen from
+// outside, so on screen for exactly the front faces, a face runs counter-clockwise: its cross product in
+// y-down pixel coordinates is negative (testScene checks that on every frame).
 void testMesh() {
     using namespace evo::retro;
     const GlenzMesh& mesh = glenzMesh();
@@ -408,8 +402,10 @@ void testScene() {
         fronts += frontCount;
         backs += kGlenzTriangles - frontCount;
         CHECK(frontCount >= 3 && frontCount <= 21);
-        // Front and back faces wind opposite ways on the screen, and the front faces are the nearer ones.
+        // Front and back faces wind opposite ways on the screen, and the front faces are the nearer ones. A
+        // front face is seen from outside, so it runs counter-clockwise: negative in y-down coordinates.
         CHECK(screenWinding[0] == -screenWinding[1]);
+        CHECK(screenWinding[1] == -1);
         CHECK(frontDepth / static_cast<double>(frontCount) <
               backDepth / static_cast<double>(kGlenzTriangles - frontCount));
         if (f % 5 == 0)
@@ -502,7 +498,7 @@ void testImages(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testPalette();
         testMesh();

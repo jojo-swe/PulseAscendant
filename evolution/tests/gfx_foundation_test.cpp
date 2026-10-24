@@ -13,6 +13,7 @@
 #include "gfx/shader.hpp"
 #include "gfx/sync.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 
 #include <array>
 #include <cstdint>
@@ -38,14 +39,6 @@ int checksPassed = 0;
     } while (false)
 
 // Points shaderDir() at the build's compiled shaders.
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
-
 ImageDesc targetDesc(std::uint32_t width, std::uint32_t height, const char* name) {
     return {
         width, height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -397,7 +390,7 @@ void testMissingShaderNamesPath(Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         {
             auto ctx = Context::create({.validation = true});
             if (!ctx.validationEnabled())

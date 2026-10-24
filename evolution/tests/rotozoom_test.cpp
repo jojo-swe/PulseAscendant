@@ -13,6 +13,7 @@
 #include "retro/rotozoom.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 #include "text/font8x8.hpp"
 
 #include <algorithm>
@@ -45,14 +46,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr int kWidth = static_cast<int>(RetroStageFixture::kWidth);
 constexpr int kHeight = static_cast<int>(RetroStageFixture::kHeight);
@@ -572,7 +565,7 @@ void testImages(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testPalette();
         testTexture();

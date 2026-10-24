@@ -10,6 +10,7 @@
 #include "retro/boot.hpp"
 #include "retro/effects.hpp"
 #include "show/timeline.hpp"
+#include "test_env.hpp"
 #include "text/font8x8.hpp"
 #include "text/text_pass.hpp"
 
@@ -36,14 +37,6 @@ int checksPassed = 0;
             throw std::runtime_error(#x);                                                                    \
         ++checksPassed;                                                                                      \
     } while (false)
-
-void setEnv(const char* name, const char* value) {
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
 
 constexpr std::uint32_t kWidth = RetroStage::kWidth, kHeight = RetroStage::kHeight;
 
@@ -265,7 +258,8 @@ void testImages(evo::gfx::Context& ctx) {
 
     // A test pattern frame first, which writes every pixel: BOOT must clear what it leaves.
     TimelineFrame pattern = evo::show::sampleTimeline(30.0);
-    pattern.effect = Effect::StudioNight; // Act II: its 1993 side stays the test pattern
+    pattern.effect = Effect::Galaxy; // Act III, 2026 only: its 1993 side stays the test pattern
+    CHECK(evo::retro::effectFor(Effect::Galaxy).shader == evo::retro::kTestPatternShader);
     CHECK(fixture.render(pattern).count(0) < kWidth * kHeight / 2);
 
     // t = 0.5: the prompt and the cursor only; at 0.3 the cursor is blinked off.
@@ -320,7 +314,7 @@ void testImages(evo::gfx::Context& ctx) {
 
 int main() {
     try {
-        setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testScript();
         testLinesFit();

@@ -2,25 +2,16 @@
 
 #include "retro/boot.hpp"
 #include "retro/flyby.hpp"
+#include "retro/math.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <numbers>
 #include <string>
 
 namespace evo::retro {
 
 namespace {
-
-double smoothstep(double x) {
-    x = std::clamp(x, 0.0, 1.0);
-    return x * x * (3 - 2 * x);
-}
-
-double radians(double degrees) {
-    return degrees * std::numbers::pi / 180;
-}
 
 // The caption's script for the prompt's typing engine.
 constexpr std::array<PromptWrite, 1> kCaption = {{{1.0, kPortalCaptionText, 8}}};

@@ -94,7 +94,7 @@ RetroStage::RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& 
     for (gfx::Buffer& palette : palettes_)
         palette =
             gfx::Buffer(ctx, {kPaletteBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "retro palette"});
-    for (int effect = 0; effect <= static_cast<int>(show::Effect::TheEnd); ++effect) {
+    for (std::size_t effect = 0; effect < show::kEffectCount; ++effect) {
         const retro::EffectInfo& info = effects_(static_cast<show::Effect>(effect));
         const bool textured = info.texture != nullptr;
         if (textured && !info.shader)
