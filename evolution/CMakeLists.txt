@@ -122,6 +122,7 @@ add_library(evo_render STATIC
     src/retro/dots.cpp
     src/retro/flyby.cpp
     src/retro/glenz.cpp
+    src/retro/rotozoom.cpp
     src/retro/tunnel.cpp
     src/retro/palette.cpp
     src/retro/palettes.cpp
@@ -154,6 +155,7 @@ evo_add_shaders(Evolution
     shaders/retro/plasma.comp
     shaders/retro/points.comp
     shaders/retro/polys.comp
+    shaders/retro/rotozoom.comp
     shaders/retro/test_pattern.comp
     shaders/text/text_index.comp
     shaders/text/text_rgba.comp)
@@ -294,6 +296,30 @@ target_link_libraries(glenz_test PRIVATE evo_render)
 target_compile_definitions(glenz_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(glenz_test Evolution_shaders)
 add_test(NAME glenz COMMAND glenz_test)
+
+# LENS: the rotozoom texture and view on the CPU, two test builds of rotozoom.comp (unturned at 1 and at 8
+# texels per pixel, the lens held still) against the tile and the refraction table, and the show's image from
+# the retro stage, with the validation layer on; fails on any message it reports.
+set(rotozoomTestShaders "")
+foreach(texelsPerPixel 1 8)
+    set(spirv "${EVO_TEST_SPIRV_DIR}/test_rotozoom_view${texelsPerPixel}.comp.spv")
+    add_custom_command(
+        OUTPUT "${spirv}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+        COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -DROTOZOOM_TEST_VIEW=${texelsPerPixel} -o "${spirv}"
+                "${CMAKE_SOURCE_DIR}/shaders/retro/rotozoom.comp"
+        DEPENDS "${CMAKE_SOURCE_DIR}/shaders/retro/rotozoom.comp" "${CMAKE_SOURCE_DIR}/shaders/retro/common.glsl"
+        COMMENT "Compiling test shader test_rotozoom_view${texelsPerPixel}.comp"
+        VERBATIM)
+    list(APPEND rotozoomTestShaders "${spirv}")
+endforeach()
+add_custom_target(rotozoom_test_shaders DEPENDS ${rotozoomTestShaders})
+add_executable(rotozoom_test tests/rotozoom_test.cpp)
+target_link_libraries(rotozoom_test PRIVATE evo_render)
+target_compile_definitions(rotozoom_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+                                                 EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(rotozoom_test Evolution_shaders rotozoom_test_shaders)
+add_test(NAME rotozoom COMMAND rotozoom_test)
 
 # The sine scroller: its glyph positions on the CPU, and CREDITS and FLYBY's greeting from the retro stage,
 # with the validation layer on; fails on any message it reports.

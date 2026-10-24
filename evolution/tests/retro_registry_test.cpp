@@ -97,6 +97,13 @@ void testEveryEffectIsPure() {
         const EffectInfo& info = evo::retro::effectFor(effect);
         CHECK(info.palette != nullptr);
         CHECK(info.retroRate > 0);
+        // A texture is built once, so it must be the same every time, width x height texels, for a shader.
+        if (info.texture) {
+            const evo::retro::EffectTexture texture = info.texture();
+            CHECK(info.shader != nullptr && texture.width > 0 && texture.height > 0);
+            CHECK(texture.texels.size() == std::size_t{texture.width} * texture.height);
+            CHECK(info.texture().texels == texture.texels);
+        }
 
         const int chapter = chapterOf(effect);
         const double start = evo::show::chapterStart(chapter);

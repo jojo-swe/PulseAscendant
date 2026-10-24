@@ -17,6 +17,14 @@ using BackgroundProvider = std::uint8_t (*)(const show::TimelineFrame&, std::uin
 // of an item's rgba is its palette index), after its shader or its background.
 using TextProvider = std::vector<text::Item> (*)(const show::TimelineFrame&, std::uint32_t retroFrame);
 
+// An effect's own texture: width x height bytes, rows top first, that its shader reads as an R8_UINT
+// storage image at binding 1 (shaders/retro/rotozoom.comp). Built once, so it must not depend on the frame.
+struct EffectTexture {
+    std::uint32_t width = 0, height = 0;
+    std::vector<std::uint8_t> texels;
+};
+using TextureBuilder = EffectTexture (*)();
+
 // How the retro stage renders an effect's 1993 side. The stage caches the result by (chapter, effect,
 // retroFrame) and calls the builders and providers below only when it re-renders, so each of them must be a
 // pure function of the chapter and the retro frame. From the TimelineFrame they may read only what is fixed
@@ -42,6 +50,9 @@ struct EffectInfo {
     // The triangles and points drawn over the shader's image or the background, before the text
     // (render::SceneRaster), or nullptr for none. The stage clears the scene before calling it.
     SceneProvider scene = nullptr;
+    // The shader's texture, or nullptr for none. The stage builds and uploads it once, when it is made, and
+    // keeps one image per builder (effects that name the same builder share it). Needs a shader.
+    TextureBuilder texture = nullptr;
 };
 
 inline constexpr const char* kTestPatternShader = "retro_test_pattern.comp.spv";
@@ -55,7 +66,8 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 // The registry (effects.cpp): the entry of every effect. Boot is the DOS prompt, Plasma the cycling plasma,
 // Credits the sine scroller on deep blue, Flyby the flat-shaded ship over a starfield with its greeting
 // scrolling over them, Dots the 512 morphing points, Tunnel the dot-ring tunnel that turns into a solid tube,
-// Glenz Future Crew's translucent glenz vector bouncing over copper bars.
+// Glenz Future Crew's translucent glenz vector bouncing over copper bars, Lens the rotozoomed logo texture
+// under a bouncing lens.
 // The other effects get their entries in later steps and show the test pattern in grey until then.
 const EffectInfo& effectFor(show::Effect effect);
 

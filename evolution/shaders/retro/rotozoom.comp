@@ -1,0 +1,112 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// LENS (chapter 6): the rotozoomer and the bouncing lens (src/retro/rotozoom.hpp has the formulas and the
+// palette). The 128x128 texture is the effect's own (binding 1), its texels palette indices. Per frame the
+// view becomes 16.16 fixed-point texture steps, as on a 486; per pixel only integer adds and a wrap-around
+// lookup. Inside the lens a pixel shows the rotozoomed point the refraction table names (to 1/256 pixel),
+// through the glass palette; the rim and the highlight are drawn on top. The time is pc.retroSeconds, so the image is a pure
+// function of retroFrame.
+//
+// ROTOZOOM_TEST_VIEW=n (tests/rotozoom_test.cpp only): no rotation, n texels per pixel from texel (0, 0) at
+// pixel (0, 0), sampled half a texel in (off the texel edges), and the lens held at (160, 100).
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D indexImage;
+layout(set = 0, binding = 1, r8ui) uniform readonly uimage2D tile;
+
+// Must match RetroPushConstants in src/render/retro_stage.cpp (12 bytes).
+layout(push_constant) uniform PushConstants {
+    uint retroFrame;    // floor(localSeconds * retroRate)
+    uint chapter;       // the chapter index
+    float retroSeconds; // retroFrame / retroRate: the chapter-local time of this retro frame
+} pc;
+
+// Must match src/retro/rotozoom.hpp.
+const float kPixelAspect = 1.2;
+const float kLensRadius = 48.0;
+const float kRimInner = 1.0 - 4.0 / 48.0;
+const float kRimOutline = 1.0 - 1.2 / 48.0; // the outermost pixel of the rim, darker
+const uint kGlass = 64u;
+const uint kRim = 144u;
+const uint kWhite = 255u;
+const vec2 kHighlight = vec2(-0.4, -0.4);
+const float kPi = 3.14159265359;
+
+struct View {
+    uvec2 origin, stepX, stepY; // 16.16, wrapping
+    ivec2 lens;
+};
+
+int fixed16(float x) {
+    return int(round(x * 65536.0));
+}
+
+View viewAt(float t) {
+    View view;
+#ifdef ROTOZOOM_TEST_VIEW
+    view.origin = uvec2(32768u);
+    view.stepX = uvec2(uint(ROTOZOOM_TEST_VIEW) * 65536u, 0u);
+    view.stepY = uvec2(0u, uint(ROTOZOOM_TEST_VIEW) * 65536u);
+    view.lens = ivec2(160, 100);
+#else
+    float angle = 0.95 * sin(0.33 * t) + 0.08 * t;
+    float zoom = 0.7 + 0.4 * sin(0.41 * t - 1.2);
+    vec2 centre = mod(vec2(64.0 + 23.0 * t, 64.0 + 40.0 * sin(0.29 * t)), 128.0);
+    ivec2 stepX = ivec2(fixed16(zoom * cos(angle)), fixed16(zoom * sin(angle)));
+    ivec2 stepY = ivec2(fixed16(-kPixelAspect * zoom * sin(angle)), fixed16(kPixelAspect * zoom * cos(angle)));
+    view.stepX = uvec2(stepX);
+    view.stepY = uvec2(stepY);
+    view.origin = uvec2(ivec2(fixed16(centre.x), fixed16(centre.y)) - 160 * stepX - 100 * stepY);
+    float phase = fract(t / 6.2);
+    float tri = phase < 0.5 ? 2.0 * phase : 2.0 - 2.0 * phase;
+    view.lens = ivec2(floor(vec2(48.0 + 224.0 * tri, 159.0 - 119.0 * abs(sin(kPi * t / 2.3))) + 0.5));
+#endif
+    return view;
+}
+
+// The rotozoomed texel at screen point p256 / 256 (24.8 fixed point: the lens looks between pixels).
+uint rotozoomed(View view, ivec2 p256) {
+    ivec2 whole = p256 >> 8; // floor
+    ivec2 part = p256 & 255;
+    ivec2 between = (part.x * ivec2(view.stepX) + part.y * ivec2(view.stepY)) >> 8;
+    uvec2 uv = view.origin + uint(whole.x) * view.stepX + uint(whole.y) * view.stepY + uvec2(between);
+    return imageLoad(tile, ivec2((uv >> 16u) & 127u)).r;
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= kRetroWidth || pixel.y >= kRetroHeight) {
+        return;
+    }
+
+    View view = viewAt(pc.retroSeconds);
+    ivec2 offset = ivec2(pixel) - view.lens;
+    vec2 n = vec2(offset) * vec2(1.0, kPixelAspect) / kLensRadius; // lens units, round on the 4:3 screen
+    float r = length(n);
+    uint index;
+    if (r >= 1.0) {
+        index = rotozoomed(view, ivec2(pixel) << 8);
+    } else if (r >= kRimInner) {
+        // The rim: lit from the upper left, its outermost pixel darker.
+        float light = dot(n / r, normalize(vec2(-1.0)));
+        int shade = clamp(int(round(7.5 + 7.5 * light)) - (r >= kRimOutline ? 6 : 0), 0, 15);
+        index = kRim + uint(shade);
+    } else {
+        float h = length(n - kHighlight);
+        if (h < 0.05) {
+            index = kWhite;
+        } else if (h < 0.12) {
+            index = kRim + 13u;
+        } else {
+            // The refraction table: a spherical cap's sag, 2x at the middle, 1x at the edge.
+            float q = 0.5 + 0.5 * (1.0 - sqrt(1.0 - r * r));
+            ivec2 source = ivec2(floor((vec2(view.lens) + vec2(offset) * q) * 256.0 + 0.5));
+            index = rotozoomed(view, source) + kGlass;
+        }
+    }
+    imageStore(indexImage, ivec2(pixel), uvec4(index));
+}

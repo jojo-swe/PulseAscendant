@@ -8,6 +8,7 @@
 #include "retro/flyby.hpp"
 #include "retro/glenz.hpp"
 #include "retro/palette.hpp"
+#include "retro/rotozoom.hpp"
 #include "retro/scroller.hpp"
 #include "retro/tunnel.hpp"
 
@@ -28,6 +29,8 @@ const EffectInfo& effectFor(show::Effect effect) {
                                         nullptr, nullptr,          tunnelScene};
     static constexpr EffectInfo kGlenz{kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr,
                                        glenzScene};
+    static constexpr EffectInfo kLens{kRotozoomShader, kRotozoomRetroRate, rotozoomPalette, nullptr, nullptr,
+                                      nullptr,         rotozoomTexture};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
                                          creditsBackground};
     switch (effect) {
@@ -43,6 +46,8 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kTunnel;
     case show::Effect::Glenz:
         return kGlenz;
+    case show::Effect::Lens:
+        return kLens;
     case show::Effect::Credits:
         return kCredits;
     case show::Effect::Raytrace:

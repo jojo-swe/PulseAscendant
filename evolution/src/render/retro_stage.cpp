@@ -1,5 +1,6 @@
 #include "render/retro_stage.hpp"
 
+#include "gfx/buffer.hpp"
 #include "gfx/paths.hpp"
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
@@ -7,7 +8,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace evo::render {
@@ -23,6 +26,9 @@ struct RetroPushConstants {
 static_assert(sizeof(RetroPushConstants) == 12);
 
 constexpr std::array<gfx::Binding, 1> kEffectBindings = {gfx::Binding{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}};
+// An effect with a texture: the index image, then the texture.
+constexpr std::array<gfx::Binding, 2> kTexturedBindings = {gfx::Binding{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+                                                           gfx::Binding{1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}};
 constexpr std::array<gfx::Binding, 3> kPaletteMapBindings = {
     gfx::Binding{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
     gfx::Binding{1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
@@ -43,6 +49,34 @@ gfx::Image createIndexImage(gfx::Context& ctx) {
               1, "retro index"});
 }
 
+// An effect's texture as an R8_UINT storage image, uploaded through a staging buffer and left in GENERAL for
+// the effect shaders to read.
+gfx::Image createTexture(gfx::Context& ctx, const retro::EffectTexture& texture) {
+    if (texture.width == 0 || texture.height == 0 ||
+        texture.texels.size() != std::size_t{texture.width} * texture.height)
+        throw std::invalid_argument("an effect texture must hold width x height texels");
+    gfx::Image image(ctx,
+                     {texture.width, texture.height, VK_FORMAT_R8_UINT,
+                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, "effect texture"});
+    gfx::Buffer staging(
+        ctx, {texture.texels.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, "effect texture staging"});
+    std::memcpy(staging.mapped(), texture.texels.data(), texture.texels.size());
+    staging.flush();
+    // immediate() waits for the copy, so the staging buffer may go when this returns.
+    ctx.immediate([&](VkCommandBuffer cmd) { // setup: once, when the stage is built
+        image.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
+                         VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        VkBufferImageCopy region{};
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageExtent = {texture.width, texture.height, 1};
+        vkCmdCopyBufferToImage(cmd, staging.handle(), image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                               &region);
+        image.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                         VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+    });
+    return image;
+}
+
 std::uint32_t retroFrameOf(const show::TimelineFrame& frame, std::uint32_t rate) {
     const double frames = std::floor(std::max(frame.localSeconds, 0.0) * rate);
     return static_cast<std::uint32_t>(frames);
@@ -61,11 +95,27 @@ RetroStage::RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& 
         palette =
             gfx::Buffer(ctx, {kPaletteBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "retro palette"});
     for (int effect = 0; effect <= static_cast<int>(show::Effect::TheEnd); ++effect) {
-        const char* shader = effects_(static_cast<show::Effect>(effect)).shader;
-        if (shader && !shaders_.contains(shader))
-            shaders_.emplace(shader, std::make_unique<gfx::ComputePipeline>(ctx, gfx::shaderDir() / shader,
-                                                                            kEffectBindings,
-                                                                            sizeof(RetroPushConstants)));
+        const retro::EffectInfo& info = effects_(static_cast<show::Effect>(effect));
+        const bool textured = info.texture != nullptr;
+        if (textured && !info.shader)
+            throw std::invalid_argument("an effect texture needs an effect shader to read it");
+        if (textured && !textures_.contains(info.texture))
+            textures_.emplace(info.texture, createTexture(ctx, info.texture()));
+        if (!info.shader)
+            continue;
+        if (const auto known = shaders_.find(info.shader); known != shaders_.end()) {
+            if (known->second.textured != textured)
+                throw std::logic_error(std::string("effect shader ") + info.shader +
+                                       " is named both with and without a texture");
+            continue;
+        }
+        const std::span<const gfx::Binding> bindings = textured
+                                                           ? std::span<const gfx::Binding>(kTexturedBindings)
+                                                           : std::span<const gfx::Binding>(kEffectBindings);
+        shaders_.emplace(info.shader, EffectShader{std::make_unique<gfx::ComputePipeline>(
+                                                       ctx, gfx::shaderDir() / info.shader, bindings,
+                                                       sizeof(RetroPushConstants)),
+                                                   textured});
     }
 }
 
@@ -82,8 +132,17 @@ bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     if (effect.shader) {
         index_.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                           VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-        gfx::ComputePipeline& pass = *shaders_.at(effect.shader);
-        pass.bind(cmd, ring_, {&indexInfo, 1}, {});
+        gfx::ComputePipeline& pass = *shaders_.at(effect.shader).pipeline;
+        if (effect.texture) {
+            gfx::Image& texture = textures_.at(effect.texture);
+            texture.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                               VK_ACCESS_2_SHADER_STORAGE_READ_BIT); // read only: no barrier after the upload
+            const std::array<VkDescriptorImageInfo, 2> images = {
+                indexInfo, VkDescriptorImageInfo{VK_NULL_HANDLE, texture.view(), VK_IMAGE_LAYOUT_GENERAL}};
+            pass.bind(cmd, ring_, images, {});
+        } else {
+            pass.bind(cmd, ring_, {&indexInfo, 1}, {});
+        }
         const RetroPushConstants push{retroFrame_, static_cast<std::uint32_t>(frame.chapter),
                                       static_cast<float>(retroFrame_) / static_cast<float>(effect.retroRate)};
         pass.push(cmd, &push, sizeof push);
