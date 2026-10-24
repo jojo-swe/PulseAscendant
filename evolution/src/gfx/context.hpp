@@ -15,9 +15,22 @@ namespace evo::gfx {
 struct ContextOptions {
     bool validation = false;                        // enable VK_LAYER_KHRONOS_validation if present, and
                                                     // route its messages to stderr via VK_EXT_debug_utils
+    bool syncValidation = false;                    // with validation: also the layer's synchronization
+                                                    // validation (VK_EXT_validation_features); slow
     std::vector<const char*> instanceExtensions;    // from SDL when windowed; empty headless
     std::vector<const char*> extraDeviceExtensions; // appended to the required list (swapchain, tests)
     PFN_vkGetInstanceProcAddr loader = nullptr;     // nullptr -> volkInitialize()
+};
+
+// What the device reports for ray tracing (VkPhysicalDeviceRayTracingPipelinePropertiesKHR and
+// VkPhysicalDeviceAccelerationStructurePropertiesKHR). Read from the driver, never assumed: lavapipe reports
+// {32, 16, 32, 31, 8}, an RTX GPU handle 32, handle alignment 32 and base alignment 64.
+struct RayTracingProperties {
+    std::uint32_t shaderGroupHandleSize;
+    std::uint32_t shaderGroupHandleAlignment;
+    std::uint32_t shaderGroupBaseAlignment;
+    std::uint32_t maxRayRecursionDepth;
+    std::uint32_t minScratchOffsetAlignment; // minAccelerationStructureScratchOffsetAlignment
 };
 
 // Thrown when the machine cannot run EVOLUTION: no Vulkan loader, no Vulkan 1.3 driver, no physical device,
@@ -58,10 +71,15 @@ public:
 
     std::string deviceName() const;
     uint32_t apiVersion() const;
+    // The device, driver, API version, validation state and the ray tracing properties as one JSON object.
     std::string deviceInfoJson() const;
+    const RayTracingProperties& rayTracingProperties() const { return rayTracing_; }
 
     // Whether the validation layer was requested and found.
     bool validationEnabled() const { return validation_; }
+    // Whether synchronization validation was requested and enabled (needs the layer and its
+    // VK_EXT_validation_features).
+    bool syncValidationEnabled() const { return syncValidation_; }
     // Validation warnings and errors reported since this Context was created.
     unsigned validationMessageCount() const;
 
@@ -72,6 +90,9 @@ public:
     // Shared samplers with clamp-to-edge addressing and no mipmapping: nearest (the retro pixels) and linear.
     VkSampler nearestSampler() const { return nearestSampler_; }
     VkSampler linearSampler() const { return linearSampler_; }
+    // Linear filtering between texels and between mip levels, clamp-to-edge, every mip level (maxLod
+    // VK_LOD_CLAMP_NONE): for mipmapped textures.
+    VkSampler trilinearSampler() const { return trilinearSampler_; }
 
     // Names an object for the validation layer's messages and for debuggers. A no-op without
     // VK_EXT_debug_utils (validation off) or for an empty name.
@@ -91,7 +112,10 @@ private:
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
     VkSampler nearestSampler_ = VK_NULL_HANDLE;
     VkSampler linearSampler_ = VK_NULL_HANDLE;
+    VkSampler trilinearSampler_ = VK_NULL_HANDLE;
+    RayTracingProperties rayTracing_{};
     bool validation_ = false;
+    bool syncValidation_ = false;
     unsigned validationMessagesBefore_ = 0; // validationMessagesReported() when this Context was created
     bool live_ = false;                     // holds the one-live-Context slot
 };

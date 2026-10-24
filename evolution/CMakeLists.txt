@@ -61,6 +61,7 @@ add_library(evo_gfx STATIC
     src/gfx/buffer.cpp
     src/gfx/compute_pipeline.cpp
     src/gfx/context.cpp
+    src/gfx/descriptors.cpp
     src/gfx/fill_pass.cpp
     src/gfx/frame_ring.cpp
     src/gfx/image.cpp
@@ -245,6 +246,23 @@ add_custom_target(gfx_foundation_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/tes
 add_dependencies(gfx_foundation_test gfx_foundation_test_shaders)
 target_compile_definitions(gfx_foundation_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME gfx_foundation COMMAND gfx_foundation_test)
+
+# The shared descriptor layer, ComputePipeline on it, the ray tracing properties, aligned and staged device
+# buffers, and sync validation as a Context option (one hazard on purpose). The probe shader is test-only.
+add_executable(descriptors_test tests/descriptors_test.cpp)
+target_link_libraries(descriptors_test PRIVATE evo_gfx)
+add_custom_command(
+    OUTPUT "${EVO_TEST_SPIRV_DIR}/test_descriptor_probe.comp.spv"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -o "${EVO_TEST_SPIRV_DIR}/test_descriptor_probe.comp.spv"
+            "${CMAKE_SOURCE_DIR}/shaders/test/descriptor_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/descriptor_probe.comp"
+    COMMENT "Compiling test shader test_descriptor_probe.comp")
+add_custom_target(descriptors_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/test_descriptor_probe.comp.spv")
+add_dependencies(descriptors_test Evolution_shaders descriptors_test_shaders)
+target_compile_definitions(descriptors_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+                                                    EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_test(NAME descriptors COMMAND descriptors_test)
 
 # The renderer's passes at small sizes, with the validation layer on; fails on any message it reports.
 add_executable(renderer_test tests/renderer_test.cpp)

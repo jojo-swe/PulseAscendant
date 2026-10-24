@@ -1,7 +1,9 @@
 #include "gfx/buffer.hpp"
 
+#include "gfx/sync.hpp"
 #include "gfx/vk_check.hpp"
 
+#include <cstring>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -11,6 +13,9 @@ namespace evo::gfx {
 Buffer::Buffer(Context& ctx, const BufferDesc& desc) : ctx_(&ctx), size_(desc.size), usage_(desc.usage) {
     if (desc.size == 0)
         throw std::invalid_argument("Buffer '" + std::string(desc.name) + "' needs a positive size");
+    if (desc.alignment & (desc.alignment - 1))
+        throw std::invalid_argument("Buffer '" + std::string(desc.name) + "': alignment " +
+                                    std::to_string(desc.alignment) + " is not a power of two");
 
     VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bufferInfo.size = desc.size;
@@ -26,7 +31,13 @@ Buffer::Buffer(Context& ctx, const BufferDesc& desc) : ctx_(&ctx), size_(desc.si
         allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     }
     VmaAllocationInfo allocation{};
-    vkCheck(vmaCreateBuffer(ctx.allocator(), &bufferInfo, &allocInfo, &buffer_, &allocation_, &allocation),
+    if (desc.alignment > 0)
+        vkCheck(vmaCreateBufferWithAlignment(ctx.allocator(), &bufferInfo, &allocInfo, desc.alignment,
+                                             &buffer_, &allocation_, &allocation),
+                "vmaCreateBufferWithAlignment");
+    else
+        vkCheck(
+            vmaCreateBuffer(ctx.allocator(), &bufferInfo, &allocInfo, &buffer_, &allocation_, &allocation),
             "vmaCreateBuffer");
     mapped_ = allocation.pMappedData;
     if (desc.hostVisible && !mapped_) {
@@ -85,6 +96,35 @@ VkDeviceAddress Buffer::address() const {
     VkBufferDeviceAddressInfo info{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
     info.buffer = buffer_;
     return vkGetBufferDeviceAddress(ctx_->device(), &info);
+}
+
+Buffer createDeviceBuffer(Context& ctx, const BufferDesc& desc, std::span<const std::byte> data) {
+    if (desc.hostVisible)
+        throw std::invalid_argument("createDeviceBuffer('" + std::string(desc.name) +
+                                    "'): the buffer must be device-local");
+    if (data.size() > desc.size)
+        throw std::invalid_argument("createDeviceBuffer('" + std::string(desc.name) +
+                                    "'): " + std::to_string(data.size()) + " bytes do not fit in " +
+                                    std::to_string(desc.size));
+    BufferDesc deviceDesc = desc;
+    deviceDesc.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    Buffer buffer(ctx, deviceDesc);
+    if (data.empty())
+        return buffer;
+
+    const std::string stagingName = "staging for " + std::string(desc.name);
+    Buffer staging(ctx, {data.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, stagingName.c_str()});
+    std::memcpy(staging.mapped(), data.data(), data.size());
+    staging.flush();
+    ctx.immediate([&](VkCommandBuffer cmd) { // setup
+        const VkBufferCopy region{0, 0, data.size()};
+        vkCmdCopyBuffer(cmd, staging.handle(), buffer.handle(), 1, &region);
+        // Every later command, in this submit or any after it, sees the copied bytes.
+        bufferBarrier2(cmd, buffer.handle(), VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                       VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                       VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
+    });
+    return buffer;
 }
 
 } // namespace evo::gfx
