@@ -2,13 +2,13 @@
 #extension GL_GOOGLE_include_directive : require
 
 // The 2026 picture's one tonemap and its one display encoding (Review Focus 6): HDR linear light (RGBA16F)
-// -> * 2^exposureEV -> ACES fit (negative light clamped to 0 in AP1) -> clamp [0, 1] -> sRGB OETF
+// -> * 2^exposureEV -> max(0) per component -> Khronos PBR Neutral -> clamp [0, 1] -> sRGB OETF
 // -> round(v * 255 + d) with d a static triangular dither in (-0.5, 0.5) from pcg(x, y), the same for all
 // three channels -> RGBA8 UNORM. A non-finite component counts as 0. Must match
 // src/post/tonemap_reference.cpp.
 
 #include "../rt/random.glsl"
-#include "aces.glsl"
+#include "neutral.glsl"
 #include "common.glsl"
 
 layout(local_size_x = 8, local_size_y = 8) in;
@@ -40,8 +40,9 @@ void main() {
         return;
     }
 
-    vec3 hdr = finiteOrZero(imageLoad(hdrImage, ivec2(pixel)).rgb) * pc.exposureScale;
-    vec3 display = srgbOetf(acesFitted(hdr));
+    // Negative light is clamped to 0 per component: PBR Neutral is defined on non-negative light.
+    vec3 hdr = max(finiteOrZero(imageLoad(hdrImage, ivec2(pixel)).rgb) * pc.exposureScale, 0.0);
+    vec3 display = srgbOetf(clamp(pbrNeutral(hdr), 0.0, 1.0));
     vec3 bytes = clamp(floor(display * 255.0 + dither(pixel) + 0.5), 0.0, 255.0);
     imageStore(ldrImage, ivec2(pixel), vec4(bytes / 255.0, 1.0));
 }

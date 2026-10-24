@@ -118,7 +118,7 @@ target_include_directories(evo_rt PUBLIC src)
 target_link_libraries(evo_rt PUBLIC evo_gfx)
 
 # Post-processing of the 2026 side: the denoiser (demodulate, reproject and accumulate, a-trous, remodulate plus
-# the primary-hit emission) and the ACES tonemap (HDR -> display-encoded RGBA8) with its CPU reference. Its
+# the primary-hit emission) and the PBR Neutral tonemap (HDR -> display-encoded RGBA8) with its CPU reference. Its
 # shaders load from <build>/bin/shaders as post_<name>.comp.spv.
 add_library(evo_post STATIC
     src/post/denoiser.cpp
@@ -601,8 +601,9 @@ target_compile_definitions(denoiser_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHAD
 add_test(NAME denoiser COMMAND denoiser_test)
 set_tests_properties(denoiser PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
 
-# The ACES tonemap against its CPU reference (Review Focus 6), black and white kept, monotonic ramps, exposure,
-# a static dither; the scene registry; the 2026 placeholder through the HDR path against the old direct fill.
+# The PBR Neutral tonemap against its CPU reference (Review Focus 6), golden anchors, black and white kept, the
+# hue kept, monotonic ramps, exposure, a static dither; the scene registry; the 2026 placeholder through the HDR
+# path against the old direct fill.
 # With the validation layer on; fails on any message.
 add_executable(tonemap_test tests/tonemap_test.cpp)
 target_link_libraries(tonemap_test PRIVATE evo_render evo_post evo_modern)

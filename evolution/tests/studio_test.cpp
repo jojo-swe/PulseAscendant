@@ -155,6 +155,26 @@ double meanOver(const Picture& p, Rect r, int channel = 3) {
     return sum / count;
 }
 
+// The mean Rec. 709 luminance of the display's linear light (the sRGB EOTF of the bytes) over a rectangle, in
+// [0, 1]: how much light a region shows, independent of how steep the encoding is near black.
+double linearOver(const Picture& p, Rect r) {
+    const auto decode = [](std::uint8_t byte) {
+        const double v = byte / 255.0;
+        return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+    };
+    double sum = 0;
+    int count = 0;
+    for (int y = std::max(r.top, 0); y < std::min(r.bottom, int(p.height)); ++y)
+        for (int x = std::max(r.left, 0); x < std::min(r.right, int(p.width)); ++x) {
+            const std::uint8_t* px = p.at(x, y);
+            sum += 0.2126 * decode(px[0]) + 0.7152 * decode(px[1]) + 0.0722 * decode(px[2]);
+            ++count;
+        }
+    if (count == 0)
+        throw std::runtime_error("empty rectangle");
+    return sum / count;
+}
+
 // The rectangle of size `size` pixels around where a world point lands.
 Rect around(const modern::Camera& camera, std::uint32_t width, std::uint32_t height, Vec3 p, int size) {
     const Pixel c = project(camera, width, height, p);
@@ -318,11 +338,15 @@ void testCrtLightsTheRoom(gfx::Context& ctx) {
     const Rect screen = screenRect(camera, kW, kH, 0.1);
     const Rect desk = around(camera, kW, kH, {0.215f, 0.75f, -0.245f}, 4);
     const Rect wall = around(camera, kW, kH, {-0.45f, 1.75f, -0.95f}, 6);
-    const double screenLit = meanOver(lit, screen), screenDark = meanOver(dark, screen);
-    const double deskLit = meanOver(lit, desk), deskDark = meanOver(dark, desk);
-    const double wallLit = meanOver(lit, wall), wallDark = meanOver(dark, wall);
-    std::printf("(b) white vs black picture: screen %.3f / %.3f, desk %.3f / %.3f, wall %.4f / %.4f\n",
-                screenLit, screenDark, deskLit, deskDark, wallLit, wallDark);
+    // Measured in the display's linear light: PBR Neutral lifts dim coloured surfaces (its toe acts on the
+    // smallest channel only), where the encoding is steepest, so encoded values would understate the desk's
+    // gain and overstate the wall's.
+    const double screenLit = linearOver(lit, screen), screenDark = linearOver(dark, screen);
+    const double deskLit = linearOver(lit, desk), deskDark = linearOver(dark, desk);
+    const double wallLit = linearOver(lit, wall), wallDark = linearOver(dark, wall);
+    std::printf(
+        "(b) white vs black picture (linear): screen %.3f / %.3f, desk %.4f / %.4f, wall %.4f / %.4f\n",
+        screenLit, screenDark, deskLit, deskDark, wallLit, wallDark);
     CHECK(screenLit >= 1.1 * screenDark && screenLit > screenDark + 0.1);
     CHECK(deskLit >= 1.1 * deskDark);
     // The screen's light reaches the wall only after a bounce: a dark patch, so its change is bounded on the
@@ -335,8 +359,8 @@ void testCrtLightsTheRoom(gfx::Context& ctx) {
 // -----------------------------------------------------------------------------------------------------
 
 void testScreenFollowsPicture(gfx::Context& ctx) {
-    // Dim colours, which the tonemap keeps apart (bright saturated green comes out with a lot of red: ACES
-    // mixes the channels in its highlights).
+    // Dim colours, which the tonemap keeps apart (bright saturated green comes out with red and blue lifted:
+    // PBR Neutral desaturates its highlights towards white).
     gfx::Image red = makeRetro(ctx, 40, 0, 0);
     gfx::Image green = makeRetro(ctx, 0, 40, 0);
     gfx::Image black = makeRetro(ctx, 0, 0, 0);

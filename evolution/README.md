@@ -10,7 +10,7 @@ implementation plans live in [`docs/plans/`](docs/plans/), starting with
 > every chapter with a 1993 side (act I, REBOOT, CREDITS and THE END) shows its 1993 effect through its own
 > pipeline (below). The act II and act III planetary chapters are 2026 only (forced into 1993 they show a grey
 > test pattern; STUDIO NIGHT and RETURN show the DOS prompt the demo exited to). The 2026 side is a path
-> tracer with a denoiser and an ACES tonemap (below), and it renders the Studio in FINALE, PORTAL, STUDIO
+> tracer with a denoiser and a PBR Neutral tonemap (below), and it renders the Studio in FINALE, PORTAL, STUDIO
 > NIGHT, RETURN and REBOOT; the other 2026 chapters show a placeholder gradient until step 5 brings the
 > modern scenes.
 
@@ -264,8 +264,11 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   and an edge-robust estimate of the noise, and multiplied by the albedo again. The primary hit's emission,
   the CRT's own picture, is added after all that, so the screen is never smeared by the history or blurred by
   the filter. Exports keep no history and filter only below 16 spp.
-- **Tonemap.** One ACES fit (Hill's RRT+ODT approximation) per frame, then the sRGB encoding and a static
-  per-pixel triangular dither into the RGBA8 image the compositor reads; a CPU reference pins it.
+- **Tonemap.** Khronos PBR Neutral per frame, then the sRGB encoding and a static per-pixel triangular dither
+  into the RGBA8 image the compositor reads; a CPU reference pins it. PBR Neutral keeps the hue: below its
+  knee (0.76) it only subtracts a small offset, above it highlights compress and move towards white in the
+  plane of the colour and white, so a bright saturated light turns paler but never changes hue (ACES turned
+  the CRT's reds orange). White approaches 255 asymptotically (light 64 rounds to it).
 
 ### The Studio
 
@@ -292,7 +295,8 @@ in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
   more samples (e.g. `--spp 256`) clean them up.
 - **Long 4K exports on Windows are unmeasured:** a frame's whole trace is one submission (above), seconds
   long at 4K and 64 spp or more; measure it on the target GPU before a long export.
-- ACES pushes the CRT's brightest saturated colours towards white; the lights are picked by fixed weights
+- PBR Neutral still desaturates the CRT's brightest colours towards white (a 1993 red at the screen's white
+  level comes out pink, hue intact); the lights are picked by fixed weights
   (no spatial importance); the glass sphere's caustic is subtle, dimmed by the Studio's indirect clamp.
 
 ## Storyboard

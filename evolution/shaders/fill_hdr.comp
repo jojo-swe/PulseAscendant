@@ -2,18 +2,19 @@
 #extension GL_GOOGLE_include_directive : require
 
 // fill.comp's pattern as HDR light for the 2026 placeholder: each display-encoded colour becomes the
-// linear light that post/tonemap.comp at 0 EV maps back to it (the sRGB EOTF, then the ACES fit
-// inverted), written to an RGBA16F image. The placeholder thus goes through the HDR image and the one
-// tonemap like every 2026 picture and still looks as it did (within the dither's one step). That holds for
-// this palette only: the RGBA16F storage breaks the round trip for strongly saturated bright colours (worst
-// 4 bytes; see acesFittedInverse).
+// linear light that post/tonemap.comp at 0 EV maps back to it (the sRGB EOTF, then PBR Neutral inverted),
+// written to an RGBA16F image. The placeholder thus goes through the HDR image and the one tonemap like every
+// 2026 picture and still looks as it did (within the dither's one step) wherever the curve can show its
+// colour: everywhere below the knee (0.76 linear), and above it unless the colour is both bright and
+// saturated (the top of the glow), which gets the nearest colour of the same hue the curve can show (see
+// pbrNeutralInverse).
 
-#include "post/aces.glsl"
+#include "post/neutral.glsl"
 
 layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D outImage;
 
 vec4 encodeFill(vec3 color) {
-    return vec4(acesFittedInverse(srgbEotf(clamp(color, 0.0, 1.0))), 1.0);
+    return vec4(pbrNeutralInverse(srgbEotf(clamp(color, 0.0, 1.0))), 1.0);
 }
 
 #include "fill.glsl"
