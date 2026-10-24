@@ -124,3 +124,22 @@ Steg 2 levererar: indexerad 320×200 med palett och palettcykling på CPU:n, fps
 1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (23 tester). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
 2. Steg 2 är slutgranskat och fixat (se ovan). Låt ägaren köra Windows-kontrollen, titta på storyboarden (`python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard`) och skriv sedan steg 3:s plan med rekommendationerna ovan (resterande retroeffekter) och kör den med `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief <plan> <n>`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
 3. När steg 3 är klart: slutgranskning av steg 3, sedan nästa stegs plan.
+
+## Läge vid sessionsslut (steg 3 pågår)
+
+Klart på `claude/evolution-showcase-plan` (62020a4): steg 3 Task 1–5, 7 och 9 (rasterisering, FLYBY, DOTS, TUNNEL, GLENZ, RAYTRACE, PORTAL, REBOOT, THE END), 32/32 tester.
+
+Ej sammanslaget:
+- `claude/evolution-step3-rotozoom` (cbaa9fa, 1fbfd47): FLYBY/TUNNEL-granskningsfixar + Task 6 ROTOZOOM/LENS. Committat men ej granskat. Slå ihop i huvudgrenen (väntade konflikter: `effects.cpp/.hpp`, `CMakeLists.txt`, README, `tests/retro_stage_fixture.hpp`, eventuellt dubbel `flybyShipFacesFrom`), kör ctest, granska.
+- `claude/evolution-step3-wip-glenz-fixes`: påbörjade GLENZ-granskningsfixar, ofärdigt och otestat. Gör om eller slutför.
+
+Kvar i steg 3:
+- GLENZ-fixar (granskning: test att alla 144 färgkombinationer är distinkta, studs-kantfall, döp om `kGlenz` i effects.cpp, byt namn på lokalerna `distance`/`step` i copper.comp, Unlicense-notis i `evolution/licenses`, DOTS flödesgräns 0.52).
+- Granskning av RAYTRACE + PORTAL/REBOOT/THE END (avbruten).
+- Task 8: VECTOR CITY och FINALE. Beslut: FINALE ger varje deleffekt en syntetisk TimelineFrame med deleffektens HEMKAPITELS fasta fakta (längd, accent, beats) och ett hemlokalt retroFrame.
+- Task 10: storyboard, README, HANDOFF.
+- Helgrenens granskning (Opus) och fixvåg.
+
+Beslut i steg 3: guard-bandets undantag behålls (bara handbyggda skärmprimitiver kan kasta); GLENZ använder schackbitar 6/7 ovanpå koderna 1/2; RAYTRACE har 24 gråtoner (planens räkning var fel); PORTAL-animationen slutar vid accenten.
+
+Fullständig logg finns i `.superpowers/sdd/2026-10-25-step3-retro-effects/progress.md`, men den är git-ignorerad och följer inte med till en ny session.
