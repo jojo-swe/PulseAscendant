@@ -2,7 +2,8 @@
 #define EVO_RT_TYPES_GLSL
 
 // The structs the path tracer shares with the CPU: mirrors of src/rt/geometry.hpp (Vertex, MeshRecord) and
-// src/rt/gpu_types.hpp (the rest), read from buffers declared layout(scalar) (GL_EXT_scalar_block_layout).
+// src/rt/gpu_types.hpp (the rest, FrameUniforms included), read from buffers declared layout(scalar)
+// (GL_EXT_scalar_block_layout).
 // Field order and types must match the C++ structs, whose sizeof and offsetof are pinned there;
 // material_test checks every field on the GPU.
 
@@ -22,6 +23,9 @@ const uint kNoLight = 0xFFFFFFFFu;
 const uint kLightEmitter = 0u; // LightKind
 const uint kLightRetroScreen = 1u;
 const uint kLightPortal = 2u;
+
+const uint kTraceFlagNee = 1u; // FrameUniforms.flags
+const uint kTraceFlagRussianRoulette = 2u;
 
 struct Vertex { // 32 bytes
     vec3 position;
@@ -69,6 +73,38 @@ struct InstanceRecord { // 16 bytes; index = gl_InstanceCustomIndexEXT
     uint material;
     uint light;
     uint pad;
+};
+
+// The path tracer's per-frame constants (see the C++ mirror for the camera convention).
+struct FrameUniforms { // 176 bytes
+    vec3 cameraPosition;
+    float tanHalfFovY;
+    vec3 cameraRight;
+    float aspect;
+    vec3 cameraUp;
+    float aperture;
+    vec3 cameraForward;
+    float focusDistance;
+    vec3 prevPosition;
+    float prevTanHalfFovY;
+    vec3 prevRight;
+    float prevAspect;
+    vec3 prevUp;
+    uint prevValid;
+    vec3 prevForward;
+    float pixelSpread;
+    uint width;
+    uint height;
+    uint frameSeed;
+    uint spp;
+    uint maxBounces;
+    uint flags;
+    uint lightCount;
+    uint instanceCount;
+    float clampIndirect;
+    float lightWeightSum;
+    uint pad0;
+    uint pad1;
 };
 
 #endif

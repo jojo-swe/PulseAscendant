@@ -37,9 +37,10 @@ class RayTracingPipeline {
 public:
     static constexpr std::uint32_t kMaxRecursionDepth = 1;
 
-    // Entry points are "main". Throws std::invalid_argument for no miss or no closest-hit shader, or a
-    // pushConstantBytes that is not a multiple of 4; std::runtime_error naming a SPIR-V file that cannot
-    // load; and what computeSbtLayout throws.
+    // Entry points are "main". Throws std::invalid_argument for no miss or no closest-hit shader, a miss or
+    // closest-hit shader that traces a ray (OpTraceRayKHR) or any shader that executes a callable
+    // (OpExecuteCallableKHR), found by scanning the SPIR-V, or a pushConstantBytes that is not a multiple of
+    // 4; std::runtime_error naming a SPIR-V file that cannot load; and what computeSbtLayout throws.
     RayTracingPipeline(Context& ctx, const RtShaders& shaders, std::span<const Binding> bindings,
                        std::uint32_t pushConstantBytes);
     ~RayTracingPipeline();

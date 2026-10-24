@@ -1,0 +1,349 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The path tracer's integrator: one invocation per pixel traces this dispatch's samples (push constants) and
+// keeps a running mean of lighting, emission and albedo over the frame's samples; the first dispatch also
+// writes the depth, normal and motion guides from the unjittered centre ray.
+//
+// Per sample: box-filter jitter in the pixel and a thin-lens origin; then a loop over bounces. A hit's
+// emission at the primary hit goes to the emission image; later it adds throughput * Le * w_MIS. At every
+// surface with a non-delta lobe, next-event estimation picks one light by selectWeight, samples a uniform
+// point on it and casts a shadow ray (portals: to infinity, the sky beyond), adding
+// throughput * f cos * Le / (pdf_select * pdf_area->solid angle) * w_MIS. A BSDF ray that hits a light, or
+// escapes through a portal, is weighted against that light's NEE density (power heuristic); after a delta
+// lobe (no NEE there) it keeps weight 1. Russian roulette from bounce 3; contributions after the first
+// bounce are clamped to a luminance of frame.clampIndirect; a non-finite sample contributes 0.
+//
+// Every random number is randomFloat(frameSeed, pixel, sampleIndex, dimension) (random.glsl). Only this
+// shader traces rays (recursion depth 1).
+
+#include "common.glsl"
+#include "random.glsl"
+#include "bsdf.glsl"
+#include "sky.glsl"
+#include "lights.glsl"
+
+layout(push_constant) uniform Push {
+    uint sampleBase;  // the frame's first sample traced by this dispatch
+    uint sampleCount; // samples this dispatch traces
+} pc;
+
+layout(location = 0) rayPayloadEXT HitPayload payload;
+layout(location = 1) rayPayloadEXT uint shadowVisible;
+
+const float kRayMax = 1e30;
+// Random dimensions: 0-1 pixel jitter, 2-3 lens, then kDimsPerBounce per bounce.
+const uint kDimsPerBounce = 8u;
+
+uvec2 gPixel;
+uint gSample;
+
+float rand(uint dimension) {
+    return randomFloat(frame.frameSeed, gPixel, gSample, dimension);
+}
+
+float bounceRand(uint bounce, uint k) {
+    return rand(4u + bounce * kDimsPerBounce + k);
+}
+
+void traceMain(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
+    payload.coneWidth = coneWidth;
+    payload.coneSpread = coneSpread;
+    traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, kMissIndexSky, origin, 0.0, direction, kRayMax, 0);
+}
+
+bool unoccluded(vec3 origin, vec3 direction, float tMax) {
+    shadowVisible = 0u;
+    traceRayEXT(tlas,
+                gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
+                0xFF, 0, 0, kMissIndexShadow, origin, 0.0, direction, tMax, 1);
+    return shadowVisible != 0u;
+}
+
+// A ray origin off the surface, on the side the new direction leaves to, scaled with the position's size.
+vec3 offsetOrigin(vec3 p, vec3 ng, vec3 direction) {
+    float scale = 1e-4 * (1.0 + maxComponent(abs(p)));
+    return p + ng * (dot(direction, ng) >= 0.0 ? scale : -scale);
+}
+
+vec3 cameraDirection(vec2 pixelPosition) {
+    vec2 ndc = vec2(2.0 * pixelPosition.x / float(frame.width) - 1.0,
+                    1.0 - 2.0 * pixelPosition.y / float(frame.height));
+    return normalize(frame.cameraForward + ndc.x * frame.tanHalfFovY * frame.aspect * frame.cameraRight +
+                     ndc.y * frame.tanHalfFovY * frame.cameraUp);
+}
+
+Surface payloadSurface() {
+    Surface s;
+    s.baseColor = payload.baseColor;
+    s.roughness = payload.roughness;
+    s.metallic = payload.metallic;
+    s.ior = payload.ior;
+    s.transmission = payload.transmission;
+    s.coat = payload.coat;
+    s.coatRoughness = payload.coatRoughness;
+    s.emission = payload.emission;
+    return s;
+}
+
+// The demodulation albedo: diffuse baseColor, metal F0, glass 1.
+vec3 demodulationAlbedo(Surface s) {
+    if (isDielectric(s)) {
+        return vec3(1.0);
+    }
+    float r = (bsdfIor(s) - 1.0) / (bsdfIor(s) + 1.0);
+    vec3 base = clamp(s.baseColor, 0.0, 1.0);
+    vec3 f0 = mix(vec3(r * r), base, clamp(s.metallic, 0.0, 1.0));
+    return mix(base, f0, clamp(s.metallic, 0.0, 1.0));
+}
+
+// Whether the shading normal n and the geometric normal ng agree that wi leaves on wo's side (reflection) or
+// on the other (transmission). Where they disagree (wi grazes a faceted surface whose smooth normal leans
+// away), the ray would start on the wrong side of the geometry and leak through it; both NEE and BSDF
+// sampling drop such directions, so their MIS weights still sum to one over the rest.
+bool sidesAgree(vec3 n, vec3 ng, vec3 wo, vec3 wi) {
+    return (dot(wi, n) * dot(wo, n) > 0.0) == (dot(wi, ng) * dot(wo, ng) > 0.0);
+}
+
+// Adds a contribution produced by the scattering at `bounce` (0: direct light of the primary hit), clamped to
+// frame.clampIndirect in luminance after the first bounce.
+void addContribution(inout vec3 radiance, vec3 c, uint bounce) {
+    if (bounce >= 1u) {
+        float l = luminance(c);
+        if (l > frame.clampIndirect) {
+            c *= frame.clampIndirect / l;
+        }
+    }
+    radiance += c;
+}
+
+// Next-event estimation at a surface: one light, one point, one shadow ray, weighted against the BSDF.
+vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
+    uint index;
+    float selectPdf;
+    if (!pickLight(bounceRand(bounce, 3u), index, selectPdf)) {
+        return vec3(0.0);
+    }
+    RectLight l = lights[index];
+    if (!(l.area > 0.0)) {
+        return vec3(0.0);
+    }
+    vec2 uv = vec2(bounceRand(bounce, 4u), bounceRand(bounce, 5u));
+    vec3 q = l.corner + uv.x * l.edgeU + uv.y * l.edgeV;
+    vec3 toLight = q - p;
+    float dist2 = dot(toLight, toLight);
+    if (!(dist2 > 0.0)) {
+        return vec3(0.0);
+    }
+    float dist = sqrt(dist2);
+    vec3 wi = toLight / dist;
+    float cosLight = -dot(wi, lightNormal(l));
+    if (!(cosLight > 0.0)) {
+        return vec3(0.0); // the shaded point sees the light's back
+    }
+    if (!sidesAgree(n, ng, wo, wi)) {
+        return vec3(0.0);
+    }
+    float bsdfPdf;
+    vec3 f = bsdfEval(s, n, wo, wi, bsdfPdf);
+    if (!(maxComponent(f) > 0.0)) {
+        return vec3(0.0);
+    }
+    float lightPdf = selectPdf * rectSolidAnglePdf(l, dist, cosLight);
+    if (!(lightPdf > 0.0) || isinf(lightPdf)) {
+        return vec3(0.0);
+    }
+    vec3 origin = offsetOrigin(p, ng, wi);
+    // A portal is an opening: the shadow ray goes on into the sky, which must be clear too. Other lights are
+    // surfaces: it stops just short of the sampled point.
+    float tMax = l.kind == kLightPortal ? kRayMax : length(q - origin) * (1.0 - 1e-4);
+    if (!unoccluded(origin, wi, tMax)) {
+        return vec3(0.0);
+    }
+    vec3 le = lightRadiance(l, uv, wi);
+    return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf);
+}
+
+struct SampleResult {
+    vec3 lighting;
+    vec3 emission;
+    vec3 albedo;
+};
+
+SampleResult tracePath() {
+    SampleResult r;
+    r.lighting = vec3(0.0);
+    r.emission = vec3(0.0);
+    r.albedo = vec3(1.0);
+
+    vec2 jitter = vec2(rand(0u), rand(1u));
+    vec3 direction = cameraDirection(vec2(gPixel) + jitter);
+    vec3 origin = frame.cameraPosition;
+    if (frame.aperture > 0.0) {
+        vec3 focus = origin + direction * (frame.focusDistance / dot(direction, frame.cameraForward));
+        vec2 lens = sampleConcentricDisk(vec2(rand(2u), rand(3u))) * (0.5 * frame.aperture);
+        origin += frame.cameraRight * lens.x + frame.cameraUp * lens.y;
+        direction = normalize(focus - origin);
+    }
+
+    bool nee = (frame.flags & kTraceFlagNee) != 0u;
+    bool roulette = (frame.flags & kTraceFlagRussianRoulette) != 0u;
+    vec3 throughput = vec3(1.0);
+    float coneWidth = 0.0;
+    float coneSpread = frame.pixelSpread;
+    bool previousDelta = true; // nothing to weigh the camera ray's hit against
+    float previousPdf = 0.0;
+
+    for (uint bounce = 0u;; ++bounce) {
+        traceMain(origin, direction, coneWidth, coneSpread);
+        if (payload.t < 0.0) {
+            vec3 sky = payload.emission;
+            if (bounce == 0u) {
+                r.emission = sky;
+            } else {
+                float w = 1.0;
+                if (nee && !previousDelta) {
+                    w = powerHeuristic(previousPdf, portalPdf(origin, direction));
+                }
+                addContribution(r.lighting, throughput * sky * w, bounce - 1u);
+            }
+            break;
+        }
+
+        Surface s = payloadSurface();
+        vec3 p = payload.position;
+        vec3 n = payload.normal;
+        vec3 ng = payload.geometricNormal;
+        vec3 wo = -direction;
+        if (bounce == 0u) {
+            r.emission = s.emission;
+            r.albedo = demodulationAlbedo(s);
+        } else if (maxComponent(s.emission) > 0.0) {
+            float w = 1.0;
+            if (nee && !previousDelta && payload.light != kNoLight) {
+                RectLight l = lights[payload.light];
+                float cosLight = abs(dot(direction, lightNormal(l)));
+                float lightPdf = 0.0;
+                if (l.area > 0.0 && cosLight > 0.0) {
+                    lightPdf = lightSelectPdf(payload.light) * rectSolidAnglePdf(l, payload.t, cosLight);
+                }
+                w = powerHeuristic(previousPdf, lightPdf);
+            }
+            addContribution(r.lighting, throughput * s.emission * w, bounce - 1u);
+        }
+        if (bounce >= frame.maxBounces) {
+            break;
+        }
+
+        if (nee && frame.lightCount > 0u && bsdfHasNonDeltaLobe(s)) {
+            addContribution(r.lighting, throughput * sampleLight(s, p, n, ng, wo, bounce), bounce);
+        }
+
+        vec3 u = vec3(bounceRand(bounce, 0u), bounceRand(bounce, 1u), bounceRand(bounce, 2u));
+        vec3 wi;
+        vec3 weight;
+        float pdf;
+        bool delta;
+        if (!bsdfSample(s, n, wo, u, wi, weight, pdf, delta) || !sidesAgree(n, ng, wo, wi)) {
+            break;
+        }
+        throughput *= weight;
+        if (roulette && bounce >= 3u) {
+            float survive = clamp(maxComponent(throughput), 0.05, 0.95);
+            if (bounceRand(bounce, 6u) >= survive) {
+                break;
+            }
+            throughput /= survive;
+        }
+        if (!(maxComponent(throughput) > 0.0) || !allFinite(throughput)) {
+            break;
+        }
+
+        // The ray cone: its width grows with distance; after a rough bounce textures use a fixed level.
+        if (coneSpread >= 0.0) {
+            coneWidth += coneSpread * payload.t;
+        }
+        if (!delta) {
+            coneSpread = -1.0;
+        }
+        previousDelta = delta;
+        previousPdf = pdf;
+        origin = offsetOrigin(p, ng, wi);
+        direction = wi;
+    }
+    return r;
+}
+
+// Where a world point (or a direction, w = 0) was in the previous frame's picture, in pixels; false behind
+// the previous camera.
+bool previousPixel(vec3 p, float w, out vec2 pixel) {
+    vec3 v = p - frame.prevPosition * w;
+    float z = dot(v, frame.prevForward);
+    pixel = vec2(0.0);
+    if (!(z > 0.0)) {
+        return false;
+    }
+    float ndcX = dot(v, frame.prevRight) / (z * frame.prevTanHalfFovY * frame.prevAspect);
+    float ndcY = dot(v, frame.prevUp) / (z * frame.prevTanHalfFovY);
+    pixel = vec2((ndcX + 1.0) * 0.5 * float(frame.width), (1.0 - ndcY) * 0.5 * float(frame.height));
+    return true;
+}
+
+// depth, normal and motion from the unjittered centre ray through a pinhole.
+void writeGuides(ivec2 pixel) {
+    vec2 centre = vec2(gPixel) + 0.5;
+    vec3 direction = cameraDirection(centre);
+    traceMain(frame.cameraPosition, direction, 0.0, frame.pixelSpread);
+    vec4 motion = vec4(0.0);
+    vec2 previous;
+    if (payload.t < 0.0) {
+        imageStore(depthImage, pixel, vec4(-1.0));
+        imageStore(normalImage, pixel, vec4(0.0));
+        if (frame.prevValid != 0u && previousPixel(direction, 0.0, previous)) {
+            motion = vec4(previous - centre, 1.0, 0.0);
+        }
+    } else {
+        float depth = dot(payload.position - frame.cameraPosition, frame.cameraForward);
+        imageStore(depthImage, pixel, vec4(depth));
+        vec3 n = dot(payload.normal, direction) > 0.0 ? -payload.normal : payload.normal; // facing the camera
+        imageStore(normalImage, pixel, vec4(n, payload.roughness));
+        if (frame.prevValid != 0u && previousPixel(payload.position, 1.0, previous)) {
+            motion = vec4(previous - centre, 1.0, 0.0);
+        }
+    }
+    imageStore(motionImage, pixel, motion);
+}
+
+void main() {
+    gPixel = gl_LaunchIDEXT.xy;
+    ivec2 pixel = ivec2(gPixel);
+
+    vec3 lighting = vec3(0.0);
+    vec3 emission = vec3(0.0);
+    vec3 albedo = vec3(0.0);
+    for (uint i = 0u; i < pc.sampleCount; ++i) {
+        gSample = pc.sampleBase + i;
+        SampleResult r = tracePath();
+        // One bad sample must not poison the picture or the history (Review Focus 8).
+        lighting += allFinite(r.lighting) ? r.lighting : vec3(0.0);
+        emission += allFinite(r.emission) ? r.emission : vec3(0.0);
+        albedo += allFinite(r.albedo) ? r.albedo : vec3(1.0);
+    }
+
+    // The running mean over the frame's samples so far.
+    float before = float(pc.sampleBase);
+    float after = float(pc.sampleBase + pc.sampleCount);
+    if (pc.sampleBase > 0u) {
+        lighting += imageLoad(lightingImage, pixel).rgb * before;
+        emission += imageLoad(emissionImage, pixel).rgb * before;
+        albedo += imageLoad(albedoImage, pixel).rgb * before;
+    }
+    imageStore(lightingImage, pixel, vec4(lighting / after, 1.0));
+    // The emission image is half precision: its largest finite value bounds an emitter's radiance.
+    imageStore(emissionImage, pixel, vec4(min(emission / after, vec3(65504.0)), 1.0));
+    imageStore(albedoImage, pixel, vec4(albedo / after, 1.0));
+
+    if (pc.sampleBase == 0u) {
+        writeGuides(pixel);
+    }
+}

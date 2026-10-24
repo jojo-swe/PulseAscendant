@@ -11,6 +11,7 @@
 #include "gfx/frame_ring.hpp"
 #include "gfx/rt_pipeline.hpp"
 #include "gfx/sbt.hpp"
+#include "gfx/shader.hpp"
 #include "gfx/sync.hpp"
 #include "rt/accel.hpp"
 #include "rt/geometry.hpp"
@@ -289,6 +290,30 @@ void testRefusals(gfx::Context& ctx) {
     gfx::RtShaders missing = probeShaders();
     missing.closestHits[2] = kSpirvDir / "no_such_shader.rchit.spv";
     CHECK(throws<std::runtime_error>([&] { gfx::RayTracingPipeline(ctx, missing, kProbeBindings, 12); }));
+
+    // Recursion depth 1: only the raygen may trace, and no stage may call a callable. lavapipe and the
+    // validation layer do not enforce maxPipelineRayRecursionDepth (an RTX GPU would hang), so the pipeline
+    // scans the SPIR-V itself.
+    std::printf("expecting three refused recursive pipelines:\n");
+    gfx::RtShaders tracingHit = probeShaders();
+    tracingHit.closestHits[1] = kSpirvDir / "test_recursive_hit.rchit.spv";
+    CHECK(
+        throws<std::invalid_argument>([&] { gfx::RayTracingPipeline(ctx, tracingHit, kProbeBindings, 12); }));
+    gfx::RtShaders tracingMiss = probeShaders();
+    tracingMiss.misses[0] = kSpirvDir / "test_recursive_miss.rmiss.spv";
+    CHECK(throws<std::invalid_argument>(
+        [&] { gfx::RayTracingPipeline(ctx, tracingMiss, kProbeBindings, 12); }));
+    gfx::RtShaders callable = probeShaders();
+    callable.raygen = kSpirvDir / "test_callable.rgen.spv";
+    CHECK(throws<std::invalid_argument>([&] { gfx::RayTracingPipeline(ctx, callable, kProbeBindings, 12); }));
+
+    // The scanner itself: the raygen traces, a miss does not; a module that is not SPIR-V is refused.
+    CHECK(gfx::spirvHasOpcode(gfx::loadSpirv(probeShaders().raygen), gfx::kSpirvOpTraceRayKHR));
+    CHECK(!gfx::spirvHasOpcode(gfx::loadSpirv(probeShaders().misses[0]), gfx::kSpirvOpTraceRayKHR));
+    const std::vector<std::uint32_t> notSpirv{0x12345678u, 0, 0, 0, 0, 0x00010000u};
+    CHECK(throws<std::runtime_error>([&] { (void)gfx::spirvHasOpcode(notSpirv, 1); }));
+    const std::vector<std::uint32_t> zeroCount{0x07230203u, 0, 0, 0, 0, 0x00000011u};
+    CHECK(throws<std::runtime_error>([&] { (void)gfx::spirvHasOpcode(zeroCount, 1); }));
 
     gfx::RayTracingPipeline pipeline(ctx, probeShaders(), kProbeBindings, sizeof(ProbePush));
     const ProbePush push{};

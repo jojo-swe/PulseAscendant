@@ -22,6 +22,7 @@
 #include "gfx/sync.hpp"
 #include "rt/geometry.hpp"
 #include "rt/gpu_types.hpp"
+#include "rt/random.hpp"
 
 #include <algorithm>
 #include <array>
@@ -157,6 +158,84 @@ rt::MeshRecord sentinelMeshRecord(std::uint32_t e) {
     return {uintSentinel(0, e), uintSentinel(1, e), uintSentinel(2, e), uintSentinel(3, e)};
 }
 
+// FrameUniforms: 44 words; the uint fields are prevValid (27), width .. instanceCount (32-39) and the pads.
+constexpr std::array<bool, 44> kFrameIsUint = [] {
+    std::array<bool, 44> isUint{};
+    isUint[27] = true;
+    for (std::size_t k = 32; k < 40; ++k)
+        isUint[k] = true;
+    isUint[42] = isUint[43] = true;
+    return isUint;
+}();
+
+rt::FrameUniforms sentinelFrame(std::uint32_t e) {
+    rt::FrameUniforms f{};
+    float* const floats[44] = {&f.cameraPosition[0],
+                               &f.cameraPosition[1],
+                               &f.cameraPosition[2],
+                               &f.tanHalfFovY,
+                               &f.cameraRight[0],
+                               &f.cameraRight[1],
+                               &f.cameraRight[2],
+                               &f.aspect,
+                               &f.cameraUp[0],
+                               &f.cameraUp[1],
+                               &f.cameraUp[2],
+                               &f.aperture,
+                               &f.cameraForward[0],
+                               &f.cameraForward[1],
+                               &f.cameraForward[2],
+                               &f.focusDistance,
+                               &f.prevPosition[0],
+                               &f.prevPosition[1],
+                               &f.prevPosition[2],
+                               &f.prevTanHalfFovY,
+                               &f.prevRight[0],
+                               &f.prevRight[1],
+                               &f.prevRight[2],
+                               &f.prevAspect,
+                               &f.prevUp[0],
+                               &f.prevUp[1],
+                               &f.prevUp[2],
+                               nullptr,
+                               &f.prevForward[0],
+                               &f.prevForward[1],
+                               &f.prevForward[2],
+                               &f.pixelSpread,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               &f.clampIndirect,
+                               &f.lightWeightSum,
+                               nullptr,
+                               nullptr};
+    std::uint32_t* const uints[44] = {
+        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   nullptr,
+        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   nullptr,
+        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   nullptr,
+        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   &f.prevValid,
+        nullptr, nullptr,       nullptr,  nullptr,       &f.width,         &f.height, &f.frameSeed,
+        &f.spp,  &f.maxBounces, &f.flags, &f.lightCount, &f.instanceCount, nullptr,   nullptr,
+        &f.pad0, &f.pad1};
+    for (std::uint32_t k = 0; k < 44; ++k) {
+        if (kFrameIsUint[k])
+            *uints[k] = uintSentinel(k, e);
+        else
+            *floats[k] = floatSentinel(k, e);
+    }
+    return f;
+}
+
+// The inputs struct_layout.comp hashes with random.glsl's pcgHash; the CPU mirror rt::pcgHash (which
+// frameSeedFor uses) must give the same words.
+constexpr std::array<std::uint32_t, 8> kHashInputs{0u,          1u,          2u,          48000u,
+                                                   0x9E3779B9u, 0x7FFFFFFFu, 0xFFFFFFFFu, 123456789u};
+
 // Appends the expected words of one struct element: word k is a uint or float sentinel per `isUint`.
 template <std::size_t N>
 void expectWords(std::vector<std::uint32_t>& out, const std::array<bool, N>& isUint, std::uint32_t e) {
@@ -171,7 +250,9 @@ void testStructLayout(Context& ctx) {
     std::vector<rt::InstanceRecord> instances;
     std::vector<rt::Vertex> vertices;
     std::vector<rt::MeshRecord> records;
+    std::vector<rt::FrameUniforms> frames;
     for (std::uint32_t e = 0; e < kElements; ++e) {
+        frames.push_back(sentinelFrame(e));
         materials.push_back(sentinelMaterial(e));
         lights.push_back(sentinelLight(e));
         instances.push_back(sentinelInstance(e));
@@ -191,6 +272,8 @@ void testStructLayout(Context& ctx) {
         expectWords(expected, std::array<bool, 8>{}, e);
     for (std::uint32_t e = 0; e < kElements; ++e)
         expectWords(expected, std::array<bool, 4>{true, true, true, true}, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kFrameIsUint, e);
     const std::vector<std::uint32_t> constants{static_cast<std::uint32_t>(rt::MaterialClass::Pbr),
                                                static_cast<std::uint32_t>(rt::MaterialClass::Glass),
                                                static_cast<std::uint32_t>(rt::MaterialClass::Emissive),
@@ -203,26 +286,33 @@ void testStructLayout(Context& ctx) {
                                                rt::kNoLight,
                                                static_cast<std::uint32_t>(rt::LightKind::Emitter),
                                                static_cast<std::uint32_t>(rt::LightKind::RetroScreen),
-                                               static_cast<std::uint32_t>(rt::LightKind::Portal)};
+                                               static_cast<std::uint32_t>(rt::LightKind::Portal),
+                                               rt::kTraceFlagNee,
+                                               rt::kTraceFlagRussianRoulette};
     expected.insert(expected.end(), constants.begin(), constants.end());
-    CHECK(expected.size() == kElements * (20 + 16 + 4 + 8 + 4) + 13);
+    for (std::uint32_t input : kHashInputs)
+        expected.push_back(rt::pcgHash(input));
+    CHECK(expected.size() == kElements * (20 + 16 + 4 + 8 + 4 + 44) + 15 + kHashInputs.size());
+    static_assert(rt::pcgHash(0) == 129708002u); // the reference value of PCG-RXS-M-XS for 0
 
     const Buffer materialBuffer = upload(ctx, materials, "layout materials");
     const Buffer lightBuffer = upload(ctx, lights, "layout lights");
     const Buffer instanceBuffer = upload(ctx, instances, "layout instances");
     const Buffer vertexBuffer = upload(ctx, vertices, "layout vertices");
     const Buffer recordBuffer = upload(ctx, records, "layout mesh records");
+    const Buffer frameBuffer = upload(ctx, frames, "layout frame uniforms");
     Buffer words = storage(ctx, sizeof(std::uint32_t) * (expected.size() + 8), "layout words");
     std::memset(words.mapped(), 0xEE, words.size());
     words.flush();
 
     std::vector<Binding> bindings;
-    for (std::uint32_t b = 0; b < 6; ++b)
+    for (std::uint32_t b = 0; b < 7; ++b)
         bindings.push_back({b, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER});
     ComputePipeline pipeline(ctx, EVO_TEST_SPIRV_DIR "/test_struct_layout.comp.spv", bindings, 0);
-    runOnce(ctx, pipeline,
-            {&materialBuffer, &lightBuffer, &instanceBuffer, &vertexBuffer, &recordBuffer, &words}, words,
-            nullptr, 0, 1, 1, 1, 1);
+    runOnce(
+        ctx, pipeline,
+        {&materialBuffer, &lightBuffer, &instanceBuffer, &vertexBuffer, &recordBuffer, &words, &frameBuffer},
+        words, nullptr, 0, 1, 1, 1, 1);
 
     const auto* back = static_cast<const std::uint32_t*>(words.mapped());
     std::size_t mismatches = 0;
@@ -250,7 +340,7 @@ struct ProbePush {
     std::uint32_t samplesPerThread, threadsPerCase, seed, caseCount;
 };
 
-constexpr std::uint32_t kResultFloats = 16; // must match bsdf_probe.comp
+constexpr std::uint32_t kResultFloats = 17; // must match bsdf_probe.comp
 
 // One case reduced over its threads in a fixed order (double sums, no atomics).
 struct CaseResult {
@@ -258,6 +348,7 @@ struct CaseResult {
     std::array<double, 3> reflect{}, transmit{}; // mean weight per sample on wo's side and the other side
     double maxWeight = 0, maxPdfError = 0, maxReciprocityError = 0, maxWeightError = 0;
     double nonDelta = 0, delta = 0, rejected = 0, nonFinite = 0, badPdf = 0, maxUnitError = 0;
+    bool hasNonDeltaLobe = false; // bsdfHasNonDeltaLobe, the same in every thread
     double mean(int c) const { return reflect[c] + transmit[c]; }
 };
 
@@ -298,6 +389,7 @@ std::vector<CaseResult> runProbe(Context& ctx, const std::vector<rt::Material>& 
             res.nonFinite += v[13];
             res.badPdf += v[14];
             res.maxUnitError = std::max<double>(res.maxUnitError, v[15]);
+            res.hasNonDeltaLobe = v[16] != 0.f;
         }
         res.samples = static_cast<double>(threadsPerCase) * samplesPerThread;
         for (int k = 0; k < 3; ++k) {
@@ -368,6 +460,68 @@ rt::Material glass(float ior, float roughness) {
     return m;
 }
 
+// bsdfEval's f cos integrated over the sphere by bsdf_quadrature.comp (thetaSteps x phiSteps, theta-uniform),
+// per case and channel; the rows are added here in double.
+std::vector<std::array<double, 3>> runQuadrature(Context& ctx, const std::vector<rt::Material>& materials,
+                                                 const std::vector<ProbeCase>& cases,
+                                                 std::uint32_t thetaSteps, std::uint32_t phiSteps) {
+    const Buffer materialBuffer = upload(ctx, materials, "quadrature materials");
+    const Buffer caseBuffer = upload(ctx, cases, "quadrature cases");
+    Buffer rows = storage(ctx, sizeof(float) * 3 * thetaSteps * cases.size(), "quadrature rows");
+    const std::array<Binding, 3> bindings{{{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+                                           {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+                                           {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
+    struct Push {
+        std::uint32_t thetaSteps, phiSteps, caseCount;
+    };
+    ComputePipeline pipeline(ctx, EVO_TEST_SPIRV_DIR "/test_bsdf_quadrature.comp.spv", bindings,
+                             sizeof(Push));
+    const Push push{thetaSteps, phiSteps, static_cast<std::uint32_t>(cases.size())};
+    runOnce(ctx, pipeline, {&materialBuffer, &caseBuffer, &rows}, rows, &push, sizeof(push), thetaSteps,
+            static_cast<std::uint32_t>(cases.size()), 64, 1);
+    const auto* r = static_cast<const float*>(rows.mapped());
+    std::vector<std::array<double, 3>> out(cases.size());
+    for (std::size_t c = 0; c < cases.size(); ++c)
+        for (std::uint32_t i = 0; i < thetaSteps; ++i)
+            for (int k = 0; k < 3; ++k)
+                out[c][k] += r[(c * thetaSteps + i) * 3 + k];
+    return out;
+}
+
+// An independent check of the samplers (the Task 6 review): bsdfSample's mean weight must equal the
+// quadrature of bsdfEval's f cos over the sphere, which uses no sampling code. A sampler whose pdf is not its
+// true density (rough glass keeping microfacet samples that land in the wrong hemisphere) biases the mean.
+// Rough lobes only (roughness >= 0.3), so the grid resolves them; glass from outside and from inside.
+void testSamplerAgainstQuadrature(Context& ctx) {
+    rt::Material varnish = opaque({0.5f, 0.3f, 0.15f}, 0.6f, 0.f, 1.5f, 0.6f, 0.3f);
+    const std::vector<rt::Material> materials = {glass(1.5f, 0.3f), glass(1.5f, 0.8f),
+                                                 opaque({0.8f, 0.1f, 0.1f}, 0.4f, 0.f), varnish};
+    const char* names[] = {"rough glass 0.3", "rough glass 0.8", "plastic", "varnish"};
+    std::vector<ProbeCase> cases;
+    for (std::uint32_t m = 0; m < materials.size(); ++m)
+        for (float angle : {0.f, 30.f, 60.f, 75.f, 85.f}) {
+            cases.push_back({m, angle});
+            if (materials[m].transmission > 0.5f)
+                cases.push_back({m, 180.f - angle}); // from inside
+        }
+    const auto start = std::chrono::steady_clock::now();
+    const std::vector<CaseResult> sampled = runProbe(ctx, materials, cases, 256, 1024, 0x5EED);
+    const std::vector<std::array<double, 3>> integrated = runQuadrature(ctx, materials, cases, 1500, 1000);
+    double worst = 0;
+    for (std::size_t c = 0; c < cases.size(); ++c) {
+        double error = 0;
+        for (int k = 0; k < 3; ++k)
+            error = std::max(error, std::abs(sampled[c].mean(k) - integrated[c][k]));
+        worst = std::max(worst, error);
+        if (error >= 0.01)
+            std::printf("  %s at %.0f deg: sampled %.4f, quadrature %.4f\n", names[cases[c].material],
+                        cases[c].thetaDegrees, sampled[c].mean(0), integrated[c][0]);
+        CHECK(error < 0.01);
+    }
+    std::printf("sampler vs quadrature: %zu cases, worst difference %.4f (%.1f s)\n", cases.size(), worst,
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
+}
+
 void describe(const char* what, std::size_t c, const ProbeCase& pc, const CaseResult& r) {
     std::printf(
         "  %s case %zu (material %u, %.3f deg): mean %.4f %.4f %.4f (reflect %.4f), max %.3f, pdf err "
@@ -380,6 +534,10 @@ void describe(const char* what, std::size_t c, const ProbeCase& pc, const CaseRe
 // sample, and no more energy out than in.
 void checkSane(const CaseResult& r) {
     CHECK(r.nonFinite == 0);
+    // NEE runs only where bsdfHasNonDeltaLobe says bsdfEval can be non-zero: never false where the sampler
+    // produced a non-delta direction.
+    if (r.nonDelta > 0)
+        CHECK(r.hasNonDeltaLobe);
     CHECK(r.badPdf == 0);
     CHECK(r.maxUnitError < 1e-5);
     for (int k = 0; k < 3; ++k)
@@ -430,6 +588,8 @@ void testBsdfs(Context& ctx) {
         CHECK(r.maxPdfError < 1e-3);
         CHECK(r.maxWeightError < 1e-3);
         CHECK(r.maxReciprocityError < 1e-4);
+        // Only the mirror and smooth glass are delta through and through (no NEE there).
+        CHECK(r.hasNonDeltaLobe == (pc.material != kMirror && pc.material != kSmoothGlass));
         switch (pc.material) {
         case kLambertWhite:
             for (int k = 0; k < 3; ++k)
@@ -519,6 +679,7 @@ int main() {
                 std::printf("warning: validation layer unavailable; only the results are checked\n");
             testStructLayout(ctx);
             testBsdfs(ctx);
+            testSamplerAgainstQuadrature(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(evo::gfx::validationMessagesReported() == 0);

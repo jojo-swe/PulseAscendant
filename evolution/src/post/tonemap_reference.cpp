@@ -1,5 +1,7 @@
 #include "post/tonemap_reference.hpp"
 
+#include "rt/random.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -27,13 +29,6 @@ float rrtAndOdtFit(float v) {
     const float a = v * (v + 0.0245786f) - 0.000090537f;
     const float b = v * (0.983729f * v + 0.4329510f) + 0.238081f;
     return a / b;
-}
-
-// PCG-RXS-M-XS, as pcgHash in shaders/rt/random.glsl.
-std::uint32_t pcgHash(std::uint32_t v) {
-    const std::uint32_t state = v * 747796405u + 2891336453u;
-    const std::uint32_t word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
 }
 
 // A uniform in (0, 1) from the hash's top 23 bits plus a half step: exact in float, never 0 or 1.
@@ -75,8 +70,8 @@ std::array<float, 3> tonemapDisplay(const float rgb[3], float exposureEV) {
 }
 
 float tonemapDither(std::uint32_t x, std::uint32_t y) {
-    const std::uint32_t first = pcgHash(x ^ pcgHash(y));
-    const std::uint32_t second = pcgHash(first);
+    const std::uint32_t first = rt::pcgHash(x ^ rt::pcgHash(y));
+    const std::uint32_t second = rt::pcgHash(first);
     return 0.5f * (openUnit(first) + openUnit(second)) - 0.5f;
 }
 
