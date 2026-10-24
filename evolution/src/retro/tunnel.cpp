@@ -2,6 +2,7 @@
 // the geometry; everything here is computed in closed form from the retro frame.
 
 #include "retro/tunnel.hpp"
+#include "retro/vec3.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -14,25 +15,7 @@ namespace evo::retro {
 
 namespace {
 
-using Vec3 = std::array<double, 3>;
 constexpr double kTau = 2 * std::numbers::pi;
-
-Vec3 sub(const Vec3& a, const Vec3& b) {
-    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-}
-
-double dot(const Vec3& a, const Vec3& b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-Vec3 cross(const Vec3& a, const Vec3& b) {
-    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-}
-
-Vec3 normalize(const Vec3& v) {
-    const double length = std::sqrt(dot(v, v));
-    return {v[0] / length, v[1] / length, v[2] / length};
-}
 
 double sumOfSines(const std::array<TunnelWave, 2>& waves, double w) {
     double sum = 0;
@@ -48,12 +31,6 @@ double sumOfSlopes(const std::array<TunnelWave, 2>& waves, double w) {
     return sum;
 }
 
-// C(z): the centre of the ring at view depth z when the camera has travelled s.
-std::array<double, 2> centreAt(double s, double z) {
-    const std::array<double, 2> far = tunnelPath(s + z), here = tunnelPath(s), tangent = tunnelPathSlope(s);
-    return {far[0] - here[0] - z * tangent[0], far[1] - here[1] - z * tangent[1]};
-}
-
 // The tube's light (towards it, view space): from the lower left, so the walls of the upper right face it.
 const Vec3 kTubeLight = normalize({-0.5, -0.8, -0.3});
 
@@ -61,7 +38,7 @@ const Vec3 kTubeLight = normalize({-0.5, -0.8, -0.3});
 Vec3 tubeVertex(std::uint32_t retroFrame, double s, std::int64_t m, std::size_t k) {
     const double w = static_cast<double>(m) * kTunnelBandLength;
     const double z = w - s;
-    const std::array<double, 2> c = centreAt(s, z);
+    const std::array<double, 2> c = tunnelRingCentre(s, z);
     const double a = kTau * static_cast<double>(k) / kTunnelSegments + tunnelTwist(retroFrame, w);
     return {c[0] + kTunnelRadius * std::cos(a), c[1] + kTunnelRadius * std::sin(a), z};
 }
@@ -98,6 +75,12 @@ double tunnelTravel(std::uint32_t retroFrame) {
     return kTunnelSpeed * retroFrame / kTunnelRetroRate;
 }
 
+std::array<double, 2> tunnelRingCentre(double s, double z) {
+    const std::array<double, 2> distant = tunnelPath(s + z), here = tunnelPath(s),
+                                tangent = tunnelPathSlope(s);
+    return {distant[0] - here[0] - z * tangent[0], distant[1] - here[1] - z * tangent[1]};
+}
+
 double tunnelTwist(std::uint32_t retroFrame, double w) {
     return kTunnelTwistRate * retroFrame / kTunnelRetroRate + kTunnelTwistPerDepth * w;
 }
@@ -112,7 +95,7 @@ std::vector<TunnelRing> tunnelRings(std::uint32_t retroFrame) {
         TunnelRing ring{};
         ring.w = static_cast<double>(j) * kTunnelRingSpacing;
         ring.z = ring.w - s;
-        ring.centre = centreAt(s, ring.z);
+        ring.centre = tunnelRingCentre(s, ring.z);
         rings.push_back(ring);
     }
     return rings;
@@ -133,7 +116,8 @@ double tunnelTubeFront(const show::TimelineFrame& frame, std::uint32_t retroFram
     return kTunnelFar - (kTunnelFar - kTunnelTubeNear) * eased;
 }
 
-std::vector<TunnelFace> tunnelTubeFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+std::vector<TunnelFace> tunnelTubeFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame,
+                                        bool cull) {
     std::vector<TunnelFace> faces;
     const double front = tunnelTubeFront(frame, retroFrame);
     if (front > kTunnelTubeFar)
@@ -143,31 +127,72 @@ std::vector<TunnelFace> tunnelTubeFaces(const show::TimelineFrame& frame, std::u
     // Bands m (between tube rings m and m + 1) from the last that ends within kTunnelTubeFar, far to near,
     // down to the last that starts at or beyond the front.
     const auto last = static_cast<std::int64_t>(std::floor((s + kTunnelTubeFar) / kTunnelBandLength)) - 1;
-    for (std::int64_t m = last; static_cast<double>(m) * kTunnelBandLength - s >= nearest; --m) {
+    const auto inFront = [&](std::int64_t m) {
+        return static_cast<double>(m) * kTunnelBandLength - s >= nearest;
+    };
+    if (!inFront(last))
+        return faces;
+    std::int64_t first = last;
+    while (inFront(first - 1))
+        --first;
+
+    // The mouth: the near ring of the nearest band, on the screen (a convex polygon). A ray through it enters
+    // the tube there, so it meets the inside of a wall before the outside of any; a face seen from outside
+    // whose three corners project inside the mouth is hidden, and culled.
+    const Camera camera = tunnelCamera();
+    std::array<std::array<double, 2>, kTunnelSegments> mouth{};
+    for (std::size_t k = 0; k < kTunnelSegments; ++k) {
+        const Vec3 v = tubeVertex(retroFrame, s, first, k);
+        const double world[3] = {v[0], v[1], v[2]};
+        const Projected p = project(camera, world);
+        mouth[k] = {p.x, p.y};
+    }
+    const auto inMouth = [&](const Vec3& v) {
+        const double world[3] = {v[0], v[1], v[2]};
+        const Projected p = project(camera, world);
+        int sign = 0;
+        for (std::size_t k = 0; k < kTunnelSegments; ++k) {
+            const auto& a = mouth[k];
+            const auto& b = mouth[(k + 1) % kTunnelSegments];
+            const double side = (b[0] - a[0]) * (p.y - a[1]) - (b[1] - a[1]) * (p.x - a[0]);
+            const int here = side > 0 ? 1 : side < 0 ? -1 : 0;
+            if (here != 0 && sign != 0 && here != sign)
+                return false;
+            if (here != 0)
+                sign = here;
+        }
+        return true;
+    };
+
+    std::vector<TunnelFace> outside; // a band's faces seen from outside, drawn after its inner faces
+    for (std::int64_t m = last; m >= first; --m) {
         const double zMiddle = (static_cast<double>(m) + 0.5) * kTunnelBandLength - s;
         const double fade =
             std::clamp((kTunnelTubeFar - zMiddle) / (kTunnelTubeFar - kTunnelTubeNear), 0.0, 1.0);
-        const std::array<double, 2> axisNear = centreAt(s, zMiddle - kTunnelBandLength / 2);
-        const std::array<double, 2> axisFar = centreAt(s, zMiddle + kTunnelBandLength / 2);
+        const std::array<double, 2> axisNear = tunnelRingCentre(s, zMiddle - kTunnelBandLength / 2);
+        const std::array<double, 2> axisFar = tunnelRingCentre(s, zMiddle + kTunnelBandLength / 2);
         const Vec3 axis = {(axisNear[0] + axisFar[0]) / 2, (axisNear[1] + axisFar[1]) / 2, zMiddle};
+        outside.clear();
         for (std::size_t k = 0; k < kTunnelSegments; ++k) {
             const std::size_t next = (k + 1) % kTunnelSegments;
             const Vec3 v00 = tubeVertex(retroFrame, s, m, k), v01 = tubeVertex(retroFrame, s, m, next);
             const Vec3 v10 = tubeVertex(retroFrame, s, m + 1, k),
                        v11 = tubeVertex(retroFrame, s, m + 1, next);
             // The quad's normal from its diagonals, turned to face the tube's axis; flat shaded by depth and
-            // by the light, in the checker's ramp.
+            // by the light on the side the camera sees, in the checker's ramp.
             Vec3 normal = normalize(cross(sub(v11, v00), sub(v01, v10)));
             const Vec3 middle = {(v00[0] + v01[0] + v10[0] + v11[0]) / 4,
                                  (v00[1] + v01[1] + v10[1] + v11[1]) / 4, zMiddle};
             if (dot(normal, sub(axis, middle)) < 0)
                 normal = {-normal[0], -normal[1], -normal[2]};
-            const double light = 0.35 + 0.65 * std::max(0.0, dot(normal, kTubeLight));
-            const int shade =
-                std::min(kTunnelTubeShades - 1, static_cast<int>(fade * light * kTunnelTubeShades));
             const std::uint8_t ramp =
                 (m + static_cast<std::int64_t>(k)) % 2 == 0 ? kTunnelTubeA : kTunnelTubeB;
-            const auto index = static_cast<std::uint8_t>(ramp + shade);
+            const auto indexFor = [&](double facing) { // facing: +1 the inner side, -1 the outer
+                const double light = 0.35 + 0.65 * std::max(0.0, facing * dot(normal, kTubeLight));
+                const int shade =
+                    std::min(kTunnelTubeShades - 1, static_cast<int>(fade * light * kTunnelTubeShades));
+                return static_cast<std::uint8_t>(ramp + shade);
+            };
 
             const Vec3* triangles[2][3] = {{&v00, &v10, &v11}, {&v00, &v11, &v01}};
             for (const auto& triangle : triangles) {
@@ -177,16 +202,19 @@ std::vector<TunnelFace> tunnelTubeFaces(const show::TimelineFrame& frame, std::u
                 Vec3 n = cross(sub(b, a), sub(c, a));
                 if (dot(n, sub(axis, a)) < 0)
                     n = {-n[0], -n[1], -n[2]};
-                if (dot(n, Vec3{-a[0], -a[1], -a[2]}) <= 0)
-                    continue; // the camera sees its outside
+                const bool outer = dot(n, Vec3{-a[0], -a[1], -a[2]}) <= 0; // the camera sees its outside
+                if (outer && cull && inMouth(a) && inMouth(b) && inMouth(c))
+                    continue;
                 TunnelFace face{};
                 for (int v = 0; v < 3; ++v)
                     for (int i = 0; i < 3; ++i)
                         face.world[v][i] = (*triangle[v])[i];
-                face.index = index;
-                faces.push_back(face);
+                face.index = indexFor(outer ? -1 : 1);
+                (outer ? outside : faces).push_back(face);
             }
         }
+        // A band is convex: a ray that crosses both its outside and its inside meets the outside first.
+        faces.insert(faces.end(), outside.begin(), outside.end());
     }
     return faces;
 }
@@ -220,8 +248,9 @@ void tunnelScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint3
     for (const TunnelRing& ring : tunnelRings(retroFrame)) {
         if (ring.z >= front)
             continue;
-        const double fade = (kTunnelFar - ring.z) / (kTunnelFar - kTunnelNear);
-        const auto index = static_cast<std::uint8_t>(kTunnelDotRamp + std::lround(63 * std::pow(fade, 1.5)));
+        const double fade = std::clamp((kTunnelFar - ring.z) / (kTunnelFar - kTunnelNear), 0.0, 1.0);
+        const auto index = static_cast<std::uint8_t>(
+            kTunnelDotRamp + std::lround((kTunnelDotShades - 1) * std::pow(fade, 1.5)));
         const std::uint8_t size = ring.z < kTunnelDotsLarge ? 3 : ring.z < kTunnelDotsMedium ? 2 : 1;
         const double twist = tunnelTwist(retroFrame, ring.w);
         for (std::size_t i = 0; i < kTunnelRingDots; ++i) {

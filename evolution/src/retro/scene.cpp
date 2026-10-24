@@ -1,4 +1,5 @@
 #include "retro/scene.hpp"
+#include "retro/vec3.hpp"
 
 #include <algorithm>
 #include <array>
@@ -13,27 +14,8 @@ namespace evo::retro {
 
 namespace {
 
-using Vec3 = std::array<double, 3>;
-
 Vec3 toVec(const double v[3]) {
     return {v[0], v[1], v[2]};
-}
-
-Vec3 sub(const Vec3& a, const Vec3& b) {
-    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-}
-
-double dot(const Vec3& a, const Vec3& b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-Vec3 cross(const Vec3& a, const Vec3& b) {
-    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-}
-
-Vec3 normalize(const Vec3& v) {
-    const double length = std::sqrt(dot(v, v));
-    return {v[0] / length, v[1] / length, v[2] / length};
 }
 
 // The camera's view basis and its focal lengths in pixels.

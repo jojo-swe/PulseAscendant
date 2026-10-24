@@ -59,6 +59,10 @@ struct FlybyFace {
 // fuselage, so when a wing is drawn after the fuselage a sliver of its root can show through the hull; and an
 // engine's two crossed flame triangles cut through each other.
 std::vector<FlybyFace> flybyShipFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame);
+// The same for any camera (the ship's attitude still that of retroFrame): FLYBY's flight never brings the
+// camera within |x| <= 0.34 of the ship's centre plane, where the fuselage is drawn after the near side, but
+// a reuse at other angles (FINALE) may.
+std::vector<FlybyFace> flybyShipFaces(std::uint32_t retroFrame, const Camera& camera);
 // The stars of the field; those the ship covers are left out of a frame's scene.
 inline constexpr std::size_t kFlybyStars = 512;
 

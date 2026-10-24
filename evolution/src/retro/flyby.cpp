@@ -2,6 +2,7 @@
 // See retro/flyby.hpp for the layout of the palette and the shape of the flight.
 
 #include "retro/flyby.hpp"
+#include "retro/vec3.hpp"
 
 #include <algorithm>
 #include <array>
@@ -14,25 +15,6 @@
 namespace evo::retro {
 
 namespace {
-
-using Vec3 = std::array<double, 3>;
-
-Vec3 sub(const Vec3& a, const Vec3& b) {
-    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-}
-
-double dot(const Vec3& a, const Vec3& b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-Vec3 cross(const Vec3& a, const Vec3& b) {
-    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-}
-
-Vec3 normalize(const Vec3& v) {
-    const double length = std::sqrt(dot(v, v));
-    return {v[0] / length, v[1] / length, v[2] / length};
-}
 
 double lerp(double a, double b, double t) {
     return a + (b - a) * t;
@@ -203,8 +185,8 @@ static_assert(kFuselageFaces.size() + 2 * kWingFaces.size() + 2 * kPodFaces.size
 
 // One directional light, from the right, above and a little behind the ship (towards the light, world space).
 // Full diffuse on top of the ambient, so a face turned squarely to the light saturates at shade 15: over the
-// flight every lit ramp runs from shade 0 (turned away) to 15.
-const Vec3 kLight = normalize({0.75, 0.45, -0.5});
+// flight the hull and canopy run from shade 0 (turned away) to 15, the wings to 14.
+const Vec3 kLight = normalize({0.9, 0.74, -0.4});
 constexpr double kDiffuse = 1.0;
 
 constexpr double kFovY = 42; // degrees, the ship's camera and the stars'
@@ -512,8 +494,9 @@ Camera flybyCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
     camera.eye[0] = distance * std::cos(elevation) * std::sin(azimuth);
     camera.eye[1] = distance * std::sin(elevation);
     camera.eye[2] = -distance * std::cos(elevation) * std::cos(azimuth);
-    // Aimed below the ship, so the ship rides in the upper part of the frame, its lowest vertex at y <= 133
-    // px on every frame (less offset while the camera looks up at it from below, which already lifts it).
+    // Aimed below the ship, so the ship rides in the upper part of the frame: its lowest vertex reaches about
+    // y = 132 px (flyby_test allows 136), less offset while the camera looks up at it from below, which
+    // already lifts it.
     camera.target[0] = 0;
     camera.target[1] = lerp(-0.4, -0.95, eased);
     camera.target[2] = 0;
@@ -542,7 +525,10 @@ std::uint8_t flybyShade(double intensity) {
 }
 
 std::vector<FlybyFace> flybyShipFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    const Camera camera = flybyCamera(frame, retroFrame);
+    return flybyShipFaces(retroFrame, flybyCamera(frame, retroFrame));
+}
+
+std::vector<FlybyFace> flybyShipFaces(std::uint32_t retroFrame, const Camera& camera) {
     const Rotation rotation = shipRotation(static_cast<double>(retroFrame) / kFlybyRetroRate);
     const Vec3 eye = rotation.applyInverse({camera.eye[0], camera.eye[1], camera.eye[2]});
 

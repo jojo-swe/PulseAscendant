@@ -1,11 +1,14 @@
 // TUNNEL, chapter 4: the registry entry, the palette, the path and the rings on the CPU (every ring centre
-// where the analytic path puts it, every dot where the documented formula puts it, the nearest ring the
-// largest), the solid tube's faces (under the triangle limit with margin on every retro frame, in a correct
-// painter's order against a ray-cast reference), and the 320x200 palette index image from the retro stage on
-// the GPU: deterministic per retro frame, with many ramp shades and a sensible coverage in both variants.
-// Runs with the validation layer on and fails on any message it reports.
+// where the analytic path puts it, C(0) = 0 and C'(0) = 0, every dot where the documented formula puts it and
+// at the tunnel's radius in view space, the nearest ring the largest), the solid tube's faces (under the
+// triangle limit with margin on every retro frame, every vertex on its ring, neighbouring bands sharing
+// vertices exactly, culling only hidden faces, in a correct painter's order against a ray-cast reference),
+// and the 320x200 palette index image from the retro stage on the GPU: deterministic per retro frame, with
+// many ramp shades and a sensible coverage in both variants. Runs with the validation layer on and fails on
+// any message it reports.
 
 #include "gfx/context.hpp"
+#include "ray_cast.hpp"
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
@@ -20,6 +23,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
+#include <map>
 #include <numbers>
 #include <set>
 #include <stdexcept>
@@ -128,8 +133,8 @@ double travel(std::uint32_t retroFrame) {
 }
 
 std::array<double, 2> centre(double s, double z) {
-    const std::array<double, 2> far = path(s + z), here = path(s), tangent = slope(s);
-    return {far[0] - here[0] - z * tangent[0], far[1] - here[1] - z * tangent[1]};
+    const std::array<double, 2> distant = path(s + z), here = path(s), tangent = slope(s);
+    return {distant[0] - here[0] - z * tangent[0], distant[1] - here[1] - z * tangent[1]};
 }
 
 double twist(std::uint32_t retroFrame, double w) {
@@ -150,8 +155,8 @@ Dot expectedDot(const TunnelRing& ring, std::size_t i, std::uint32_t retroFrame)
     const evo::retro::Projected p = evo::retro::project(evo::retro::tunnelCamera(), world);
     Dot dot{};
     dot.x = p.x, dot.y = p.y;
-    const double fade =
-        (evo::retro::kTunnelFar - ring.z) / (evo::retro::kTunnelFar - evo::retro::kTunnelNear);
+    const double fade = std::clamp(
+        (evo::retro::kTunnelFar - ring.z) / (evo::retro::kTunnelFar - evo::retro::kTunnelNear), 0.0, 1.0);
     dot.index = static_cast<std::uint8_t>(evo::retro::kTunnelDotRamp + std::lround(63 * std::pow(fade, 1.5)));
     dot.size = ring.z < evo::retro::kTunnelDotsLarge ? 3 : ring.z < evo::retro::kTunnelDotsMedium ? 2 : 1;
     // The square's first pixel as points.comp computes it.
@@ -216,6 +221,20 @@ void testRings() {
         CHECK(std::abs((path(w + h)[0] - path(w - h)[0]) / (2 * h) - slope(w)[0]) < 1e-6);
         CHECK(std::abs((path(w + h)[1] - path(w - h)[1]) / (2 * h) - slope(w)[1]) < 1e-6);
     }
+    // The camera rides the path along its tangent: whatever the travel, the ring centre at depth 0 is on the
+    // view axis and the tunnel leaves it with zero slope, C(0) = 0 and C'(0) = 0.
+    for (double s : {0.0, 3.7, 12.25, 30.0, 47.9}) {
+        const std::array<double, 2> c0 = evo::retro::tunnelRingCentre(s, 0);
+        CHECK(std::abs(c0[0]) < 1e-12 && std::abs(c0[1]) < 1e-12);
+        const double h = 1e-4;
+        const std::array<double, 2> ahead = evo::retro::tunnelRingCentre(s, h);
+        const std::array<double, 2> behind = evo::retro::tunnelRingCentre(s, -h);
+        CHECK(std::abs(ahead[0] - behind[0]) / (2 * h) < 1e-6 &&
+              std::abs(ahead[1] - behind[1]) / (2 * h) < 1e-6);
+        // ... and curves away beyond it (the path bends), so the test above is not vacuous.
+        const std::array<double, 2> distant = evo::retro::tunnelRingCentre(s, 20);
+        CHECK(std::hypot(distant[0], distant[1]) > 0.5);
+    }
     for (std::uint32_t retroFrame = 0; retroFrame < frameCount(); ++retroFrame) {
         CHECK(evo::retro::tunnelTravel(retroFrame) == travel(retroFrame));
         CHECK(std::abs(evo::retro::tunnelTwist(retroFrame, 3.5) - twist(retroFrame, 3.5)) < 1e-12);
@@ -240,9 +259,13 @@ void testRings() {
 }
 
 // The dots of every retro frame before the tube: the 96 x 64 dots of the formula, each in the scene within
-// one pixel, in its ramp shade and size, unless its square lies wholly off the screen; the ring centres on
-// the projected path within one pixel; the rings shrinking with depth, the nearest the largest.
+// one pixel, in its ramp shade and size, unless its square lies wholly off the screen; each drawn dot,
+// unprojected at its ring's depth, at the tunnel's radius from the ring centre in view space; the ring
+// centres on the projected path within one pixel; the rings shrinking with depth, the nearest the largest.
 void testDots() {
+    const double focalY = 100.0 / std::tan(evo::retro::kTunnelFovY * std::numbers::pi / 360.0);
+    const double focalX = focalY * evo::retro::kPixelAspect;
+    double worstRadius = 0;
     const std::uint32_t tubeFrame = evo::retro::tunnelTubeFrame(tunnel(1));
     std::size_t fewest = SIZE_MAX, most = 0, ringsChecked = 0;
     double worstCentre = 0;
@@ -266,6 +289,13 @@ void testDots() {
                 const evo::retro::RetroPoint& p = scene.points[next++];
                 CHECK(std::abs(p.x - dot.x * 16) <= 16 && std::abs(p.y - dot.y * 16) <= 16);
                 CHECK(p.index == dot.index && p.size == dot.size);
+                // Back into view space at the ring's depth: on the ring's circle, to the rounding of 28.4.
+                const double viewX = (p.x / 16.0 - 160) * ring.z / focalX;
+                const double viewY = (100 - p.y / 16.0) * ring.z / focalY;
+                const double radius = std::hypot(viewX - ring.centre[0], viewY - ring.centre[1]);
+                const double error = std::abs(radius - evo::retro::kTunnelRadius) / (ring.z / focalX);
+                worstRadius = std::max(worstRadius, error);
+                CHECK(error <= 1.0 / 16); // in pixels: half a 1/16 pixel each way
                 sumX += p.x / 16.0, sumY += p.y / 16.0;
                 minX = std::min(minX, p.x / 16.0), maxX = std::max(maxX, p.x / 16.0);
                 ++visible;
@@ -278,9 +308,6 @@ void testDots() {
                 worstCentre = std::max(worstCentre, error);
                 CHECK(error <= 1);
                 // Far to near, each whole ring wider than the last; partly hidden rings only nearer.
-                if (partialSeen)
-                    std::printf("frame %u ring z %.2f whole after a partial one; centre (%.1f, %.1f)\n",
-                                retroFrame, ring.z, c.x, c.y);
                 CHECK(!partialSeen);
                 CHECK(maxX - minX > previousExtent);
                 previousExtent = maxX - minX;
@@ -296,9 +323,9 @@ void testDots() {
     }
     std::printf(
         "tunnel: dots %zu..%zu of 6144 on screen before the tube; %zu whole rings within %.3f px of the "
-        "path\n",
-        fewest, most, ringsChecked, worstCentre);
-    CHECK(fewest >= 4000 && most <= 6144);
+        "path; dots within %.4f px of the ring radius\n",
+        fewest, most, ringsChecked, worstCentre, worstRadius);
+    CHECK(fewest >= 5900 && most <= 6144); // measured 5946..6015
 }
 
 // The tube from its first frame to the end: at most kTubeBudget triangles on every retro frame (the
@@ -354,62 +381,29 @@ void testTube() {
         "%zu indices\n",
         fewest, most, kTubeBudget, evo::retro::kMaxTriangles, indices.size());
     CHECK(most <= kTubeBudget);
-    CHECK(fewest >= 400);
+    CHECK(fewest >= 760);        // measured 780
     CHECK(indices.size() >= 30); // two ramps, many shades
 }
 
 // The tube's painter's order on the CPU: for every 13th retro frame of the whole tube, a ray through each
 // pixel centre of an 80x50 grid against its faces (view space, camera at the origin). The face drawn last
 // among those it hits must show the nearest one's index.
-using Vec = std::array<double, 3>;
-
-Vec sub(const Vec& a, const Vec& b) {
-    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-}
-Vec cross(const Vec& a, const Vec& b) {
-    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-}
-double dot(const Vec& a, const Vec& b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-double hit(const Vec& direction, const double world[3][3]) {
-    const Vec a = {world[0][0], world[0][1], world[0][2]};
-    const Vec e1 = sub({world[1][0], world[1][1], world[1][2]}, a);
-    const Vec e2 = sub({world[2][0], world[2][1], world[2][2]}, a);
-    const Vec p = cross(direction, e2);
-    const double det = dot(e1, p);
-    if (std::abs(det) < 1e-14)
-        return -1;
-    const Vec s = sub({0, 0, 0}, a);
-    const double u = dot(s, p) / det;
-    if (u < 0 || u > 1)
-        return -1;
-    const Vec q = cross(s, e1);
-    const double v = dot(direction, q) / det;
-    if (v < 0 || u + v > 1)
-        return -1;
-    return dot(e2, q) / det;
-}
-
 void testTubeOrder() {
     const std::uint32_t tubeFrame = evo::retro::tunnelTubeFrame(tunnel(1));
     const auto whole =
         tubeFrame + static_cast<std::uint32_t>(std::ceil(evo::retro::kTunnelTubeSweepSeconds * kRate));
-    const double focalY = 100.0 / std::tan(evo::retro::kTunnelFovY * std::numbers::pi / 360.0);
-    const double focalX = focalY * evo::retro::kPixelAspect;
     std::size_t rays = 0, wrong = 0;
     for (std::uint32_t retroFrame = tubeFrame + 3; retroFrame < frameCount(); retroFrame += 13) {
         const std::vector<TunnelFace> faces = evo::retro::tunnelTubeFaces(frameOf(retroFrame), retroFrame);
         std::size_t covered = 0;
         for (int gy = 0; gy < 50; ++gy)
             for (int gx = 0; gx < 80; ++gx) {
-                const double px = gx * 4 + 1.5, py = gy * 4 + 1.5;
-                const Vec direction = {(px - 160) / focalX, (100 - py) / focalY, 1};
+                const evo::test::Ray ray =
+                    evo::test::rayThrough(evo::retro::tunnelCamera(), gx * 4 + 1.5, gy * 4 + 1.5);
                 int nearest = -1, last = -1;
                 double nearestT = 1e30, lastT = 0;
                 for (std::size_t i = 0; i < faces.size(); ++i) {
-                    const double t = hit(direction, faces[i].world);
+                    const double t = evo::test::hit(ray, faces[i].world);
                     if (t <= 0)
                         continue;
                     if (t < nearestT)
@@ -432,6 +426,73 @@ void testTubeOrder() {
     CHECK(wrong == 0);
 }
 
+// The nearest hit along a ray beyond the near plane among the faces, or infinity.
+double nearestHit(const evo::test::Ray& ray, const std::vector<TunnelFace>& faces) {
+    double nearest = std::numeric_limits<double>::infinity();
+    for (const TunnelFace& face : faces) {
+        const double t = evo::test::hit(ray, face.world);
+        if (t > 0 && t * ray.direction[2] >= evo::retro::kNearPlane)
+            nearest = std::min(nearest, t);
+    }
+    return nearest;
+}
+
+// The tube's geometry and culling, on every 9th retro frame of the tube (the sweep included), from all its
+// faces before culling: every vertex at the tube's radius from its ring's centre and on the tube rings'
+// grid; neighbouring bands sharing their ring's 16 vertices bit for bit; and, on a 40x25 grid of rays, the
+// nearest culled face where the nearest of all faces is (culling only drops faces something nearer hides).
+void testTubeCulling() {
+    const std::uint32_t tubeFrame = evo::retro::tunnelTubeFrame(tunnel(1));
+    std::size_t frames = 0, rays = 0, culled = 0, total = 0;
+    double worstRadius = 0;
+    for (std::uint32_t retroFrame = tubeFrame; retroFrame < frameCount(); retroFrame += 9) {
+        const TimelineFrame frame = frameOf(retroFrame);
+        const std::vector<TunnelFace> all = evo::retro::tunnelTubeFaces(frame, retroFrame, false);
+        const std::vector<TunnelFace> drawn = evo::retro::tunnelTubeFaces(frame, retroFrame);
+        if (all.empty())
+            continue;
+        ++frames;
+        CHECK(all.size() % (2 * evo::retro::kTunnelSegments) == 0 && drawn.size() <= all.size());
+        culled += all.size() - drawn.size();
+        total += all.size();
+
+        // The vertices, ring by ring (grouped by their exact depth).
+        const double s = travel(retroFrame);
+        std::map<double, std::set<std::array<double, 3>>> rings;
+        for (const TunnelFace& face : all)
+            for (const auto& v : face.world) {
+                const std::array<double, 2> c = centre(s, v[2]);
+                const double radius = std::hypot(v[0] - c[0], v[1] - c[1]);
+                worstRadius = std::max(worstRadius, std::abs(radius - evo::retro::kTunnelRadius));
+                CHECK(std::abs(radius - evo::retro::kTunnelRadius) < 1e-9);
+                const double m = (v[2] + s) / evo::retro::kTunnelBandLength;
+                CHECK(std::abs(m - std::round(m)) < 1e-9);
+                rings[v[2]].insert({v[0], v[1], v[2]});
+            }
+        // Bands + 1 rings of exactly 16 vertices: where two bands meet they use the same 16 points.
+        const std::size_t bands = all.size() / (2 * evo::retro::kTunnelSegments);
+        CHECK(rings.size() == bands + 1);
+        for (const auto& [z, vertices] : rings)
+            CHECK(vertices.size() == evo::retro::kTunnelSegments);
+
+        for (int gy = 0; gy < 25; ++gy)
+            for (int gx = 0; gx < 40; ++gx) {
+                const evo::test::Ray ray =
+                    evo::test::rayThrough(evo::retro::tunnelCamera(), gx * 8 + 3.5, gy * 8 + 3.5);
+                const double nearest = nearestHit(ray, all);
+                if (std::isinf(nearest))
+                    continue;
+                ++rays;
+                CHECK(std::abs(nearestHit(ray, drawn) - nearest) <= 1e-9 * nearest);
+            }
+    }
+    std::printf("tunnel: tube culling: %zu frames, %zu rays, %zu of %zu faces culled; vertices within %.1e "
+                "of the radius\n",
+                frames, rays, culled, total, worstRadius);
+    CHECK(frames >= 20 && rays >= 10000);
+    CHECK(culled * 4 >= total); // a good share is culled, or the test above proves little
+}
+
 // --- GPU --------------------------------------------------------------------------------------------------
 
 // The dot frame where the tunnel's far end swings furthest from the centre (a bend).
@@ -440,8 +501,8 @@ std::uint32_t curveFrame() {
     std::uint32_t best = 0;
     double widest = 0;
     for (std::uint32_t retroFrame = 0; retroFrame < tubeFrame; ++retroFrame) {
-        const TunnelRing far = evo::retro::tunnelRings(retroFrame).front();
-        const double offset = std::hypot(far.centre[0], far.centre[1]) / far.z;
+        const TunnelRing farthest = evo::retro::tunnelRings(retroFrame).front();
+        const double offset = std::hypot(farthest.centre[0], farthest.centre[1]) / farthest.z;
         if (offset > widest)
             widest = offset, best = retroFrame;
     }
@@ -507,6 +568,7 @@ int main() {
         testDots();
         testTube();
         testTubeOrder();
+        testTubeCulling();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())
