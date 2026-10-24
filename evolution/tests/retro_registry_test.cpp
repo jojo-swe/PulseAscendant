@@ -2,7 +2,9 @@
 // background and scene) is a pure function of the chapter and the retro frame. The stage caches a retro
 // frame and calls the builders and providers only when it re-renders, so two frames inside one retro frame
 // must give byte-identical results however much their show time, local time and music signals differ. This
-// one test covers every effect, present and future, instead of a purity check per effect. CPU only.
+// one test covers every effect, present and future, instead of a purity check per effect. It also builds
+// every retro frame of every chapter whose effect has a scene and checks it the way the rasteriser does
+// (retro::checkScene), since a frame it refuses would end the show. CPU only.
 
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
@@ -11,6 +13,7 @@
 #include "show/timeline.hpp"
 #include "text/text_pass.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -138,11 +141,52 @@ void testEveryEffectIsPure() {
                 static_cast<int>(Effect::TheEnd) + 1, frames, scenes, texts);
 }
 
+// Every retro frame of every chapter whose effect has a scene provider passes retro::checkScene: within
+// kMaxTriangles and kMaxPoints and inside the guard band, as SceneRaster::draw requires (it throws
+// otherwise, which would end the show). Clipping can split one triangle into five, so the counts depend on
+// the frame and none can be skipped.
+void testEverySceneFrameFits() {
+    std::size_t chapters = 0, frames = 0, maxTriangles = 0, maxPoints = 0;
+    for (int chapter = 0; chapter < evo::show::chapterCount(); ++chapter) {
+        const EffectInfo& info =
+            evo::retro::effectFor(evo::show::cues[static_cast<std::size_t>(chapter)].effect);
+        if (info.scene == nullptr)
+            continue;
+        ++chapters;
+        const double start = evo::show::chapterStart(chapter);
+        const double duration = evo::show::sampleTimeline(start).chapterDuration;
+        const auto count = static_cast<std::uint32_t>(std::ceil(duration * info.retroRate));
+        evo::retro::RetroScene scene;
+        for (std::uint32_t retroFrame = 0; retroFrame < count; ++retroFrame) {
+            // The middle of the retro frame, or just before the chapter's end for the last, partial one.
+            const double t = std::min(start + (retroFrame + 0.5) / info.retroRate, start + duration - 1e-6);
+            const TimelineFrame frame = evo::show::sampleTimeline(t);
+            CHECK(frame.chapter == chapter);
+            scene.clear();
+            info.scene(scene, frame, retroFrame);
+            try {
+                evo::retro::checkScene(scene);
+            } catch (const std::exception& error) {
+                throw std::runtime_error("chapter " + std::to_string(chapter) + " retro frame " +
+                                         std::to_string(retroFrame) + ": " + error.what());
+            }
+            ++checksPassed;
+            ++frames;
+            maxTriangles = std::max(maxTriangles, scene.triangles.size());
+            maxPoints = std::max(maxPoints, scene.points.size());
+        }
+    }
+    std::printf("retro_registry: every retro frame of %zu scene chapters fits the rasteriser (%zu frames, at "
+                "most %zu triangles and %zu points)\n",
+                chapters, frames, maxTriangles, maxPoints);
+}
+
 } // namespace
 
 int main() {
     try {
         testEveryEffectIsPure();
+        testEverySceneFrameFits();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());
         return 1;

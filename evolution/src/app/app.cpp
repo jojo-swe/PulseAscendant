@@ -1,5 +1,6 @@
 #include "app/app.hpp"
 
+#include "app/capture.hpp"
 #include "app/clock.hpp"
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
@@ -294,7 +295,9 @@ int runRenderStream(const Options& options) {
     render::Renderer renderer(ctx, ring, {width, height, options.crt, options.hud}); // no title: cards only
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();
-        renderer.render(cmd, show::sampleTimeline(options.time + static_cast<double>(i) / options.fps));
+        show::TimelineFrame frame = show::sampleTimeline(options.time + static_cast<double>(i) / options.fps);
+        applyForcedEra(frame);
+        renderer.render(cmd, frame);
         readback.record(cmd, renderer.output());
         ring.wait(ring.submit()); // the readback is complete: rgb() may read it
         const std::vector<std::uint8_t> rgb = readback.rgb();

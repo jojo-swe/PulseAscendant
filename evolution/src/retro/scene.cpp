@@ -131,6 +131,30 @@ std::int32_t toFixed(double pixels) {
     return static_cast<std::int32_t>(std::lround(pixels * kSubpixel));
 }
 
+void checkScene(const RetroScene& scene) {
+    if (scene.triangles.size() > kMaxTriangles)
+        throw std::length_error(std::to_string(scene.triangles.size()) +
+                                " triangles in one retro frame, more than " + std::to_string(kMaxTriangles));
+    if (scene.points.size() > kMaxPoints)
+        throw std::length_error(std::to_string(scene.points.size()) +
+                                " points in one retro frame, more than " + std::to_string(kMaxPoints));
+    // Within the guard band every edge function of polys.comp fits in 32 bits.
+    const auto inGuardBand = [](std::int32_t x, std::int32_t y) {
+        return x >= toFixed(kGuardMinX) && x <= toFixed(kGuardMaxX) && y >= toFixed(kGuardMinY) &&
+               y <= toFixed(kGuardMaxY);
+    };
+    for (std::size_t i = 0; i < scene.triangles.size(); ++i) {
+        const RetroTriangle& t = scene.triangles[i];
+        for (int v = 0; v < 3; ++v)
+            if (!inGuardBand(t.x[v], t.y[v]))
+                throw std::invalid_argument("triangle " + std::to_string(i) +
+                                            " has a vertex outside the guard band");
+    }
+    for (std::size_t i = 0; i < scene.points.size(); ++i)
+        if (!inGuardBand(scene.points[i].x, scene.points[i].y))
+            throw std::invalid_argument("point " + std::to_string(i) + " is outside the guard band");
+}
+
 void addTriangle(RetroScene& scene, const Camera& camera, const double world[3][3],
                  const std::uint8_t index[3], std::uint8_t mode) {
     const View view = viewOf(camera);
@@ -163,6 +187,8 @@ void addTriangle(RetroScene& scene, const Camera& camera, const double world[3][
         std::uint8_t index;
     };
     std::vector<Fixed> fixed;
+    // A vertex made by clipping rounds its interpolated gouraud index to a whole entry, so the gradient of a
+    // clipped face can shift by up to half an index. Accepted: half a step of a shade ramp does not show.
     for (const Vertex& v : polygon)
         fixed.push_back({toFixed(v.x), toFixed(v.y), toIndex(v.index)});
 

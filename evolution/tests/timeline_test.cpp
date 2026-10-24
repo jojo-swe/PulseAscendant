@@ -123,6 +123,14 @@ void checkShowInfo() {
     CHECK(json.find("\"title\":\"RAYTRACE\"") != std::string::npos);
     CHECK(json.find("\"effect\":\"StudioNight\"") != std::string::npos);
     CHECK(json.find("\"effect\":\"TheEnd\"") != std::string::npos);
+    // The eras a chapter shows: a Cut holds its eraFixed, the other transitions show both.
+    CHECK(json.find("\"title\":\"BOOT\",\"effect\":\"Boot\",\"transition\":\"Cut\",\"eras\":[1993]") !=
+          std::string::npos);
+    CHECK(json.find(
+              "\"title\":\"DOTS\",\"effect\":\"Dots\",\"transition\":\"BeatSwap\",\"eras\":[1993,2026]") !=
+          std::string::npos);
+    CHECK(json.find("\"title\":\"NEBULA\",\"effect\":\"Nebula\",\"transition\":\"Cut\",\"eras\":[2026]") !=
+          std::string::npos);
 }
 
 } // namespace

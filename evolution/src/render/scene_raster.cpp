@@ -37,34 +37,17 @@ constexpr VkDeviceSize kPointBytes = retro::kMaxPoints * sizeof(retro::RetroPoin
 constexpr VkDeviceSize kOrderBytes = VkDeviceSize{kWidth} * kHeight * sizeof(std::uint32_t);
 constexpr std::uint32_t kPointGroup = 64; // points.comp's local_size_x
 
-bool inGuardBand(std::int32_t x, std::int32_t y) {
-    return x >= retro::toFixed(retro::kGuardMinX) && x <= retro::toFixed(retro::kGuardMaxX) &&
-           y >= retro::toFixed(retro::kGuardMinY) && y <= retro::toFixed(retro::kGuardMaxY);
-}
-
 void validate(const gfx::Image& image, const retro::RetroScene& scene) {
     if (image.format() != VK_FORMAT_R8_UINT || image.extent().width != kWidth ||
         image.extent().height != kHeight)
         throw std::invalid_argument("SceneRaster: the target must be the 320x200 R8_UINT index image");
-    if (scene.triangles.size() > retro::kMaxTriangles)
-        throw std::length_error("SceneRaster: " + std::to_string(scene.triangles.size()) +
-                                " triangles in one retro frame, more than " +
-                                std::to_string(retro::kMaxTriangles));
-    if (scene.points.size() > retro::kMaxPoints)
-        throw std::length_error("SceneRaster: " + std::to_string(scene.points.size()) +
-                                " points in one retro frame, more than " + std::to_string(retro::kMaxPoints));
-    // Within the guard band every edge function of polys.comp fits in 32 bits (retro/scene.hpp).
-    for (std::size_t i = 0; i < scene.triangles.size(); ++i) {
-        const retro::RetroTriangle& t = scene.triangles[i];
-        for (int v = 0; v < 3; ++v)
-            if (!inGuardBand(t.x[v], t.y[v]))
-                throw std::invalid_argument("SceneRaster: triangle " + std::to_string(i) +
-                                            " has a vertex outside the guard band");
+    try {
+        retro::checkScene(scene);
+    } catch (const std::length_error& error) {
+        throw std::length_error(std::string("SceneRaster: ") + error.what());
+    } catch (const std::invalid_argument& error) {
+        throw std::invalid_argument(std::string("SceneRaster: ") + error.what());
     }
-    for (std::size_t i = 0; i < scene.points.size(); ++i)
-        if (!inGuardBand(scene.points[i].x, scene.points[i].y))
-            throw std::invalid_argument("SceneRaster: point " + std::to_string(i) +
-                                        " is outside the guard band");
 }
 
 } // namespace
@@ -126,8 +109,8 @@ void SceneRaster::draw(VkCommandBuffer cmd, gfx::Image& indexImage, const retro:
     // by the last point on them, then written by it.
     if (!scene.points.empty()) {
         gfx::bufferBarrier2(cmd, order_.handle(), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                            VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                            VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+                            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                            VK_ACCESS_2_TRANSFER_WRITE_BIT);
         vkCmdFillBuffer(cmd, order_.handle(), 0, VK_WHOLE_SIZE, 0);
         gfx::bufferBarrier2(cmd, order_.handle(), VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
                             VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,

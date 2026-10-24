@@ -91,6 +91,12 @@ inline constexpr double kPixelAspect = 1.2; // pixel height over width on the 4:
 inline constexpr double kGuardMinX = -512, kGuardMaxX = kScreenWidth + 512;
 inline constexpr double kGuardMinY = -512, kGuardMaxY = kScreenHeight + 512;
 
+// Checks a scene the way the rasterisers need it (render::SceneRaster::draw runs it on every scene): throws
+// std::length_error for more than kMaxTriangles triangles or kMaxPoints points, std::invalid_argument for a
+// triangle vertex or a point outside the guard band (bounds included). addTriangle and addPoint keep within
+// the band; the limits are the provider's to keep.
+void checkScene(const RetroScene& scene);
+
 // A point in view space and on the screen (pixels, unquantised). x and y are meaningful only when z > 0.
 struct Projected {
     double viewX, viewY, z; // view space

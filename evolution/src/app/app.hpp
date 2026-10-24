@@ -27,7 +27,7 @@ namespace evo {
 int runWindowed(const Options& options);
 
 // Headless: renders frames 0..ceil(duration*fps)-1 at t = time + i/fps and writes each as raw top-down RGB
-// to stdout. Progress goes to stderr.
+// to stdout. Progress goes to stderr. Each frame goes through applyForcedEra (app/capture.hpp).
 int runRenderStream(const Options& options);
 
 // Prints Context::deviceInfoJson() and a newline.

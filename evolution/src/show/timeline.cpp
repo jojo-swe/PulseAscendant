@@ -220,7 +220,11 @@ std::string showInfoJson() {
             out << ',';
         out << "{\"index\":" << chapter << ",\"title\":\"" << cue.title << "\",\"effect\":\""
             << effectName(cue.effect) << "\",\"transition\":\"" << transitionName(cue.transition)
-            << "\",\"track\":" << d.track << ",\"start\":" << d.start << ",\"duration\":" << d.duration
+            << "\",\"eras\":"
+            << (cue.transition != Transition::Cut ? "[1993,2026]"
+                : cue.eraFixed == 0               ? "[1993]"
+                                                  : "[2026]")
+            << ",\"track\":" << d.track << ",\"start\":" << d.start << ",\"duration\":" << d.duration
             << ",\"accent\":" << d.start + d.accent << '}';
     }
     out << "]}";

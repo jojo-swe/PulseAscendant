@@ -538,6 +538,64 @@ void testFan(Fixture& fixture) {
         inside, outside, edgeBand);
 }
 
+// A deterministic fan on the pixel grid: the centre exactly on a pixel centre and eight spokes along the axes
+// and the diagonals, ending on pixel centres. Every horizontal spoke is an edge with dy == 0 (the top-left
+// tie-break), every spoke runs through pixel centres, and all eight triangles share the centre pixel: each
+// of those pixels must be drawn by exactly one triangle, inside exactly once, outside never.
+void testGridFan(Fixture& fixture) {
+    constexpr int kSpokes = 8;
+    const double cx = 160.5, cy = 100.5;
+    std::size_t inside = 0, outside = 0;
+    for (const int reach : {1, 2, 7, 40, 90}) {
+        double rimX[kSpokes], rimY[kSpokes];
+        for (int i = 0; i < kSpokes; ++i) {
+            constexpr int kDx[kSpokes] = {1, 1, 0, -1, -1, -1, 0, 1},
+                          kDy[kSpokes] = {0, 1, 1, 1, 0, -1, -1, -1};
+            rimX[i] = cx + reach * kDx[i];
+            rimY[i] = cy + reach * kDy[i];
+        }
+        RetroScene scene;
+        for (int i = 0; i < kSpokes; ++i) {
+            const int k = (i + 1) % kSpokes;
+            // Alternate windings: the rule must not depend on how a triangle lists its vertices.
+            if (i % 2 == 0)
+                scene.triangles.push_back(
+                    screenTriangle(cx, cy, rimX[i], rimY[i], rimX[k], rimY[k], evo::retro::kFlat, 1));
+            else
+                scene.triangles.push_back(
+                    screenTriangle(cx, cy, rimX[k], rimY[k], rimX[i], rimY[i], evo::retro::kFlat, 1));
+        }
+        const std::vector<int> counts = coverageCounts(fixture, scene);
+        std::vector<int> expected(kPixels, 0);
+        for (const RetroTriangle& t : scene.triangles) {
+            Pixels one(kPixels, 0);
+            referenceTriangle(one, t);
+            for (std::size_t p = 0; p < kPixels; ++p)
+                expected[p] += one[p];
+        }
+        CHECK(counts == expected);
+        // The rim is the square of half-width `reach` round the centre pixel. A pixel centre on it belongs
+        // to the fan only on the square's top and left sides (the top-left rule applied to the rim edges).
+        for (int y = 0; y < kHeight; ++y) {
+            for (int x = 0; x < kWidth; ++x) {
+                const int dx = x - 160, dy = y - 100;
+                const bool in = dx >= -reach && dx < reach && dy >= -reach && dy < reach;
+                const int count = counts[static_cast<std::size_t>(y) * kWidth + x];
+                if (in) {
+                    ++inside;
+                    CHECK(count == 1);
+                } else {
+                    ++outside;
+                    CHECK(count == 0);
+                }
+            }
+        }
+        CHECK(counts[100 * kWidth + 160] == 1); // the shared centre pixel: one owner
+    }
+    std::printf("raster: pixel-grid fans: %zu pixels inside covered once, %zu outside untouched\n", inside,
+                outside);
+}
+
 // A fan of eight huge triangles in a plane tilted up to 40 degrees from facing the camera, which fills the
 // view: its rim lies behind the camera and far off screen, so every triangle is cut by the near plane and the
 // guard band. Under 64 random tilts and spins, every pixel is covered by exactly one piece.
@@ -728,6 +786,41 @@ void testLimits(Fixture& fixture) {
     CHECK(fixture.draw({&triangles, &points}, 0) == Pixels(kPixels, 0)); // all-zero primitives draw index 0
 }
 
+// The CPU check SceneRaster::draw runs (and retro_registry_test runs on every retro frame of every scene):
+// the same exceptions, the guard band inclusive, the limits allowed exactly.
+void testCheckScene() {
+    using evo::retro::checkScene;
+    RetroScene triangles, points;
+    triangles.triangles.resize(evo::retro::kMaxTriangles);
+    points.points.resize(evo::retro::kMaxPoints);
+    checkScene(triangles);
+    checkScene(points);
+    triangles.triangles.emplace_back();
+    points.points.emplace_back();
+    CHECK(throws<std::length_error>([&] { checkScene(triangles); }));
+    CHECK(throws<std::length_error>([&] { checkScene(points); }));
+
+    using evo::retro::kGuardMaxX;
+    using evo::retro::kGuardMaxY;
+    using evo::retro::kGuardMinX;
+    using evo::retro::kGuardMinY;
+    RetroScene edge;
+    edge.triangles.push_back(screenTriangle(kGuardMinX, kGuardMinY, kGuardMaxX, kGuardMinY, kGuardMaxX,
+                                            kGuardMaxY, evo::retro::kFlat, 1));
+    edge.points.push_back(screenPoint(kGuardMinX, kGuardMaxY, 1, 1));
+    checkScene(edge);
+    for (int side = 0; side < 4; ++side) {
+        const double nudge = 1.0 / 16;
+        const double x = side == 0 ? kGuardMinX - nudge : side == 1 ? kGuardMaxX + nudge : 100;
+        const double y = side == 2 ? kGuardMinY - nudge : side == 3 ? kGuardMaxY + nudge : 100;
+        RetroScene triangle, point;
+        triangle.triangles.push_back(screenTriangle(100, 100, x, y, 50, 120, evo::retro::kFlat, 1));
+        point.points.push_back(screenPoint(x, y, 1, 1));
+        CHECK(throws<std::invalid_argument>([&] { checkScene(triangle); }));
+        CHECK(throws<std::invalid_argument>([&] { checkScene(point); }));
+    }
+}
+
 // --- GPU: the retro stage draws an effect's scene ---------------------------------------------------------
 
 // A test registry: Dots is a scene over a background, Tunnel the test pattern with the same scene over it,
@@ -857,6 +950,7 @@ int main() {
         testAddTriangle();
         testAddPoint();
         testSort();
+        testCheckScene();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())
@@ -865,6 +959,7 @@ int main() {
                 Fixture fixture(ctx);
                 testModes(fixture);
                 testFan(fixture);
+                testGridFan(fixture);
                 testClippedFan(fixture);
                 testFarVertex(fixture);
                 testPoints(fixture);

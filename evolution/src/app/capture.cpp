@@ -26,8 +26,8 @@ std::filesystem::path captureFileName(double seconds) {
     return name;
 }
 
-// Diagnostic: EVO_FORCE_ERA=0 or 1 holds the frame in 1993 or 2026 (the era, a wipe not started or finished,
-// no cut flash), so a capture shows either era at any show time. Any other value is ignored.
+} // namespace
+
 void applyForcedEra(show::TimelineFrame& frame) {
     const char* value = std::getenv("EVO_FORCE_ERA");
     if (value == nullptr || (std::strcmp(value, "0") != 0 && std::strcmp(value, "1") != 0))
@@ -37,8 +37,6 @@ void applyForcedEra(show::TimelineFrame& frame) {
     frame.wipe = era;
     frame.eraCut = 0.f;
 }
-
-} // namespace
 
 int runCapture(const Options& options) {
     gfx::ContextOptions contextOptions;

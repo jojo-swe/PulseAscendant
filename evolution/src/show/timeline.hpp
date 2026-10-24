@@ -81,8 +81,9 @@ double wrapShowTime(double seconds);
 
 TimelineFrame sampleTimeline(double showSeconds);
 
-// The show as JSON for --show-info: duration, music file, tracks and every chapter with its start, duration
-// and accent (accent in show seconds).
+// The show as JSON for --show-info: duration, music file, tracks and every chapter with its start, duration,
+// accent (accent in show seconds) and the eras it shows ([1993], [2026] or [1993,2026]: a Cut holds its
+// eraFixed, the other transitions show both).
 std::string showInfoJson();
 
 } // namespace evo::show
