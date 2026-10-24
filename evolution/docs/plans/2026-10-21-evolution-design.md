@@ -75,9 +75,25 @@ Varje kapitel bär en **epok-skylt** med *beräknade* siffror, t.ex.
 Siffrorna hämtas från faktisk konfiguration.
 
 Flera låtar hanteras som i Pulse Ascendant: spåren läggs efter varandra
-utan tystnad, och varje spår bär sin egen kapitelföljd. Kapitelplanen ovan
-beskriver ett spår på 4–5 minuter; med två låtar blir det två "akter" där
-den andra kan fördjupa 2026-sidan (t.ex. Studion i natt, staden i regn).
+utan tystnad, och varje spår bär sin egen kapitelföljd.
+
+### 2.4 Tre akter (beslutat 2026-10-24, tre låtar av joyolo)
+
+| Akt | Låt | Längd | Tema | Kapitel |
+|---|---|---|---|---|
+| I · DÅ/NU | Amiga Trance Demo (~143 BPM) | 3:14 | Då/nu-paren ovan (kapitel 0–10). Slutar med PORTAL: kameran dras ut ur CRT:n in i Studion. | BOOT, FLYBY, DOTS, PLASMA, TUNNEL, GLENZ, LENS, RAYTRACE, VECTOR CITY, FINALE, PORTAL |
+| II · NU | Guitar Trance (~140 BPM) | 3:38 | Enbart 2026. Resan ut ur Studion och tillbaka: staden i natt, nebulosa, glaskatedral, partikelhav, sfärstorm, singularitet. | STUDIO NIGHT, ASCENT, CITY NIGHT, NEBULA, GLASS CATHEDRAL, PARTICLE OCEAN, SPHERE STORM, SINGULARITY, RETURN |
+| III · BORTOM | Rigid Arpeggios (~138 BPM) | 4:59 | CRT:n i Studion bootar 1993 igen, kameran går *genom glaset*, och varje 1993-effekt återkommer en tredje gång i planetär skala: "tänk om 1993 hade haft vår hårdvara". Slutar med credits och 1993 års THE END-skärm. | REBOOT, GALAXY, PLASMA PLANET, WORMHOLE, CRYSTAL CITY, LENS OF GOD, RAYTRACE INFINITY, METROPOLIS, ASCENDANT, CREDITS, THE END |
+
+Totalt 31 kapitel, 711,16 s (11:51). Akt II och III är 2026-only (`Transition::Cut`
+med fast era 1), utom REBOOT (portal 1993→2026) och THE END (1993).
+Akt III:s världar byggs som varianter av akt II:s scener i större skala, så
+kostnaden är parametrar och kameror snarare än nya renderare.
+
+**Tempo.** De tre låtarna är trance kring 140 BPM med punkterade
+åttondels-delay; den ärvda beat-trackern låste på 2/3-tempot. Pipelinen
+får därför ett disambigueringssteg som väljer det tempo där baskaggen
+träffar bäst (avsnitt 3.7).
 
 ## 3. Teknisk arkitektur
 
