@@ -2,11 +2,11 @@
 // Measured facts in music/direction.json.
 #pragma once
 namespace evo::show::generated {
-inline constexpr int chapterCount = 21;
+inline constexpr int chapterCount = 31;
 // Directed chapter starts in show seconds, each on a tracked beat; the first is 0.
-inline constexpr double chapterStarts[chapterCount] = {0.0000,11.0108,32.8800,58.6700,81.0977,107.5769,135.0492,160.4862,193.7000,224.9200,257.3815,289.9200,314.0692,341.4954,372.1715,408.0438,436.0462,471.1892,503.7200,530.9900,558.1854};
+inline constexpr double chapterStarts[chapterCount] = {0.0000,7.1731,27.1138,44.1346,60.7038,80.6485,98.8677,115.3762,149.1862,170.2923,182.5208,194.0000,215.7000,238.6900,264.4454,289.7015,321.7492,346.4715,366.4431,390.6408,412.4000,431.9762,458.5331,488.1231,516.4008,542.9054,569.3746,600.6138,635.7315,667.7208,696.6185};
 // The authored targets from tools/show_targets.json, in show seconds.
-inline constexpr double chapterTargets[chapterCount] = {0.0000,10.0000,34.0000,58.0000,82.0000,108.0000,134.0000,162.0000,194.0000,226.0000,258.0000,289.9200,313.9200,341.9200,373.9200,405.9200,437.9200,469.9200,501.9200,531.9200,559.9200};
+inline constexpr double chapterTargets[chapterCount] = {0.0000,8.0000,26.0000,44.0000,62.0000,80.0000,98.0000,116.0000,150.0000,168.0000,182.0000,194.0000,214.0000,238.0000,264.0000,292.0000,322.0000,344.0000,368.0000,390.0000,412.4000,430.4000,458.4000,486.4000,514.4000,542.4000,570.4000,602.4000,634.4000,666.4000,696.4000};
 // SHA-256 of assets/music/show.wav, the audio this data was measured from.
-inline constexpr const char* sourceSha256 = "94c4eb1ca7bf5508282f34b230cb42405210e00df94606e30662b30453bb7a37";
+inline constexpr const char* sourceSha256 = "5d338c7d376e9f6974053ef1350b3a792055e50aa9895b8c0edaffb060029b91";
 }

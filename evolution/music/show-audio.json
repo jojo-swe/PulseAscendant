@@ -1,19 +1,26 @@
 {
-  "frames": 28256640,
-  "duration": 588.68,
+  "frames": 34135680,
+  "duration": 711.16,
   "sample_rate": 48000,
   "channels": 2,
   "encoding": "PCM signed 16 bit",
   "track_start_frames": [
     0,
-    13916160
+    9312000,
+    19795200
   ],
   "tracks": [
     {
-      "source": "Adventurous Uplift.mp3",
-      "runtime_file": "assets/music/Adventurous Uplift.wav",
-      "frames": 13916160,
-      "sha256": "3fd1d9156eb7ff1f724ec53e73e33d86463eacdf43baccc5b10cc9d8ef2cf0d5"
+      "source": "Amiga Trance Demo.mp3",
+      "runtime_file": "assets/music/Amiga Trance Demo.wav",
+      "frames": 9312000,
+      "sha256": "ab3fe61cc8971828365a5cbe99b8a6ac69cfe47d8edc179f1f4dbcbec1f69c59"
+    },
+    {
+      "source": "Guitar Trance.mp3",
+      "runtime_file": "assets/music/Guitar Trance.wav",
+      "frames": 10483200,
+      "sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d"
     },
     {
       "source": "Rigid Arpeggios.mp3",
@@ -22,6 +29,6 @@
       "sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335"
     }
   ],
-  "sha256": "94c4eb1ca7bf5508282f34b230cb42405210e00df94606e30662b30453bb7a37",
+  "sha256": "5d338c7d376e9f6974053ef1350b3a792055e50aa9895b8c0edaffb060029b91",
   "runtime_file": "assets/music/show.wav"
 }

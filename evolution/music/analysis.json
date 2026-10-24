@@ -32,17 +32,26 @@
   "method": "RMS, 35-180 Hz bass, positive spectral flux; 2048 sample Hann / 16 kHz; no assumed beat grid",
   "envelope_offsets": [
     0,
-    5799,
-    11775
+    3880,
+    8248,
+    14224
   ],
   "tracks": [
     {
-      "source": "Adventurous Uplift.wav",
-      "frames": 13916160,
-      "duration": 289.92,
-      "envelope_samples": 5799,
-      "transient_peaks": 837,
-      "runtime_sha256": "3fd1d9156eb7ff1f724ec53e73e33d86463eacdf43baccc5b10cc9d8ef2cf0d5"
+      "source": "Amiga Trance Demo.wav",
+      "frames": 9312000,
+      "duration": 194.0,
+      "envelope_samples": 3880,
+      "transient_peaks": 531,
+      "runtime_sha256": "ab3fe61cc8971828365a5cbe99b8a6ac69cfe47d8edc179f1f4dbcbec1f69c59"
+    },
+    {
+      "source": "Guitar Trance.wav",
+      "frames": 10483200,
+      "duration": 218.4,
+      "envelope_samples": 4368,
+      "transient_peaks": 603,
+      "runtime_sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d"
     },
     {
       "source": "Rigid Arpeggios.wav",
