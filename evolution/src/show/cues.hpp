@@ -100,7 +100,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     {390, Effect::Return, Transition::Cut, .5f, 1, "RETURN", "", "2026 · RETURN · THE STUDIO"},
 
     // Act III: Rigid Arpeggios. The Studio's CRT boots 1993 again, the camera goes through the glass and
-    // every effect returns at planetary scale; it ends on the 1993 end screen.
+    // every effect returns at planetary scale; it ends on the credits scroller and the 1993 end screen.
     {412.4, Effect::Reboot, Transition::Portal, .5f, 0, "REBOOT",
         "1993 · REBOOT", "2026 · THROUGH THE GLASS"},
     {430.4, Effect::Galaxy, Transition::Cut, .7f, 1, "GALAXY", "", "2026 · GALAXY · 16,777,216 POINTS"},
@@ -114,7 +114,8 @@ inline constexpr std::array<Cue, 31> cues = {{
         "2026 · RAY TRACED INFINITY"},
     {602.4, Effect::Metropolis, Transition::Cut, .9f, 1, "METROPOLIS", "", "2026 · METROPOLIS"},
     {634.4, Effect::Ascendant, Transition::Cut, 1.f, 1, "ASCENDANT", "", "2026 · ASCENDANT"},
-    {666.4, Effect::Credits, Transition::Cut, .4f, 1, "CREDITS", "", "1993 → 2026 · CREDITS"},
+    // The credits roll as a 1993 sine scroller, so the chapter holds 1993 and its card is the 1993 one.
+    {666.4, Effect::Credits, Transition::Cut, .4f, 0, "CREDITS", "1993 → 2026 · CREDITS", ""},
     {696.4, Effect::TheEnd, Transition::Cut, .2f, 0, "THE END", "1993 · THE END", ""},
 }};
 // clang-format on

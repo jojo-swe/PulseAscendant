@@ -108,7 +108,7 @@ target_link_libraries(evo_text PUBLIC evo_gfx)
 
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
-# registry, the palette builders and the BOOT prompt script it draws on.
+# registry, the palette builders, the BOOT prompt script and the sine scroller it draws on.
 add_library(evo_render STATIC
     src/render/compositor.cpp
     src/render/modern_stage.cpp
@@ -117,7 +117,8 @@ add_library(evo_render STATIC
     src/retro/boot.cpp
     src/retro/effects.hpp
     src/retro/palette.cpp
-    src/retro/palettes.cpp)
+    src/retro/palettes.cpp
+    src/retro/scroller.cpp)
 target_include_directories(evo_render PUBLIC src)
 target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
 
@@ -236,6 +237,14 @@ target_link_libraries(plasma_test PRIVATE evo_render)
 target_compile_definitions(plasma_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(plasma_test Evolution_shaders)
 add_test(NAME plasma COMMAND plasma_test)
+
+# The sine scroller: its glyph positions on the CPU, and CREDITS and FLYBY's greeting from the retro stage,
+# with the validation layer on; fails on any message it reports.
+add_executable(scroller_test tests/scroller_test.cpp)
+target_link_libraries(scroller_test PRIVATE evo_render)
+target_compile_definitions(scroller_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(scroller_test Evolution_shaders)
+add_test(NAME scroller COMMAND scroller_test)
 
 # The font's invariants, its UTF-8 mapping and the atlas layout; CPU only.
 add_executable(font_test tests/font_test.cpp)

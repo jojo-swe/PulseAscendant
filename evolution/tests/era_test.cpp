@@ -306,7 +306,7 @@ void checkCut() {
         float era;
     } expected[] = {{0, Effect::Boot, 0},
                     {11, Effect::StudioNight, 1},
-                    {29, Effect::Credits, 1},
+                    {29, Effect::Credits, 0}, // the 1993 sine scroller
                     {30, Effect::TheEnd, 0}};
     for (const auto& e : expected) {
         CHECK(evo::show::cues[e.chapter].effect == e.effect);

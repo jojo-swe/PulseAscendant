@@ -2,6 +2,7 @@
 
 #include "retro/boot.hpp"
 #include "retro/palette.hpp"
+#include "retro/scroller.hpp"
 #include "show/cues.hpp"
 #include "show/timeline.hpp"
 #include "text/text_pass.hpp"
@@ -47,18 +48,26 @@ inline constexpr std::uint32_t kRaytraceRetroRate = 10;
 inline constexpr const char* kPlasmaShader = "retro_plasma.comp.spv";
 inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 
-// The registry. Boot is the DOS prompt, Plasma the cycling plasma; Credits gets its own entry in a later
-// task of the step, the other effects in later steps, and show the test pattern in grey until then.
+// The registry. Boot is the DOS prompt, Plasma the cycling plasma, Credits the sine scroller on deep blue;
+// Flyby keeps the test pattern until step 3 but scrolls its greeting over it. The other effects get their
+// entries in later steps and show the test pattern in grey until then.
 inline const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kTestPattern{kTestPatternShader, kDefaultRetroRate, grayPalette};
     static constexpr EffectInfo kRaytrace{kTestPatternShader, kRaytraceRetroRate, grayPalette};
     static constexpr EffectInfo kBoot{nullptr, kBootRetroRate, bootPalette, bootText, bootBackground};
     static constexpr EffectInfo kPlasma{kPlasmaShader, kPlasmaRetroRate, plasmaPalette};
+    static constexpr EffectInfo kFlyby{kTestPatternShader, kScrollerRetroRate, grayPalette, flybyText};
+    static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
+                                         creditsBackground};
     switch (effect) {
     case show::Effect::Boot:
         return kBoot;
+    case show::Effect::Flyby:
+        return kFlyby;
     case show::Effect::Plasma:
         return kPlasma;
+    case show::Effect::Credits:
+        return kCredits;
     case show::Effect::Raytrace:
         return kRaytrace;
     default:
