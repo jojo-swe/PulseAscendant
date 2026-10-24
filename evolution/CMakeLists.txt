@@ -79,6 +79,14 @@ add_library(evo_audio STATIC
     src/audio/wav.cpp)
 target_include_directories(evo_audio PUBLIC src)
 
+# The directed show: the cue sheet, the music curves sampled from the generated tables and the timeline that
+# turns a show time into everything a frame needs. No SDL or Vulkan here.
+add_library(evo_show STATIC
+    src/show/music_curves.cpp
+    src/show/timeline.cpp)
+target_include_directories(evo_show PUBLIC src)
+target_compile_definitions(evo_show PRIVATE EVO_VERSION="${PROJECT_VERSION}")
+
 # The run modes (windowed, render stream, capture, device info); SDL3 provides the window and the Vulkan
 # surface.
 add_library(evo_app STATIC
@@ -117,6 +125,10 @@ add_executable(audio_transport_test tests/audio_transport_test.cpp)
 target_link_libraries(audio_transport_test PRIVATE evo_audio)
 target_compile_definitions(audio_transport_test PRIVATE EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_test(NAME audio_transport COMMAND audio_transport_test)
+
+add_executable(timeline_test tests/timeline_test.cpp)
+target_link_libraries(timeline_test PRIVATE evo_show)
+add_test(NAME timeline COMMAND timeline_test)
 
 add_executable(context_test tests/context_test.cpp)
 target_link_libraries(context_test PRIVATE evo_gfx)
