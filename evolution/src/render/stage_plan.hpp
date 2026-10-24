@@ -1,7 +1,9 @@
 #pragma once
 
+#include "post/denoiser.hpp"
 #include "show/timeline.hpp"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -59,10 +61,11 @@ struct HistoryKey {
 };
 
 // What the modern stage needs to know about a frame besides the timeline: whether its temporal history
-// continues, and how to sample it. The renderer fills in its mode, spp and resolved bounce limit (never 0),
-// and the frame seed: frameSeedFor(showSeconds, 0) in Export, whatever frames came before (a pure function
-// of the show time), and frameSeedFor(showSeconds, framesSinceReset) in Interactive, so the window's first
-// frame after a reset uses the export seed (modern/path_tracer.hpp).
+// continues, and how to sample it. The renderer fills in its mode, the spp this frame traces (frameSpp
+// below: 4 and 2 on the window's first two frames of a history) and resolved bounce limit (never 0), and the
+// frame seed: frameSeedFor(showSeconds, 0) in Export, whatever frames came before (a pure function of the
+// show time), and frameSeedFor(showSeconds, framesSinceReset) in Interactive, so the window's first frame
+// after a reset uses the export seed (modern/path_tracer.hpp) and equals an export at spp max(spp, 4).
 struct HistoryState {
     HistoryReset reset = HistoryReset::FirstFrame;
     std::uint32_t framesSinceReset = 0;
@@ -95,5 +98,19 @@ private:
     bool resized_ = false; // markResize() since the last advance()
     std::uint32_t framesSinceReset_ = 0;
 };
+
+// The window traces more samples on the first frames of a history, so a seek, a cut or a resize starts clean
+// (Task 7 of step 5): max(spp, kResetSpp[framesSinceReset]) while framesSinceReset < 2, then spp. Exports
+// always trace spp. The HistoryKey keeps the configured spp, so the extra samples never reset anything.
+inline constexpr std::array<std::uint32_t, 2> kResetSpp{4, 2};
+std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset);
+
+// Exports filter spatially (a-trous) only below this many samples per pixel, and clamp fireflies from it.
+inline constexpr std::uint32_t kExportFilterSpp = 16;
+
+// The denoiser settings of a frame: the window keeps history and always runs 3 a-trous iterations; exports
+// keep none, run 3 below kExportFilterSpp and 0 from it, where the firefly filter (k = 4) takes over
+// (Decision 16; never in the window). Both: 5 iterations at history length <= 2 and 4 on the volume layer.
+post::DenoiseSettings denoiseSettingsFor(const HistoryState& state);
 
 } // namespace evo::render

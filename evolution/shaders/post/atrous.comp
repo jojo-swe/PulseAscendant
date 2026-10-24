@@ -2,8 +2,16 @@
 
 // One à-trous iteration of the denoiser: a 5x5 B3 kernel (1/16, 1/4, 3/8) with taps `step` pixels apart,
 // each weighted by depth, normal and luminance edge stops; the variance travels with squared weights so the
-// next, wider iteration stops at a smaller luminance difference. A miss (depth <= 0) is copied unfiltered
-// and never taken as a tap (as is a non-finite depth).
+// next, wider iteration stops at a smaller luminance difference. A negative variance marks a sparse pixel
+// of a short history (accumulate.comp): the first pass filters it by depth and normal only, and every pass
+// uses the magnitude. A miss (depth <= 0) is copied unfiltered
+// and never taken as a tap (as is a non-finite depth). A pixel whose history is longer than copyAbove frames
+// is copied as well: the extra iterations a short history gets (resetAtrousIterations) leave the others.
+//
+// With `volume` set it filters the volume layer instead (RGB in-scattered radiance, A transmittance): every
+// pixel, every tap inside the image, weighted by luminance alone (a medium has no depth or normal); the
+// luminance stop scales with the standard deviation of the 3x3 neighbourhood at step 1; the transmittance is
+// copied, never blurred, since it carries the silhouettes of the surfaces it multiplies.
 
 #extension GL_GOOGLE_include_directive : require
 
@@ -15,8 +23,9 @@ layout(set = 0, binding = 0, rgba16f) uniform readonly image2D source; // RGB il
 layout(set = 0, binding = 1, r32f) uniform readonly image2D depthImage;
 layout(set = 0, binding = 2, rgba16f) uniform readonly image2D normalImage;
 layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D target;
+layout(set = 0, binding = 4, rgba16f) uniform readonly image2D momentsImage; // R history length
 
-// Must match AtrousPush in src/post/denoiser.cpp (24 bytes).
+// Must match AtrousPush in src/post/denoiser.cpp (32 bytes).
 layout(push_constant) uniform PushConstants {
     uint width;
     uint height;
@@ -24,6 +33,8 @@ layout(push_constant) uniform PushConstants {
     float sigmaDepth;
     float sigmaNormal;
     float sigmaLuminance;
+    uint copyAbove; // pixels with a longer history are copied (0xFFFFFFFF: none)
+    uint volume;    // 1: the volume layer
 } pc;
 
 const float kKernel[3] = float[3](3.0 / 8.0, 1.0 / 4.0, 1.0 / 16.0);
@@ -37,15 +48,52 @@ bool inside(ivec2 q) {
     return q.x >= 0 && q.y >= 0 && q.x < int(pc.width) && q.y < int(pc.height);
 }
 
+void filterVolume(ivec2 p) {
+    vec4 centre = imageLoad(source, p);
+    float lum = luminance(centre.rgb);
+    float mean = 0.0, meanSquare = 0.0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            float l = luminance(imageLoad(source, clampToImage(p + ivec2(dx, dy))).rgb);
+            float g = kGauss[abs(dx)] * kGauss[abs(dy)];
+            mean += g * l;
+            meanSquare += g * l * l;
+        }
+    }
+    float phiLuminance = pc.sigmaLuminance * sqrt(max(meanSquare - mean * mean, 0.0)) + 1e-4;
+    // The weighted mean as centre + sum(w (tap - centre)) / sum(w): exactly the centre on a constant layer.
+    vec3 sum = vec3(0.0);
+    float sumWeight = 0.0;
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            ivec2 q = p + ivec2(dx, dy) * int(pc.step);
+            if (!inside(q)) {
+                continue;
+            }
+            vec3 tap = imageLoad(source, q).rgb;
+            float w = kKernel[abs(dx)] * kKernel[abs(dy)] * exp(-abs(lum - luminance(tap)) / phiLuminance);
+            sum += w * (tap - centre.rgb);
+            sumWeight += w;
+        }
+    }
+    // sumWeight >= the centre's 9/64.
+    imageStore(target, p, vec4(max(centre.rgb + sum / sumWeight, vec3(0.0)), centre.a));
+}
+
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
         return;
     }
+    if (pc.volume != 0u) {
+        filterVolume(p);
+        return;
+    }
 
     vec4 centre = imageLoad(source, p);
     float depth = imageLoad(depthImage, p).r;
-    if (!isHit(depth)) {
+    float historyLength = imageLoad(momentsImage, p).r;
+    if (!isHit(depth) || historyLength > float(pc.copyAbove)) {
         imageStore(target, p, centre);
         return;
     }
@@ -56,10 +104,12 @@ void main() {
     float variance = 0.0;
     for (int dy = -1; dy <= 1; ++dy) {
         for (int dx = -1; dx <= 1; ++dx) {
-            variance += kGauss[abs(dx)] * kGauss[abs(dy)] * imageLoad(source, clampToImage(p + ivec2(dx, dy))).a;
+            variance +=
+                kGauss[abs(dx)] * kGauss[abs(dy)] * abs(imageLoad(source, clampToImage(p + ivec2(dx, dy))).a);
         }
     }
     float phiLuminance = pc.sigmaLuminance * sqrt(max(variance, 0.0)) + 1e-4;
+    bool sparse = pc.step == 1u && centre.a < 0.0; // no luminance stop on raw sparse samples
     float phiDepth = pc.sigmaDepth * float(pc.step) * 0.01 * max(depth, 1e-3);
 
     vec3 sum = vec3(0.0);
@@ -82,12 +132,12 @@ void main() {
                 tap = imageLoad(source, q);
                 vec3 qNormal = imageLoad(normalImage, q).xyz;
                 w = exp(-abs(depth - qDepth) / phiDepth) * normalWeight(normal, qNormal, pc.sigmaNormal) *
-                    exp(-abs(lum - luminance(tap.rgb)) / phiLuminance);
+                    (sparse ? 1.0 : exp(-abs(lum - luminance(tap.rgb)) / phiLuminance));
             }
             float kw = k * w;
             sum += kw * tap.rgb;
             sumWeight += kw;
-            sumVariance += kw * kw * tap.a;
+            sumVariance += kw * kw * abs(tap.a);
         }
     }
     // sumWeight >= the centre's 9/64.

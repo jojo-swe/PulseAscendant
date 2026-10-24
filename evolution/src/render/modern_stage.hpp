@@ -31,8 +31,10 @@ namespace evo::render {
 // Either way whole-frame 2026 whatever the era state; the compositor decides where it shows.
 //
 // Path tracing follows the HistoryState the renderer hands over: TraceSettings {spp, maxBounces, frameSeed};
-// Interactive denoises temporally with 3 a-trous iterations; Export has no temporal history and filters with
-// 3 a-trous iterations below 16 spp and not at all from 16 (Decision 6). The denoiser's history starts over
+// the denoiser follows denoiseSettingsFor(state) (stage_plan.hpp): Interactive denoises temporally with 3
+// a-trous iterations; Export has no temporal history and filters with 3 below 16 spp and not at all from 16
+// (Decision 6), where the firefly filter clamps lone fireflies instead (step 5 Decision 16); 5 iterations
+// at history length <= 2 either way. The denoiser's history starts over
 // whenever state.reset is not None, and the motion guide uses the previous frame's camera only while the
 // history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the history
 // and the filter, so the screen stays sharp and current (Review Focus 5).

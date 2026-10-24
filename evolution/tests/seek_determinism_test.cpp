@@ -1,5 +1,6 @@
 // Seeking with temporal accumulation on (Task 12 of step 4, Review Focus 1). The window renders Interactive:
-// 1 spp per frame, accumulated over the frames since the last history reset. Whenever the user seeks (keys
+// 1 spp per frame (4 on the frame of a history reset and 2 on the next: Task 7 of step 5), accumulated over
+// the frames since the last history reset. Whenever the user seeks (keys
 // <- / -> and 1-9, 0 jump to chapter starts; the show loops at its end), the first frame after the reset must
 // not show the old chapter or the old camera, and every frame from the seek on must equal, byte for byte, the
 // frame a fresh renderer gives when it starts playing at the same point. The test checks this at 160x90 and
@@ -107,6 +108,11 @@ std::vector<Frame> freshPlay(evo::gfx::Context& ctx, double start, int count) {
     std::vector<Frame> frames = fresh.play(start, count);
     CHECK(frames.front().stats.historyReset == HistoryReset::FirstFrame ||
           !frames.front().stats.modernRendered);
+    // The samples traced: 4 and 2 on the first two frames of a history, then 1; none without the stage.
+    for (const Frame& frame : frames) {
+        const std::uint32_t since = frame.stats.framesSinceReset;
+        CHECK(frame.stats.spp == (!frame.stats.modernRendered ? 0u : since == 0 ? 4u : since == 1 ? 2u : 1u));
+    }
     return frames;
 }
 
@@ -121,6 +127,7 @@ void checkSeek(Harness& seeker, double start, const std::vector<Frame>& referenc
         CHECK(frame.stats.historyReset == (i == 0 && want.modernRendered ? reset : want.historyReset));
         CHECK(frame.stats.framesSinceReset == want.framesSinceReset);
         CHECK(frame.stats.frameSeed == want.frameSeed);
+        CHECK(frame.stats.spp == want.spp);
         CHECK(frame.rgb == reference[i].rgb);
     }
 }

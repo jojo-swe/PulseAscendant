@@ -13,9 +13,6 @@ namespace {
 
 // The placeholder's exposure: fill_hdr.comp inverts the tonemap at 0 EV.
 constexpr float kPlaceholderExposureEV = 0.f;
-// A-trous iterations: always in the window; in exports only below kExportFilterSpp samples per pixel.
-constexpr std::uint32_t kAtrousIterations = 3;
-constexpr std::uint32_t kExportFilterSpp = 16;
 
 gfx::ImageDesc hdrDesc(std::uint32_t width, std::uint32_t height) {
     return {width, height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT, 1, "modern hdr"};
@@ -31,6 +28,21 @@ gfx::ImageDesc imageDesc(std::uint32_t width, std::uint32_t height) {
             "modern"};
 }
 
+// MERGE(step 5 Task 1): gone once the tracer writes GBuffer::volume. The volume layer of a scene without a
+// medium, (0, 0, 0, 1) everywhere: no in-scattered light, full transmittance.
+gfx::Image noMediumImage(gfx::Context& ctx, std::uint32_t width, std::uint32_t height) {
+    gfx::Image image(ctx, {width, height, VK_FORMAT_R16G16B16A16_SFLOAT,
+                           VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, "no medium"});
+    ctx.immediate([&](VkCommandBuffer cmd) { // setup
+        image.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                         VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        const VkClearColorValue clear{{0.f, 0.f, 0.f, 1.f}};
+        const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        vkCmdClearColorImage(cmd, image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+    });
+    return image;
+}
+
 } // namespace
 
 struct ModernStage::Traced {
@@ -38,6 +50,8 @@ struct ModernStage::Traced {
     // Built on first use. The denoiser and the tracer each wait for the ring when they go.
     std::optional<modern::PathTracer> tracer;
     std::optional<post::Denoiser> denoiser;
+    // MERGE(step 5 Task 1): replaced by the tracer's GBuffer::volume. No medium: (0, 0, 0, 1).
+    std::optional<gfx::Image> noMedium;
     std::optional<modern::Camera> previousCamera; // the last frame's, while the history continues
 };
 
@@ -58,6 +72,7 @@ ModernStage::Traced& ModernStage::traced(modern::SceneId id) {
         // setup: the BLASes, pipeline and images, once per scene (PathTracer waits for its uploads)
         t.tracer.emplace(ctx_, ring_, t.scene->staticScene(), width_, height_);
         t.denoiser.emplace(ctx_, ring_, width_, height_);
+        t.noMedium.emplace(noMediumImage(ctx_, width_, height_));
     }
     return t;
 }
@@ -74,6 +89,7 @@ void ModernStage::resize(std::uint32_t width, std::uint32_t height) {
     if (studio_->tracer) {
         studio_->tracer->resize(width, height);
         studio_->denoiser->resize(width, height);
+        studio_->noMedium.emplace(noMediumImage(ctx_, width, height));
         studio_->previousCamera.reset();
     }
 }
@@ -128,13 +144,11 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, Traced& t, const show::Timel
     trace.clampIndirect = scene.clampIndirect;
     t.tracer->trace(cmd, scene, continues ? t.previousCamera : std::nullopt, trace, *retroImage);
 
-    post::DenoiseSettings denoise;
-    denoise.temporal = interactive;
-    denoise.atrousIterations = interactive || state.spp < kExportFilterSpp ? kAtrousIterations : 0u;
     if (state.reset != HistoryReset::None)
         t.denoiser->resetHistory();
     modern::GBuffer& g = t.tracer->gbuffer();
-    t.denoiser->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion}, denoise, hdr_);
+    t.denoiser->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion, *t.noMedium},
+                        denoiseSettingsFor(state), hdr_);
     tonemap_.record(cmd, hdr_, image_, scene.exposureEV);
     t.previousCamera = scene.camera;
 }

@@ -1,5 +1,6 @@
 // The stage plan and the history tracker, on the CPU: which stages a frame runs and may show, per mode, and
-// when the modern stage's temporal history resets.
+// when the modern stage's temporal history resets; the samples a frame traces (more on the window's reset
+// frames) and the denoiser settings per mode and spp (the firefly filter in exports from 16 spp only).
 
 #include "render/stage_plan.hpp"
 #include "show/timeline.hpp"
@@ -364,6 +365,41 @@ void testFramesSinceReset() {
     CHECK(tracker.framesSinceReset() == 1);
 }
 
+// The window traces kResetSpp {4, 2} on the first two frames of a history (more if --spp asks), then --spp;
+// exports always --spp.
+void testResetSpp() {
+    using evo::render::frameSpp;
+    CHECK(evo::render::kResetSpp[0] == 4 && evo::render::kResetSpp[1] == 2);
+    CHECK(frameSpp(RenderMode::Interactive, 1, 0) == 4);
+    CHECK(frameSpp(RenderMode::Interactive, 1, 1) == 2);
+    CHECK(frameSpp(RenderMode::Interactive, 1, 2) == 1);
+    CHECK(frameSpp(RenderMode::Interactive, 1, 1000) == 1);
+    CHECK(frameSpp(RenderMode::Interactive, 3, 0) == 4 && frameSpp(RenderMode::Interactive, 3, 1) == 3);
+    CHECK(frameSpp(RenderMode::Interactive, 8, 0) == 8);
+    for (const std::uint32_t frames : {0u, 1u, 2u})
+        CHECK(frameSpp(RenderMode::Export, 1, frames) == 1 && frameSpp(RenderMode::Export, 64, frames) == 64);
+}
+
+// The window: temporal, a-trous always, no firefly filter at any spp. Exports: no history, a-trous below
+// 16 spp, the firefly filter from 16 (Decision 16). Both: 5 a-trous iterations at history length <= 2 and 4
+// on the volume layer.
+void testDenoiseSettings() {
+    using evo::render::denoiseSettingsFor;
+    evo::render::HistoryState state;
+    for (const std::uint32_t spp : {1u, 4u, 15u, 16u, 64u}) {
+        state.mode = RenderMode::Interactive;
+        state.spp = spp;
+        const auto window = denoiseSettingsFor(state);
+        CHECK(window.temporal && window.atrousIterations == 3 && !window.fireflyFilter);
+        CHECK(window.resetAtrousIterations == 5 && window.volumeAtrousIterations == 4);
+        state.mode = RenderMode::Export;
+        const auto exported = denoiseSettingsFor(state);
+        CHECK(!exported.temporal && exported.atrousIterations == (spp < 16 ? 3u : 0u));
+        CHECK(exported.fireflyFilter == (spp >= 16) && exported.fireflyK == 4.f);
+        CHECK(exported.resetAtrousIterations == 5 && exported.volumeAtrousIterations == 4);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -381,6 +417,8 @@ int main() {
         testMarkedResize();
         testTimeJumps();
         testFramesSinceReset();
+        testResetSpp();
+        testDenoiseSettings();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());
         return 1;
