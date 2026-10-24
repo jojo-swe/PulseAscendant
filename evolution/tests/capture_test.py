@@ -96,9 +96,7 @@ def main(exe, tmpdir, extra):
     info = json.loads(subprocess.run([exe, "--show-info"], stdout=subprocess.PIPE, timeout=60).stdout)
     traced = [c for c in info["chapters"] if c["scene"] != "Placeholder"]
     if not traced:
-        print("capture: no chapter is path traced yet (every scene is the placeholder); --spp not checked "
-              "on a path-traced picture")
-        return
+        sys.exit("capture: no chapter is path traced (every scene is the placeholder): the Studio is missing")
     chapter = traced[0]
     t = f"{chapter['start'] + 0.4 * chapter['duration']:.4f}"
     one = read(capture(exe, extra, capture_dir, time=t, force_era="1", more=("--spp", "1")))

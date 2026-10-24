@@ -21,8 +21,9 @@ Step 4 (Review Focus 2): the Studio chapters path trace, with the TLAS rebuilt e
 stays pure: no temporal history, the seed from the show time alone. Path tracing is what costs time on
 lavapipe, so the chapters come in two parts that CTest runs in parallel: "studio" (the chapters that show the
 Studio, Decision 1, and any chapter --show-info reports with a scene other than the placeholder) and "rest"
-(every other chapter); "all" runs both. CTest passes --spp 2 at 160x90. Once any Studio chapter reports the
-"Studio" scene, all five must, so the part never compares placeholders where it means path-traced frames.
+(every other chapter); "all" runs both. CTest passes --spp 2 at 160x90. All five Studio chapters must report
+the "Studio" scene, and the "studio" part must path trace, so it never compares placeholders where it means
+path-traced frames.
 
 Usage: stream_capture_test.py <Evolution> <tmpdir> studio|rest|all [Evolution options...]; the options
 (e.g. --validation --spp 2) are passed to every run."""
@@ -147,15 +148,17 @@ def main(exe, tmpdir, part, extra):
     titles = [chapter["title"] for chapter in info["chapters"]]
     if any(title not in titles for title in STUDIO_CHAPTERS):
         sys.exit(f"--show-info lacks a Studio chapter: expected {STUDIO_CHAPTERS} among {titles}")
-    # Once any chapter path traces the Studio, every Studio chapter must (Decision 1), or this part would
-    # compare placeholders where it means to compare path-traced frames.
+    # Every Studio chapter path traces the Studio (Decision 1), or this part would compare placeholders where
+    # it means to compare path-traced frames.
     studio_scenes = {chapter["title"]: chapter["scene"] for chapter in info["chapters"]
                      if chapter["title"] in STUDIO_CHAPTERS}
-    if "Studio" in studio_scenes.values() and set(studio_scenes.values()) != {"Studio"}:
+    if set(studio_scenes.values()) != {"Studio"}:
         sys.exit(f"some Studio chapters are not path traced: {studio_scenes}")
     chosen = [chapter for chapter in info["chapters"] if in_part(chapter, part)]
     traced = [chapter["title"] for chapter in chosen if chapter["scene"] != "Placeholder"]
     print(f"stream_capture: part '{part}', {len(chosen)} chapters, path traced: {', '.join(traced) or 'none'}")
+    if part in ("studio", "all") and set(traced) != set(STUDIO_CHAPTERS):
+        sys.exit(f"part '{part}' path traces {traced}, expected every one of {STUDIO_CHAPTERS}")
     compared = {"unforced": 0, 1993: 0, 2026: 0}
     for chapter in chosen:
         start, duration, eras = chapter["start"], chapter["duration"], chapter["eras"]

@@ -6,14 +6,16 @@
 // pcg(llround(showSeconds * 48000)) in exports, plus 0x9E3779B9 per frame since the last reset in the window.
 // Runs with the validation layer on and fails on any message it reports.
 //
-// The byte comparisons hold for any scene, so they pin the path-traced Studio once modern::sceneFor maps
-// STUDIO NIGHT to it (Task 10); before that the chapter renders the placeholder and the test says so.
+// STUDIO NIGHT path traces the Studio (Task 10): the test fails unless every Studio chapter maps to it and
+// the frames really run the modern stage and, for the CRT, the retro stage. The bounce limit reaches the
+// tracer: exports at 1 and 6 bounces differ, and so do the Export and Interactive defaults (6 and 4).
 
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/readback.hpp"
 #include "modern/modern_scene.hpp"
 #include "modern/path_tracer.hpp"
+#include "modern/studio.hpp"
 #include "render/renderer.hpp"
 #include "show/timeline.hpp"
 
@@ -95,7 +97,7 @@ void testSeeds(evo::gfx::Context& ctx) {
     Harness exported(ctx, settings(RenderMode::Export, 2, 0));
     CHECK(exported.renderer().spp() == 2 && exported.renderer().maxBounces() == 6);
     exported.render(t);
-    CHECK(exported.stats().modernRendered);
+    CHECK(exported.stats().modernRendered && exported.stats().retroRendered); // the Studio and its CRT
     CHECK(exported.stats().frameSeed == frameSeedFor(t.showSeconds, 0));
     exported.render(next); // the history tracker counts on, the export seed does not
     CHECK(exported.stats().framesSinceReset == 1);
@@ -124,7 +126,7 @@ void testSeeds(evo::gfx::Context& ctx) {
 // on the very first frame and after a seek.
 void testWindowMatchesExport(evo::gfx::Context& ctx) {
     const TimelineFrame t = studioNight(0.4);
-    for (const std::uint32_t spp : {1u, 2u}) {
+    for (const std::uint32_t spp : {1u, 2u, 5u}) { // 5: two trace dispatches
         Harness exported(ctx, settings(RenderMode::Export, spp, 4));
         const std::vector<std::uint8_t> reference = exported.render(t);
 
@@ -142,29 +144,50 @@ void testWindowMatchesExport(evo::gfx::Context& ctx) {
     }
 }
 
-// Export purity at spp 2: T in two fresh renderers, and after first rendering T - 1/60, gives the same bytes;
-// T + 1/60 does not (the seed and the scene move).
+// Export purity: T in two fresh renderers, and after first rendering T - 1/60, gives the same bytes; T + 1/60
+// does not (the seed and the scene move). At spp 2, 5 (two trace dispatches) and 16 (no a-trous filter).
 void testExportPurity(evo::gfx::Context& ctx) {
     const TimelineFrame t = studioNight(0.4);
-    std::vector<std::uint8_t> first, second, afterPrevious, later;
-    {
-        Harness a(ctx, settings(RenderMode::Export, 2, 0));
-        first = a.render(t);
+    // T - 1/60 is in the same camera shot, so the tracker sees no reset in between.
+    CHECK(evo::modern::studioCamera(studioNight(0.4, -kFrame)).shot == evo::modern::studioCamera(t).shot);
+    for (const std::uint32_t spp : {2u, 5u, 16u}) {
+        std::vector<std::uint8_t> first, second, afterPrevious, later;
+        {
+            Harness a(ctx, settings(RenderMode::Export, spp, 0));
+            first = a.render(t);
+        }
+        {
+            Harness b(ctx, settings(RenderMode::Export, spp, 0));
+            second = b.render(t);
+        }
+        {
+            Harness c(ctx, settings(RenderMode::Export, spp, 0));
+            c.render(studioNight(0.4, -kFrame));
+            afterPrevious = c.render(t);
+            CHECK(c.stats().historyReset ==
+                  HistoryReset::None); // the tracker counted on; the frame did not care
+            later = c.render(studioNight(0.4, kFrame));
+        }
+        CHECK(first == second);
+        CHECK(first == afterPrevious);
+        CHECK(first != later);
     }
-    {
-        Harness b(ctx, settings(RenderMode::Export, 2, 0));
-        second = b.render(t);
-    }
-    {
-        Harness c(ctx, settings(RenderMode::Export, 2, 0));
-        c.render(studioNight(0.4, -kFrame));
-        afterPrevious = c.render(t);
-        CHECK(c.stats().historyReset == HistoryReset::None); // the tracker counted on; the frame did not care
-        later = c.render(studioNight(0.4, kFrame));
-    }
-    CHECK(first == second);
-    CHECK(first == afterPrevious);
-    CHECK(first != later);
+}
+
+// The bounce limit reaches the path tracer: an export at 1 bounce differs from one at 6, and the Export
+// default (6) from the Interactive one (4) on the same frame (the window's first frame equals an export at
+// equal bounces, so only the limit can tell them apart).
+void testBounces(evo::gfx::Context& ctx) {
+    const TimelineFrame t = studioNight(0.4);
+    Harness one(ctx, settings(RenderMode::Export, 2, 1));
+    Harness six(ctx, settings(RenderMode::Export, 2, 6));
+    Harness exportDefault(ctx, settings(RenderMode::Export, 2, 0));
+    Harness windowDefault(ctx, settings(RenderMode::Interactive, 2, 0));
+    CHECK(exportDefault.renderer().maxBounces() == 6 && windowDefault.renderer().maxBounces() == 4);
+    const std::vector<std::uint8_t> a = one.render(t), b = six.render(t);
+    CHECK(a != b);
+    CHECK(exportDefault.render(t) == b);
+    CHECK(windowDefault.render(t) != b);
 }
 
 } // namespace
@@ -172,11 +195,10 @@ void testExportPurity(evo::gfx::Context& ctx) {
 int main() {
     try {
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR); // the build's compiled shaders
-        const bool studio =
-            evo::modern::sceneFor(evo::show::Effect::StudioNight) == evo::modern::SceneId::Studio;
-        if (!studio)
-            std::printf("note: STUDIO NIGHT renders the placeholder (no path-traced Studio yet), so the byte "
-                        "comparisons hold trivially\n");
+        using evo::show::Effect;
+        for (const Effect effect :
+             {Effect::Finale, Effect::Portal, Effect::StudioNight, Effect::Return, Effect::Reboot})
+            CHECK(evo::modern::sceneFor(effect) == evo::modern::SceneId::Studio);
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())
@@ -184,6 +206,7 @@ int main() {
             testSeeds(ctx);
             testWindowMatchesExport(ctx);
             testExportPurity(ctx);
+            testBounces(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(evo::gfx::validationMessagesReported() == 0);
