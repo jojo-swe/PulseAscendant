@@ -1,6 +1,7 @@
 #pragma once
 
 #include "retro/palette.hpp"
+#include "retro/scene.hpp"
 #include "show/cues.hpp"
 #include "show/timeline.hpp"
 #include "text/text_pass.hpp"
@@ -25,8 +26,8 @@ using TextProvider = std::vector<text::Item> (*)(const show::TimelineFrame&, std
 struct EffectInfo {
     // The compute shader's SPIR-V file in shaderDir(). It writes palette indices into the 320x200 R8_UINT
     // image (binding 0) with the push constants of shaders/retro/test_pattern.comp, and must be a pure
-    // function of (chapter, retroFrame). nullptr for a text-only effect: the stage clears the image to
-    // background (index 0 when that is null too) and draws the text over it.
+    // function of (chapter, retroFrame). nullptr for an effect drawn by its scene or text alone: the stage
+    // clears the image to background (index 0 when that is null too) and draws the scene and text over it.
     const char* shader;
     // Retro frames per second: retroFrame = floor(localSeconds * retroRate).
     std::uint32_t retroRate;
@@ -34,8 +35,12 @@ struct EffectInfo {
     PaletteBuilder palette;
     // The text drawn over the frame, or nullptr for none.
     TextProvider text = nullptr;
-    // The clear index of a text-only effect, or nullptr for index 0. Unused when the effect has a shader.
+    // The clear index of an effect without a shader (text or scene only), or nullptr for index 0. Unused when
+    // the effect has a shader.
     BackgroundProvider background = nullptr;
+    // The triangles and points drawn over the shader's image or the background, before the text
+    // (render::SceneRaster), or nullptr for none. The stage clears the scene before calling it.
+    SceneProvider scene = nullptr;
 };
 
 inline constexpr const char* kTestPatternShader = "retro_test_pattern.comp.spv";

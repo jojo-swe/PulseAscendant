@@ -5,6 +5,9 @@
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
+#include "render/scene_raster.hpp"
+#include "retro/effects.hpp"
+#include "retro/scene.hpp"
 #include "show/timeline.hpp"
 #include "text/text_pass.hpp"
 
@@ -20,7 +23,8 @@
 namespace evo::render {
 
 // The 1993 side: the chapter's effect renders palette indices into a 320x200 R8_UINT image (its compute
-// shader, or a clear for a text-only effect, then the effect's text drawn with the text pass), which
+// shader, or a clear for an effect without one, then the triangles and points of its scene drawn by the
+// SceneRaster, then its text drawn with the text pass), which
 // palette_map.comp turns into a 320x200 RGBA8 image through the 256 colours the effect's palette builder
 // makes on the CPU. Both passes run only when the retro frame changes: retroFrame = floor(localSeconds *
 // retroRate), keyed together with the chapter (and the effect), so a chapter that starts on the same retro
@@ -30,14 +34,19 @@ public:
     static constexpr std::uint32_t kWidth = 320;
     static constexpr std::uint32_t kHeight = 200;
 
+    // The effect registry the stage renders from: retro::effectFor, or a test's own.
+    using EffectLookup = const retro::EffectInfo& (*)(show::Effect);
+
     // Loads every effect shader of the registry up front, so no chapter hitches on its first frame. Throws
     // std::runtime_error if the GPU cannot store to an R8_UINT image.
     // The text pass draws the palette indices of text-only effects and text overlays (drawIndex); it must
     // outlive the stage.
-    RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text);
+    RetroStage(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text,
+               EffectLookup effects = retro::effectFor);
 
     // Records the effect and palette passes if (chapter, effect, retroFrame) differ from the last frame
     // rendered; returns whether they were recorded. image() then holds the frame's picture either way.
+    // Throws what SceneRaster::draw throws for a scene past the limits.
     bool render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
 
     // The retro frame of the last render().
@@ -55,12 +64,15 @@ private:
 
     gfx::FrameRing& ring_;
     text::TextPass& text_; // draws the effects' text (EffectInfo::text)
+    EffectLookup effects_;
     gfx::Image index_;
     gfx::Image color_;
     // One palette per frame in flight: the CPU writes the slot being recorded, whose last submit is done.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> palettes_;
-    std::map<std::string, std::unique_ptr<gfx::ComputePipeline>> effects_; // by SPIR-V file name
+    std::map<std::string, std::unique_ptr<gfx::ComputePipeline>> shaders_; // by SPIR-V file name
     gfx::ComputePipeline paletteMap_;
+    SceneRaster raster_;      // draws the effects' scenes (EffectInfo::scene)
+    retro::RetroScene scene_; // the last scene built, kept for its capacity
     std::optional<Key> cached_;
     std::uint32_t retroFrame_ = 0;
 };

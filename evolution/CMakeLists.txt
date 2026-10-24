@@ -108,17 +108,20 @@ target_link_libraries(evo_text PUBLIC evo_gfx)
 
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
-# registry, the palette builders, the BOOT prompt script and the sine scroller it draws on.
+# registry, the palette builders, the BOOT prompt script, the sine scroller it draws on, and the 1993 scene
+# functions (projection, clipping, quantisation) whose triangles and points the scene rasteriser draws.
 add_library(evo_render STATIC
     src/render/compositor.cpp
     src/render/modern_stage.cpp
     src/render/renderer.cpp
     src/render/retro_stage.cpp
+    src/render/scene_raster.cpp
     src/retro/boot.cpp
     src/retro/effects.cpp
     src/retro/effects.hpp
     src/retro/palette.cpp
     src/retro/palettes.cpp
+    src/retro/scene.cpp
     src/retro/scroller.cpp)
 target_include_directories(evo_render PUBLIC src)
 target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
@@ -144,6 +147,8 @@ evo_add_shaders(Evolution
     shaders/composite.comp
     shaders/retro/palette_map.comp
     shaders/retro/plasma.comp
+    shaders/retro/points.comp
+    shaders/retro/polys.comp
     shaders/retro/test_pattern.comp
     shaders/text/text_index.comp
     shaders/text/text_rgba.comp)
@@ -260,6 +265,21 @@ target_compile_definitions(scroller_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHAD
 add_dependencies(scroller_test Evolution_shaders)
 add_test(NAME scroller COMMAND scroller_test)
 
+# The 1993 rasterisers: the scene functions on the CPU, and the polygon and point passes against a CPU
+# reference (shared edges under rotation, primitives far off screen and behind the camera, the retro stage
+# drawing an effect's scene), with the validation layer on; fails on any message it reports.
+add_executable(raster_test tests/raster_test.cpp)
+target_link_libraries(raster_test PRIVATE evo_render)
+target_compile_definitions(raster_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(raster_test Evolution_shaders)
+add_test(NAME raster COMMAND raster_test)
+
+# Every effect of the registry is a pure function of (chapter, retroFrame): palette, text, background and
+# scene; CPU only.
+add_executable(retro_registry_test tests/retro_registry_test.cpp)
+target_link_libraries(retro_registry_test PRIVATE evo_render)
+add_test(NAME retro_registry COMMAND retro_registry_test)
+
 # The font's invariants, its UTF-8 mapping and the atlas layout; CPU only.
 add_executable(font_test tests/font_test.cpp)
 target_link_libraries(font_test PRIVATE evo_text)
@@ -287,6 +307,13 @@ add_test(NAME capture
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/capture_test.py $<TARGET_FILE:Evolution>
             ${CMAKE_BINARY_DIR}/build-out/capture --validation)
 set_tests_properties(capture PROPERTIES TIMEOUT 120)
+
+# Seeking and export agree: in every chapter, a frame streamed after five others equals a fresh capture of the
+# same time, byte for byte (Review Focus 4 of step 3).
+add_test(NAME stream_capture
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/stream_capture_test.py $<TARGET_FILE:Evolution>
+            ${CMAKE_BINARY_DIR}/build-out/stream_capture --validation)
+set_tests_properties(stream_capture PROPERTIES TIMEOUT 300)
 
 # The storyboard tool on two chapters: one grid for Act I, of the documented size, its 1993 and 2026 cells
 # forced through EVO_FORCE_ERA (needs numpy).
