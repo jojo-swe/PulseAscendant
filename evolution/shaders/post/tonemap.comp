@@ -1,0 +1,46 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The 2026 picture's one tonemap and its one display encoding (Review Focus 6): HDR linear light (RGBA16F)
+// -> * 2^exposureEV -> ACES fit -> clamp [0, 1] -> sRGB OETF -> round(v * 255 + d) with d a static
+// triangular dither in (-0.5, 0.5) from pcg(x, y), the same for all three channels -> RGBA8 UNORM. A
+// non-finite component counts as 0. Must match src/post/tonemap_reference.cpp.
+
+#include "../rt/random.glsl"
+#include "aces.glsl"
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly image2D hdrImage;
+layout(set = 0, binding = 1, rgba8) uniform writeonly image2D ldrImage;
+
+// Must match TonemapPush in src/post/tonemap.cpp (12 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    float exposureScale; // 2^exposureEV, computed on the CPU like the reference does
+} pc;
+
+// A uniform in (0, 1) from the hash's top 23 bits plus a half step: exact in float, never 0 or 1.
+float openUnit(uint h) {
+    return (float(h >> 9u) + 0.5) * (1.0 / 8388608.0);
+}
+
+float dither(uvec2 pixel) {
+    uint first = pcgHash(pixel.x ^ pcgHash(pixel.y));
+    uint second = pcgHash(first);
+    return 0.5 * (openUnit(first) + openUnit(second)) - 0.5;
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= pc.width || pixel.y >= pc.height) {
+        return;
+    }
+
+    vec3 hdr = finiteOrZero(imageLoad(hdrImage, ivec2(pixel)).rgb) * pc.exposureScale;
+    vec3 display = srgbOetf(acesFitted(hdr));
+    vec3 bytes = clamp(floor(display * 255.0 + dither(pixel) + 0.5), 0.0, 255.0);
+    imageStore(ldrImage, ivec2(pixel), vec4(bytes / 255.0, 1.0));
+}

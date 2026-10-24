@@ -118,15 +118,19 @@ target_include_directories(evo_rt PUBLIC src)
 target_link_libraries(evo_rt PUBLIC evo_gfx)
 
 # Post-processing of the 2026 side: the denoiser (demodulate, reproject and accumulate, a-trous, remodulate plus
-# the primary-hit emission). Its shaders load from <build>/bin/shaders as post_<name>.comp.spv.
+# the primary-hit emission) and the ACES tonemap (HDR -> display-encoded RGBA8) with its CPU reference. Its
+# shaders load from <build>/bin/shaders as post_<name>.comp.spv.
 add_library(evo_post STATIC
-    src/post/denoiser.cpp)
+    src/post/denoiser.cpp
+    src/post/tonemap.cpp
+    src/post/tonemap_reference.cpp)
 target_include_directories(evo_post PUBLIC src)
 target_link_libraries(evo_post PUBLIC evo_gfx)
 evo_add_shaders(evo_post
     shaders/post/accumulate.comp
     shaders/post/atrous.comp
-    shaders/post/combine.comp)
+    shaders/post/combine.comp
+    shaders/post/tonemap.comp)
 
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
@@ -158,6 +162,8 @@ add_library(evo_render STATIC
     src/retro/the_end.cpp)
 target_include_directories(evo_render PUBLIC src)
 target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
+# The modern stage: the scene registry (evo_modern) and the HDR image's tonemap (evo_post).
+target_link_libraries(evo_render PUBLIC evo_modern evo_post)
 
 # The 2026 side's procedural meshes (and, from later tasks, its scenes and path tracer). The shared GPU structs
 # in src/rt/gpu_types.hpp and the Mat34 helpers in src/modern/math.hpp are header-only.
@@ -165,6 +171,7 @@ add_library(evo_modern STATIC
     src/modern/mesh_builder.cpp)
 target_include_directories(evo_modern PUBLIC src)
 target_link_libraries(evo_modern PUBLIC evo_rt)
+target_link_libraries(evo_modern PUBLIC evo_post evo_show) # the scene interface and registry (modern_scene.hpp)
 
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.
@@ -183,6 +190,7 @@ endif()
 # Places Evolution in <build>/bin with its compiled shaders in <build>/bin/shaders.
 evo_add_shaders(Evolution
     shaders/fill.comp
+    shaders/fill_hdr.comp
     shaders/crt.comp
     shaders/composite.comp
     shaders/retro/copper.comp
@@ -556,6 +564,15 @@ add_executable(denoiser_test tests/denoiser_test.cpp)
 target_link_libraries(denoiser_test PRIVATE evo_post)
 target_compile_definitions(denoiser_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_test(NAME denoiser COMMAND denoiser_test)
+
+# The ACES tonemap against its CPU reference (Review Focus 6), black and white kept, monotonic ramps, exposure,
+# a static dither; the scene registry; the 2026 placeholder through the HDR path against the old direct fill.
+# With the validation layer on; fails on any message.
+add_executable(tonemap_test tests/tonemap_test.cpp)
+target_link_libraries(tonemap_test PRIVATE evo_render evo_post evo_modern)
+target_compile_definitions(tonemap_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(tonemap_test Evolution_shaders)
+add_test(NAME tonemap COMMAND tonemap_test)
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
 # validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked).
