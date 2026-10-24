@@ -26,7 +26,9 @@
 
 namespace {
 
+using evo::render::HistoryReset;
 using evo::render::Renderer;
+using evo::render::RenderMode;
 using evo::render::RenderSettings;
 using evo::show::Effect;
 using evo::show::TimelineFrame;
@@ -114,8 +116,10 @@ class Harness {
 public:
     Harness(evo::gfx::Context& ctx, std::uint32_t width, std::uint32_t height, bool crt = true,
             bool hud = false, bool hudTitle = false)
-        : ctx_(ctx), readback_(std::in_place, ctx, width, height), ring_(ctx),
-          renderer_(ctx, ring_, {width, height, crt, hud, hudTitle}) {}
+        : Harness(ctx, RenderSettings{width, height, crt, hud, hudTitle}) {}
+    Harness(evo::gfx::Context& ctx, const RenderSettings& settings)
+        : ctx_(ctx), readback_(std::in_place, ctx, settings.width, settings.height), ring_(ctx),
+          renderer_(ctx, ring_, settings) {}
 
     Picture render(const TimelineFrame& frame) {
         VkCommandBuffer cmd = ring_.begin();
@@ -720,11 +724,111 @@ void testTwoFramesInFlight(evo::gfx::Context& ctx) {
     }
 }
 
+// A STUDIO NIGHT frame: a 2026-only chapter, so the colourful placeholder fills the whole output.
+TimelineFrame studioNight(double localSeconds) {
+    const int chapter = 11;
+    TimelineFrame frame = evo::show::sampleTimeline(evo::show::chapterStart(chapter) + localSeconds);
+    CHECK(frame.effect == Effect::StudioNight && frame.era == 1.f);
+    return frame;
+}
+
+RenderSettings modeSettings(std::uint32_t width, std::uint32_t height, RenderMode mode) {
+    RenderSettings settings{width, height};
+    settings.mode = mode;
+    return settings;
+}
+
+// (a) A frame runs only the stages it shows: BOOT records no modern pass, STUDIO NIGHT no retro pass (the
+// placeholder samples nothing of 1993), in both modes.
+void testStagesSkipped(evo::gfx::Context& ctx) {
+    for (RenderMode mode : {RenderMode::Export, RenderMode::Interactive}) {
+        Harness harness(ctx, modeSettings(160, 90, mode));
+        harness.render(evo::show::sampleTimeline(1.0));
+        CHECK(harness.renderer().lastStats().retroRendered && !harness.renderer().lastStats().modernRendered);
+        CHECK(harness.renderer().lastStats().historyReset == HistoryReset::None);
+        harness.render(studioNight(2.0));
+        CHECK(!harness.renderer().lastStats().retroRendered && harness.renderer().lastStats().modernRendered);
+    }
+}
+
+// (b) Review Focus 7: a skipped stage's stale image never reaches the output. A colourful 2026 frame, then
+// BOOT at t = 1, equals a fresh renderer's BOOT at t = 1 byte for byte; BOOT, then STUDIO NIGHT with the
+// retro stage skipped, equals a fresh STUDIO NIGHT. With the CRT and the HUD on, as an export draws.
+void testSkippedStageNeverShows(evo::gfx::Context& ctx) {
+    const RenderSettings settings{320, 180, true, true};
+    const TimelineFrame boot = evo::show::sampleTimeline(1.0);
+    const TimelineFrame night = studioNight(2.0);
+
+    Harness freshBoot(ctx, settings), freshNight(ctx, settings);
+    const Picture bootAlone = freshBoot.render(boot);
+    const Picture nightAlone = freshNight.render(night);
+    CHECK(bootAlone.rgb != nightAlone.rgb);
+
+    Harness modernFirst(ctx, settings);
+    modernFirst.render(night);
+    CHECK(modernFirst.render(boot).rgb == bootAlone.rgb);
+    CHECK(!modernFirst.renderer().lastStats().modernRendered);
+
+    Harness retroFirst(ctx, settings);
+    retroFirst.render(boot);
+    CHECK(retroFirst.render(night).rgb == nightAlone.rgb);
+    CHECK(!retroFirst.renderer().lastStats().retroRendered);
+}
+
+// The window keeps the hidden 2026 side of a BeatSwap warm (Decision 7), an export skips it; both show the
+// same 1993 picture.
+void testInteractiveKeepsHiddenModernWarm(evo::gfx::Context& ctx) {
+    TimelineFrame dots = evo::show::sampleTimeline(evo::show::chapterStart(2) + 1.0);
+    CHECK(dots.transition == Transition::BeatSwap);
+    dots.era = 0.f;
+    dots.eraCut = 0.f;
+    Harness exported(ctx, modeSettings(160, 90, RenderMode::Export));
+    Harness window(ctx, modeSettings(160, 90, RenderMode::Interactive));
+    const Picture a = exported.render(dots);
+    const Picture b = window.render(dots);
+    CHECK(!exported.renderer().lastStats().modernRendered);
+    CHECK(window.renderer().lastStats().modernRendered);
+    CHECK(a.rgb == b.rgb);
+}
+
+// The history state the renderer hands the modern stage: a reset on the first modern frame, frames counted
+// after it, nothing while the modern stage is skipped, and a reset when it runs again.
+void testHistoryResets(evo::gfx::Context& ctx) {
+    Harness harness(ctx, modeSettings(160, 90, RenderMode::Interactive));
+    const auto stats = [&] { return harness.renderer().lastStats(); };
+    harness.render(studioNight(2.0));
+    CHECK(stats().historyReset == HistoryReset::FirstFrame && stats().framesSinceReset == 0);
+    harness.render(studioNight(2.0 + 1.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
+    harness.render(evo::show::sampleTimeline(1.0)); // BOOT: no modern pass
+    CHECK(!stats().modernRendered && stats().historyReset == HistoryReset::None);
+    harness.render(studioNight(2.0 + 2.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::Skipped && stats().framesSinceReset == 0);
+    harness.render(studioNight(5.0));
+    CHECK(stats().historyReset == HistoryReset::TimeJump);
+    harness.resize(192, 108);
+    harness.render(studioNight(5.0 + 1.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::Resize);
+    harness.render(studioNight(5.0 + 2.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
+    CHECK(harness.renderer().maxBounces() == 4);
+}
+
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
     evo::gfx::FrameRing ring(ctx);
     bool threw = false;
     try {
         Renderer renderer(ctx, ring, {0, 100});
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    CHECK(threw);
+
+    threw = false;
+    try {
+        RenderSettings settings{16, 16};
+        settings.spp = 0;
+        Renderer renderer(ctx, ring, settings);
     } catch (const std::invalid_argument&) {
         threw = true;
     }
@@ -754,6 +858,10 @@ int main() {
             testHudScaled(ctx);
             testBoot(ctx);
             testTwoFramesInFlight(ctx);
+            testStagesSkipped(ctx);
+            testSkippedStageNeverShows(ctx);
+            testInteractiveKeepsHiddenModernWarm(ctx);
+            testHistoryResets(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

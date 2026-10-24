@@ -24,8 +24,8 @@ layout(push_constant) uniform PushConstants {
     float wipe;
     float eraCut;
     uint transition;
-    uint crt; // 0 = plain nearest-neighbour pillarbox
-    float localSeconds;
+    uint crt;     // 0 = plain nearest-neighbour pillarbox
+    uint visible; // bit 0 retro, bit 1 modern; without bit 0 the compositor skips this pass
 } pc;
 
 const ivec2 kRetroSize = ivec2(320, 200);

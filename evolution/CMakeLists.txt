@@ -116,6 +116,7 @@ add_library(evo_render STATIC
     src/render/renderer.cpp
     src/render/retro_stage.cpp
     src/render/scene_raster.cpp
+    src/render/stage_plan.cpp
     src/retro/boot.cpp
     src/retro/city.cpp
     src/retro/effects.cpp
@@ -253,6 +254,11 @@ target_compile_definitions(renderer_test PRIVATE
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(renderer_test Evolution_shaders)
 add_test(NAME renderer COMMAND renderer_test)
+
+# Which stages a frame runs and may show, and when the modern stage's history resets: pure CPU.
+add_executable(stage_plan_test tests/stage_plan_test.cpp)
+target_link_libraries(stage_plan_test PRIVATE evo_render)
+add_test(NAME stage_plan COMMAND stage_plan_test)
 
 # BOOT: the DOS prompt script on the CPU and its index image from the retro stage, with the validation layer
 # on; fails on any message it reports.

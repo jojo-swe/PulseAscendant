@@ -16,6 +16,8 @@ const RenderSettings& checked(const RenderSettings& settings) {
     if (settings.width == 0 || settings.height == 0)
         throw std::invalid_argument("the render size must be positive, got " +
                                     std::to_string(settings.width) + "x" + std::to_string(settings.height));
+    if (settings.spp == 0)
+        throw std::invalid_argument("the samples per pixel must be positive");
     return settings;
 }
 
@@ -85,7 +87,9 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
 
 Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings& settings)
     : ring_(ring), crt_(checked(settings).crt), hud_(settings.hud), hudTitle_(settings.hudTitle),
-      text_(ctx, ring), retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height),
+      mode_(settings.mode), spp_(settings.spp),
+      maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)), text_(ctx, ring),
+      retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height),
       compositor_(ctx, ring, text_, settings.width, settings.height) {}
 
 Renderer::~Renderer() {
@@ -108,13 +112,28 @@ void Renderer::resize(std::uint32_t width, std::uint32_t height) {
 }
 
 void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
-    stats_.retroRendered = retro_.render(cmd, frame);
-    stats_.retroFrame = retro_.retroFrame();
-    modern_.render(cmd, frame);
+    const StagePlan plan = planStages(frame, mode_, modern_.samplesRetro(frame));
     const VkExtent2D size = output().extent();
+
+    stats_.retroRendered = plan.retro && retro_.render(cmd, frame);
+    stats_.retroFrame = retro_.retroFrame();
+
+    stats_.modernRendered = plan.modern;
+    stats_.historyReset = HistoryReset::None;
+    if (plan.modern) {
+        const HistoryKey key{
+            frame.chapter, modern_.shotFor(frame), frame.showSeconds, size.width, size.height, mode_, spp_};
+        stats_.historyReset = history_.advance(key, !modernRanLastFrame_);
+        modern_.render(cmd, frame, {stats_.historyReset, history_.framesSinceReset()});
+    }
+    stats_.framesSinceReset = history_.framesSinceReset();
+    modernRanLastFrame_ = plan.modern;
+
+    const std::uint32_t visible =
+        (plan.retroVisible ? kRetroVisible : 0u) | (plan.modernVisible ? kModernVisible : 0u);
     const std::vector<text::Item> hud =
         hud_ ? hudItems(frame, size.width, size.height, hudTitle_) : std::vector<text::Item>{};
-    compositor_.render(cmd, retro_.image(), modern_.image(), frame, crt_, hud);
+    compositor_.render(cmd, retro_.image(), modern_.image(), frame, crt_, visible, hud);
 }
 
 } // namespace evo::render

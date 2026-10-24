@@ -6,6 +6,7 @@
 #include "render/compositor.hpp"
 #include "render/modern_stage.hpp"
 #include "render/retro_stage.hpp"
+#include "render/stage_plan.hpp"
 #include "show/timeline.hpp"
 #include "text/text_pass.hpp"
 
@@ -17,10 +18,13 @@
 namespace evo::render {
 
 struct RenderSettings {
-    std::uint32_t width = 0, height = 0; // the render resolution (the output image)
-    bool crt = true;                     // the CRT look on the 1993 picture
-    bool hud = true;                     // the epoch cards (and the chapter title, when hudTitle is set)
-    bool hudTitle = false;               // the chapter title: a development aid, set only in the window
+    std::uint32_t width = 0, height = 0;  // the render resolution (the output image)
+    bool crt = true;                      // the CRT look on the 1993 picture
+    bool hud = true;                      // the epoch cards (and the chapter title, when hudTitle is set)
+    bool hudTitle = false;                // the chapter title: a development aid, set only in the window
+    RenderMode mode = RenderMode::Export; // the window renders Interactive, the exports Export
+    std::uint32_t spp = 1;                // samples per pixel per frame (at least 1)
+    std::uint32_t maxBounces = 0;         // 0 = the mode's default (interactive 4, export 6)
 };
 
 // The HUD scales with the output height in whole steps: unit = max(1, round(height / 360)), so 1 at 640x360,
@@ -43,13 +47,18 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
 // Renders a timeline frame into one R8G8B8A8_UNORM image at the render resolution: the retro stage (only
 // when its retro frame changes), the modern stage, then the compositor's CRT and era passes. Every pass is a
 // compute pass recorded into the caller's command buffer from the given ring, the HUD text last; the window
-// blits output() and the exports read it back. The output is a pure function of (settings, frame).
+// blits output() and the exports read it back. The output is a pure function of (settings, frame) in Export
+// mode, and of (settings, the frames since the last history reset) in Interactive mode.
+//
+// Only the stages a frame needs run (planStages): a stage the frame does not show is skipped, and the
+// compositor is told which images are visible, so a skipped stage's stale image never reaches the output.
+// The history tracker advances on every frame in which the modern stage runs.
 //
 // The ring must outlive the renderer, which waits for it (FrameRing::waitAll) before its images and
 // pipelines go, and on resize().
 class Renderer {
 public:
-    // Throws std::invalid_argument for a zero width or height.
+    // Throws std::invalid_argument for a zero width, height or spp.
     Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings& settings);
     ~Renderer();
     Renderer(const Renderer&) = delete;
@@ -70,14 +79,26 @@ public:
     struct Stats {
         bool retroRendered = false; // whether the last render() re-rendered the retro frame
         std::uint32_t retroFrame = 0;
+        bool modernRendered = false; // whether the last render() ran the modern stage
+        // The modern stage's history on the last render(): None when the stage did not run.
+        HistoryReset historyReset = HistoryReset::None;
+        std::uint32_t framesSinceReset = 0; // as of the last frame the modern stage ran
     };
     Stats lastStats() const { return stats_; }
+    RenderMode mode() const { return mode_; }
+    std::uint32_t spp() const { return spp_; }
+    std::uint32_t maxBounces() const { return maxBounces_; } // resolved: never 0
 
 private:
     gfx::FrameRing& ring_;
     bool crt_;
     bool hud_;
     bool hudTitle_;
+    RenderMode mode_;
+    std::uint32_t spp_;
+    std::uint32_t maxBounces_;
+    HistoryTracker history_;
+    bool modernRanLastFrame_ = false;
     text::TextPass text_; // before the stages that draw with it
     RetroStage retro_;
     ModernStage modern_;

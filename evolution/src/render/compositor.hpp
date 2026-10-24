@@ -20,6 +20,13 @@ namespace evo::render {
 //   composite.comp  that screen and the modern image blended by era, wipe, transition and eraCut into the
 //                   R8G8B8A8_UNORM output (also usable as a blit and copy source);
 // then the overlay text (the HUD) is blended over the output with the text pass.
+//
+// `visible` (kRetroVisible | kModernVisible) says which stages' images the frame may show: an image whose bit
+// is clear is never read (its stage may not have run) and counts as black, and without the retro bit the
+// CRT pass does not run at all.
+inline constexpr std::uint32_t kRetroVisible = 1u;
+inline constexpr std::uint32_t kModernVisible = 2u;
+
 class Compositor {
 public:
     Compositor(gfx::Context& ctx, gfx::FrameRing& ring, text::TextPass& text, std::uint32_t width,
@@ -29,7 +36,7 @@ public:
     void resize(std::uint32_t width, std::uint32_t height);
     // Leaves output() in GENERAL.
     void render(VkCommandBuffer cmd, gfx::Image& retro, gfx::Image& modern, const show::TimelineFrame& frame,
-                bool crt, std::span<const text::Item> overlay = {});
+                bool crt, std::uint32_t visible, std::span<const text::Item> overlay = {});
 
     gfx::Image& output() { return output_; }
 

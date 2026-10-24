@@ -7,6 +7,8 @@
 //   Portal          a cross-fade by era (until the Studio exists);
 //   Cut, BeatSwap   era selects the whole frame: 2026 from 0.5, 1993 below.
 // eraCut then flashes the whole frame white: + 0.6 * eraCut.
+// An image whose visible bit is clear counts as black and is never read: its stage may not have run this
+// frame, so it can hold a stale picture (or none).
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
@@ -24,12 +26,15 @@ layout(push_constant) uniform PushConstants {
     float eraCut; // [0, 1]: the white flash of a cut
     uint transition;
     uint crt;
-    float localSeconds;
+    uint visible; // bit 0 the 1993 screen, bit 1 the modern image
 } pc;
 
 // show::Transition values.
 const uint kPortal = 1u;
 const uint kWipe = 3u;
+
+const uint kRetroVisible = 1u;
+const uint kModernVisible = 2u;
 
 const float kFlash = 0.6;
 
@@ -39,8 +44,14 @@ void main() {
         return;
     }
 
-    vec3 then = imageLoad(retroScreen, ivec2(pixel)).rgb;
-    vec3 now = imageLoad(modernImage, ivec2(pixel)).rgb;
+    vec3 then = vec3(0.0);
+    if ((pc.visible & kRetroVisible) != 0u) {
+        then = imageLoad(retroScreen, ivec2(pixel)).rgb;
+    }
+    vec3 now = vec3(0.0);
+    if ((pc.visible & kModernVisible) != 0u) {
+        now = imageLoad(modernImage, ivec2(pixel)).rgb;
+    }
     float x = float(pixel.x) + 0.5; // the pixel centre
     float wipeEdge = pc.wipe * float(pc.width);
 

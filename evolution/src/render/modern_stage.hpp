@@ -4,6 +4,7 @@
 #include "gfx/fill_pass.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
+#include "render/stage_plan.hpp"
 #include "show/timeline.hpp"
 
 #include <volk.h>
@@ -21,7 +22,12 @@ public:
 
     // Recreates the image at the new size. The caller makes sure no submitted frame still uses the old one.
     void resize(std::uint32_t width, std::uint32_t height);
-    void render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
+    // `history` says whether the temporal history continues; the placeholder has none and ignores it.
+    void render(VkCommandBuffer cmd, const show::TimelineFrame& frame, const HistoryState& history);
+    // The camera shot of a frame (a change resets the history): the placeholder has one, 0.
+    std::uint32_t shotFor(const show::TimelineFrame& /*frame*/) const { return 0; }
+    // Whether the frame's 2026 picture shows the retro image (the Studio's CRT): the placeholder does not.
+    bool samplesRetro(const show::TimelineFrame& /*frame*/) const { return false; }
 
     gfx::Image& image() { return image_; }
 

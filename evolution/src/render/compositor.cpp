@@ -17,7 +17,7 @@ struct CompositorPushConstants {
     float eraCut;
     std::uint32_t transition; // a show::Transition value
     std::uint32_t crt;        // 0 = plain pillarbox
-    float localSeconds;
+    std::uint32_t visible;    // kRetroVisible | kModernVisible
 };
 static_assert(sizeof(CompositorPushConstants) == 32);
 
@@ -74,19 +74,23 @@ void Compositor::resize(std::uint32_t width, std::uint32_t height) {
 }
 
 void Compositor::render(VkCommandBuffer cmd, gfx::Image& retro, gfx::Image& modern,
-                        const show::TimelineFrame& frame, bool crt, std::span<const text::Item> overlay) {
+                        const show::TimelineFrame& frame, bool crt, std::uint32_t visible,
+                        std::span<const text::Item> overlay) {
     const VkExtent2D size = output_.extent();
     const CompositorPushConstants push{size.width,    size.height,
                                        frame.era,     frame.wipe,
                                        frame.eraCut,  static_cast<std::uint32_t>(frame.transition),
-                                       crt ? 1u : 0u, static_cast<float>(frame.localSeconds)};
+                                       crt ? 1u : 0u, visible & (kRetroVisible | kModernVisible)};
 
-    prepareRead(cmd, retro);
-    prepareWrite(cmd, screen_);
-    const std::array<VkDescriptorImageInfo, 2> crtImages = {storage(retro), storage(screen_)};
-    crt_.bind(cmd, ring_, crtImages, {});
-    crt_.push(cmd, &push, sizeof push);
-    crt_.dispatch(cmd, size.width, size.height);
+    // Without the retro bit the screen is never read: no CRT pass (the retro image may be stale).
+    if ((visible & kRetroVisible) != 0) {
+        prepareRead(cmd, retro);
+        prepareWrite(cmd, screen_);
+        const std::array<VkDescriptorImageInfo, 2> crtImages = {storage(retro), storage(screen_)};
+        crt_.bind(cmd, ring_, crtImages, {});
+        crt_.push(cmd, &push, sizeof push);
+        crt_.dispatch(cmd, size.width, size.height);
+    }
 
     prepareRead(cmd, screen_);
     prepareRead(cmd, modern);

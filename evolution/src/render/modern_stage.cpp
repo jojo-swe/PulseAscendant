@@ -17,7 +17,8 @@ void ModernStage::resize(std::uint32_t width, std::uint32_t height) {
     image_ = gfx::Image(ctx_, imageDesc(width, height));
 }
 
-void ModernStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
+void ModernStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame,
+                         const HistoryState& /*history*/) {
     gfx::FillParams params;
     params.localSeconds = static_cast<float>(frame.localSeconds);
     params.era = 1.0f;     // the 2026 look over the whole image
