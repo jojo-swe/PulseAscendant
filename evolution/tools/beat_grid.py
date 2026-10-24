@@ -156,6 +156,8 @@ def disambiguate_period(onset, low, period):
     report = {f'{60 * RATE / refined:.2f}': round(score, 4)
               for score, refined in sorted(scored, key=lambda s: s[1])}
     score, refined = max(scored)
+    # Only the best candidate is considered. If it is P's own tempo (within 3 %), P stays even when a distinct
+    # second-best candidate beats P by the margin: that is deliberate, the best evidence already backs P.
     if score > 0 and score >= SWITCH_MARGIN * scored[0][0] and abs(np.log(refined / period)) > np.log(1.03):
         return refined, report, 'bass-grid'
     return period, report, 'comb'

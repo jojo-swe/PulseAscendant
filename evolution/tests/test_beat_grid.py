@@ -103,6 +103,23 @@ class BeatGridTests(unittest.TestCase):
         self.assertAlmostEqual(bpm, 140, delta=1.5, msg=detail)
         self.assertGreaterEqual(on_beat_fraction(beats, truth), .9)
 
+    def test_hat_echo_on_every_beat_keeps_the_tempo(self):
+        # The brief's literal figure: kick and off-beat bass as above, a hi-hat on every beat and its
+        # dotted-eighth (3/16) echo. The comb reads 140; the bass grid ranks 93.3 BPM about 3 % above it, so
+        # only the 5 % switch margin keeps the tempo. A near miss, pinned here. The unchanged DP tracker sits
+        # off-phase on this material, so beat alignment is deliberately not asserted.
+        beat, seconds = 60 / 140, 60
+        truth = np.arange(.25, seconds - .5, beat)
+        signal = np.random.default_rng(2).normal(0, .002, seconds * 48000).astype(np.float32)
+        add_bursts(signal, truth, 60, .9, .03)
+        add_bursts(signal, truth + beat / 2, 110, .35, .02)
+        add_hats(signal, truth, .3)
+        add_hats(signal, truth + .75 * beat, .2)
+        bpm, _, comb_bpm, method, candidates = tracked_tempo(signal)
+        detail = f'comb {comb_bpm:.2f} BPM, {method}, candidates {candidates}'
+        self.assertEqual(method, 'comb', detail)
+        self.assertAlmostEqual(bpm, 140, delta=1.5, msg=detail)
+
     def test_plain_slow_track_keeps_its_tempo(self):
         # 92 BPM kick on every beat and nothing 1.5 beats apart: the disambiguation must not move it to 138.
         truth = np.arange(.25, 59.5, 60 / 92)
