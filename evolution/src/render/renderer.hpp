@@ -92,6 +92,9 @@ public:
         std::uint32_t framesSinceReset = 0;
         // The seed handed to the modern stage (HistoryState::frameSeed); 0 when the stage did not run.
         std::uint32_t frameSeed = 0;
+        // The samples per pixel the modern stage traced (frameSpp: more on the window's reset frames); 0
+        // when the stage did not run.
+        std::uint32_t spp = 0;
     };
     Stats lastStats() const { return stats_; }
     RenderMode mode() const { return mode_; }

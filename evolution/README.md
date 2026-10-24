@@ -263,7 +263,13 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   that starts as a plain copy after a reset), then filtered by three à-trous passes guided by depth, normal
   and an edge-robust estimate of the noise, and multiplied by the albedo again. The primary hit's emission,
   the CRT's own picture, is added after all that, so the screen is never smeared by the history or blurred by
-  the filter. Exports keep no history and filter only below 16 spp.
+  the filter. A short history (the first two frames after a reset) gets five à-trous passes, and where its
+  lighting is sparse (many samples exactly 0) no luminance edge stop, so first frames come out clean rather
+  than blotchy. Exports keep no history and filter only below 16 spp; from 16 spp an export firefly filter
+  (on by default) clamps each pixel to 4× the second-brightest of its 3×3 neighbourhood instead, which keeps
+  anything two pixels wide (CRT text, highlights) but removes lone fireflies. A separate volume layer
+  (in-scattered light and transmittance, from the participating media) has its own history and filter and is
+  composed as `transmittance × surface + volume`.
 - **Tonemap.** One ACES fit (Hill's RRT+ODT approximation) per frame, then the sRGB encoding and a static
   per-pixel triangular dither into the RGBA8 image the compositor reads; a CPU reference pins it.
 
@@ -286,10 +292,10 @@ in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
   window: below 2 fps every frame counts as a time jump, so the window's accumulation never builds up and it
   shows each frame's single sample, filtered. The real look needs a ray tracing GPU, which has not been tried yet (nor has
   Windows).
-- **The first frames after a reset** (a seek, a chapter change or a camera cut) look blotchy in the window at
-  1 spp, and clear within about 10 frames.
-- **Exports at 16 spp and more** are not filtered, so dark corners keep a fine grain at the 64 spp default;
-  more samples (e.g. `--spp 256`) clean them up.
+- **The first frames after a reset** (a seek, a chapter change or a camera cut) trace 4 and then 2 spp in the
+  window and are filtered harder; in sparsely lit areas shadow edges are soft for those two frames.
+- **Exports at 16 spp and more** are not filtered spatially (the firefly filter only), so dark corners keep a
+  fine grain at the 64 spp default; more samples (e.g. `--spp 256`) clean them up.
 - **Long 4K exports on Windows are unmeasured:** a frame's whole trace is one submission (above), seconds
   long at 4K and 64 spp or more; measure it on the target GPU before a long export.
 - ACES pushes the CRT's brightest saturated colours towards white; the lights are picked by fixed weights
@@ -390,15 +396,17 @@ Evolution --show-info
 ```
 
 **Interactive and export.** The window is interactive: it path traces `--spp` samples per pixel per frame (1
-by default) and accumulates them over the frames since the last reset of its temporal history, which resets on
-a seek, a chapter change, a camera cut, a resize or a change of settings. The exports (`--capture-dir`,
+by default; 4 on the first frame after a reset of its temporal history and 2 on the next, so a cut starts
+clean) and accumulates them over the frames since that reset, which happens on a seek, a chapter change, a
+camera cut, a resize or a change of settings. The exports (`--capture-dir`,
 `--render-stream`) keep no history at all: every frame traces `--spp` samples (64 by default, in dispatches of
-4) at up to 6 bounces (the window: 4), filtered spatially (à-trous) only below 16 spp, and is a pure function
+4) at up to 6 bounces (the window: 4), filtered spatially (à-trous) only below 16 spp (from 16, a firefly
+filter clamps lone bright pixels instead; the window never uses it), and is a pure function
 of the options and its show time, so a streamed frame equals a fresh capture of the same time byte for byte.
 The random seed of a frame comes from the show time, `pcg(llround(seconds × 48000))` (the audio sample clock);
 the window adds `0x9E3779B9` per frame since its last reset, so its first frame after a reset uses the export
-seed and, at equal spp and bounces and below 16 spp (where both filter), equals the export frame byte for
-byte. The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
+seed and, at equal bounces, equals the export frame at spp max(`--spp`, 4) byte for byte while that is below
+16 (where both filter the same way; Review Focus 3). The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
 equals a real export frame; only the tests, which set both, see the equality.
 
 In the window the time comes from the music: the clock is the position the listener hears (what SDL still

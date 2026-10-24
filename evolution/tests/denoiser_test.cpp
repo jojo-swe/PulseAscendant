@@ -102,21 +102,32 @@ std::uint16_t floatToHalf(float f) {
     return static_cast<std::uint16_t>(sign | (halfExponent << 10) | (mantissa & 0x3FFu));
 }
 
+// Whether a positive half is `value` converted to fp16 as Vulkan allows (round to nearest or towards zero):
+// equal, or one of the two halves around it.
+bool isHalfOf(std::uint16_t bits, float value) {
+    const float h = halfToFloat(bits);
+    if (h == value)
+        return true;
+    return h < value ? halfToFloat(static_cast<std::uint16_t>(bits + 1)) > value
+                     : halfToFloat(static_cast<std::uint16_t>(bits - 1)) < value;
+}
+
 // --- Synthetic G-buffers
 // --------------------------------------------------------------------------------------
 
 // One frame's path tracer outputs on the CPU, in the denoiser's input formats.
 struct Frame {
     std::uint32_t width = 0, height = 0;
-    std::vector<float> lighting, emission, albedo, normal, motion; // RGBA per pixel
-    std::vector<float> depth;                                      // one per pixel
+    std::vector<float> lighting, emission, albedo, normal, motion, volume; // RGBA per pixel
+    std::vector<float> depth;                                              // one per pixel
 
     float* at(std::vector<float>& image, std::uint32_t x, std::uint32_t y) {
         return &image[(std::size_t{y} * width + x) * 4];
     }
 };
 
-// Black lighting and emission, white albedo, a plane facing the camera at depth 1, no motion.
+// Black lighting and emission, white albedo, a plane facing the camera at depth 1, no motion, no medium
+// (volume = (0, 0, 0, 1)).
 Frame flatFrame(std::uint32_t width = kSize, std::uint32_t height = kSize) {
     Frame frame;
     frame.width = width;
@@ -127,11 +138,13 @@ Frame flatFrame(std::uint32_t width = kSize, std::uint32_t height = kSize) {
     frame.albedo.assign(pixels * 4, 1.0f);
     frame.normal.assign(pixels * 4, 0.0f);
     frame.motion.assign(pixels * 4, 0.0f);
+    frame.volume.assign(pixels * 4, 0.0f);
     frame.depth.assign(pixels, 1.0f);
     for (std::size_t i = 0; i < pixels; ++i) {
         frame.normal[i * 4 + 2] = 1.0f;
         frame.normal[i * 4 + 3] = 0.5f; // roughness
         frame.motion[i * 4 + 2] = 1.0f; // valid
+        frame.volume[i * 4 + 3] = 1.0f; // transmittance
     }
     return frame;
 }
@@ -161,13 +174,18 @@ Frame noisyFrame(std::uint32_t index, float base, float amplitude) {
 // --- The harness: upload, denoise, read back
 // -----------------------------------------------------------------
 
-// What one frame read back: the HDR output, the illumination history and the history length image.
+// What one frame read back: the HDR output, the illumination history, the history length image and the
+// volume layer's history.
 struct Output {
-    std::vector<std::uint16_t> hdrBits, historyBits, lengthBits; // RGBA16F
+    std::vector<std::uint16_t> hdrBits, historyBits, lengthBits, volumeBits; // RGBA16F
     float hdr(std::uint32_t x, std::uint32_t y, std::uint32_t c) const { return value(hdrBits, x, y, c); }
     float history(std::uint32_t x, std::uint32_t y, std::uint32_t c) const {
         return value(historyBits, x, y, c);
     }
+    float volume(std::uint32_t x, std::uint32_t y, std::uint32_t c) const {
+        return value(volumeBits, x, y, c);
+    }
+    float volumeLength(std::uint32_t x, std::uint32_t y) const { return value(lengthBits, x, y, 3); }
     float length(std::uint32_t x, std::uint32_t y) const { return value(lengthBits, x, y, 0); }
     std::uint32_t width = 0;
 
@@ -217,7 +235,7 @@ public:
             collect(slot);
             VkCommandBuffer cmd = ring_->begin();
             upload(cmd, slot, frames[i]);
-            post::GBufferView view{lighting_, emission_, albedo_, normal_, depth_, motion_};
+            post::GBufferView view{lighting_, emission_, albedo_, normal_, depth_, motion_, volume_};
             denoiser_->denoise(cmd, view, settings, hdr_);
             readback(cmd, slot);
             pending_[slot] = Pending{ring_->submit(), &outputs[i]};
@@ -242,7 +260,7 @@ public:
         ring_->submit();
     }
 
-    gfx::Image lighting_, emission_, albedo_, normal_, depth_, motion_, hdr_;
+    gfx::Image lighting_, emission_, albedo_, normal_, depth_, motion_, volume_, hdr_;
 
 private:
     struct Pending {
@@ -262,10 +280,11 @@ private:
         normal_ = makeImage(ctx_, width, height, VK_FORMAT_R16G16B16A16_SFLOAT, in, "test normal");
         depth_ = makeImage(ctx_, width, height, VK_FORMAT_R32_SFLOAT, in, "test depth");
         motion_ = makeImage(ctx_, width, height, VK_FORMAT_R16G16B16A16_SFLOAT, in, "test motion");
+        volume_ = makeImage(ctx_, width, height, VK_FORMAT_R16G16B16A16_SFLOAT, in, "test volume");
         hdr_ = makeImage(ctx_, width, height, VK_FORMAT_R16G16B16A16_SFLOAT,
                          VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "test hdr");
-        const VkDeviceSize stagingBytes = pixels() * (16 + 4 * 8 + 4);
-        const VkDeviceSize readbackBytes = pixels() * 8 * 3;
+        const VkDeviceSize stagingBytes = pixels() * (16 + 5 * 8 + 4);
+        const VkDeviceSize readbackBytes = pixels() * 8 * 4;
         for (std::size_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
             // Kept, not freed: a new size gets new buffers beside the old ones.
             retired_.push_back(std::move(staging_[slot]));
@@ -302,11 +321,13 @@ private:
         };
         copy(lighting_, frame.lighting.data(), pixels() * 16);
         const auto emission = halves(frame.emission), albedo = halves(frame.albedo),
-                   normal = halves(frame.normal), motion = halves(frame.motion);
+                   normal = halves(frame.normal), motion = halves(frame.motion),
+                   volume = halves(frame.volume);
         copy(emission_, emission.data(), pixels() * 8);
         copy(albedo_, albedo.data(), pixels() * 8);
         copy(normal_, normal.data(), pixels() * 8);
         copy(motion_, motion.data(), pixels() * 8);
+        copy(volume_, volume.data(), pixels() * 8);
         copy(depth_, frame.depth.data(), pixels() * 4);
         staging_[slot].flush();
     }
@@ -317,8 +338,9 @@ private:
         // writes too (write after write).
         gfx::bufferBarrier2(cmd, buffer, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                             VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-        gfx::Image* sources[3] = {&hdr_, &denoiser_->history(), &denoiser_->historyLength()};
-        for (int i = 0; i < 3; ++i) {
+        gfx::Image* sources[4] = {&hdr_, &denoiser_->history(), &denoiser_->historyLength(),
+                                  &denoiser_->volumeHistory()};
+        for (int i = 0; i < 4; ++i) {
             sources[i]->transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
                                    VK_ACCESS_2_TRANSFER_READ_BIT);
             VkBufferImageCopy region{};
@@ -345,6 +367,7 @@ private:
         out.hdrBits.assign(bits, bits + count);
         out.historyBits.assign(bits + count, bits + 2 * count);
         out.lengthBits.assign(bits + 2 * count, bits + 3 * count);
+        out.volumeBits.assign(bits + 3 * count, bits + 4 * count);
         pending.output = nullptr;
     }
     void collectAll() {
@@ -929,23 +952,330 @@ void testDeterministic(gfx::Context& ctx) {
     }
 }
 
+// --- Task 7 of step 5: clean first frames, the export firefly filter, the volume layer
+// ---------------------------------------------------------------------------------------------------------
+
+// FNV-1a over the output and history bits of every frame.
+std::uint64_t outputHash(const std::vector<Output>& outputs) {
+    std::uint64_t hash = 1469598103934665603ull;
+    for (const Output& o : outputs)
+        for (const auto* bits : {&o.hdrBits, &o.historyBits})
+            for (const std::uint16_t v : *bits)
+                for (int b = 0; b < 2; ++b) {
+                    hash ^= (v >> (8 * b)) & 0xFFu;
+                    hash *= 1099511628211ull;
+                }
+    return hash;
+}
+
+// (a) Sparse first frames: Bernoulli lighting (on with p = 0.3 at 1 / 0.3, else 0: mean 1) on one plane at
+// length 1. The edge-robust variance sees all-zero quadrants and claims no noise, so step 4's denoiser left
+// holes (RMSE 0.1833 at length 1 and 0.1346 at length 2 on this input, 3 iterations; the plan guessed
+// ~0.063). Now sparse neighbourhoods get the plain variance with a first pass by geometry alone, and 5
+// iterations at length <= 2: RMSE below 0.045, and no darker than the samples. Very bright sparse samples
+// stay finite.
+void testSparseFirstFrames(gfx::Context& ctx) {
+    std::printf("sparse first frames are filtered clean\n");
+    const auto bernoulli = [](std::uint32_t index) {
+        Frame frame = flatFrame();
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                const bool on = noise(index, x, y, 0) + 0.5f < 0.3f;
+                float* l = frame.at(frame.lighting, x, y);
+                l[0] = l[1] = l[2] = on ? 1.0f / 0.3f : 0.0f;
+            }
+        return frame;
+    };
+    Harness harness(ctx);
+    const auto out = harness.run({bernoulli(900), bernoulli(901)}, {});
+    CHECK(allLengths(out[0], 1.0f) && allLengths(out[1], 2.0f));
+    const double first = rmse(out[0], 1.0f), second = rmse(out[1], 1.0f);
+    const auto mean = [](const Output& o) {
+        double sum = 0.0;
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x)
+                sum += o.hdr(x, y, 0);
+        return sum / (kSize * kSize);
+    };
+    std::printf("  RMSE after denoising: length 1 %.4f, length 2 %.4f (step 4: 0.1833, 0.1346); mean %.4f, "
+                "%.4f\n",
+                first, second, mean(out[0]), mean(out[1]));
+    CHECK(first < 0.045);
+    CHECK(second < 0.045);
+    // Not darker than the samples: a luminance stop on skewed sparse noise weights the rare bright samples
+    // down (by 9 % on this frame with the plan's plain 3x3 variance: mean 0.906 for samples 0.989;
+    // within 2 % now, the rest is the renormalised kernel at the image border).
+    double accumulated = 0.0; // the mean of the samples the history holds (length 2: both frames, halved)
+    for (std::uint32_t i = 0; i < 2; ++i) {
+        Frame input = bernoulli(900 + i);
+        double sum = 0.0;
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x)
+                sum += input.at(input.lighting, x, y)[0];
+        accumulated = i == 0 ? sum / (kSize * kSize) : 0.5 * (accumulated + sum / (kSize * kSize));
+        const double samples = accumulated;
+        std::printf("  frame %u: mean %.4f, samples %.4f\n", i + 1, mean(out[i]), samples);
+        CHECK(std::fabs(mean(out[i]) - samples) < 0.02 * samples);
+    }
+
+    // Bright sparse samples (the half range's top) keep the output and the history finite.
+    Frame bright = bernoulli(902);
+    for (float& v : bright.lighting)
+        v *= 15000.0f;
+    Harness brightHarness(ctx);
+    for (const Output& o : brightHarness.run({bright, bright, bright}, {})) {
+        CHECK(allFinite(o.hdrBits));
+        CHECK(allFinite(o.historyBits));
+    }
+
+    // resetAtrousIterations at or below atrousIterations, on input that is not sparse, is step 4's denoiser:
+    // the plan's (a) is then where the improvement comes from.
+    post::DenoiseSettings step4;
+    step4.resetAtrousIterations = 0;
+    Harness old(ctx);
+    const Output unchanged = old.runOne(noisyFrame(901, 0.5f, 0.2f), step4);
+    Harness reset3(ctx);
+    step4.resetAtrousIterations = 3;
+    CHECK(reset3.runOne(noisyFrame(901, 0.5f, 0.2f), step4).hdrBits == unchanged.hdrBits);
+}
+
+// The step 4 bytes: with no medium (volume = (0, 0, 0, 1)) and no extra reset iterations, the output and
+// history equal step 4's denoiser on the same input, temporal and stateless (hashes recorded with it on
+// llvmpipe; another driver may round differently, so there only the exact identity below is checked). And
+// everywhere: with albedo 1, no emission and no a-trous the output is the history, bit for bit.
+void testNoMediumKeepsStep4Bytes(gfx::Context& ctx) {
+    std::printf("no medium keeps the step 4 bytes\n");
+    std::vector<Frame> frames;
+    for (std::uint32_t i = 0; i < 6; ++i) {
+        Frame frame = noisyFrame(700 + i, 0.3f, 0.25f);
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                frame.at(frame.motion, x, y)[0] = -0.37f * static_cast<float>(i);
+                frame.depth[std::size_t{y} * kSize + x] = 1.0f + 0.01f * static_cast<float>(x);
+                float* a = frame.at(frame.albedo, x, y);
+                a[0] = 0.8f;
+                a[1] = 0.5f;
+                a[2] = 0.25f;
+                frame.at(frame.emission, x, y)[0] = x % 7 == 0 ? 2.0f : 0.0f;
+            }
+        frames.push_back(frame);
+    }
+    post::DenoiseSettings temporal;
+    temporal.resetAtrousIterations = 0;
+    post::DenoiseSettings stateless = temporal;
+    stateless.temporal = false;
+    Harness a(ctx), b(ctx);
+    const std::uint64_t temporalHash = outputHash(a.run(frames, temporal));
+    const std::uint64_t statelessHash = outputHash(b.run(frames, stateless));
+    std::printf("  hashes %016llx %016llx\n", static_cast<unsigned long long>(temporalHash),
+                static_cast<unsigned long long>(statelessHash));
+    if (ctx.deviceName().find("llvmpipe") != std::string::npos) {
+        CHECK(temporalHash == 0xaec4f5b1764ae804ull);
+        CHECK(statelessHash == 0x8d3e941bd00fd7e7ull);
+    } else {
+        std::printf("  not llvmpipe: the step 4 hashes are not compared\n");
+    }
+
+    Harness plain(ctx);
+    const auto out = plain.run({noisyFrame(710, 0.5f, 0.4f), noisyFrame(711, 0.5f, 0.4f)}, noFilter());
+    for (const Output& o : out)
+        for (std::size_t i = 0; i < o.hdrBits.size(); ++i)
+            if (i % 4 != 3)
+                CHECK(o.hdrBits[i] == o.historyBits[i]);
+}
+
+// (c) The export firefly filter: a flat 0.5 field with one pixel at 500 comes out at most 4x its largest
+// neighbour (the second largest of its 3x3 neighbourhood); a 2x2 block at 5 is kept within 1 %; the emission
+// is untouched; off (the default, as in the window) nothing is clamped.
+void testFireflyFilter(gfx::Context& ctx) {
+    std::printf("the export firefly filter clamps lone fireflies only\n");
+    Frame frame = flatFrame();
+    for (float& v : frame.lighting)
+        v = 0.5f;
+    float* firefly = frame.at(frame.lighting, 10, 10);
+    firefly[0] = firefly[1] = firefly[2] = 500.0f;
+    frame.at(frame.emission, 10, 10)[1] = 7.0f;
+    for (std::uint32_t y = 40; y < 42; ++y)
+        for (std::uint32_t x = 40; x < 42; ++x) {
+            float* l = frame.at(frame.lighting, x, y);
+            l[0] = l[1] = l[2] = 5.0f;
+        }
+
+    post::DenoiseSettings settings = noFilter();
+    settings.temporal = false;
+    settings.fireflyFilter = true;
+    Harness on(ctx);
+    const Output filtered = on.runOne(frame, settings);
+    std::printf("  firefly %.3f, block %.3f\n", filtered.hdr(10, 10, 0), filtered.hdr(40, 40, 0));
+    for (std::uint32_t c = 0; c < 3; ++c) {
+        CHECK(filtered.history(10, 10, c) <= 4.0f * 0.5f * (1.0f + 1.0f / 1024.0f));
+        CHECK(filtered.history(10, 10, c) >= 4.0f * 0.5f * (1.0f - 1.0f / 1024.0f)); // clamped, not dropped
+        for (std::uint32_t y = 40; y < 42; ++y)
+            for (std::uint32_t x = 40; x < 42; ++x)
+                CHECK(std::fabs(filtered.hdr(x, y, c) - 5.0f) <= 0.05f);
+        CHECK(std::fabs(filtered.hdr(20, 20, c) - 0.5f) <= 1e-3f);
+    }
+    // The emission is added after the clamp: 2 + 7 in green.
+    CHECK(std::fabs(filtered.hdr(10, 10, 1) - 9.0f) <= 9.0f / 1024.0f);
+    // With a-trous on the firefly cannot spread either.
+    settings.atrousIterations = 3;
+    Harness spread(ctx);
+    const Output smoothed = spread.runOne(frame, settings);
+    float peak = 0.0f;
+    for (std::uint32_t y = 0; y < 30; ++y)
+        for (std::uint32_t x = 0; x < 30; ++x)
+            peak = std::max(peak, smoothed.history(x, y, 0));
+    CHECK(peak <= 2.0f * (1.0f + 1.0f / 1024.0f));
+
+    Harness off(ctx);
+    post::DenoiseSettings defaults = noFilter();
+    CHECK(!defaults.fireflyFilter);
+    CHECK(std::fabs(off.runOne(frame, defaults).history(10, 10, 0) - 500.0f) <= 0.5f);
+}
+
+// (d) The volume layer: hdr = T * surface + volume. A constant volume (0.2, 0.1, 0.05, T 0.5) over a surface
+// of 1 gives exactly 0.5 + volume (converted to fp16), on every frame of a history; a noisy volume loses at
+// least 3x of its standard deviation; the history follows the surface motion without depth or normal tests
+// and is clamped to the current 3x3 min/max.
+void testVolumeLayer(gfx::Context& ctx) {
+    std::printf("the volume layer: composition, filter, history\n");
+    const auto withVolume = [](Frame frame, float r, float g, float b, float t) {
+        for (std::size_t i = 0; i < frame.volume.size() / 4; ++i) {
+            frame.volume[i * 4] = r;
+            frame.volume[i * 4 + 1] = g;
+            frame.volume[i * 4 + 2] = b;
+            frame.volume[i * 4 + 3] = t;
+        }
+        return frame;
+    };
+    Frame lit = flatFrame();
+    for (float& v : lit.lighting)
+        v = 1.0f;
+    const Frame constant = withVolume(lit, 0.2f, 0.1f, 0.05f, 0.5f);
+    Harness harness(ctx);
+    const auto out = harness.run({constant, constant, constant, constant}, {});
+    const float volume[3] = {0.2f, 0.1f, 0.05f};
+    for (const Output& o : out)
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x)
+                for (std::uint32_t c = 0; c < 3; ++c) {
+                    const float expected = 0.5f + halfToFloat(floatToHalf(volume[c]));
+                    CHECK(isHalfOf(o.hdrBits[(std::size_t{y} * kSize + x) * 4 + c], expected));
+                }
+    CHECK(out.back().volume(5, 5, 3) == 0.5f);
+    CHECK(out.back().volumeLength(5, 5) == 4.0f);
+
+    // Noise: radiance 0.2 +- 0.1 per pixel, T 0.5, no surface light; one stateless frame.
+    Frame noisy = withVolume(flatFrame(), 0.2f, 0.2f, 0.2f, 0.5f);
+    for (std::uint32_t y = 0; y < kSize; ++y)
+        for (std::uint32_t x = 0; x < kSize; ++x)
+            for (std::uint32_t c = 0; c < 3; ++c)
+                noisy.at(noisy.volume, x, y)[c] += 0.2f * noise(950, x, y, c);
+    post::DenoiseSettings settings;
+    settings.temporal = false;
+    settings.volumeAtrousIterations = 0;
+    Harness raw(ctx);
+    const Output unfiltered = raw.runOne(noisy, settings);
+    settings.volumeAtrousIterations = 4;
+    Harness smooth(ctx);
+    const Output filtered = smooth.runOne(noisy, settings);
+    const double before = flatStddev(unfiltered, 8, kSize - 8, 0.2),
+                 after = flatStddev(filtered, 8, kSize - 8, 0.2);
+    std::printf("  noisy volume: stddev %.5f -> %.5f (%.1fx)\n", before, after, before / after);
+    CHECK(before / after >= 3.0);
+    CHECK(filtered.volume(30, 30, 3) == 0.5f); // T is not filtered spatially
+
+    // History: frame 1 volume 0.3; frame 2 a 0.2 | 0.4 checker, the right half at another depth (the surface
+    // history is rejected there, the volume's is not). The previous 0.3 lies inside the 3x3 min/max, so at
+    // length 2 the volume is (0.3 + current) / 2. Frame 3 at 0.9 everywhere: the history (<= 0.4) is clamped
+    // up to 0.9, so the result is exactly 0.9.
+    Frame first = withVolume(flatFrame(), 0.3f, 0.3f, 0.3f, 1.0f);
+    Frame second = withVolume(flatFrame(), 0.0f, 0.0f, 0.0f, 1.0f);
+    for (std::uint32_t y = 0; y < kSize; ++y)
+        for (std::uint32_t x = 0; x < kSize; ++x) {
+            const float v = (x + y) % 2 == 0 ? 0.2f : 0.4f;
+            float* vol = second.at(second.volume, x, y);
+            vol[0] = vol[1] = vol[2] = v;
+            if (x >= kSize / 2)
+                second.depth[std::size_t{y} * kSize + x] = 2.0f;
+        }
+    const Frame third = withVolume(flatFrame(), 0.9f, 0.9f, 0.9f, 1.0f);
+    Harness history(ctx);
+    const auto steps = history.run({first, second, third}, noFilter());
+    bool halves = true, lengths = true, surfaceRejected = true, clamped = true;
+    for (std::uint32_t y = 1; y < kSize - 1; ++y)
+        for (std::uint32_t x = 1; x < kSize - 1; ++x) {
+            const float v = (x + y) % 2 == 0 ? 0.2f : 0.4f;
+            const float expected = 0.5f * (halfToFloat(floatToHalf(0.3f)) + halfToFloat(floatToHalf(v)));
+            halves = halves && std::fabs(steps[1].volume(x, y, 0) - expected) <= 1.0f / 2048.0f;
+            lengths = lengths && steps[1].volumeLength(x, y) == 2.0f;
+            if (x >= kSize / 2)
+                surfaceRejected = surfaceRejected && steps[1].length(x, y) == 1.0f;
+            clamped = clamped && steps[2].volume(x, y, 0) == halfToFloat(floatToHalf(0.9f));
+        }
+    CHECK(halves);
+    CHECK(lengths);
+    CHECK(surfaceRejected);
+    CHECK(clamped);
+    // A reset copies the current volume exactly.
+    history.denoiser().resetHistory();
+    const Output reset = history.runOne(second, noFilter());
+    CHECK(reset.volume(3, 4, 0) == halfToFloat(floatToHalf(0.4f)) && reset.volumeLength(3, 4) == 1.0f);
+}
+
+// (e) Non-finite volume samples count as no medium: NaN or Inf radiance as 0, a non-finite transmittance as
+// 1; negative radiance as 0 and a transmittance outside [0, 1] clamped. Nothing non-finite reaches the
+// output or the histories, in the frame or later.
+void testNonFiniteVolume(gfx::Context& ctx) {
+    std::printf("non-finite volume samples stay out\n");
+    const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
+    std::vector<Frame> frames;
+    for (std::uint32_t i = 0; i < 4; ++i) {
+        Frame frame = noisyFrame(960 + i, 0.5f, 0.1f);
+        for (std::size_t p = 0; p < frame.volume.size() / 4; ++p) {
+            frame.volume[p * 4] = frame.volume[p * 4 + 1] = frame.volume[p * 4 + 2] = 0.1f;
+            frame.volume[p * 4 + 3] = 0.8f;
+        }
+        frames.push_back(frame);
+    }
+    frames[1].at(frames[1].volume, 10, 10)[0] = nan;
+    frames[1].at(frames[1].volume, 20, 20)[1] = inf;
+    frames[1].at(frames[1].volume, 30, 30)[3] = nan;
+    frames[1].at(frames[1].volume, 40, 40)[3] = inf;
+    frames[2].at(frames[2].volume, 12, 12)[2] = -1e30f;
+    frames[2].at(frames[2].volume, 14, 14)[3] = -3.0f;
+    frames[2].at(frames[2].volume, 16, 16)[3] = 7.0f;
+    Harness harness(ctx);
+    const auto out = harness.run(frames, {});
+    for (const Output& o : out) {
+        CHECK(allFinite(o.hdrBits));
+        CHECK(allFinite(o.volumeBits));
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                for (std::uint32_t c = 0; c < 3; ++c)
+                    CHECK(o.volume(x, y, c) >= 0.0f && o.hdr(x, y, c) >= 0.0f);
+                CHECK(o.volume(x, y, 3) >= 0.0f && o.volume(x, y, 3) <= 1.0f);
+            }
+    }
+}
+
 // Sizes, formats and recording are checked; resize() starts the history over at the new size.
 void testRefusalsAndResize(gfx::Context& ctx) {
     std::printf("refusals and resize\n");
     Harness harness(ctx);
-    post::GBufferView wrongHdr{harness.lighting_, harness.emission_, harness.albedo_,
-                               harness.normal_,   harness.depth_,    harness.motion_};
+    post::GBufferView wrongHdr{harness.lighting_, harness.emission_, harness.albedo_, harness.normal_,
+                               harness.depth_,    harness.motion_,   harness.volume_};
     // The HDR output must be RGBA16F, the lighting RGBA32F, every image the denoiser's size.
     CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(wrongHdr, harness.lighting_); }));
-    post::GBufferView swapped{harness.emission_, harness.emission_, harness.albedo_,
-                              harness.normal_,   harness.depth_,    harness.motion_};
+    post::GBufferView swapped{harness.emission_, harness.emission_, harness.albedo_, harness.normal_,
+                              harness.depth_,    harness.motion_,   harness.volume_};
     CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(swapped, harness.hdr_); }));
     gfx::Image small =
         makeImage(ctx, 16, 16, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT, "small");
     CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(wrongHdr, small); }));
     CHECK(throws<std::logic_error>([&] {
-        post::GBufferView view{harness.lighting_, harness.emission_, harness.albedo_,
-                               harness.normal_,   harness.depth_,    harness.motion_};
+        post::GBufferView view{harness.lighting_, harness.emission_, harness.albedo_, harness.normal_,
+                               harness.depth_,    harness.motion_,   harness.volume_};
         harness.denoiser().denoise(VK_NULL_HANDLE, view, {}, harness.hdr_); // not between begin and submit
     }));
     CHECK(throws<std::invalid_argument>([&] {
@@ -954,8 +1284,8 @@ void testRefusalsAndResize(gfx::Context& ctx) {
     }));
     // Sigmas must be positive and finite, alphas in (0, 1].
     const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
-    post::GBufferView good{harness.lighting_, harness.emission_, harness.albedo_,
-                           harness.normal_,   harness.depth_,    harness.motion_};
+    post::GBufferView good{harness.lighting_, harness.emission_, harness.albedo_, harness.normal_,
+                           harness.depth_,    harness.motion_,   harness.volume_};
     for (float post::DenoiseSettings::*field :
          {&post::DenoiseSettings::sigmaDepth, &post::DenoiseSettings::sigmaNormal,
           &post::DenoiseSettings::sigmaLuminance})
@@ -971,6 +1301,19 @@ void testRefusalsAndResize(gfx::Context& ctx) {
             settings.*field = bad;
             CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(good, harness.hdr_, settings); }));
         }
+    // At most 9 iterations of each kind; fireflyK finite and at least 1.
+    for (std::uint32_t post::DenoiseSettings::*field :
+         {&post::DenoiseSettings::atrousIterations, &post::DenoiseSettings::resetAtrousIterations,
+          &post::DenoiseSettings::volumeAtrousIterations}) {
+        post::DenoiseSettings settings;
+        settings.*field = 10;
+        CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(good, harness.hdr_, settings); }));
+    }
+    for (const float bad : {0.5f, 0.0f, -4.0f, nan, inf}) {
+        post::DenoiseSettings settings;
+        settings.fireflyK = bad;
+        CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(good, harness.hdr_, settings); }));
+    }
     post::DenoiseSettings alphaOne;
     alphaOne.alphaColor = alphaOne.alphaMoments = 1.0f;
     harness.denoiseWith(good, harness.hdr_, alphaOne); // 1 is allowed: no accumulation
@@ -1031,6 +1374,16 @@ int main() {
             testDeterministic(ctx);
             settle();
             testRefusalsAndResize(ctx);
+            settle();
+            testSparseFirstFrames(ctx);
+            settle();
+            testNoMediumKeepsStep4Bytes(ctx);
+            settle();
+            testFireflyFilter(ctx);
+            settle();
+            testVolumeLayer(ctx);
+            settle();
+            testNonFiniteVolume(ctx);
             settle();
             CHECK(ctx.validationMessageCount() == 0);
         }

@@ -1,4 +1,4 @@
-// Shared by the denoiser's passes (accumulate, atrous, combine).
+// Shared by the denoiser's passes (firefly, accumulate, atrous, combine).
 
 #ifndef POST_COMMON_GLSL
 #define POST_COMMON_GLSL
@@ -36,6 +36,15 @@ vec3 safeAlbedo(vec3 albedo) {
 // to [0, half maximum] (radiance is never negative, and a huge negative value would store as -Inf).
 vec3 demodulate(vec3 lighting, vec3 albedo) {
     return clamp(finiteOrZero(lighting) / max(safeAlbedo(albedo), vec3(1e-3)), vec3(0.0), vec3(kHalfMax));
+}
+
+// A volume layer sample made safe: non-finite radiance components count as 0 (as a non-finite lighting
+// sample does), radiance is clamped to [0, half maximum], and a non-finite transmittance counts as 1 (no
+// medium), else clamped to [0, 1].
+vec4 safeVolume(vec4 volume) {
+    vec3 radiance = clamp(finiteOrZero(volume.rgb), vec3(0.0), vec3(kHalfMax));
+    float transmittance = isFinite(volume.a) ? clamp(volume.a, 0.0, 1.0) : 1.0;
+    return vec4(radiance, transmittance);
 }
 
 #endif
