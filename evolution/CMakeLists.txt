@@ -73,11 +73,13 @@ target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
 set_source_files_properties(src/gfx/vma_impl.cpp src/gfx/context.cpp PROPERTIES
     COMPILE_DEFINITIONS "VMA_STATIC_VULKAN_FUNCTIONS=0;VMA_DYNAMIC_VULKAN_FUNCTIONS=1")
 
-# Music: the WAV reader and the sample-exact transport that loops it. No SDL here; playback comes later.
+# Music: the WAV reader, the sample-exact transport that loops it and the SDL3 player that plays it.
 add_library(evo_audio STATIC
+    src/audio/player.cpp
     src/audio/transport.cpp
     src/audio/wav.cpp)
 target_include_directories(evo_audio PUBLIC src)
+target_link_libraries(evo_audio PUBLIC SDL3::SDL3-static)
 
 # The directed show: the cue sheet, the music curves sampled from the generated tables and the timeline that
 # turns a show time into everything a frame needs. No SDL or Vulkan here.
@@ -88,12 +90,13 @@ add_library(evo_show STATIC
 target_include_directories(evo_show PUBLIC src)
 target_compile_definitions(evo_show PRIVATE EVO_VERSION="${PROJECT_VERSION}")
 
-# The run modes (windowed, render stream, capture, device info); SDL3 provides the window and the Vulkan
-# surface.
+# The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
+# window, the Vulkan surface and the timer.
 add_library(evo_app STATIC
     src/app/app.cpp
-    src/app/capture.cpp)
-target_link_libraries(evo_app PUBLIC evo_gfx SDL3::SDL3-static)
+    src/app/capture.cpp
+    src/app/clock.cpp)
+target_link_libraries(evo_app PUBLIC evo_gfx evo_show evo_audio SDL3::SDL3-static)
 
 add_executable(Evolution
     src/main.cpp)
@@ -135,6 +138,12 @@ add_executable(era_test tests/era_test.cpp)
 target_link_libraries(era_test PRIVATE evo_show)
 add_test(NAME era COMMAND era_test)
 
+# Also plays a short WAV through SDL's dummy audio driver, which needs no device.
+add_executable(clock_test tests/clock_test.cpp)
+target_link_libraries(clock_test PRIVATE evo_app)
+target_compile_definitions(clock_test PRIVATE EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+add_test(NAME clock COMMAND clock_test)
+
 add_executable(context_test tests/context_test.cpp)
 target_link_libraries(context_test PRIVATE evo_gfx)
 add_test(NAME context COMMAND context_test)
@@ -163,6 +172,10 @@ add_test(NAME capture
             ${CMAKE_BINARY_DIR}/build-out/capture --validation)
 set_tests_properties(capture PROPERTIES TIMEOUT 120)
 
+# --show-info prints the show as JSON without touching SDL video or Vulkan.
+add_test(NAME show_info COMMAND Evolution --show-info)
+set_tests_properties(show_info PROPERTIES PASS_REGULAR_EXPRESSION "\"duration\":711\\.16[,}]")
+
 # The process-level exit codes: 0 on success, 1 for bad usage, 2 when the GPU lacks a requirement.
 add_test(NAME exit_codes
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/exit_code_test.py $<TARGET_FILE:Evolution>)
@@ -178,4 +191,11 @@ if(EVO_RUNTIME_TESTS)
     add_test(NAME windowed
         COMMAND xvfb-run -a $<TARGET_FILE:Evolution> --validation --duration 1 --width 320 --height 200)
     set_tests_properties(windowed PROPERTIES TIMEOUT 120)
+
+    # With no usable audio driver the windowed run falls back to the monotonic clock, says SILENT MODE on
+    # stderr and still exits 0 (Review Focus 3); on SDL's dummy driver it plays and says AUDIO.
+    add_test(NAME silent_mode
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/silent_mode_test.py $<TARGET_FILE:Evolution>
+                ${CMAKE_BINARY_DIR}/build-out/silent_mode)
+    set_tests_properties(silent_mode PROPERTIES TIMEOUT 120)
 endif()

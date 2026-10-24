@@ -68,6 +68,10 @@ private:
 
 BeatGridView beatGrid(int track);
 
+// The show's music, relative to the executable's directory: the --music default and the "music" field of
+// showInfoJson().
+inline constexpr const char* kMusicFile = "assets/music/show.wav";
+
 double showDuration();
 int chapterCount();
 // Directed start of a chapter in show seconds; the index clamps into the show.
@@ -77,8 +81,8 @@ double wrapShowTime(double seconds);
 
 TimelineFrame sampleTimeline(double showSeconds);
 
-// The show as JSON for --show-info: duration, tracks and every chapter with its start, duration and accent
-// (accent in show seconds).
+// The show as JSON for --show-info: duration, music file, tracks and every chapter with its start, duration
+// and accent (accent in show seconds).
 std::string showInfoJson();
 
 } // namespace evo::show

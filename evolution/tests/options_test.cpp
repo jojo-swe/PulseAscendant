@@ -69,7 +69,21 @@ int main() {
         CHECK(evo::parseOptions({"--time", "86400"}).time == 86400.0);
         CHECK(parseError({"--time", "86400.5"}).find("at most 86400") != std::string::npos);
 
+        // Audio: on by default with the show's own music beside the executable (empty path).
+        CHECK(!defaults.noAudio);
+        CHECK(!defaults.mute);
+        CHECK(!defaults.showInfo);
+        CHECK(defaults.music.empty());
+        CHECK(evo::parseOptions({"--no-audio"}).noAudio);
+        CHECK(evo::parseOptions({"--mute"}).mute);
+        CHECK(evo::parseOptions({"--show-info"}).showInfo);
+        CHECK(evo::parseOptions({"--music", "x.wav"}).music == "x.wav");
+        CHECK(parseError({"--music"}) == "--music needs a value");
+        CHECK(parseError({"--music", ""}) == "--music needs a non-empty path");
+
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
+        for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info"})
+            CHECK(evo::helpText().find(flag) != std::string::npos);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "CHECK failed: %s\n", error.what());
         return 1;

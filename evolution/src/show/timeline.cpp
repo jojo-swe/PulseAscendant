@@ -206,7 +206,7 @@ std::string showInfoJson() {
     std::ostringstream out;
     out << std::setprecision(12);
     out << "{\"title\":\"EVOLUTION\",\"version\":\"" << EVO_VERSION << "\",\"duration\":" << showDuration()
-        << ",\"music\":\"music/show.wav\",\"tracks\":[";
+        << ",\"music\":\"" << kMusicFile << "\",\"tracks\":[";
     for (int track = 0; track < trackCount(); ++track) {
         if (track)
             out << ',';

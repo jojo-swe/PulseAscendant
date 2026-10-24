@@ -19,7 +19,11 @@ struct Options {
     bool help = false;
     bool deviceInfo = false;
     bool fullscreen = false;
+    bool showInfo = false;            // print the show as JSON and exit
+    bool noAudio = false;             // run on the monotonic clock without opening an audio device
+    bool mute = false;                // start muted (the music still drives the clock)
     std::filesystem::path captureDir; // empty = no capture
+    std::filesystem::path music;      // empty = the show's music beside the executable
 };
 
 // Parses the arguments after the program name. Throws std::runtime_error on bad input.

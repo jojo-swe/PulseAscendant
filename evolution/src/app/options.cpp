@@ -81,6 +81,18 @@ Options parseOptions(const std::vector<std::string>& args) {
                 throw std::runtime_error(flag + " needs a non-empty path");
             }
             options.captureDir = path;
+        } else if (flag == "--music") {
+            const std::string& path = nextValue();
+            if (path.empty()) {
+                throw std::runtime_error(flag + " needs a non-empty path");
+            }
+            options.music = path;
+        } else if (flag == "--no-audio") {
+            options.noAudio = true;
+        } else if (flag == "--mute") {
+            options.mute = true;
+        } else if (flag == "--show-info") {
+            options.showInfo = true;
         } else if (flag == "--validation") {
             options.validation = true;
         } else if (flag == "--device-info") {
@@ -122,10 +134,18 @@ std::string helpText() {
            "  --headless           Render without opening a window\n"
            "  --render-stream      Write raw RGB frames to stdout (implies --headless)\n"
            "  --capture-dir PATH   Write one PNG frame, at --time, to PATH (implies --headless)\n"
+           "  --music PATH         Music WAV to play (default: assets/music/show.wav beside the\n"
+           "                       executable); a WAV of another length than the show is refused\n"
+           "  --no-audio           Run without audio, on the system clock (SILENT MODE)\n"
+           "  --mute               Start muted (M toggles); the music still keeps the time\n"
+           "  --show-info          Print the show's chapters and music as JSON and exit\n"
            "  --validation         Enable the Vulkan validation layers\n"
            "  --device-info        Print information about the selected GPU and exit\n"
            "  --fullscreen         Start the window in fullscreen\n"
-           "  -h, --help           Show this help and exit\n";
+           "  -h, --help           Show this help and exit\n"
+           "\n"
+           "Keys (window): Left/Right previous/next chapter, 1-9 and 0 chapters 1-10, M mute,\n"
+           "F11 fullscreen, Esc quit\n";
 }
 
 } // namespace evo

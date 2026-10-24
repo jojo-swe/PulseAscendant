@@ -1,18 +1,22 @@
 #include "app/app.hpp"
 
+#include "app/clock.hpp"
 #include "gfx/context.hpp"
 #include "gfx/offscreen.hpp"
 #include "gfx/swapchain.hpp"
 #include "gfx/vk_check.hpp"
+#include "show/timeline.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #ifdef _WIN32
 #include <fcntl.h>
@@ -24,6 +28,9 @@ namespace evo {
 namespace {
 
 constexpr Uint32 kMinimisedPollMs = 50;
+// A chapter key pressed just after a jump may read the clock a hair before the chapter it jumped to; this
+// much slack counts it as in that chapter, so Right, Right moves two chapters.
+constexpr double kChapterSlack = 0.05;
 
 std::runtime_error sdlError(const std::string& what) {
     return std::runtime_error(what + ": " + SDL_GetError());
@@ -88,6 +95,14 @@ gfx::Context createWindowedContext(const Options& options) {
     return gfx::Context::create(contextOptions);
 }
 
+// --music, or the show's music beside the executable.
+std::filesystem::path musicPath(const Options& options) {
+    if (!options.music.empty())
+        return options.music;
+    const char* base = SDL_GetBasePath(); // owned by SDL; ends with a separator
+    return base ? std::filesystem::path(base) / show::kMusicFile : std::filesystem::path(show::kMusicFile);
+}
+
 void toggleFullscreen(SDL_Window* window) {
     const bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
     if (!SDL_SetWindowFullscreen(window, !fullscreen))
@@ -95,6 +110,30 @@ void toggleFullscreen(SDL_Window* window) {
 }
 
 } // namespace
+
+int chapterForKey(SDL_Keycode key, double now) {
+    const int count = show::chapterCount();
+    int current = 0;
+    while (current + 1 < count && show::chapterStart(current + 1) <= now + kChapterSlack)
+        ++current;
+
+    if (key == SDLK_LEFT)
+        return (current + count - 1) % count;
+    if (key == SDLK_RIGHT)
+        return (current + 1) % count;
+    if (key >= SDLK_1 && key <= SDLK_9)
+        return static_cast<int>(key - SDLK_1);
+    if (key == SDLK_0)
+        return 9;
+    return -1;
+}
+
+std::string windowTitle(double now) {
+    const int seconds = static_cast<int>(now);
+    char clock[16];
+    std::snprintf(clock, sizeof clock, "%02d:%02d", seconds / 60, seconds % 60);
+    return std::string("EVOLUTION  ") + show::sampleTimeline(now).title + "  " + clock;
+}
 
 std::string missingRequirementsMessage(const gfx::MissingRequirements& missing) {
     std::string list;
@@ -127,7 +166,14 @@ int runWindowed(const Options& options) {
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
-    const Uint64 start = SDL_GetTicksNS();
+    // Started last, so the music begins with the first frame rather than during the device setup.
+    ShowClock clock(!options.noAudio, musicPath(options), show::showDuration(), options.time);
+    std::fprintf(stderr, "%s\n", clock.status().c_str());
+    bool muted = options.mute;
+    clock.setMuted(muted);
+    std::string title;
+
+    const Uint64 start = SDL_GetTicksNS(); // for --duration, which counts run time rather than show time
     for (bool running = true; running;) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -136,10 +182,18 @@ int runWindowed(const Options& options) {
                 running = false;
                 break;
             case SDL_EVENT_KEY_DOWN:
-                if (event.key.key == SDLK_ESCAPE)
+                if (event.key.key == SDLK_ESCAPE) {
                     running = false;
-                else if (event.key.key == SDLK_F11 && !event.key.repeat)
+                } else if (event.key.repeat) {
+                    break; // a held key acts once
+                } else if (event.key.key == SDLK_F11) {
                     toggleFullscreen(window.handle);
+                } else if (event.key.key == SDLK_M) {
+                    muted = !muted;
+                    clock.setMuted(muted);
+                } else if (const int chapter = chapterForKey(event.key.key, clock.now()); chapter >= 0) {
+                    clock.seek(show::chapterStart(chapter));
+                }
                 break;
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                 needRecreate = true;
@@ -173,7 +227,12 @@ int runWindowed(const Options& options) {
             offscreen = std::make_unique<gfx::Offscreen>(ctx, width, height);
         }
 
-        offscreen->render(options.time + elapsed);
+        const double now = clock.now();
+        if (std::string newTitle = windowTitle(now); newTitle != title) {
+            title = std::move(newTitle);
+            SDL_SetWindowTitle(window.handle, title.c_str());
+        }
+        offscreen->render(now);
         if (!swapchain.present(offscreen->image(), offscreen->width(), offscreen->height()))
             needRecreate = true;
     }

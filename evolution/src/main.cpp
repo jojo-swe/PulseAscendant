@@ -2,6 +2,7 @@
 #include "app/capture.hpp"
 #include "app/options.hpp"
 #include "gfx/context.hpp"
+#include "show/timeline.hpp"
 
 #include <cstdio>
 #include <exception>
@@ -46,6 +47,11 @@ int main(int argc, char** argv) {
 
     if (options.help) {
         std::fputs(evo::helpText().c_str(), stdout);
+        return 0;
+    }
+    // Needs neither SDL video nor Vulkan: the show is compiled in.
+    if (options.showInfo) {
+        std::printf("%s\n", evo::show::showInfoJson().c_str());
         return 0;
     }
 
