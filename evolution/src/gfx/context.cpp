@@ -370,6 +370,25 @@ Context Context::create(const ContextOptions& options) {
     poolInfo.queueFamilyIndex = ctx.queueFamily_;
     vkCheck(vkCreateCommandPool(ctx.device_, &poolInfo, nullptr, &ctx.commandPool_), "vkCreateCommandPool");
 
+    // --- Samplers ---
+    VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    samplerInfo.magFilter = VK_FILTER_NEAREST;
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.maxLod = 0.0f;
+    vkCheck(vkCreateSampler(ctx.device_, &samplerInfo, nullptr, &ctx.nearestSampler_),
+            "vkCreateSampler(nearest)");
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    vkCheck(vkCreateSampler(ctx.device_, &samplerInfo, nullptr, &ctx.linearSampler_),
+            "vkCreateSampler(linear)");
+    ctx.setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(ctx.nearestSampler_),
+                      "nearest");
+    ctx.setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(ctx.linearSampler_), "linear");
+
     return ctx;
 }
 
@@ -381,7 +400,9 @@ Context::Context(Context&& other) noexcept
       physicalDevice_(std::exchange(other.physicalDevice_, VK_NULL_HANDLE)),
       device_(std::exchange(other.device_, VK_NULL_HANDLE)), queue_(std::exchange(other.queue_, VK_NULL_HANDLE)),
       queueFamily_(other.queueFamily_), allocator_(std::exchange(other.allocator_, VK_NULL_HANDLE)),
-      commandPool_(std::exchange(other.commandPool_, VK_NULL_HANDLE)), validation_(other.validation_),
+      commandPool_(std::exchange(other.commandPool_, VK_NULL_HANDLE)),
+      nearestSampler_(std::exchange(other.nearestSampler_, VK_NULL_HANDLE)),
+      linearSampler_(std::exchange(other.linearSampler_, VK_NULL_HANDLE)), validation_(other.validation_),
       validationMessagesBefore_(other.validationMessagesBefore_), live_(std::exchange(other.live_, false)) {}
 
 Context& Context::operator=(Context&& other) noexcept {
@@ -395,6 +416,8 @@ Context& Context::operator=(Context&& other) noexcept {
         queueFamily_ = other.queueFamily_;
         allocator_ = std::exchange(other.allocator_, VK_NULL_HANDLE);
         commandPool_ = std::exchange(other.commandPool_, VK_NULL_HANDLE);
+        nearestSampler_ = std::exchange(other.nearestSampler_, VK_NULL_HANDLE);
+        linearSampler_ = std::exchange(other.linearSampler_, VK_NULL_HANDLE);
         validation_ = other.validation_;
         validationMessagesBefore_ = other.validationMessagesBefore_;
         live_ = std::exchange(other.live_, false);
@@ -405,6 +428,10 @@ Context& Context::operator=(Context&& other) noexcept {
 void Context::destroy() noexcept {
     if (device_) {
         vkDeviceWaitIdle(device_);
+        if (nearestSampler_)
+            vkDestroySampler(device_, nearestSampler_, nullptr);
+        if (linearSampler_)
+            vkDestroySampler(device_, linearSampler_, nullptr);
         if (commandPool_)
             vkDestroyCommandPool(device_, commandPool_, nullptr);
         if (allocator_)
@@ -419,6 +446,8 @@ void Context::destroy() noexcept {
     messenger_ = VK_NULL_HANDLE;
     device_ = VK_NULL_HANDLE;
     commandPool_ = VK_NULL_HANDLE;
+    nearestSampler_ = VK_NULL_HANDLE;
+    linearSampler_ = VK_NULL_HANDLE;
     allocator_ = VK_NULL_HANDLE;
     if (live_) {
         live_ = false;
@@ -453,6 +482,17 @@ std::string Context::deviceInfoJson() const {
            jsonEscape(std::string(driver.driverName) + " " + driver.driverInfo) + "\",\"api\":\"" +
            versionString(properties.properties.apiVersion) + "\",\"rayTracing\":true,\"validation\":" +
            (validation_ ? "true" : "false") + "}";
+}
+
+void Context::setObjectName(VkObjectType type, std::uint64_t handle, const char* name) const {
+    // The messenger exists exactly when VK_EXT_debug_utils was enabled on the instance.
+    if (!messenger_ || !vkSetDebugUtilsObjectNameEXT || !name || !*name || handle == 0)
+        return;
+    VkDebugUtilsObjectNameInfoEXT info{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+    info.objectType = type;
+    info.objectHandle = handle;
+    info.pObjectName = name;
+    vkSetDebugUtilsObjectNameEXT(device_, &info);
 }
 
 void Context::immediate(const std::function<void(VkCommandBuffer)>& record) const {

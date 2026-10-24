@@ -58,16 +58,23 @@ add_library(evo_core STATIC
 target_include_directories(evo_core PUBLIC src)
 
 add_library(evo_gfx STATIC
+    src/gfx/buffer.cpp
+    src/gfx/compute_pipeline.cpp
     src/gfx/context.cpp
+    src/gfx/fill_pass.cpp
+    src/gfx/frame_ring.cpp
+    src/gfx/image.cpp
     src/gfx/offscreen.cpp
     src/gfx/paths.cpp
+    src/gfx/readback.cpp
     src/gfx/shader.cpp
     src/gfx/swapchain.cpp
+    src/gfx/sync.hpp
     src/gfx/vk_check.hpp
     src/gfx/vma_impl.cpp)
 target_include_directories(evo_gfx PUBLIC src)
 # SDL3 provides SDL_GetBasePath() for locating the shaders beside the executable; evo_show the timeline
-# frame that Offscreen renders.
+# frame that the fill pass renders.
 target_link_libraries(evo_gfx PUBLIC
     volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator evo_core evo_show SDL3::SDL3-static)
 target_compile_definitions(evo_gfx PUBLIC VK_NO_PROTOTYPES)
@@ -171,6 +178,13 @@ target_compile_definitions(offscreen_test PRIVATE
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(offscreen_test Evolution_shaders) # the test loads fill.comp.spv from <build>/bin/shaders
 add_test(NAME offscreen COMMAND offscreen_test)
+
+# Runs with the validation layer and fails on any message it reports.
+add_executable(gfx_foundation_test tests/gfx_foundation_test.cpp)
+target_link_libraries(gfx_foundation_test PRIVATE evo_gfx)
+target_compile_definitions(gfx_foundation_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(gfx_foundation_test Evolution_shaders) # loads fill.comp.spv from <build>/bin/shaders
+add_test(NAME gfx_foundation COMMAND gfx_foundation_test)
 
 add_executable(swapchain_test tests/swapchain_test.cpp)
 target_link_libraries(swapchain_test PRIVATE evo_gfx)

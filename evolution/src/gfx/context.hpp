@@ -65,8 +65,17 @@ public:
     // Validation warnings and errors reported since this Context was created.
     unsigned validationMessageCount() const;
 
-    // Records on a fresh primary command buffer, submits, waits idle, frees.
+    // Records on a fresh primary command buffer, submits, waits idle, frees. For one-off setup work; frames
+    // go through a FrameRing.
     void immediate(const std::function<void(VkCommandBuffer)>& record) const;
+
+    // Shared samplers with clamp-to-edge addressing and no mipmapping: nearest (the retro pixels) and linear.
+    VkSampler nearestSampler() const { return nearestSampler_; }
+    VkSampler linearSampler() const { return linearSampler_; }
+
+    // Names an object for the validation layer's messages and for debuggers. A no-op without
+    // VK_EXT_debug_utils (validation off) or for an empty name.
+    void setObjectName(VkObjectType type, std::uint64_t handle, const char* name) const;
 
 private:
     Context() = default;
@@ -80,6 +89,8 @@ private:
     uint32_t queueFamily_ = 0;
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
+    VkSampler nearestSampler_ = VK_NULL_HANDLE;
+    VkSampler linearSampler_ = VK_NULL_HANDLE;
     bool validation_ = false;
     unsigned validationMessagesBefore_ = 0; // validationMessagesReported() when this Context was created
     bool live_ = false;                     // holds the one-live-Context slot
