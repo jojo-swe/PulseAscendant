@@ -1,5 +1,10 @@
 #include "render/modern_stage.hpp"
 
+#include "modern/modern_scene.hpp"
+#include "modern/path_tracer.hpp"
+#include "post/denoiser.hpp"
+
+#include <optional>
 #include <stdexcept>
 
 namespace evo::render {

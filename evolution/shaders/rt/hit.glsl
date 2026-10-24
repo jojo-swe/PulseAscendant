@@ -19,6 +19,7 @@ struct HitPoint {
     InstanceRecord record;
     Material material;
     float uvPerWorldArea; // the triangle's uv area over its world area, for texture LOD
+    vec3 dPdu, dPdv;      // world change per unit of u and of v across the triangle (0 for a degenerate uv map)
 };
 
 HitPoint hitPoint() {
@@ -59,6 +60,9 @@ HitPoint hitPoint() {
     vec2 d2 = v2.uv - v0.uv;
     float uvArea = abs(d1.x * d2.y - d1.y * d2.x);
     h.uvPerWorldArea = worldArea > 0.0 ? uvArea / worldArea : 0.0;
+    float uvDet = d1.x * d2.y - d1.y * d2.x;
+    h.dPdu = uvDet != 0.0 ? (d2.y * w1 - d1.y * w2) / uvDet : vec3(0.0);
+    h.dPdv = uvDet != 0.0 ? (d1.x * w2 - d2.x * w1) / uvDet : vec3(0.0);
     return h;
 }
 

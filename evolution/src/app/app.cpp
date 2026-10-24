@@ -8,6 +8,7 @@
 #include "gfx/readback.hpp"
 #include "gfx/swapchain.hpp"
 #include "gfx/vk_check.hpp"
+#include "modern/modern_scene.hpp"
 #include "render/renderer.hpp"
 #include "show/timeline.hpp"
 
@@ -304,6 +305,15 @@ int runRenderStream(const Options& options) {
     settings.mode = render::RenderMode::Export;
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     render::Renderer renderer(ctx, ring, settings);
+    // When the range shows the Studio, its GPU side (BLASes, pipeline, denoiser images) as setup, before the
+    // first frame.
+    for (long i = 0; i < frames; ++i)
+        if (modern::sceneFor(
+                show::sampleTimeline(options.time + static_cast<double>(i) / options.fps).effect) !=
+            modern::SceneId::Placeholder) {
+            renderer.prepare();
+            break;
+        }
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();
         show::TimelineFrame frame = show::sampleTimeline(options.time + static_cast<double>(i) / options.fps);

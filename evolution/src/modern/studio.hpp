@@ -40,7 +40,8 @@ std::vector<StudioShot> studioShots(const show::TimelineFrame& frame);
 //                   the accent: a close orbit around the monitor
 //   RETURN          one shot: a slow push back towards the screen
 //   REBOOT          one shot: a close-up of the screen, drifting slightly
-// Any other effect gets REBOOT's close-up.
+// Any other effect gets REBOOT's close-up. Every shot but STUDIO NIGHT's dolly is about the screen: it
+// focuses on the screen's plane with an aperture of at most 4 mm, so the CRT's picture stays sharp.
 Camera studioCamera(const show::TimelineFrame& frame);
 
 // The exposure (EV, applied before the tonemap) of a Studio chapter: chosen per chapter by eye, so that the

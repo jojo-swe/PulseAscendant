@@ -68,8 +68,10 @@ public:
     // resets its history (Resize), even after a resize back to the size it last rendered. Not between
     // ring.begin() and ring.submit(). A no-op for the current size.
     void resize(std::uint32_t width, std::uint32_t height);
-    // Builds the path-traced scenes' GPU side now instead of on the first frame that shows them, so that no
-    // chapter hitches (setup: before the first frame; the window calls it).
+    // Builds the path-traced scenes' GPU side now instead of in the first frame that shows them, so that no
+    // chapter hitches (setup: not between ring.begin() and ring.submit()). The window calls it, and the
+    // exports when they show the Studio. An unprepared renderer builds it inside its first Studio frame, with
+    // the same pixels (ModernStage).
     void prepare() { modern_.prepare(); }
     // Records all passes; output() is GENERAL afterwards.
     void render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
