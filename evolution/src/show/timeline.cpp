@@ -145,8 +145,8 @@ BeatGridView beatGrid(int track) {
 }
 
 double showDuration() {
-    // From whole frames, so 28 256 640 frames is exactly the decimal 588.68 (adding the two track lengths in
-    // seconds would round twice).
+    // From whole frames, so 34 135 680 frames is exactly the decimal 711.16 (adding the track lengths in
+    // seconds would round at every step).
     std::uint64_t frames = 0;
     for (int track = 0; track < trackCount(); ++track)
         frames += trackFrames(track);

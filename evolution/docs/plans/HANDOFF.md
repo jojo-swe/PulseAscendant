@@ -48,14 +48,14 @@ Beslut i steg 0 (utöver tidigare): min upplösning 16; VK_KHR_swapchain via ext
 | Task | Status | Commit |
 |---|---|---|
 | 1. Python-pipeline + placeholder-låt | **klar**, granskad | d29aee7 |
-| 2. WAV-läsare + transport | pågår | |
-| 3. Cue-sheet + timeline | | |
+| 2. WAV-läsare + transport | **klar** | d0039ea |
+| 3. Cue-sheet + timeline | **klar**; ommålad till tre akter | b53f227 + musikbytet (tempofix, tre låtar, 711,16 s) |
 | 4. Era/övergångar | | |
 | 5. SDL3-spelare + klocka | | |
 | 6. Frame synlig i testmönstret | | |
 | 7. README + handoff | | |
 
-Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 default); exakta beat-tider (4 decimaler); `show_targets.json` är ett objekt `{max_chapter_seconds, chapters:[…]}` — Task 3 cross-check läser `.chapters`/`chapterTargets[]`. Placeholder: hi-hats på fjärdedelar (åttondelar fick tempo-estimatorn att läsa 2/3-tempo) — kontrollera `beats.json` när riktiga låtar kommer.
+Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 default); exakta beat-tider (4 decimaler); `show_targets.json` är ett objekt `{max_chapter_seconds, chapters:[…]}` — Task 3 cross-check läser `.chapters`/`chapterTargets[]`. Placeholder: hi-hats på fjärdedelar (åttondelar fick tempo-estimatorn att läsa 2/3-tempo). De riktiga trance-låtarna lästes också på 2/3-tempo (3/16-delays); `beat_grid.disambiguate_period()` väljer nu tempo efter basonseter på kandidatgridden (Amiga Trance Demo 141,6, Guitar Trance 140,5, Rigid Arpeggios 138,3 BPM; placeholdern oförändrad 134). Showen är tre akter, 31 kapitel, 34 135 680 frames = 711,16 s (planens amendment).
 
 ## Så här återupptas arbetet
 

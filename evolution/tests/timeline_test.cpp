@@ -26,30 +26,39 @@ bool unit(float value) {
 }
 
 void checkChapters() {
-    CHECK(evo::show::showDuration() == 588.68);
-    CHECK(evo::show::chapterCount() == 21);
+    CHECK(std::abs(evo::show::showDuration() - 711.16) < 1e-9);
+    CHECK(evo::show::chapterCount() == 31);
     CHECK(evo::show::chapterStart(0) == 0.0);
-    CHECK(evo::show::chapterStart(11) == 289.92);
+    CHECK(evo::show::chapterStart(11) == 194.0);
+    CHECK(evo::show::chapterStart(20) == 412.4);
     for (int i = 1; i < evo::show::chapterCount(); ++i)
         CHECK(evo::show::chapterStart(i) > evo::show::chapterStart(i - 1));
 
     CHECK(sampleTimeline(0).effect == Effect::Boot);
     CHECK(sampleTimeline(evo::show::chapterStart(7) + .5).effect == Effect::Raytrace);
 
-    const evo::show::TimelineFrame studio = sampleTimeline(289.92);
+    const evo::show::TimelineFrame studio = sampleTimeline(194.0);
     CHECK(studio.effect == Effect::StudioNight);
     CHECK(studio.chapter == 11);
     CHECK(studio.track == 1);
     CHECK(studio.trackSeconds == 0.0);
-    CHECK(sampleTimeline(289.9).track == 0);
+    CHECK(sampleTimeline(193.99).track == 0);
 
-    CHECK(sampleTimeline(588.679).chapter == 20);
-    CHECK(sampleTimeline(588.68).chapter == 0); // the end wraps to the start
+    const evo::show::TimelineFrame reboot = sampleTimeline(412.4);
+    CHECK(reboot.effect == Effect::Reboot);
+    CHECK(reboot.chapter == 20);
+    CHECK(reboot.track == 2);
+    CHECK(reboot.trackSeconds == 0.0);
+    CHECK(sampleTimeline(412.39).track == 1);
+
+    CHECK(sampleTimeline(711.159).chapter == 30);
+    CHECK(sampleTimeline(711.159).effect == Effect::TheEnd);
+    CHECK(sampleTimeline(711.16).chapter == 0); // the end wraps to the start
     CHECK(sampleTimeline(-5).chapter == 0);
     CHECK(sampleTimeline(std::nan("")).chapter == 0);
-    CHECK(std::abs(evo::show::wrapShowTime(588.68 + 10) - 10) < 1e-9);
+    CHECK(std::abs(evo::show::wrapShowTime(711.16 + 10) - 10) < 1e-9);
 
-    // No chapter straddles the two tracks.
+    // No chapter straddles two tracks.
     for (int i = 0; i + 1 < evo::show::chapterCount(); ++i)
         CHECK(sampleTimeline(evo::show::chapterStart(i)).track ==
               sampleTimeline(evo::show::chapterStart(i + 1) - 1e-6).track);
@@ -80,7 +89,7 @@ void checkBeats() {
     // Within one beat the phase only rises; it stays in [0, 1] everywhere.
     evo::show::TimelineFrame previous = sampleTimeline(0);
     CHECK(previous.beatPhase == 0.f); // before the first tracked beat
-    for (int ms = 1; ms < 588680; ++ms) {
+    for (int ms = 1; ms < 711160; ++ms) {
         const evo::show::TimelineFrame frame = sampleTimeline(ms / 1000.0);
         CHECK(unit(frame.beatPhase));
         CHECK(frame.beatSeconds >= .2f);
@@ -99,7 +108,7 @@ void checkBeats() {
 
 void checkFlow() {
     double previous = sampleTimeline(0).flowSeconds;
-    for (int step = 1; step < 58868; ++step) {
+    for (int step = 1; step < 71116; ++step) {
         const double flow = sampleTimeline(step / 100.0).flowSeconds;
         CHECK(std::isfinite(flow));
         CHECK(flow >= previous);
@@ -109,10 +118,11 @@ void checkFlow() {
 
 void checkShowInfo() {
     const std::string json = evo::show::showInfoJson();
-    CHECK(json.find("\"duration\":588.68") != std::string::npos);
+    CHECK(json.find("\"duration\":711.16") != std::string::npos);
     CHECK(json.find("\"chapters\":[") != std::string::npos);
     CHECK(json.find("\"title\":\"RAYTRACE\"") != std::string::npos);
     CHECK(json.find("\"effect\":\"StudioNight\"") != std::string::npos);
+    CHECK(json.find("\"effect\":\"TheEnd\"") != std::string::npos);
 }
 
 } // namespace
