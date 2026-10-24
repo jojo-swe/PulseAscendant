@@ -125,6 +125,7 @@ add_library(evo_render STATIC
     src/retro/tunnel.cpp
     src/retro/palette.cpp
     src/retro/palettes.cpp
+    src/retro/raytrace.cpp
     src/retro/scene.cpp
     src/retro/scroller.cpp)
 target_include_directories(evo_render PUBLIC src)
@@ -154,6 +155,7 @@ evo_add_shaders(Evolution
     shaders/retro/plasma.comp
     shaders/retro/points.comp
     shaders/retro/polys.comp
+    shaders/retro/raytrace.comp
     shaders/retro/test_pattern.comp
     shaders/text/text_index.comp
     shaders/text/text_rgba.comp)
@@ -294,6 +296,26 @@ target_link_libraries(glenz_test PRIVATE evo_render)
 target_compile_definitions(glenz_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(glenz_test Evolution_shaders)
 add_test(NAME glenz COMMAND glenz_test)
+
+# RAYTRACE: the fixed palette and the quantiser on the CPU, the quantiser on the GPU (a test shader running the
+# shader's own quantiser, compiled for the test only) and the ray-traced index image from the retro stage, with
+# the validation layer on; fails on any message it reports.
+add_executable(raytrace_test tests/raytrace_test.cpp)
+target_link_libraries(raytrace_test PRIVATE evo_render)
+add_custom_command(
+    OUTPUT "${EVO_TEST_SPIRV_DIR}/test_raytrace_quantise.comp.spv"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -o "${EVO_TEST_SPIRV_DIR}/test_raytrace_quantise.comp.spv"
+            "${CMAKE_SOURCE_DIR}/shaders/test/raytrace_quantise.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/raytrace_quantise.comp"
+            "${CMAKE_SOURCE_DIR}/shaders/retro/raytrace_quantise.glsl" "${CMAKE_SOURCE_DIR}/shaders/retro/common.glsl"
+    COMMENT "Compiling test shader test_raytrace_quantise.comp"
+    VERBATIM)
+add_custom_target(raytrace_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/test_raytrace_quantise.comp.spv")
+add_dependencies(raytrace_test Evolution_shaders raytrace_test_shaders)
+target_compile_definitions(raytrace_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+                                                 EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_test(NAME raytrace COMMAND raytrace_test)
 
 # The sine scroller: its glyph positions on the CPU, and CREDITS and FLYBY's greeting from the retro stage,
 # with the validation layer on; fails on any message it reports.

@@ -8,7 +8,7 @@ implementation plans live in [`docs/plans/`](docs/plans/), starting with
 
 > **Status:** step 3 of the plan (the 1993 effects) is under way. The music drives a timeline of 31 chapters
 > in three acts, and the 1993 side renders through its own pipeline (below): BOOT, FLYBY, DOTS, PLASMA,
-> TUNNEL, GLENZ and the CREDITS sine scroller are finished on the 1993 side, the other effects still show a
+> TUNNEL, GLENZ, RAYTRACE and the CREDITS sine scroller are finished on the 1993 side, the other effects still show a
 > grey test pattern there, and the 2026 side is still a placeholder gradient.
 
 ## Requirements
@@ -106,7 +106,7 @@ the exports read back:
 1. **Retro stage.** The chapter's 1993 effect writes palette indices into a 320×200 8-bit image, as a VGA
    mode 13h screen would hold them, and a second pass maps them through the 256 colours that the effect's
    palette builder makes on the CPU. Palette cycling happens there, never in a shader. Each effect has its
-   own retro frame rate (35 Hz, the Raytrace placeholder 10 Hz); the stage renders only when the retro frame
+   own retro frame rate (35 Hz, RAYTRACE 10 Hz); the stage renders only when the retro frame
    changes, and everything it draws is a function of the chapter and the retro frame alone, so seeking,
    playback and export give the same picture.
 2. **CRT.** The 320×200 picture fills a centred 4:3 rectangle (its pixels are 1.2 times taller than wide),
@@ -136,6 +136,9 @@ The effects so far:
 - **GLENZ** (chapter 5): Future Crew's 24-triangle glenz vector from Second Reality (credited, Unlicense),
   spinning on three axes and bouncing on the chapter's beats, its translucent faces ORed into the palette
   index over moving copper bars, so the bars and the far side show through, tinted.
+- **RAYTRACE** (chapter 7): a "precalculated" ray-traced animation at 10 fps: chrome spheres and a
+  glass-coloured one bouncing round a big chrome sphere over a red and white checkerboard, hard shadows, two
+  reflection bounces, one ray per pixel, dithered into a fixed 6×6×6 colour cube and 24 greys.
 - **Scrollers**: CREDITS (chapter 29, now a 1993 chapter) rolls the credits on a sine wave over deep blue
   under a static EVOLUTION title; FLYBY's greeting is the other.
 

@@ -46,7 +46,7 @@ struct EffectInfo {
 
 inline constexpr const char* kTestPatternShader = "retro_test_pattern.comp.spv";
 inline constexpr std::uint32_t kDefaultRetroRate = 35;
-// Raytrace's 1993 side is a precalculated animation shown at a slower rate (step 3 renders it).
+// Raytrace's 1993 side is a precalculated animation shown at a slower rate (retro/raytrace.hpp).
 inline constexpr std::uint32_t kRaytraceRetroRate = 10;
 // PLASMA's index image (shaders/retro/plasma.comp) and its rate; the shader's clock is retroSeconds.
 inline constexpr const char* kPlasmaShader = "retro_plasma.comp.spv";
@@ -55,8 +55,9 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 // The registry (effects.cpp): the entry of every effect. Boot is the DOS prompt, Plasma the cycling plasma,
 // Credits the sine scroller on deep blue, Flyby the flat-shaded ship over a starfield with its greeting
 // scrolling over them, Dots the 512 morphing points, Tunnel the dot-ring tunnel that turns into a solid tube,
-// Glenz Future Crew's translucent glenz vector bouncing over copper bars.
-// The other effects get their entries in later steps and show the test pattern in grey until then.
+// Glenz Future Crew's translucent glenz vector bouncing over copper bars, Raytrace the dithered chrome
+// spheres over a checkerboard at 10 fps. The other effects get their entries in later steps and show the test
+// pattern in grey until then.
 const EffectInfo& effectFor(show::Effect effect);
 
 } // namespace evo::retro

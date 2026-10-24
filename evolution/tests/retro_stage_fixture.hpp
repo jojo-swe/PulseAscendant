@@ -35,8 +35,10 @@ public:
     static constexpr std::uint32_t kWidth = render::RetroStage::kWidth;
     static constexpr std::uint32_t kHeight = render::RetroStage::kHeight;
 
-    explicit RetroStageFixture(gfx::Context& ctx, bool colours = false)
-        : ring_(ctx), text_(ctx, ring_), stage_(ctx, ring_, text_),
+    // `effects` is the registry the stage renders from (a test may swap one effect's shader).
+    explicit RetroStageFixture(gfx::Context& ctx, bool colours = false,
+                               render::RetroStage::EffectLookup effects = retro::effectFor)
+        : ring_(ctx), text_(ctx, ring_), stage_(ctx, ring_, text_, effects),
           indexBuffer_(ctx, {VkDeviceSize{kWidth} * kHeight, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true,
                              "retro stage fixture index readback"}) {
         if (colours)

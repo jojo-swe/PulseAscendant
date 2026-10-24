@@ -76,7 +76,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     {98, Effect::Lens, Transition::Wipe, .7f, 0, "LENS",
         "1993 · ROTOZOOM · LENS", "2026 · GLASS SPHERE · RAY TRACED FLOOR"},
     {116, Effect::Raytrace, Transition::BeatSwap, 1.f, 0, "RAYTRACE",
-        "1993 · PRECALCULATED · 8 FPS", "2026 · REAL-TIME PATH TRACING · 60 FPS"},
+        "1993 · PRECALCULATED · 10 FPS", "2026 · REAL-TIME PATH TRACING · 60 FPS"},
     {150, Effect::City, Transition::Wipe, .9f, 0, "VECTOR CITY",
         "1993 · 200 POLYGONS · GOURAUD", "2026 · MILLIONS OF WINDOWS · WET STREETS"},
     {168, Effect::Finale, Transition::BeatSwap, 1.f, 0, "FINALE", "1993 · ALL EFFECTS", "2026 · THE STUDIO"},

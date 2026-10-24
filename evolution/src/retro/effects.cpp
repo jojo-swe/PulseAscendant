@@ -8,6 +8,7 @@
 #include "retro/flyby.hpp"
 #include "retro/glenz.hpp"
 #include "retro/palette.hpp"
+#include "retro/raytrace.hpp"
 #include "retro/scroller.hpp"
 #include "retro/tunnel.hpp"
 
@@ -18,7 +19,7 @@ static_assert(kFlybyRetroRate == kScrollerRetroRate);
 
 const EffectInfo& effectFor(show::Effect effect) {
     static constexpr EffectInfo kTestPattern{kTestPatternShader, kDefaultRetroRate, grayPalette};
-    static constexpr EffectInfo kRaytrace{kTestPatternShader, kRaytraceRetroRate, grayPalette};
+    static constexpr EffectInfo kRaytrace{kRaytraceShader, kRaytraceRetroRate, raytracePalette};
     static constexpr EffectInfo kBoot{nullptr, kBootRetroRate, bootPalette, bootText, bootBackground};
     static constexpr EffectInfo kPlasma{kPlasmaShader, kPlasmaRetroRate, plasmaPalette};
     static constexpr EffectInfo kFlyby{nullptr,   kFlybyRetroRate, flybyPalette,

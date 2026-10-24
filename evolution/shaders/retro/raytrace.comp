@@ -1,0 +1,157 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// RAYTRACE's 1993 side (chapter 7): a "precalculated" ray-traced animation. One ray per pixel (aliased, as a
+// night's render on a 486 was): a chrome sphere in the middle, four chrome spheres and one glass-coloured one
+// orbiting and bouncing round it, above an infinite red and white checkerboard; one point light with hard
+// shadows, two reflection bounces, a sky gradient. The colour is quantised to the fixed palette with 4x4
+// Bayer dithering (raytrace_quantise.glsl). The time is pc.retroSeconds (10 retro frames a second), so a
+// frame is a pure function of retroFrame. The scene's constants must match src/retro/raytrace.cpp.
+
+#include "common.glsl"
+#include "raytrace_quantise.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D indexImage;
+
+// Must match RetroPushConstants in src/render/retro_stage.cpp (12 bytes).
+layout(push_constant) uniform PushConstants {
+    uint retroFrame;    // floor(localSeconds * retroRate)
+    uint chapter;       // the chapter index
+    float retroSeconds; // retroFrame / retroRate: the chapter-local time of this retro frame
+} pc;
+
+const int kSpheres = 6;
+const int kGlass = 3;     // kRaytraceGlassSphere
+const int kFloor = 6;     // the id of the checkerboard
+const float kOrbit = 3.0; // kRaytraceOrbitRadius
+const float kTau = 6.28318530718;
+const vec3 kEye = vec3(0.0, 2.0, -8.0); // raytraceCamera()
+const vec3 kTarget = vec3(0.0, 1.0, 0.0);
+const float kFovY = 46.0;
+const float kPixelAspect = 1.2;
+const vec3 kLight = vec3(-5.0, 9.0, -6.0); // behind the camera, up left: shadows fall away from it
+const vec3 kHorizon = vec3(0.80, 0.86, 1.0);
+const vec3 kZenith = vec3(0.10, 0.20, 0.60);
+
+vec4 spheres[kSpheres]; // centre, radius
+
+void placeSpheres(float t) {
+    spheres[0] = vec4(0.0, 1.3, 0.0, 1.3);
+    for (int i = 1; i < kSpheres; ++i) {
+        float angle = 0.6 * t + float(i - 1) * kTau / 5.0;
+        float bounce = abs(sin(1.7 * t + 1.3 * float(i)));
+        spheres[i] = vec4(kOrbit * sin(angle), 0.6 + 0.9 * bounce, -kOrbit * cos(angle), 0.6);
+    }
+}
+
+// The distance to the sphere along a unit direction, or -1 for a miss (rays start outside every sphere).
+float hitSphere(vec3 origin, vec3 direction, vec4 sphere) {
+    vec3 oc = origin - sphere.xyz;
+    float b = dot(oc, direction);
+    float h = b * b - (dot(oc, oc) - sphere.w * sphere.w);
+    if (h < 0.0) {
+        return -1.0;
+    }
+    float t = -b - sqrt(h);
+    return t > 1e-3 ? t : -1.0;
+}
+
+// The nearest hit: its distance and id (a sphere, kFloor, or -1 for the sky).
+float trace(vec3 origin, vec3 direction, out int id) {
+    float nearest = 1e30;
+    id = -1;
+    for (int i = 0; i < kSpheres; ++i) {
+        float t = hitSphere(origin, direction, spheres[i]);
+        if (t > 0.0 && t < nearest) {
+            nearest = t;
+            id = i;
+        }
+    }
+    if (direction.y < -1e-6) {
+        float t = -origin.y / direction.y;
+        if (t > 1e-3 && t < nearest) {
+            nearest = t;
+            id = kFloor;
+        }
+    }
+    return nearest;
+}
+
+// 1 where the light reaches the point, 0 in a sphere's shadow (hard shadows).
+float lightAt(vec3 point) {
+    vec3 toLight = kLight - point;
+    float distance = length(toLight);
+    vec3 direction = toLight / distance;
+    for (int i = 0; i < kSpheres; ++i) {
+        float t = hitSphere(point, direction, spheres[i]);
+        if (t > 0.0 && t < distance) {
+            return 0.0;
+        }
+    }
+    return 1.0;
+}
+
+vec3 sky(vec3 direction) {
+    return mix(kHorizon, kZenith, sqrt(clamp(direction.y, 0.0, 1.0)));
+}
+
+vec3 shade(vec3 origin, vec3 direction) {
+    vec3 colour = vec3(0.0);
+    vec3 weight = vec3(1.0);
+    // The primary ray and two reflections.
+    for (int bounce = 0; bounce <= 2; ++bounce) {
+        int id;
+        float t = trace(origin, direction, id);
+        if (id < 0) {
+            return colour + weight * sky(direction);
+        }
+        vec3 point = origin + t * direction;
+        vec3 toLight = normalize(kLight - point);
+        float light = lightAt(point);
+        if (id == kFloor) {
+            vec2 cell = floor(point.xz);
+            bool white = mod(cell.x + cell.y, 2.0) == 0.0;
+            vec3 base = white ? vec3(0.92) : vec3(0.82, 0.07, 0.05);
+            vec3 lit = base * (0.28 + 0.8 * light * max(toLight.y, 0.0));
+            // Far squares fade into the horizon haze, so the aliasing stays at the horizon.
+            return colour + weight * mix(lit, kHorizon, smoothstep(40.0, 140.0, t));
+        }
+        vec3 normal = normalize(point - spheres[id].xyz);
+        vec3 reflected = reflect(direction, normal);
+        float highlight = light * pow(max(dot(reflected, toLight), 0.0), 60.0);
+        if (id == kGlass) {
+            vec3 tint = vec3(0.30, 0.95, 0.70);
+            colour += weight * (tint * (0.08 + 0.3 * light * max(dot(normal, toLight), 0.0)) + vec3(highlight));
+            weight *= 0.65 * tint;
+        } else {
+            colour += weight * vec3(highlight);
+            weight *= vec3(0.80, 0.82, 0.86); // chrome
+        }
+        origin = point + 1e-3 * normal;
+        direction = reflected;
+    }
+    return colour + weight * vec3(0.25); // a third reflection is not traced
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= kRetroWidth || pixel.y >= kRetroHeight) {
+        return;
+    }
+    placeSpheres(pc.retroSeconds);
+
+    // The pinhole camera of retro::project: pixel centres, 1.2 pixel aspect.
+    vec3 forward = normalize(kTarget - kEye);
+    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
+    vec3 up = cross(forward, right);
+    float focalY = 100.0 / tan(radians(kFovY) * 0.5);
+    float focalX = focalY * kPixelAspect;
+    vec2 view = vec2((float(pixel.x) + 0.5 - 160.0) / focalX, (100.0 - float(pixel.y) - 0.5) / focalY);
+    vec3 direction = normalize(forward + view.x * right + view.y * up);
+
+    vec3 colour = clamp(shade(kEye, direction), 0.0, 1.0);
+    uvec3 bytes = uvec3(colour * 255.0 + 0.5);
+    imageStore(indexImage, ivec2(pixel), uvec4(raytraceQuantise(bytes, bayer4(pixel))));
+}
