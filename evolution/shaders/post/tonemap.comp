@@ -2,9 +2,10 @@
 #extension GL_GOOGLE_include_directive : require
 
 // The 2026 picture's one tonemap and its one display encoding (Review Focus 6): HDR linear light (RGBA16F)
-// -> * 2^exposureEV -> ACES fit -> clamp [0, 1] -> sRGB OETF -> round(v * 255 + d) with d a static
-// triangular dither in (-0.5, 0.5) from pcg(x, y), the same for all three channels -> RGBA8 UNORM. A
-// non-finite component counts as 0. Must match src/post/tonemap_reference.cpp.
+// -> * 2^exposureEV -> ACES fit (negative light clamped to 0 in AP1) -> clamp [0, 1] -> sRGB OETF
+// -> round(v * 255 + d) with d a static triangular dither in (-0.5, 0.5) from pcg(x, y), the same for all
+// three channels -> RGBA8 UNORM. A non-finite component counts as 0. Must match
+// src/post/tonemap_reference.cpp.
 
 #include "../rt/random.glsl"
 #include "aces.glsl"

@@ -29,13 +29,6 @@ float rrtAndOdtFit(float v) {
     return a / b;
 }
 
-// For v in [0, 1]; exactly 1 at 1 (1.055 - 0.055 rounds below 1 in float, which would make white 254).
-float srgbOetf(float v) {
-    if (v >= 1.f)
-        return 1.f;
-    return v <= 0.0031308f ? 12.92f * v : 1.055f * std::pow(v, 1.f / 2.4f) - 0.055f;
-}
-
 // PCG-RXS-M-XS, as pcgHash in shaders/rt/random.glsl.
 std::uint32_t pcgHash(std::uint32_t v) {
     const std::uint32_t state = v * 747796405u + 2891336453u;
@@ -50,15 +43,27 @@ float openUnit(std::uint32_t h) {
 
 } // namespace
 
+// Exactly 1 at 1 (1.055 - 0.055 rounds below 1 in float, which would make white 254).
+float srgbOetf(float v) {
+    if (v >= 1.f)
+        return 1.f;
+    return v <= 0.0031308f ? 12.92f * v : 1.055f * std::pow(v, 1.f / 2.4f) - 0.055f;
+}
+
 std::array<float, 3> tonemapDisplay(const float rgb[3], float exposureEV) {
     const float scale = std::exp2(exposureEV);
     float hdr[3];
     for (int i = 0; i < 3; ++i)
         hdr[i] = std::isfinite(rgb[i]) ? rgb[i] * scale : 0.f;
 
+    // Negative light (in AP1, after the input matrix) is clamped to 0: the curve's lower root lies below 0
+    // and its other branch rises again, so -1 grey would come out white. Not before the matrix: the
+    // placeholder's inverse tonemap feeds negative RGB whose AP1 components are all positive (at least
+    // 0.0033).
     float fitted[3];
     for (int i = 0; i < 3; ++i)
-        fitted[i] = rrtAndOdtFit(kInput[i][0] * hdr[0] + kInput[i][1] * hdr[1] + kInput[i][2] * hdr[2]);
+        fitted[i] = rrtAndOdtFit(
+            std::max(kInput[i][0] * hdr[0] + kInput[i][1] * hdr[1] + kInput[i][2] * hdr[2], 0.f));
 
     std::array<float, 3> display{};
     for (int i = 0; i < 3; ++i) {

@@ -337,8 +337,8 @@ Tlas::Tlas(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t maxInstances)
         alignedAddress(instanceBuffers_[slot], desc.alignment, "TLAS instances");
     }
     tlas_ = createAccelerationStructure(ctx, storage_, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, "tlas");
-    // Tells the destructor whether the ring is still there to wait for.
-    ringAlive_ = ring.onBegin([](std::uint32_t) {});
+    // Tells the destructor whether the ring is still there to wait for, and starts each frame unbuilt.
+    ringAlive_ = ring.onBegin([this](std::uint32_t) { builtThisFrame_ = false; });
 }
 
 Tlas::~Tlas() {
@@ -361,6 +361,8 @@ void Tlas::destroy() noexcept {
 void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Instance> instances) {
     if (!ringAlive_.active() || !ring_.recording())
         throw std::logic_error("Tlas::build() outside its ring's begin() and submit()");
+    if (builtThisFrame_)
+        throw std::logic_error("Tlas::build(): a second build in one frame (its traces read the first)");
     if (instances.size() > maxInstances_)
         throw std::length_error("Tlas::build(): " + std::to_string(instances.size()) +
                                 " instances for at most " + std::to_string(maxInstances_));
@@ -379,6 +381,9 @@ void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Ins
         record.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         record.accelerationStructureReference = blases.address(instance.mesh);
     }
+
+    // Nothing below throws: from here on the frame has its build.
+    builtThisFrame_ = true;
 
     // This slot's previous frame has completed (begin() waited for it), so its instances are free to write.
     const gfx::Buffer& instanceBuffer = instanceBuffers_[ring_.slot()];

@@ -56,7 +56,9 @@ int axisOf(Vec3 unitAxis) {
 }
 
 // A ring of `segments` + 1 columns per profile point (the last column repeats the first one's position with
-// u = 1), quads between consecutive points, a single triangle where one side is a pole (radius 0).
+// u = 1), quads between consecutive points, a single triangle where one side is a pole (radius 0). Column j
+// sits at angle phi = 2 pi j / segments from +x towards -z, so u grows along cross(+y, outward normal): to
+// the right seen from outside with +y up, and an image wrapped around reads unmirrored.
 void revolve(rt::Mesh& mesh, std::span<const float> radii, std::span<const float> ys,
              std::span<const Vec2> normals /* (radial, y), unit */, std::span<const float> vs, int segments) {
     const auto columns = static_cast<std::uint32_t>(segments) + 1;
@@ -72,8 +74,8 @@ void revolve(rt::Mesh& mesh, std::span<const float> radii, std::span<const float
         for (std::uint32_t j = 0; j < columns; ++j) {
             const float c = cosines[j % segments];
             const float s = sines[j % segments];
-            addVertex(mesh, {radii[i] * c, ys[i], radii[i] * s},
-                      {normals[i].x * c, normals[i].y, normals[i].x * s},
+            addVertex(mesh, {radii[i] * c, ys[i], -radii[i] * s},
+                      {normals[i].x * c, normals[i].y, -normals[i].x * s},
                       static_cast<float>(j) / static_cast<float>(segments), vs[i]);
         }
     }
@@ -83,10 +85,12 @@ void revolve(rt::Mesh& mesh, std::span<const float> radii, std::span<const float
             const std::uint32_t b = a + 1;                   // this point, next column
             const std::uint32_t d = a + columns;             // next point, this column
             const std::uint32_t c = d + 1;                   // next point, next column
+            // a, b, c, d run counter-clockwise seen from outside: b and c lie to the right (along u), d and c
+            // further along the profile.
             if (radii[i + 1] != 0.f)
-                addTriangle(mesh, a, d, c);
+                addTriangle(mesh, a, c, d);
             if (radii[i] != 0.f)
-                addTriangle(mesh, a, c, b);
+                addTriangle(mesh, a, b, c);
         }
     }
 }
@@ -202,10 +206,12 @@ rt::Mesh cylinder(float radius, float height, int segments, bool caps) {
             for (std::uint32_t j = 0; j < static_cast<std::uint32_t>(segments); ++j) {
                 const std::uint32_t a = centre + 1 + j;
                 const std::uint32_t b = centre + 1 + (j + 1) % static_cast<std::uint32_t>(segments);
+                // The rim runs counter-clockwise seen from above (+x towards -z), so the top cap takes it in
+                // order and the bottom cap reversed.
                 if (y > 0)
-                    addTriangle(mesh, centre, b, a);
-                else
                     addTriangle(mesh, centre, a, b);
+                else
+                    addTriangle(mesh, centre, b, a);
             }
         }
     }

@@ -1,7 +1,8 @@
 // The procedural meshes and the transform helpers of the 2026 side, on the CPU: every closed mesh is
 // watertight (after welding positions within 1e-6 every edge belongs to exactly two triangles, once in each
 // direction), every triangle winds counter-clockwise around its outward vertex normals, normals are unit and
-// uvs lie in [0, 1]; the sphere's area converges on 4 pi; the Mat34 helpers move points and normals as
+// uvs lie in [0, 1]; on the revolved meshes u grows along cross(up, n) (to the right seen from outside, so an
+// image is not mirrored); the sphere's area converges on 4 pi; the Mat34 helpers move points and normals as
 // documented.
 
 #include "modern/math.hpp"
@@ -137,6 +138,33 @@ bool uvsInUnitSquare(const Mesh& mesh) {
     });
 }
 
+// Not mirrored: on every triangle of the revolved surface u grows along cross(+y, n), to the viewer's right
+// seen from outside with +y up. Triangles facing straight up or down (caps) and those without a u gradient
+// are skipped; at least `minimum` must be checked.
+bool uGrowsRightward(const Mesh& mesh, std::size_t minimum) {
+    std::size_t checked = 0;
+    for (std::size_t t = 0; t < mesh.indices.size(); t += 3) {
+        const std::uint32_t i0 = mesh.indices[t], i1 = mesh.indices[t + 1], i2 = mesh.indices[t + 2];
+        const Vec3 e1 = position(mesh, i1) - position(mesh, i0);
+        const Vec3 e2 = position(mesh, i2) - position(mesh, i0);
+        const float du1 = mesh.vertices[i1].uv[0] - mesh.vertices[i0].uv[0];
+        const float du2 = mesh.vertices[i2].uv[0] - mesh.vertices[i0].uv[0];
+        const Vec3 n = faceNormal(mesh, t);
+        const Vec3 right = evo::modern::cross({0.f, 1.f, 0.f}, n);
+        if (evo::modern::length(right) < 1e-3f * evo::modern::length(n) || (du1 == 0.f && du2 == 0.f))
+            continue;
+        // The gradient of u in the triangle's plane, up to the positive factor 1 / (|e1|^2 |e2|^2 -
+        // (e1.e2)^2).
+        const float e11 = evo::modern::dot(e1, e1), e22 = evo::modern::dot(e2, e2),
+                    e12 = evo::modern::dot(e1, e2);
+        const Vec3 gradient = e1 * (du1 * e22 - du2 * e12) + e2 * (du2 * e11 - du1 * e12);
+        if (!(evo::modern::dot(gradient, right) > 0.f))
+            return false;
+        ++checked;
+    }
+    return checked >= minimum;
+}
+
 double area(const Mesh& mesh) {
     double sum = 0;
     for (std::size_t t = 0; t < mesh.indices.size(); t += 3)
@@ -216,6 +244,7 @@ void testBevelBox() {
 void testCylinder() {
     const Mesh capped = evo::modern::cylinder(0.5f, 2.f, 32, true);
     checkClosed(capped);
+    CHECK(uGrowsRightward(capped, 64));
     const auto [lo, hi] = bounds(capped);
     CHECK(std::abs(lo.y + 1.f) < 1e-6f && std::abs(hi.y - 1.f) < 1e-6f);
     CHECK(std::abs(hi.x - 0.5f) < 1e-6f && std::abs(lo.z + 0.5f) < 1e-6f);
@@ -241,6 +270,7 @@ void testLathe() {
                                     {0.4f, 0.8f}, {0.45f, 1.f}, {0.f, 1.f}};
     const Mesh mesh = evo::modern::lathe(profile, 48);
     checkClosed(mesh);
+    CHECK(uGrowsRightward(mesh, 5 * 48));
     const auto [lo, hi] = bounds(mesh);
     CHECK(std::abs(lo.y) < 1e-6f && std::abs(hi.y - 1.f) < 1e-6f);
     CHECK(std::abs(hi.x - 0.6f) < 1e-6f);
@@ -251,6 +281,7 @@ void testLathe() {
     checkIndices(open);
     CHECK(!watertight(open));
     CHECK(windsWithNormals(open) && unitNormals(open) && uvsInUnitSquare(open));
+    CHECK(uGrowsRightward(open, 48));
 
     const std::vector<Vec2> one{{0.3f, 0.f}};
     CHECK(throwsInvalidArgument([&] { evo::modern::lathe(one, 24); }));
@@ -262,6 +293,15 @@ void testLathe() {
 void testSphere() {
     const Mesh mesh = evo::modern::uvSphere(1.f, 32, 64);
     checkClosed(mesh);
+    CHECK(uGrowsRightward(mesh, 32 * 64));
+    // Seen from +x with +y up, the viewer's right is -z: the vertex at u = 1/4 on the equator lies there.
+    bool sawQuarter = false;
+    for (const auto& v : mesh.vertices)
+        if (v.uv[0] == .25f && v.uv[1] == .5f) {
+            CHECK(near({v.position[0], v.position[1], v.position[2]}, {0.f, 0.f, -1.f}, 1e-6f));
+            sawQuarter = true;
+        }
+    CHECK(sawQuarter);
     CHECK(std::abs(area(mesh) - 4.0 * std::numbers::pi) / (4.0 * std::numbers::pi) < 0.01);
     // Smooth: the normal is the direction from the centre.
     for (std::uint32_t i = 0; i < mesh.vertices.size(); ++i)
@@ -269,6 +309,7 @@ void testSphere() {
 
     const Mesh small = evo::modern::uvSphere(0.03f, 8, 12);
     checkClosed(small);
+    CHECK(uGrowsRightward(small, 8 * 12));
     CHECK(throwsInvalidArgument([] { evo::modern::uvSphere(1.f, 1, 8); }));
     CHECK(throwsInvalidArgument([] { evo::modern::uvSphere(1.f, 4, 2); }));
 }

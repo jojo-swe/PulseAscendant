@@ -19,8 +19,13 @@ static_assert(sizeof(VkAccelerationStructureInstanceKHR) == 64);
 // One bottom-level acceleration structure per mesh of a GeometryStore, all built in one immediate submit at
 // setup, opaque geometry, PREFER_FAST_TRACE | ALLOW_COMPACTION. With `compact` the compacted sizes are
 // queried, compacted copies made in a second immediate submit, and only once that copy completed are the
-// originals and the scratch buffer destroyed. The store may go once this is built; the set must outlive
-// every submit that traces a TLAS referencing it.
+// originals and the scratch buffer destroyed. The store may go once this is built as far as the BLASes are
+// concerned, but shaders that fetch vertices read its buffers.
+//
+// Lifetime, for scene owners: declare the GeometryStore and the BlasSet before the FrameRing and the Tlas
+// (members are destroyed in reverse order), so they outlive both: the ring's destructor and the Tlas's wait
+// for the frames in flight, and only then may the BLASes and the vertex and index buffers those frames
+// traced go.
 class BlasSet {
 public:
     BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact = true);
@@ -70,9 +75,17 @@ struct Instance {
 // and a barrier (BUILD writes -> RAY_TRACING_SHADER | COMPUTE_SHADER acceleration structure reads) for this
 // frame's traces.
 //
+// One build per frame: a second build() in the same frame throws std::logic_error, since it would overwrite
+// the instance buffer and the TLAS that the first build's traces in this command buffer read.
+//
 // Lifetime: a Tlas belongs to the ring it was made with. Its destructor waits for every submit of that ring
-// while the ring lives (a frame in flight may still trace the TLAS); a ring destroyed first has waited
-// itself. The BlasSet a build used must outlive the frame.
+// while the ring lives (a frame in flight may still trace the TLAS); that is a full stall of the ring, fine
+// at shutdown or between scenes outside the show, not for scenes torn down mid-show. A ring destroyed first
+// has waited itself. The BlasSet and GeometryStore a build used must outlive the frame: declare them before
+// the ring and the Tlas.
+//
+// The barriers assume one queue: the ring's frames and every trace of the TLAS are submitted to the
+// Context's single queue in order. A second queue would need semaphores between its submits and these.
 class Tlas {
 public:
     // Throws std::invalid_argument for maxInstances 0.
@@ -81,7 +94,8 @@ public:
     Tlas(const Tlas&) = delete;
     Tlas& operator=(const Tlas&) = delete;
 
-    // Throws, before recording anything, std::logic_error outside ring.begin()/submit(), std::length_error
+    // Throws, before recording anything, std::logic_error outside ring.begin()/submit() or for a second build
+    // in the frame (a refused build does not count), std::length_error
     // for more than maxInstances instances, std::out_of_range for a mesh not in `blases` and
     // std::invalid_argument for a customIndex or hitGroup over 24 bits.
     void build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Instance> instances);
@@ -98,6 +112,7 @@ private:
     gfx::Buffer scratch_;
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> instanceBuffers_;
     VkAccelerationStructureKHR tlas_ = VK_NULL_HANDLE;
+    bool builtThisFrame_ = false;            // reset by the ring's begin()
     gfx::FrameRing::Subscription ringAlive_; // active while ring_ lives
 };
 

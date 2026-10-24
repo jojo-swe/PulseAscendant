@@ -1,9 +1,11 @@
 // The geometry store and the acceleration structures: every mesh in one vertex and one index buffer, one
 // compacted BLAS per mesh built at setup, a TLAS rebuilt every frame from per-slot instance buffers. A
-// ray-query probe casts a grid of rays along -z and each hit (distance, custom index, primitive, facing) must
-// equal a CPU intersection of the same instances. Review Focus 3: 64 frames with two in flight while one
-// instance moves, each frame's probe equal to its own transform. Runs with the validation layer and its
-// synchronization validation on and fails on any message.
+// ray-query probe casts a grid of rays along -z and each hit (distance, custom index, primitive, facing,
+// instance index, SBT record offset) must equal a CPU intersection of the same instances, also with a cull
+// mask that leaves instances out and with the cull-back-facing ray flag (which every instance's
+// FACING_CULL_DISABLE overrides). A TLAS refuses a second build in one frame. Review Focus 3: 64 frames with
+// two in flight while one instance moves, each frame's probe equal to its own transform. Runs with the
+// validation layer and its synchronization validation on and fails on any message.
 
 #include "gfx/buffer.hpp"
 #include "gfx/compute_pipeline.hpp"
@@ -139,14 +141,15 @@ Vec3d apply(const rt::Mat34& m, const float p[3]) {
 constexpr std::uint32_t kQuad = 0, kCube = 1;
 
 // The scene at `frame`: a quad in front of everything at x = 0.1 * frame, a quad turned away from the rays
-// (they hit its back) and two turned cubes.
+// (they hit its back) and two turned cubes. Hit groups 2, 1, 0, 1 and masks 0xFF, 0x01, 0x02, 0x05, so a
+// cull mask of 0x01 leaves out the turned quad and 0x02 both cubes.
 std::vector<rt::Instance> instancesAt(int frame) {
     const auto x = static_cast<double>(static_cast<float>(0.1 * frame));
     return {
-        {kQuad, makeTransform({x, -1.9, 3.0}, {0, 0, 1}, 0.0, 1.0), 10, 0},
-        {kCube, makeTransform({1.9, -2.1, 0.0}, {1, 1, 0}, 35.0, 1.2), 11, 1},
-        {kQuad, makeTransform({-1.9, 2.05, -1.0}, {0, 1, 0}, 140.0, 2.0), 12, 0},
-        {kCube, makeTransform({2.0, 1.95, 0.5}, {1, 2, 3}, 50.0, 1.5), 13, 1},
+        {kQuad, makeTransform({x, -1.9, 3.0}, {0, 0, 1}, 0.0, 1.0), 10, 2, 0xFF},
+        {kCube, makeTransform({1.9, -2.1, 0.0}, {1, 1, 0}, 35.0, 1.2), 11, 1, 0x01},
+        {kQuad, makeTransform({-1.9, 2.05, -1.0}, {0, 1, 0}, 140.0, 2.0), 12, 0, 0x02},
+        {kCube, makeTransform({2.0, 1.95, 0.5}, {1, 2, 3}, 50.0, 1.5), 13, 1, 0x05},
     };
 }
 
@@ -157,38 +160,58 @@ struct ProbeHit {
     std::int32_t customIndex;
     std::int32_t primitiveId;
     std::int32_t frontFace;
+    std::int32_t instanceId; // the instance's index in the build
+    std::int32_t sbtOffset;  // its hit group
 };
-static_assert(sizeof(ProbeHit) == 16);
+static_assert(sizeof(ProbeHit) == 24);
 
 constexpr std::uint32_t kGrid = 16;
 constexpr std::uint32_t kRays = kGrid * kGrid;
 using ProbeHits = std::array<ProbeHit, kRays>;
 
+constexpr std::uint32_t kCullBackFacing = 0x10; // gl_RayFlagsCullBackFacingTrianglesEXT
+
 struct ProbePush {
     float originX, originY, originZ, spacing;
     std::uint32_t gridWidth, gridHeight;
+    std::uint32_t cullMask = 0xFF;
+    std::uint32_t rayFlags = 0; // gl_RayFlagsNoneEXT
 };
 // Ray x and y sit 0.03 and 0.08 off the 0.1 lattice that every instance's edges and the moving quad lie on,
 // so no ray grazes an edge (the reference checks that).
 constexpr ProbePush kStaticGrid{-3.97f, -3.92f, 10.0f, 0.5f, kGrid, kGrid};
 constexpr ProbePush kMovingGrid{-0.97f, -3.92f, 10.0f, 0.5f, kGrid, kGrid};
 
-// The closest hit of every ray of `grid` against the instances' world-space triangles (Moller-Trumbore in
-// double, no culling). A triangle is front-facing when cross(v1 - v0, v2 - v0) points back at the ray
-// origin: Vulkan's default ("clockwise from the ray in a left-handed system", FLIP_FACING not set) is
+// The closest hit of every ray of `grid` against the world-space triangles of the instances its cull mask
+// keeps (Moller-Trumbore in double, no face culling: every instance has FACING_CULL_DISABLE, whatever the
+// ray flags). A triangle is front-facing when cross(v1 - v0, v2 - v0) points back at the ray origin:
+// Vulkan's default ("clockwise from the ray in a left-handed system", FLIP_FACING not set) is
 // counter-clockwise seen from the origin in our right-handed space, so an outward face hit from outside is
-// front-facing.
+// front-facing. The spec defines facing in object space (the ray transformed into the instance); the
+// world-space winding used here is the same only while the transform keeps orientation, so the reference
+// refuses a transform whose determinant is not positive.
 // Throws if any ray comes within 1e-3 (barycentric) of a triangle's edge, where GPU and CPU may differ.
 ProbeHits reference(const rt::Mesh* meshes, const std::vector<rt::Instance>& instances, ProbePush grid) {
+    for (const rt::Instance& instance : instances) {
+        const auto& m = instance.transform.m;
+        const double det = double(m[0][0]) * (double(m[1][1]) * m[2][2] - double(m[1][2]) * m[2][1]) -
+                           double(m[0][1]) * (double(m[1][0]) * m[2][2] - double(m[1][2]) * m[2][0]) +
+                           double(m[0][2]) * (double(m[1][0]) * m[2][1] - double(m[1][1]) * m[2][0]);
+        if (!(det > 0.0))
+            throw std::runtime_error("reference: a mirroring transform; facing would need object space");
+    }
     ProbeHits hits{};
     for (std::uint32_t j = 0; j < grid.gridHeight; ++j)
         for (std::uint32_t i = 0; i < grid.gridWidth; ++i) {
             const Vec3d origin{double(grid.originX + grid.spacing * float(i)),
                                double(grid.originY + grid.spacing * float(j)), double(grid.originZ)};
             const Vec3d dir{0.0, 0.0, -1.0};
-            ProbeHit best{-1.0f, -1, -1, -1};
+            ProbeHit best{-1.0f, -1, -1, -1, -1, -1};
             double bestT = std::numeric_limits<double>::infinity();
-            for (const rt::Instance& instance : instances) {
+            for (std::size_t index = 0; index < instances.size(); ++index) {
+                const rt::Instance& instance = instances[index];
+                if ((instance.mask & grid.cullMask) == 0)
+                    continue;
                 const rt::Mesh& mesh = meshes[instance.mesh];
                 for (std::size_t tri = 0; tri < mesh.indices.size() / 3; ++tri) {
                     const Vec3d v0 = apply(instance.transform, mesh.vertices[mesh.indices[3 * tri]].position);
@@ -222,6 +245,8 @@ ProbeHits reference(const rt::Mesh* meshes, const std::vector<rt::Instance>& ins
                         best.customIndex = static_cast<std::int32_t>(instance.customIndex);
                         best.primitiveId = static_cast<std::int32_t>(tri);
                         best.frontFace = dot(cross(e1, e2), dir) < 0.0 ? 1 : 0;
+                        best.instanceId = static_cast<std::int32_t>(index);
+                        best.sbtOffset = static_cast<std::int32_t>(instance.hitGroup);
                     }
                 }
             }
@@ -236,12 +261,13 @@ bool matches(const ProbeHits& got, const ProbeHits& want, const char* what) {
         const ProbeHit& g = got[r];
         const ProbeHit& w = want[r];
         if (std::fabs(g.t - w.t) > 1e-4f || g.customIndex != w.customIndex ||
-            g.primitiveId != w.primitiveId || g.frontFace != w.frontFace) {
+            g.primitiveId != w.primitiveId || g.frontFace != w.frontFace || g.instanceId != w.instanceId ||
+            g.sbtOffset != w.sbtOffset) {
             std::printf(
-                "%s: ray %u got (t %.6f, custom %d, primitive %d, front %d), want (t %.6f, custom %d, "
-                "primitive %d, front %d)\n",
-                what, r, g.t, g.customIndex, g.primitiveId, g.frontFace, w.t, w.customIndex, w.primitiveId,
-                w.frontFace);
+                "%s: ray %u got (t %.6f, custom %d, primitive %d, front %d, instance %d, sbt %d), want "
+                "(t %.6f, custom %d, primitive %d, front %d, instance %d, sbt %d)\n",
+                what, r, g.t, g.customIndex, g.primitiveId, g.frontFace, g.instanceId, g.sbtOffset, w.t,
+                w.customIndex, w.primitiveId, w.frontFace, w.instanceId, w.sbtOffset);
             return false;
         }
     }
@@ -374,7 +400,10 @@ void testGeometryStore(gfx::Context& ctx, const std::array<rt::Mesh, 2>& meshes)
 }
 
 // (b) Compacted and uncompacted BLASes give the same probe, equal to the CPU intersection, and compaction
-// does not grow them. A TLAS refuses more instances than it was made for.
+// does not grow them. The probe also matches with cull masks that leave instances out, and with the
+// cull-back-facing ray flag: FACING_CULL_DISABLE keeps the back-facing hits. A TLAS refuses more instances
+// than it was made for, and a second build in the frame (it would overwrite the instances and the TLAS the
+// first build's traces read).
 void testProbeMatchesReference(gfx::Context& ctx, const std::array<rt::Mesh, 2>& meshes) {
     rt::GeometryStore store(ctx, meshes);
     rt::BlasSet compacted(ctx, store);
@@ -397,29 +426,64 @@ void testProbeMatchesReference(gfx::Context& ctx, const std::array<rt::Mesh, 2>&
     Probe probe(ctx);
     gfx::Buffer outCompacted = hitBuffer(ctx, "hits compacted");
     gfx::Buffer outUncompacted = hitBuffer(ctx, "hits uncompacted");
+    gfx::Buffer outMaskTurned = hitBuffer(ctx, "hits mask 0x01");
+    gfx::Buffer outMaskCubes = hitBuffer(ctx, "hits mask 0x02");
+    gfx::Buffer outCullBack = hitBuffer(ctx, "hits cull back-facing");
     gfx::FrameRing ring(ctx);
     rt::Tlas tlasCompacted(ctx, ring, 4);
     rt::Tlas tlasUncompacted(ctx, ring, 4);
 
     const std::vector<rt::Instance> instances = instancesAt(-20); // the moving quad at x = -2
+    ProbePush maskTurned = kStaticGrid, maskCubes = kStaticGrid, cullBack = kStaticGrid;
+    maskTurned.cullMask = 0x01;
+    maskCubes.cullMask = 0x02;
+    cullBack.rayFlags = kCullBackFacing;
     VkCommandBuffer cmd = ring.begin();
-    tlasCompacted.build(cmd, compacted, instances);
-    tlasUncompacted.build(cmd, uncompacted, instances);
-    probe.record(cmd, ring, tlasCompacted, outCompacted, kStaticGrid);
-    probe.record(cmd, ring, tlasUncompacted, outUncompacted, kStaticGrid);
-
-    std::printf("expecting a refused TLAS build:\n");
+    std::printf("expecting two refused TLAS builds:\n");
     std::vector<rt::Instance> five = instances;
     five.push_back(instances[0]);
     CHECK(throws<std::length_error>([&] { tlasCompacted.build(cmd, compacted, five); }));
+    tlasCompacted.build(cmd, compacted, instances); // the refused build did not count as the frame's build
+    tlasUncompacted.build(cmd, uncompacted, instances);
+    CHECK(throws<std::logic_error>([&] { tlasCompacted.build(cmd, compacted, instances); }));
+    probe.record(cmd, ring, tlasCompacted, outCompacted, kStaticGrid);
+    probe.record(cmd, ring, tlasUncompacted, outUncompacted, kStaticGrid);
+    probe.record(cmd, ring, tlasCompacted, outMaskTurned, maskTurned);
+    probe.record(cmd, ring, tlasCompacted, outMaskCubes, maskCubes);
+    probe.record(cmd, ring, tlasCompacted, outCullBack, cullBack);
     ring.wait(ring.submit());
 
     const ProbeHits want = reference(meshes.data(), instances, kStaticGrid);
     const ProbeHits got = readHits(outCompacted);
     checkCoverage(want);
     CHECK(matches(got, want, "compacted"));
+    // Exact: the same build inputs, so the same hits on lavapipe. Another GPU may order or round a compacted
+    // BLAS differently; relax this to matches(gotUncompacted, want) (1e-4 in t) if it fails there.
     const ProbeHits gotUncompacted = readHits(outUncompacted);
     CHECK(std::memcmp(gotUncompacted.data(), got.data(), sizeof got) == 0);
+
+    // The masks: 0x01 loses the turned quad (instance 2) and finds what lies behind it; 0x02 keeps only the
+    // two quads.
+    const auto hitsInstance = [](const ProbeHits& hits, std::int32_t id) {
+        for (const ProbeHit& hit : hits)
+            if (hit.instanceId == id)
+                return true;
+        return false;
+    };
+    const ProbeHits wantTurned = reference(meshes.data(), instances, maskTurned);
+    CHECK(hitsInstance(want, 2) && !hitsInstance(wantTurned, 2));
+    CHECK(matches(readHits(outMaskTurned), wantTurned, "cull mask 0x01"));
+    const ProbeHits wantCubes = reference(meshes.data(), instances, maskCubes);
+    CHECK(hitsInstance(want, 1) && hitsInstance(want, 3));
+    CHECK(!hitsInstance(wantCubes, 1) && !hitsInstance(wantCubes, 3) && hitsInstance(wantCubes, 2));
+    CHECK(matches(readHits(outMaskCubes), wantCubes, "cull mask 0x02"));
+    // The cull-back-facing flag changes nothing: the back-facing hits checkCoverage found stay.
+    CHECK(matches(readHits(outCullBack), want, "cull back-facing flag"));
+
+    // The next frame may build again.
+    cmd = ring.begin();
+    tlasCompacted.build(cmd, compacted, instances);
+    ring.wait(ring.submit());
 }
 
 // (c) Review Focus 3: 64 frames, two in flight, the quad moving 0.1 to the right each frame; the TLAS is

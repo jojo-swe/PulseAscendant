@@ -1,10 +1,12 @@
 // The ACES tonemap (Review Focus 6: one tonemap, display encoding exactly once): HDR RGBA16F ramps and colour
 // patches uploaded from the CPU, tone mapped on the GPU into RGBA8 and compared with tonemapReference, the
 // CPU mirror (within 1 per channel); black stays 0 and white 255 at every pixel whatever the dither; the ramp
-// is monotonic once the dither is taken out; +1 EV equals the input doubled, byte for byte; the dither is
-// static. Then the scene registry (every effect is the placeholder until the Studio arrives) and the modern
-// stage's placeholder through the HDR path: its picture must match the old direct RGBA8 fill within 1 per
-// channel. Runs with the validation layer on and fails on any message it reports.
+// is monotonic once the dither is taken out; +1 EV equals the input doubled, +2 EV quadrupled and -1 EV
+// halved, byte for byte; the dither is static; golden anchors computed independently of this code (mid grey,
+// white, black, saturated primaries, the sRGB OETF) hold on the CPU and the GPU; negative and non-finite
+// light is black. Then the scene registry (every effect is the placeholder until the Studio arrives) and the
+// modern stage's placeholder through the HDR path: its picture must match the old direct RGBA8 fill within 1
+// per channel. Runs with the validation layer on and fails on any message it reports.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -63,10 +65,14 @@ float halfToFloat(std::uint16_t h) {
     return sign ? -magnitude : magnitude;
 }
 
-// Round to nearest even; finite values inside the half range only.
+// Round to nearest even; finite values inside the half range, infinities and NaN (a quiet NaN).
 std::uint16_t floatToHalf(float f) {
     const std::uint32_t bits = std::bit_cast<std::uint32_t>(f);
     const auto sign = static_cast<std::uint16_t>((bits >> 16) & 0x8000u);
+    if (std::isnan(f))
+        return static_cast<std::uint16_t>(sign | 0x7E00u);
+    if (std::isinf(f))
+        return static_cast<std::uint16_t>(sign | 0x7C00u);
     const float magnitude = std::fabs(f);
     if (magnitude < std::ldexp(1.0f, -14)) { // subnormal half: multiples of 2^-24
         const auto m = static_cast<std::uint32_t>(std::nearbyint(magnitude * 16777216.0f));
@@ -85,7 +91,7 @@ std::uint16_t floatToHalf(float f) {
 }
 
 // --- An HDR picture on the CPU, held as the half values the GPU sees
-// -----------------------------------------
+// ----------------------------------------
 
 struct HdrPicture {
     std::uint32_t width = 0, height = 0;
@@ -155,8 +161,8 @@ HdrPicture uniformPicture(float value) {
 class Gpu {
 public:
     explicit Gpu(Context& ctx)
-        : ctx_(ctx), hdr_(ctx, {kWidth, kHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
-                                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, "test hdr"}),
+        : hdr_(ctx, {kWidth, kHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
+                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, "test hdr"}),
           ldr_(ctx, {kWidth, kHeight, VK_FORMAT_R8G8B8A8_UNORM,
                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1, "test ldr"}),
           staging_(ctx, {std::size_t{kWidth} * kHeight * 8, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true,
@@ -191,7 +197,6 @@ public:
     FrameRing& ring() { return ring_; }
 
 private:
-    Context& ctx_;
     Image hdr_, ldr_;
     evo::gfx::Buffer staging_;
     evo::gfx::Readback readback_;
@@ -203,8 +208,8 @@ std::uint8_t byteAt(const std::vector<std::uint8_t>& rgb, std::uint32_t x, std::
     return rgb[(std::size_t{y} * kWidth + x) * 3 + c];
 }
 
-// (a) GPU bytes equal tonemapReference within 1 at every pixel and exposure, and off by one in at most 1 % of
-// the channels.
+// (a) GPU bytes equal tonemapReference within 1 at every pixel and exposure, and off by one in at most 0.3 %
+// of the channels.
 void testMatchesReference(Gpu& gpu) {
     const HdrPicture picture = testPicture();
     for (const float exposure : {0.f, 1.5f, -2.f}) {
@@ -224,7 +229,7 @@ void testMatchesReference(Gpu& gpu) {
         CHECK(worst <= 1);
         // Rounding may differ in a few places, not systematically (a lost dither would put about a quarter of
         // the channels off by one).
-        CHECK(off * 100 <= static_cast<int>(kWidth * kHeight * 3));
+        CHECK(off * 1000 <= 3 * static_cast<int>(kWidth * kHeight * 3));
     }
 }
 
@@ -271,8 +276,9 @@ void testMonotonic(Gpu& gpu) {
     CHECK(std::fabs(sum / 65536.0) < .01);
 }
 
-// (d) +1 EV equals the input doubled, byte for byte (doubling a half is exact); the dither is static: the
-// same picture twice gives the same bytes.
+// (d) +1 EV equals the input doubled, +2 EV the input times 4 and -1 EV the input halved, byte for byte
+// (scaling a half by a power of two is exact while it stays normal, as the test picture does); the dither is
+// static: the same picture twice gives the same bytes.
 void testExposure(Gpu& gpu) {
     const HdrPicture picture = testPicture();
     const std::vector<std::uint8_t> plusOne = gpu.run(picture, 1.f);
@@ -281,6 +287,79 @@ void testExposure(Gpu& gpu) {
     CHECK(plusOne == doubled);
     CHECK(plusOne != plain);
     CHECK(gpu.run(picture, 0.f) == plain);
+    CHECK(gpu.run(picture, 2.f) == gpu.run(picture.scaled(4.f), 0.f));
+    CHECK(gpu.run(picture, -1.f) == gpu.run(picture.scaled(.5f), 0.f));
+}
+
+// (h) Golden anchors, independent of this code: computed in float64 with numpy from Stephen Hill's published
+// ACES fit (BakingLab ACES.hlsl: ACESInputMat, RRTAndODTFit, ACESOutputMat) and the sRGB OETF, rounded to
+// bytes without dither. The reference's display value must be within 1e-4, the GPU's dithered bytes (of the
+// half-rounded inputs) within 1 of the literal byte, at every pixel.
+struct Golden {
+    std::array<float, 3> hdr;
+    std::array<float, 3> display;
+    std::array<int, 3> bytes;
+};
+constexpr std::array<Golden, 6> kGolden = {{
+    {{.18f, .18f, .18f}, {.35845739f, .35845739f, .35845567f}, {91, 91, 91}}, // mid grey
+    {{64.f, 64.f, 64.f}, {1.f, 1.f, 1.f}, {255, 255, 255}},
+    {{0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}, {0, 0, 0}},
+    {{2.f, 0.f, 0.f}, {1.f, .15927376f, .10099596f}, {255, 41, 26}}, // saturated patches
+    {{0.f, 2.f, 0.f}, {.64484654f, .91410403f, .40926638f}, {164, 233, 104}},
+    {{0.f, 0.f, 2.f}, {.05609214f, 0.f, .91734403f}, {14, 0, 234}},
+}};
+
+void testGoldenAnchors(Gpu& gpu) {
+    // The sRGB OETF on its own: the knee and mid grey.
+    CHECK(std::fabs(evo::post::srgbOetf(.0031308f) - .04045f) < 1e-4f);
+    CHECK(std::fabs(evo::post::srgbOetf(.5f) - .7354f) < 1e-4f);
+    CHECK(evo::post::srgbOetf(0.f) == 0.f && evo::post::srgbOetf(1.f) == 1.f);
+
+    HdrPicture picture(kWidth, kHeight);
+    for (std::uint32_t y = 0; y < kHeight; ++y)
+        for (std::uint32_t x = 0; x < kWidth; ++x) {
+            const auto& hdr = kGolden[x % kGolden.size()].hdr;
+            picture.set(x, y, hdr[0], hdr[1], hdr[2]);
+        }
+    const std::vector<std::uint8_t> rgb = gpu.run(picture, 0.f);
+    for (const Golden& golden : kGolden) {
+        const std::array<float, 3> display = evo::post::tonemapDisplay(golden.hdr.data(), 0.f);
+        for (int c = 0; c < 3; ++c)
+            CHECK(std::fabs(display[c] - golden.display[c]) < 1e-4f);
+    }
+    for (std::uint32_t y = 0; y < kHeight; ++y)
+        for (std::uint32_t x = 0; x < kWidth; ++x)
+            for (int c = 0; c < 3; ++c)
+                CHECK(std::abs(byteAt(rgb, x, y, c) - kGolden[x % kGolden.size()].bytes[c]) <= 1);
+}
+
+// (i) Light the tonemap cannot show is black, never a bright speckle: negative light (clamped in AP1, after
+// the input matrix) and NaN or infinite components, on the GPU and in the reference.
+void testNegativeAndNonFinite(Gpu& gpu) {
+    const float inf = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const std::array<std::array<float, 3>, 6> kBlack = {{
+        {-1.f, -1.f, -1.f},
+        {-64.f, -.5f, -.01f},
+        {nan, nan, nan},
+        {inf, inf, inf},
+        {-inf, -inf, -inf},
+        {nan, inf, -inf},
+    }};
+    HdrPicture picture(kWidth, kHeight);
+    for (std::uint32_t y = 0; y < kHeight; ++y)
+        for (std::uint32_t x = 0; x < kWidth; ++x) {
+            const auto& hdr = kBlack[x % kBlack.size()];
+            picture.set(x, y, hdr[0], hdr[1], hdr[2]);
+        }
+    for (const float exposure : {0.f, 3.f}) {
+        const std::vector<std::uint8_t> rgb = gpu.run(picture, exposure);
+        CHECK(std::all_of(rgb.begin(), rgb.end(), [](std::uint8_t v) { return v == 0; }));
+        for (const auto& hdr : kBlack)
+            for (std::uint32_t x = 0; x < 16; ++x)
+                CHECK(evo::post::tonemapReference(hdr.data(), exposure, x, 3) ==
+                      (std::array<std::uint8_t, 3>{0, 0, 0}));
+    }
 }
 
 // (e) The record() contract: RGBA16F in, RGBA8 UNORM out, the same size.
@@ -383,6 +462,8 @@ int main() {
                 testBlackAndWhite(gpu);
                 testMonotonic(gpu);
                 testExposure(gpu);
+                testGoldenAnchors(gpu);
+                testNegativeAndNonFinite(gpu);
                 testRejectsWrongImages(ctx, gpu);
             }
             testPlaceholderUnchanged(ctx);

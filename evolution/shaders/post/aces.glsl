@@ -28,9 +28,12 @@ vec3 rrtAndOdtFit(vec3 v) {
     return a / b;
 }
 
-// Linear light (already exposed) -> linear display light, clamped to [0, 1].
+// Linear light (already exposed) -> linear display light, clamped to [0, 1]. Negative light is clamped to 0
+// in AP1, after the input matrix: the curve's other branch rises again below its root, so -1 grey would come
+// out white. Not before the matrix: acesFittedInverse gives negative RGB for saturated colours whose AP1
+// components are all positive (at least 0.0033).
 vec3 acesFitted(vec3 rgb) {
-    return clamp(kAcesOutput * rrtAndOdtFit(kAcesInput * rgb), 0.0, 1.0);
+    return clamp(kAcesOutput * rrtAndOdtFit(max(kAcesInput * rgb, 0.0)), 0.0, 1.0);
 }
 
 // The sRGB OETF for v in [0, 1]; exactly 1 at 1 (1.055 - 0.055 rounds below 1 in float).
@@ -55,9 +58,15 @@ vec3 srgbEotf(vec3 v) {
 // The light acesFitted maps to `display` (linear, in [0, 1]): the output matrix undone, the curve solved for
 // its positive root, the input matrix undone. A component at 1 gets light well past the curve's 1 crossing,
 // so the tonemap's clamp makes it exactly 1 again. Components may come out negative for saturated colours;
-// the input matrix brings them back.
+// the input matrix brings them back (the inverse output matrix has no negative entry, so v >= 0 and the root
+// x >= 0.0033 in AP1, above the tonemap's clamp at 0).
+//
+// The round trip through the tonemap holds within the dither's 1 step only for the placeholder's palette:
+// the light is stored as RGBA16F, and for strongly saturated bright colours the half rounding of the large
+// RGB components that cancel in AP1 moves the result by up to 4 bytes.
 vec3 acesFittedInverse(vec3 display) {
-    vec3 v = inverse(kAcesOutput) * clamp(display, 0.0, 1.0);
+    // In [0, 1]: the rows of the output matrix sum to 1 within 1e-5, so white may come out a hair above 1.
+    vec3 v = clamp(inverse(kAcesOutput) * clamp(display, 0.0, 1.0), 0.0, 1.0);
     // (1 - c v) x^2 + (a - d v) x - (b + e v) = 0, solved for x >= 0 (1 - c v > 0 for v <= 1).
     vec3 qa = 1.0 - kFitC * v;
     vec3 qb = kFitA - kFitD * v;

@@ -26,6 +26,10 @@ struct Material { // 80 bytes, scalar
     float baseColor[3] = {0.8f, 0.8f, 0.8f};
     float roughness = 0.5f;
     float metallic = 0.f;
+    // Schlick's F90 is saturate(50 * mean F0), so below IOR ~1.33 (mean F0 < 0.02) grazing Fresnel is capped
+    // under 1. Deliberate: IOR 1 then has no specular lobe at all and is pure Lambert. The Lambert lobe is
+    // weighted by (1 - F(wo)) (1 - F(wi)) without energy compensation: at IOR 1.5 the (1 - F(wi)) factor
+    // alone takes about 8 % (its cosine-weighted mean is 0.914), about 12 % in all at normal incidence.
     float ior = 1.5f;
     float transmission = 0.f;
     float emission[3] = {0.f, 0.f, 0.f};
