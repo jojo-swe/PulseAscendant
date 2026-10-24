@@ -1,11 +1,13 @@
 #pragma once
 
 #include "gfx/context.hpp"
+#include "gfx/fill_pass.hpp"
+#include "gfx/frame_ring.hpp"
+#include "gfx/image.hpp"
+#include "gfx/readback.hpp"
 #include "show/timeline.hpp"
 
 #include <volk.h>
-
-#include <vk_mem_alloc.h>
 
 #include <cstdint>
 #include <vector>
@@ -18,54 +20,38 @@ struct Frame {
     std::vector<std::uint8_t> rgb;
 };
 
-// Renders the fill.comp test pattern for a timeline frame into an RGBA8 storage image with a compute dispatch
-// and copies it to a host-visible buffer. Every render() waits for the GPU, so readback() always sees that
-// frame.
+// A headless fixture for --render-stream, --capture-dir and the tests: renders the fill.comp test pattern for
+// a timeline frame into an RGBA8 image and reads it back, on its own FrameRing. Every render() submits and
+// waits for that submit, so readback() always sees that frame. The window does not use it: it records the
+// passes into its own ring and presents without reading back.
 class Offscreen {
 public:
     Offscreen(Context& ctx, int width, int height);
-    ~Offscreen();
+    ~Offscreen() = default;
     Offscreen(const Offscreen&) = delete;
     Offscreen& operator=(const Offscreen&) = delete;
 
-    // Records, submits and waits: barrier -> dispatch ceil(w/8) x ceil(h/8) -> barrier -> copy to buffer.
-    // The pattern shows the frame's chapter, era, wipe, kick and beat phase.
+    // Records the fill pass (dispatch ceil(w/8) x ceil(h/8)) and the readback copy, submits and waits. The
+    // pattern shows the frame's chapter, era, wipe, kick and beat phase.
     void render(const show::TimelineFrame& frame);
     // render(show::sampleTimeline(seconds)).
     void render(double seconds);
     // RGBA -> RGB conversion on the host of the last rendered frame.
     Frame readback() const;
 
-    VkImage image() const { return image_; }
-    // The image's layout right after render(): TRANSFER_SRC_OPTIMAL. The swapchain's blit reads the image
-    // in this layout without transitioning it, so render() must keep leaving it there.
-    VkImageLayout layout() const { return layout_; }
+    VkImage image() const { return image_.handle(); }
+    // The image's layout right after render(): TRANSFER_SRC_OPTIMAL, left by the readback copy.
+    VkImageLayout layout() const { return image_.layout(); }
     int width() const { return width_; }
     int height() const { return height_; }
 
 private:
-    void createTargets();
-    void createPipeline();
-    void destroy() noexcept;
-
-    Context& ctx_;
     int width_ = 0;
     int height_ = 0;
-
-    VkImage image_ = VK_NULL_HANDLE;
-    VmaAllocation imageAllocation_ = VK_NULL_HANDLE;
-    VkImageView view_ = VK_NULL_HANDLE;
-    VkImageLayout layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    VkBuffer readbackBuffer_ = VK_NULL_HANDLE;
-    VmaAllocation readbackAllocation_ = VK_NULL_HANDLE;
-    const std::uint8_t* mapped_ = nullptr;
-
-    VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
-    VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
-    VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    Image image_;
+    Readback readback_;
+    FillPass fill_;
+    FrameRing ring_; // last: destroyed first, after waiting for its submits
 };
 
 } // namespace evo::gfx

@@ -2,6 +2,9 @@
 
 #include "app/clock.hpp"
 #include "gfx/context.hpp"
+#include "gfx/fill_pass.hpp"
+#include "gfx/frame_ring.hpp"
+#include "gfx/image.hpp"
 #include "gfx/offscreen.hpp"
 #include "gfx/swapchain.hpp"
 #include "gfx/vk_check.hpp"
@@ -11,9 +14,9 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -45,6 +48,18 @@ struct SdlVideo {
     ~SdlVideo() { SDL_Quit(); }
     SdlVideo(const SdlVideo&) = delete;
     SdlVideo& operator=(const SdlVideo&) = delete;
+};
+
+// The Vulkan loader, loaded by SDL before any window exists, so the Context can be created first: a machine
+// that cannot run EVOLUTION exits without a window flashing up. No loader is a missing requirement.
+struct VulkanLibrary {
+    VulkanLibrary() {
+        if (!SDL_Vulkan_LoadLibrary(nullptr))
+            throw gfx::MissingRequirements({std::string("Vulkan loader (") + SDL_GetError() + ")"});
+    }
+    ~VulkanLibrary() { SDL_Vulkan_UnloadLibrary(); }
+    VulkanLibrary(const VulkanLibrary&) = delete;
+    VulkanLibrary& operator=(const VulkanLibrary&) = delete;
 };
 
 struct Window {
@@ -144,8 +159,9 @@ std::string missingRequirementsMessage(const gfx::MissingRequirements& missing) 
 
 int runWindowed(const Options& options) {
     SdlVideo video;
+    VulkanLibrary vulkan;
+    gfx::Context ctx = createWindowedContext(options); // before the window: see VulkanLibrary
     Window window(options);
-    gfx::Context ctx = createWindowedContext(options);
     Surface surface(ctx.instance(), window.handle);
 
     VkBool32 presentable = VK_FALSE;
@@ -160,9 +176,13 @@ int runWindowed(const Options& options) {
     if (!SDL_GetWindowSizeInPixels(window.handle, &width, &height))
         throw sdlError("SDL_GetWindowSizeInPixels");
 
-    // Declared before the swapchain so it is destroyed after it: ~Swapchain waits for the device, so no
-    // blit can still be reading the offscreen image when it goes.
-    std::unique_ptr<gfx::Offscreen> offscreen; // sized to the drawable; created on the first visible frame
+    // Each frame records the fill pass into `target` and the swapchain's blit of it into one command buffer
+    // of the ring, with up to two frames in flight; begin() waits only for the frame whose slot it reuses.
+    // Declared before the swapchain so they are destroyed after it: ~Swapchain waits for the device, so no
+    // frame can still be using them when they go.
+    gfx::FrameRing ring(ctx);
+    gfx::FillPass fill(ctx);
+    gfx::Image target; // sized to the drawable; created on the first visible frame
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
@@ -220,11 +240,13 @@ int runWindowed(const Options& options) {
             SDL_Delay(kMinimisedPollMs);
             continue;
         }
-        if (!offscreen || offscreen->width() != width || offscreen->height() != height) {
-            // The previous frame's blit may still be reading the old image.
-            gfx::vkCheck(vkDeviceWaitIdle(ctx.device()), "vkDeviceWaitIdle");
-            offscreen.reset();
-            offscreen = std::make_unique<gfx::Offscreen>(ctx, width, height);
+        const auto drawable =
+            VkExtent2D{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
+        if (target.extent().width != drawable.width || target.extent().height != drawable.height) {
+            ring.waitAll(); // resize: the frames in flight may still be reading the old image
+            target = gfx::Image(ctx, {drawable.width, drawable.height, VK_FORMAT_R8G8B8A8_UNORM,
+                                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1,
+                                      "window target"});
         }
 
         const double now = clock.now();
@@ -232,12 +254,13 @@ int runWindowed(const Options& options) {
             title = std::move(newTitle);
             SDL_SetWindowTitle(window.handle, title.c_str());
         }
-        offscreen->render(show::sampleTimeline(now));
-        if (!swapchain.present(offscreen->image(), offscreen->width(), offscreen->height()))
+        VkCommandBuffer cmd = ring.begin();
+        fill.record(cmd, ring, target, show::sampleTimeline(now));
+        if (!swapchain.present(ring, cmd, target)) // submits the frame in every case
             needRecreate = true;
     }
 
-    gfx::vkCheck(vkDeviceWaitIdle(ctx.device()), "vkDeviceWaitIdle");
+    gfx::vkCheck(vkDeviceWaitIdle(ctx.device()), "vkDeviceWaitIdle"); // shutdown: presents included
     return 0;
 }
 

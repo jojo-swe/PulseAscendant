@@ -211,6 +211,10 @@ add_test(NAME exit_codes
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/exit_code_test.py $<TARGET_FILE:Evolution>)
 set_tests_properties(exit_codes PROPERTIES TIMEOUT 120)
 
+# The windowed loop and the renderer never wait for the whole GPU per frame (Review Focus 5).
+add_test(NAME no_wait_idle
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/no_wait_idle_test.py ${CMAKE_SOURCE_DIR})
+
 # The Python music pipeline: beat tracker, placeholder song and the end-to-end header generation.
 add_test(NAME python_tools
     COMMAND Python3::Interpreter -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests -p "test_*.py")
@@ -221,6 +225,14 @@ if(EVO_RUNTIME_TESTS)
     add_test(NAME windowed
         COMMAND xvfb-run -a $<TARGET_FILE:Evolution> --validation --duration 1 --width 320 --height 200)
     set_tests_properties(windowed PROPERTIES TIMEOUT 120)
+
+    # A machine that cannot run EVOLUTION gets the message and exit code 2 from the window mode as well; the
+    # Context is created before the window, so none opens.
+    add_test(NAME windowed_unsupported
+        COMMAND xvfb-run -a $<TARGET_FILE:Evolution> --duration 1 --width 320 --height 200)
+    set_tests_properties(windowed_unsupported PROPERTIES TIMEOUT 120
+        ENVIRONMENT "EVO_TEST_REQUIRE_DEVICE_EXTENSION=VK_EVO_nope"
+        PASS_REGULAR_EXPRESSION "EVOLUTION needs a Vulkan 1.3 GPU with ray tracing\\. Missing: VK_EVO_nope")
 
     # With no usable audio driver the windowed run falls back to the monotonic clock, says SILENT MODE on
     # stderr and still exits 0 (Review Focus 3); on SDL's dummy driver it plays and says AUDIO.

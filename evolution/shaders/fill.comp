@@ -23,7 +23,7 @@ const uint kWipe = 3u;
 const float kChapterCount = 31.0;
 const float kTau = 6.2831853;
 
-// Must match FillPushConstants in src/gfx/offscreen.cpp (32 bytes).
+// Must match FillPushConstants in src/gfx/fill_pass.cpp (32 bytes).
 layout(push_constant) uniform PushConstants {
     uint width;
     uint height;

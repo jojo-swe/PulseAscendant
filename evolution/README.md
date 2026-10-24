@@ -39,10 +39,11 @@ The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/
 `assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
 (Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
 
-The 15 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` also numpy): `options`, `png`,
-`png_decode`, `context`, `offscreen`, `swapchain`, `render_stream`, `capture`, `exit_codes`, `python_tools`,
-`audio_transport`, `timeline`, `era`, `clock` and `show_info`. The two that open a window, `windowed` and
-`silent_mode`, are off by default; configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
+The 17 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` also numpy): `options`, `png`,
+`png_decode`, `context`, `offscreen`, `gfx_foundation`, `swapchain`, `render_stream`, `capture`, `exit_codes`,
+`no_wait_idle`, `python_tools`, `audio_transport`, `timeline`, `era`, `clock` and `show_info`. The three that open a
+window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default; configure with
+`-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
 
 ## Build on Windows
 

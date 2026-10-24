@@ -1,5 +1,6 @@
 #include "gfx/swapchain.hpp"
 
+#include "gfx/sync.hpp"
 #include "gfx/vk_check.hpp"
 
 #include <algorithm>
@@ -13,7 +14,6 @@ namespace {
 
 constexpr VkFormat kPreferredFormat = VK_FORMAT_B8G8R8A8_UNORM;
 constexpr std::uint32_t kPreferredImageCount = 3;
-const VkImageSubresourceRange kColorRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
 VkSurfaceFormatKHR chooseFormat(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
     std::uint32_t count = 0;
@@ -30,27 +30,6 @@ VkSurfaceFormatKHR chooseFormat(VkPhysicalDevice physicalDevice, VkSurfaceKHR su
             return format;
     }
     return formats.front();
-}
-
-void imageBarrier(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to,
-                  VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess, VkPipelineStageFlags2 dstStage,
-                  VkAccessFlags2 dstAccess) {
-    VkImageMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-    barrier.srcStageMask = srcStage;
-    barrier.srcAccessMask = srcAccess;
-    barrier.dstStageMask = dstStage;
-    barrier.dstAccessMask = dstAccess;
-    barrier.oldLayout = from;
-    barrier.newLayout = to;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange = kColorRange;
-
-    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    dependency.imageMemoryBarrierCount = 1;
-    dependency.pImageMemoryBarriers = &barrier;
-    vkCmdPipelineBarrier2(cmd, &dependency);
 }
 
 } // namespace
@@ -74,7 +53,7 @@ VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR& caps, int desiredWidth, 
 Swapchain::Swapchain(Context& ctx, VkSurfaceKHR surface, int width, int height)
     : ctx_(ctx), surface_(surface) {
     try {
-        createFrameSync();
+        createImageAvailable();
         recreate(width, height); // a minimised window starts with no swapchain; present() then returns false
     } catch (...) {
         destroy();
@@ -86,24 +65,11 @@ Swapchain::~Swapchain() {
     destroy();
 }
 
-void Swapchain::createFrameSync() {
-    const VkDevice device = ctx_.device();
-    for (auto& frame : frames_) {
-        VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        allocInfo.commandPool = ctx_.commandPool();
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        vkCheck(vkAllocateCommandBuffers(device, &allocInfo, &frame.cmd),
-                "vkAllocateCommandBuffers(present)");
-
-        VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-        vkCheck(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &frame.imageAvailable),
+void Swapchain::createImageAvailable() {
+    VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    for (VkSemaphore& semaphore : imageAvailable_)
+        vkCheck(vkCreateSemaphore(ctx_.device(), &semaphoreInfo, nullptr, &semaphore),
                 "vkCreateSemaphore(imageAvailable)");
-
-        VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // the first wait on each frame returns at once
-        vkCheck(vkCreateFence(device, &fenceInfo, nullptr, &frame.inFlight), "vkCreateFence(inFlight)");
-    }
 }
 
 void Swapchain::createRenderFinished(std::size_t count) {
@@ -128,14 +94,10 @@ void Swapchain::destroy() noexcept {
         return;
     vkDeviceWaitIdle(device);
     destroyRenderFinished();
-    for (auto& frame : frames_) {
-        if (frame.inFlight)
-            vkDestroyFence(device, frame.inFlight, nullptr);
-        if (frame.imageAvailable)
-            vkDestroySemaphore(device, frame.imageAvailable, nullptr);
-        if (frame.cmd)
-            vkFreeCommandBuffers(device, ctx_.commandPool(), 1, &frame.cmd);
-        frame = {};
+    for (VkSemaphore& semaphore : imageAvailable_) {
+        if (semaphore)
+            vkDestroySemaphore(device, semaphore, nullptr);
+        semaphore = VK_NULL_HANDLE;
     }
     if (swapchain_)
         vkDestroySwapchainKHR(device, swapchain_, nullptr);
@@ -215,69 +177,52 @@ bool Swapchain::recreate(int width, int height) {
     return true;
 }
 
-bool Swapchain::present(VkImage src, int srcWidth, int srcHeight) {
-    if (!swapchain_)
+bool Swapchain::present(FrameRing& ring, VkCommandBuffer cmd, Image& src) {
+    if (!swapchain_) {
+        ring.submit(); // minimised since the swapchain was made: the frame's other work still runs
         return false;
+    }
 
     const VkDevice device = ctx_.device();
-    FrameSync& frame = frames_[frameIndex_];
-    vkCheck(vkWaitForFences(device, 1, &frame.inFlight, VK_TRUE, UINT64_MAX), "vkWaitForFences");
-
+    // Free to reuse: the ring's begin() waited for this slot's previous submit, the one that waited on it.
+    const VkSemaphore imageAvailable = imageAvailable_[ring.slot()];
     std::uint32_t imageIndex = 0;
-    const VkResult acquired = vkAcquireNextImageKHR(device, swapchain_, UINT64_MAX, frame.imageAvailable,
-                                                    VK_NULL_HANDLE, &imageIndex);
-    if (acquired == VK_ERROR_OUT_OF_DATE_KHR)
-        return false; // nothing was signalled; the fence stays signalled for the next attempt
+    const VkResult acquired =
+        vkAcquireNextImageKHR(device, swapchain_, UINT64_MAX, imageAvailable, VK_NULL_HANDLE, &imageIndex);
+    if (acquired == VK_ERROR_OUT_OF_DATE_KHR) {
+        ring.submit(); // nothing was signalled, so nothing to wait for
+        return false;
+    }
     if (acquired != VK_SUBOPTIMAL_KHR)
         vkCheck(acquired, "vkAcquireNextImageKHR");
 
-    // Reset only once a submit that signals the fence is certain to follow.
-    vkCheck(vkResetFences(device, 1, &frame.inFlight), "vkResetFences");
-    vkCheck(vkResetCommandBuffer(frame.cmd, 0), "vkResetCommandBuffer");
-
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkCheck(vkBeginCommandBuffer(frame.cmd, &beginInfo), "vkBeginCommandBuffer(present)");
-
+    src.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_BLIT_BIT,
+                   VK_ACCESS_2_TRANSFER_READ_BIT);
     const VkImage target = images_[imageIndex];
     // The blit overwrites the whole image, so its previous contents are discarded. The acquire semaphore
-    // is waited on at the transfer stage, which this barrier's source scope chains onto.
-    imageBarrier(frame.cmd, target, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                 VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-                 VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    // is waited on at the blit stage, which this barrier's source scope chains onto.
+    imageBarrier2(cmd, target, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                  VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_BLIT_BIT,
+                  VK_ACCESS_2_TRANSFER_WRITE_BIT);
 
     VkImageBlit region{};
     region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.srcOffsets[1] = {srcWidth, srcHeight, 1};
+    region.srcOffsets[1] = {static_cast<std::int32_t>(src.extent().width),
+                            static_cast<std::int32_t>(src.extent().height), 1};
     region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     region.dstOffsets[1] = {static_cast<std::int32_t>(extent_.width),
                             static_cast<std::int32_t>(extent_.height), 1};
-    vkCmdBlitImage(frame.cmd, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target,
+    vkCmdBlitImage(cmd, src.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_LINEAR);
 
-    // Presentation needs no stage or access mask; the semaphore signal below orders it after the blit.
-    imageBarrier(frame.cmd, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                 VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
-    vkCheck(vkEndCommandBuffer(frame.cmd), "vkEndCommandBuffer(present)");
+    // Presentation needs no access mask. The destination stage is the one the semaphore below is signalled
+    // at, so the signal (and the present that waits for it) is ordered after the layout transition too.
+    imageBarrier2(cmd, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                  VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                  VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_NONE);
 
-    VkSemaphoreSubmitInfo waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-    waitInfo.semaphore = frame.imageAvailable;
-    waitInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
-    VkSemaphoreSubmitInfo signalInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-    signalInfo.semaphore = renderFinished_[imageIndex];
-    signalInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    VkCommandBufferSubmitInfo cmdInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
-    cmdInfo.commandBuffer = frame.cmd;
-
-    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
-    submit.waitSemaphoreInfoCount = 1;
-    submit.pWaitSemaphoreInfos = &waitInfo;
-    submit.commandBufferInfoCount = 1;
-    submit.pCommandBufferInfos = &cmdInfo;
-    submit.signalSemaphoreInfoCount = 1;
-    submit.pSignalSemaphoreInfos = &signalInfo;
-    vkCheck(vkQueueSubmit2(ctx_.queue(), 1, &submit, frame.inFlight), "vkQueueSubmit2(present)");
+    // The passes before the blit do not wait for the acquire; only the blit does.
+    ring.submit(imageAvailable, VK_PIPELINE_STAGE_2_BLIT_BIT, renderFinished_[imageIndex]);
 
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1;
@@ -286,7 +231,6 @@ bool Swapchain::present(VkImage src, int srcWidth, int srcHeight) {
     presentInfo.pSwapchains = &swapchain_;
     presentInfo.pImageIndices = &imageIndex;
     const VkResult presented = vkQueuePresentKHR(ctx_.queue(), &presentInfo);
-    frameIndex_ = (frameIndex_ + 1) % kFramesInFlight;
 
     if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR)
         return false;
