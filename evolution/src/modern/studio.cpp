@@ -17,7 +17,7 @@ constexpr float kPi = std::numbers::pi_v<float>;
 
 // --- Layout (metres) ---------------------------------------------------------------------------------------
 
-// The room: x from -2 to 2, the back wall's face at z = -1.1, the front wall's at z = 2.9, floor 0, ceiling
+// The room: x from -2 to 2, the back wall's face at z = -0.95, the front wall's at z = 2.9, floor 0, ceiling
 // 2.7. Walls are 0.1 thick boxes, so the room is closed apart from the window.
 constexpr float kRoomLeft = -2.0f, kRoomRight = 2.0f, kRoomBack = -0.95f, kRoomFront = 2.9f;
 constexpr float kRoomHeight = 2.7f, kWall = 0.1f;
@@ -303,7 +303,7 @@ std::vector<rt::Material> buildMaterials(float screenEmission) {
     m[kLampPaint] = plastic({0.03f, 0.045f, 0.035f}, 0.35f);
     m[kLampPaint].coat = 0.7f;
     m[kLampPaint].coatRoughness = 0.1f;
-    // The lamp's bulb behind a diffuser: warm (1.0, 0.75, 0.5) x 30, also the Emitter light.
+    // The lamp's bulb behind a diffuser: warm (1.0, 0.75, 0.5) x 35, also the Emitter light.
     m[kLampEmitter] = plastic({0.8f, 0.8f, 0.8f}, 0.9f);
     m[kLampEmitter].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     setColor(m[kLampEmitter].emission, Studio::kLampColor);
@@ -426,6 +426,15 @@ Camera makeCamera(const Key3& key, float fov, float aperture, std::uint32_t shot
     return c;
 }
 
+// A camera about the screen: in focus on the screen's plane wherever it aims (the thin lens focuses on the
+// plane at focusDistance along the view, so the distance to the screen's centre along it), so the CRT's
+// picture stays sharp; the aperture keeps a little depth of field in the room around it.
+Camera screenCamera(const Key3& key, float fov, float aperture, std::uint32_t shot) {
+    Camera c = makeCamera(key, fov, aperture, shot);
+    c.focusDistance = std::max(dot(screenCentre() - key.eye, cameraBasis(c).forward), 0.05f);
+    return c;
+}
+
 // The pull from the screen out to a wide view of the desk (FINALE, PORTAL), and RETURN's push back in.
 constexpr std::array<Key3, 4> kPullOut = {{
     {{0.f, kScreenCentreY, kScreenZ + 0.3f}, {0.f, kScreenCentreY, kScreenZ}},
@@ -467,7 +476,7 @@ Camera studioCamera(const show::TimelineFrame& frame) {
     switch (frame.effect) {
     case show::Effect::Finale:
     case show::Effect::Portal:
-        return makeCamera(alongKeys(kPullOut, s), 40.f, 0.004f, shot);
+        return screenCamera(alongKeys(kPullOut, s), 40.f, 0.004f, shot);
     case show::Effect::StudioNight:
         if (shot == 0) {
             // A wide dolly across the dark room, from the window's side towards the desk.
@@ -478,24 +487,25 @@ Camera studioCamera(const show::TimelineFrame& frame) {
             }};
             return makeCamera(alongKeys(kDolly, s), 42.f, 0.006f, shot);
         } else {
-            // A close orbit around the monitor, from its right to its left, the screen always in view.
+            // A close orbit around the monitor, from its right to its left, the screen always in view: aimed
+            // at the monitor's body, in focus on the screen.
             const Vec3 centre{0.f, kScreenCentreY - 0.06f, kScreenZ - 0.12f};
             const float angle = (0.65f - 1.25f * s); // radians from +z, positive to the right
             const float radius = 0.82f - 0.12f * std::sin(s * kPi);
             const Vec3 eye{centre.x + radius * std::sin(angle), kScreenCentreY + 0.08f - 0.06f * s,
                            centre.z + radius * std::cos(angle)};
-            return makeCamera({eye, centre}, 38.f, 0.012f, shot);
+            return screenCamera({eye, centre}, 38.f, 0.004f, shot);
         }
     case show::Effect::Return: {
         static constexpr std::array<Key3, 3> kPushIn = {kPullOut[3], kPullOut[2], kPullOut[1]};
-        return makeCamera(alongKeys(kPushIn, s), 40.f, 0.004f, shot);
+        return screenCamera(alongKeys(kPushIn, s), 40.f, 0.004f, shot);
     }
     default: {
         // REBOOT (and anything else): a close-up of the screen, drifting slightly.
         const float t = local;
         const Vec3 eye{0.025f * std::sin(0.21f * t), kScreenCentreY + 0.012f * std::sin(0.17f * t + 1.f),
                        kScreenZ + 0.44f - 0.04f * s};
-        return makeCamera({eye, screenCentre()}, 42.f, 0.003f, shot);
+        return screenCamera({eye, screenCentre()}, 42.f, 0.003f, shot);
     }
     }
 }

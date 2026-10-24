@@ -40,7 +40,8 @@ std::vector<StudioShot> studioShots(const show::TimelineFrame& frame);
 //                   the accent: a close orbit around the monitor
 //   RETURN          one shot: a slow push back towards the screen
 //   REBOOT          one shot: a close-up of the screen, drifting slightly
-// Any other effect gets REBOOT's close-up.
+// Any other effect gets REBOOT's close-up. Every shot but STUDIO NIGHT's dolly is about the screen: it
+// focuses on the screen's plane with an aperture of at most 4 mm, so the CRT's picture stays sharp.
 Camera studioCamera(const show::TimelineFrame& frame);
 
 // The exposure (EV, applied before the tonemap) of a Studio chapter: chosen per chapter by eye, so that the
@@ -49,7 +50,7 @@ float studioExposureEV(show::Effect effect);
 
 class Studio final : public ModernScene {
 public:
-    // Builds the meshes, materials, the placed instances and the three lights once (CPU only).
+    // Builds the meshes, materials, the placed instances and the four lights once (CPU only).
     Studio();
 
     // The mesh every key cap instances, and how many key caps there are (a 101-key keyboard).
@@ -72,7 +73,7 @@ public:
     static constexpr Vec3 kMoonDirection{-0.6807f, 0.5327f, -0.5031f};
     // The screen's emissionScale: the RetroScreen light's radiance is the picture (linear light) times it.
     static constexpr float kScreenEmission = 1.2f;
-    // The lamp's emitter: a warm 7 cm square, colour times intensity.
+    // The lamp's emitter: a warm 10 cm square, colour times intensity.
     static constexpr Vec3 kLampColor{1.f, 0.75f, 0.5f};
     static constexpr float kLampIntensity = 35.f;
     static constexpr float kChromeRadius = 0.04f, kGlassRadius = 0.045f;

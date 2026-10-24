@@ -4,9 +4,6 @@
 #include "gfx/fill_pass.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
-#include "modern/modern_scene.hpp"
-#include "modern/path_tracer.hpp"
-#include "post/denoiser.hpp"
 #include "post/tonemap.hpp"
 #include "render/stage_plan.hpp"
 #include "show/timeline.hpp"
@@ -15,7 +12,11 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
+
+namespace evo::modern {
+class PathTracer;
+enum class SceneId;
+} // namespace evo::modern
 
 namespace evo::render {
 
@@ -36,10 +37,13 @@ namespace evo::render {
 // history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the history
 // and the filter, so the screen stays sharp and current (Review Focus 5).
 //
-// A path-traced scene's GPU side (BLASes, the ray tracing pipeline, the denoiser's images) is built on the
-// first frame that shows it (setup work that waits for the GPU once: a stage that never shows the Studio,
-// like the 1993-only tests' and most exports', never pays for it); prepare() builds it up front instead,
-// which the window does so that no chapter hitches.
+// A path-traced scene's GPU side (BLASes, the ray tracing pipeline, the denoiser's images) is built by
+// prepare(), which the window and the exports call before their first frame when they will show the Studio,
+// so that no chapter hitches. A stage that was not prepared builds it on the first frame that shows it,
+// inside render(): blocking setup (immediate submits that wait for the queue) recorded while the frame's
+// command buffer is still open, which is legal and ordered before that frame's submit, and leaves the same
+// state as prepare() (the first frame is byte for byte the same). A stage that never shows the Studio, like
+// the 1993-only tests', never pays for it.
 class ModernStage {
 public:
     ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height);
@@ -47,7 +51,8 @@ public:
     ModernStage(const ModernStage&) = delete;
     ModernStage& operator=(const ModernStage&) = delete;
 
-    // Builds every path-traced scene's GPU side now (setup: not between ring.begin() and submit()).
+    // Builds every path-traced scene's GPU side now, instead of in the first frame that shows it (setup:
+    // before a frame, not between ring.begin() and submit()). Idempotent.
     void prepare();
     // Recreates the images at the new size. The caller makes sure no submitted frame still uses the old ones.
     void resize(std::uint32_t width, std::uint32_t height);

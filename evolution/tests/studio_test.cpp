@@ -10,9 +10,15 @@
 //   (d) studioCamera: finite, smooth within a shot, cutting exactly at the authored times;
 //   (e) the scene: 101 key caps on one mesh, every transform finite, within the TLAS's capacity, the lights;
 //   (f) sceneFor's mapping, and STUDIO NIGHT running the retro stage for the CRT;
-//   (g) the DOS idle screen: C:\DEMO> with BOOT's 2 Hz cursor, a pure function of the retro frame.
+//   (g) the DOS idle screen: C:\DEMO> with BOOT's 2 Hz cursor, a pure function of the retro frame;
+//   (h) the CRT stays sharp in the window: every shot that shows the screen up close focuses on its plane
+//       with a small aperture; at 1 spp the same frame shown twice barely changes in the screen, and the
+//       30th window frame's screen matches a 64 spp export of the same time;
+//   (i) the Studio's clampIndirect (2) reaches the path tracer: its lighting equals a trace at 2, not at 64,
+//       the default of every other scene.
 // With --look <dir> [spp] [width height] it only renders stills of every shot to look at.
 
+#include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/readback.hpp"
@@ -209,6 +215,33 @@ public:
 
     render::ModernStage& modern() { return modern_; }
 
+    // One trace of `scene` with the stage's own path tracer (built by an earlier render), nothing else.
+    void trace(const modern::SceneFrame& scene, const modern::TraceSettings& settings, gfx::Image& retro) {
+        VkCommandBuffer cmd = ring_.begin();
+        modern_.studioTracer()->trace(cmd, scene, std::nullopt, settings, retro);
+        ring_.wait(ring_.submit());
+    }
+
+    // The path tracer's lighting image (RGBA32F), raw bytes. Between frames.
+    std::vector<std::uint8_t> lightingBytes(gfx::Context& ctx) {
+        gfx::Image& image = modern_.studioTracer()->gbuffer().lighting;
+        const VkExtent2D extent = image.extent();
+        gfx::Buffer buffer(ctx, {VkDeviceSize(extent.width) * extent.height * 16,
+                                 VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "studio test lighting readback"});
+        ctx.immediate([&](VkCommandBuffer cmd) {
+            image.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
+                             VK_ACCESS_2_TRANSFER_READ_BIT);
+            VkBufferImageCopy region{};
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.imageExtent = {extent.width, extent.height, 1};
+            vkCmdCopyImageToBuffer(cmd, image.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer.handle(),
+                                   1, &region);
+        });
+        buffer.invalidate();
+        const auto* bytes = static_cast<const std::uint8_t*>(buffer.mapped());
+        return {bytes, bytes + buffer.size()};
+    }
+
 private:
     gfx::FrameRing ring_;
     evo::text::TextPass text_;
@@ -346,6 +379,18 @@ bool finite(Vec3 v) {
     return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 }
 
+Vec3 screenCentre() {
+    Vec3 sum{0, 0, 0};
+    for (const Vec3& corner : modern::studioScreenCorners())
+        sum = sum + corner;
+    return sum * 0.25f;
+}
+
+// Every Studio shot but STUDIO NIGHT's wide dolly is about the screen.
+bool screenShot(Effect effect, std::uint32_t shot) {
+    return !(effect == Effect::StudioNight && shot == 0);
+}
+
 void testCameras() {
     int samples = 0;
     for (const int chapter : {kFinale, kPortal, kStudioNight, kReturn, kReboot}) {
@@ -367,6 +412,13 @@ void testCameras() {
             for (std::size_t i = 1; i < shots.size(); ++i)
                 expectedShot += static_cast<float>(frame.localSeconds) >= shots[i].start ? 1 : 0;
             CHECK(c.shot == expectedShot);
+            if (screenShot(frame.effect, c.shot)) {
+                // In focus on the screen's plane (the thin lens focuses on a plane at focusDistance along
+                // the view), with a small aperture: the CRT's picture stays sharp.
+                const modern::CameraBasis b = modern::cameraBasis(c);
+                CHECK(std::abs(c.focusDistance - modern::dot(screenCentre() - c.eye, b.forward)) < 1e-4f);
+                CHECK(c.aperture <= 0.004f);
+            }
             if (previous && previous->shot == c.shot) {
                 CHECK(modern::length(c.eye - previous->eye) < 0.05f);
                 CHECK(modern::length(c.target - previous->target) < 0.05f);
@@ -508,6 +560,107 @@ void testDosIdle() {
     std::printf("(g) DOS idle: %s with a 2 Hz cursor\n", retro::kDosIdlePrompt);
 }
 
+// --- (h)
+// -----------------------------------------------------------------------------------------------------
+
+// The mean absolute difference of two pictures over a rectangle, all channels, in [0, 1].
+double meanAbsDifference(const Picture& a, const Picture& b, Rect r) {
+    double sum = 0;
+    int count = 0;
+    for (int y = std::max(r.top, 0); y < std::min(r.bottom, int(a.height)); ++y)
+        for (int x = std::max(r.left, 0); x < std::min(r.right, int(a.width)); ++x)
+            for (int c = 0; c < 3; ++c) {
+                sum += std::abs(int(a.at(x, y)[c]) - int(b.at(x, y)[c])) / 255.0;
+                ++count;
+            }
+    return sum / count;
+}
+
+// The local contrast over a rectangle: the mean absolute luminance step to the right and down neighbours.
+double localContrast(const Picture& p, Rect r) {
+    double sum = 0;
+    int count = 0;
+    for (int y = std::max(r.top, 0); y + 1 < std::min(r.bottom, int(p.height)); ++y)
+        for (int x = std::max(r.left, 0); x + 1 < std::min(r.right, int(p.width)); ++x) {
+            sum += std::abs(p.luminance(x + 1, y) - p.luminance(x, y)) +
+                   std::abs(p.luminance(x, y + 1) - p.luminance(x, y));
+            ++count;
+        }
+    return sum / count;
+}
+
+// The window's frames 1 .. count of a run ending at `last`, 1 spp with the temporal history, as the window
+// plays them (a reset on the first frame and at a shot cut); returns the last.
+Picture playWindow(Stages& stages, const TimelineFrame& last, std::uint32_t count) {
+    Picture p;
+    std::uint32_t sinceReset = 0;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const TimelineFrame f = show::sampleTimeline(last.showSeconds - (count - 1 - i) / 60.0);
+        const bool reset =
+            i == 0 || modern::studioCamera(f).shot !=
+                          modern::studioCamera(show::sampleTimeline(f.showSeconds - 1 / 60.0)).shot;
+        sinceReset = reset ? 0 : sinceReset + 1;
+        p = stages.render(
+            f, interactiveState(f, reset ? render::HistoryReset::FirstFrame : render::HistoryReset::None,
+                                sinceReset));
+    }
+    return p;
+}
+
+void testWindowScreenSharp(gfx::Context& ctx) {
+    // STUDIO NIGHT's orbit around the monitor, the DOS prompt on the screen.
+    const TimelineFrame still = chapterAt(kStudioNight, 0.8);
+    const modern::Camera camera = modern::studioCamera(still);
+    CHECK(camera.shot == 1);
+    Stages window(ctx, kW, kH);
+    const Picture frame30 = playWindow(window, still, 30);
+    // The same frame again (a repeated frame, dt = 0: the history goes on, a new seed): the camera and the
+    // retro frame are unchanged, so only sampling noise can change the screen.
+    const Picture frame31 = window.render(still, interactiveState(still, render::HistoryReset::None, 30));
+    Stages exporter(ctx, kW, kH);
+    const Picture reference = exporter.render(still, exportState(still, 64));
+    frame30.save(kOutDir / "studio_window_orbit_30.png");
+    reference.save(kOutDir / "studio_window_orbit_export.png");
+    const Rect screen = screenRect(camera, kW, kH, 0.1);
+    const double flicker = meanAbsDifference(frame30, frame31, screen);
+    const double error = meanAbsDifference(frame30, reference, screen);
+    std::printf(
+        "(h) window orbit screen: frame to frame %.4f, from a 64 spp export %.4f, local contrast %.3f "
+        "(export %.3f)\n",
+        flicker, error, localContrast(frame30, screen), localContrast(reference, screen));
+    // Mean absolute differences over the screen on the display scale (1 = 255 levels). A jittered single
+    // tap at 1 spp changed it by about 0.035 a frame and stayed 0.045 from the export.
+    CHECK(flicker < 0.01);
+    CHECK(error < 0.025);
+}
+
+// --- (i)
+// -----------------------------------------------------------------------------------------------------
+
+void testClampIndirect(gfx::Context& ctx) {
+    CHECK(modern::SceneFrame{}.clampIndirect == 64.f && modern::TraceSettings{}.clampIndirect == 64.f);
+    const modern::Studio studio;
+    // FINALE's pull-out passes the chrome and glass spheres and the lamp: plenty of caustic paths above 2.
+    const TimelineFrame frame = chapterAt(kFinale, 0.5);
+    const modern::SceneFrame scene = studio.frame(frame);
+    CHECK(scene.clampIndirect == 2.f);
+    gfx::Image white = makeRetro(ctx, 255, 255, 255);
+    Stages stages(ctx, 160, 90);
+    const render::HistoryState state = exportState(frame, 4);
+    stages.render(frame, state, &white);
+    const std::vector<std::uint8_t> staged = stages.lightingBytes(ctx);
+    modern::TraceSettings settings{state.spp, state.maxBounces, state.frameSeed};
+    settings.clampIndirect = 2.f;
+    stages.trace(scene, settings, white);
+    const std::vector<std::uint8_t> clamped = stages.lightingBytes(ctx);
+    settings.clampIndirect = 64.f;
+    stages.trace(scene, settings, white);
+    const std::vector<std::uint8_t> loose = stages.lightingBytes(ctx);
+    CHECK(staged == clamped);
+    CHECK(clamped != loose);
+    std::printf("(i) the Studio traces with clampIndirect 2 (64 changes its lighting)\n");
+}
+
 // --- --look ------------------------------------------------------------------------------------------------
 
 void renderLook(gfx::Context& ctx, const std::filesystem::path& dir, std::uint32_t spp, std::uint32_t width,
@@ -579,6 +732,8 @@ int main(int argc, char** argv) {
         testStudioNightLooks(ctx);
         testCrtLightsTheRoom(ctx);
         testScreenFollowsPicture(ctx);
+        testWindowScreenSharp(ctx);
+        testClampIndirect(ctx);
         CHECK(ctx.validationMessageCount() == 0);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());

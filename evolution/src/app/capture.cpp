@@ -5,6 +5,7 @@
 #include "gfx/paths.hpp"
 #include "gfx/readback.hpp"
 #include "image/png.hpp"
+#include "modern/modern_scene.hpp"
 #include "render/renderer.hpp"
 #include "show/timeline.hpp"
 
@@ -55,6 +56,9 @@ int runCapture(const Options& options) {
     render::Renderer renderer(ctx, ring, settings);
     show::TimelineFrame frame = show::sampleTimeline(options.time);
     applyForcedEra(frame);
+    // A Studio chapter's GPU side (BLASes, pipeline, denoiser images) as setup, before the frame.
+    if (modern::sceneFor(frame.effect) != modern::SceneId::Placeholder)
+        renderer.prepare();
     VkCommandBuffer cmd = ring.begin();
     renderer.render(cmd, frame);
     readback.record(cmd, renderer.output());

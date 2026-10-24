@@ -836,6 +836,51 @@ void testSkippedStageStats(evo::gfx::Context& ctx) {
     CHECK(!stats().modernRendered && stats().framesSinceReset == 0);
 }
 
+TimelineFrame studioNight(double fraction) {
+    const int chapter = 11;
+    const double start = evo::show::chapterStart(chapter), end = evo::show::chapterStart(chapter + 1);
+    TimelineFrame frame = evo::show::sampleTimeline(start + fraction * (end - start));
+    CHECK(frame.effect == Effect::StudioNight);
+    return frame;
+}
+
+// The window prepares the Studio's GPU side, then resizes: the path tracer and the denoiser follow the new
+// size. The first frame after the resize resets the history (Resize) and so equals a fresh renderer's first
+// frame at that size and time byte for byte, and the next one carries on (no reset), validation clean.
+void testStudioResize(evo::gfx::Context& ctx) {
+    Harness harness(ctx, modeSettings(160, 90, RenderMode::Interactive));
+    const auto stats = [&] { return harness.renderer().lastStats(); };
+    harness.renderer().prepare();
+    const TimelineFrame start = studioNight(0.3);
+    harness.render(start);
+    harness.render(evo::show::sampleTimeline(start.showSeconds + 1.0 / 60));
+    CHECK(stats().modernRendered && stats().historyReset == HistoryReset::None);
+    harness.resize(192, 108);
+    const TimelineFrame after = evo::show::sampleTimeline(start.showSeconds + 2.0 / 60);
+    const Picture resized = harness.render(after);
+    CHECK(stats().historyReset == HistoryReset::Resize && stats().framesSinceReset == 0);
+    const VkExtent2D extent = harness.renderer().output().extent();
+    CHECK(extent.width == 192 && extent.height == 108);
+    CHECK(resized.width == 192 && resized.height == 108);
+    Harness fresh(ctx, modeSettings(192, 108, RenderMode::Interactive));
+    CHECK(fresh.render(after).rgb == resized.rgb);
+    harness.render(evo::show::sampleTimeline(after.showSeconds + 1.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
+}
+
+// A prepared renderer (the GPU side built up front, as the window and the exports do) and a lazily built one
+// (on its first Studio frame) render the same first Studio frame, byte for byte.
+void testPreparedEqualsLazy(evo::gfx::Context& ctx) {
+    const TimelineFrame frame = studioNight(0.4);
+    Harness prepared(ctx, modeSettings(160, 90, RenderMode::Export));
+    prepared.renderer().prepare();
+    Harness lazy(ctx, modeSettings(160, 90, RenderMode::Export));
+    const Picture a = prepared.render(frame);
+    const Picture b = lazy.render(frame);
+    CHECK(prepared.renderer().lastStats().modernRendered && lazy.renderer().lastStats().modernRendered);
+    CHECK(a.rgb == b.rgb);
+}
+
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
     evo::gfx::FrameRing ring(ctx);
     bool threw = false;
@@ -885,6 +930,8 @@ int main() {
             testInteractiveKeepsHiddenModernWarm(ctx);
             testHistoryResets(ctx);
             testSkippedStageStats(ctx);
+            testStudioResize(ctx);
+            testPreparedEqualsLazy(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
