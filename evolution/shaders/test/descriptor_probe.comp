@@ -1,0 +1,25 @@
+#version 460
+
+// A test fixture for the shared descriptor layer (tests/descriptors_test.cpp): reads three textures through a
+// combined image sampler array, a value from a storage buffer and a texel of a storage image, and writes all
+// five out, so the test sees that every element of the array and every other binding reached the shader.
+// The sync validation case makes it read the storage image right after another dispatch wrote it.
+
+layout(local_size_x = 1, local_size_y = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D textures[3];
+layout(set = 0, binding = 1, std430) readonly buffer Input {
+    vec4 value;
+} inData;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    vec4 values[5];
+} outData;
+layout(set = 0, binding = 3, rgba8) uniform readonly image2D storageImage;
+
+void main() {
+    for (int i = 0; i < 3; ++i) {
+        outData.values[i] = textureLod(textures[i], vec2(0.5), 0.0);
+    }
+    outData.values[3] = inData.value;
+    outData.values[4] = imageLoad(storageImage, ivec2(0, 0));
+}

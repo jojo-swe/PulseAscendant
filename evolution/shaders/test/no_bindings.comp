@@ -1,0 +1,16 @@
+#version 460
+
+// A test fixture for ComputePipeline (tests/gfx_foundation_test.cpp): a compute shader with no descriptor
+// bindings and only a push constant. It writes nothing; it exists to be created, bound and dispatched.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(push_constant) uniform PushConstants {
+    uint value;
+} pc;
+
+void main() {
+    if (pc.value == 0xffffffffu) {
+        return;
+    }
+}

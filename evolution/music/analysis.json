@@ -1,0 +1,65 @@
+{
+  "envelope_rate": 20,
+  "spectrum_bands": 24,
+  "spectrum_edges_hz": [
+    35.0,
+    45.398,
+    58.885,
+    76.378,
+    99.068,
+    128.5,
+    166.674,
+    216.19,
+    280.416,
+    363.722,
+    471.777,
+    611.932,
+    793.725,
+    1029.526,
+    1335.377,
+    1732.092,
+    2246.662,
+    2914.101,
+    3779.822,
+    4902.733,
+    6359.238,
+    8248.442,
+    10698.892,
+    13877.322,
+    18000.0
+  ],
+  "spectrum_method": "48 kHz / 8192 sample centred Hann FFT; log-spaced 35-18000 Hz bands; attack/release; interpolated at playback clock",
+  "method": "RMS, 35-180 Hz bass, positive spectral flux; 2048 sample Hann / 16 kHz; no assumed beat grid",
+  "envelope_offsets": [
+    0,
+    3880,
+    8248,
+    14224
+  ],
+  "tracks": [
+    {
+      "source": "Amiga Trance Demo.wav",
+      "frames": 9312000,
+      "duration": 194.0,
+      "envelope_samples": 3880,
+      "transient_peaks": 531,
+      "runtime_sha256": "ab3fe61cc8971828365a5cbe99b8a6ac69cfe47d8edc179f1f4dbcbec1f69c59"
+    },
+    {
+      "source": "Guitar Trance.wav",
+      "frames": 10483200,
+      "duration": 218.4,
+      "envelope_samples": 4368,
+      "transient_peaks": 603,
+      "runtime_sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d"
+    },
+    {
+      "source": "Rigid Arpeggios.wav",
+      "frames": 14340480,
+      "duration": 298.76,
+      "envelope_samples": 5976,
+      "transient_peaks": 791,
+      "runtime_sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335"
+    }
+  ]
+}

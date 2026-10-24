@@ -1,0 +1,150 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The 1993 polygon rasteriser: draws the retro frame's screen-space triangles (retro::RetroTriangle, made and
+// sorted back to front on the CPU) into the 320x200 palette index image. One invocation per pixel walks every
+// triangle in upload order, so later triangles land on top (painter's order) without any ordering between
+// invocations; each workgroup first stages a chunk of triangles in shared memory, oriented, with their
+// bounding boxes and gouraud setup, which most pixels reject at a glance.
+//
+// Coverage is exact: vertices are 28.4 fixed point within the guard band (retro/scene.hpp), so every edge
+// function below fits in 32 bits. A pixel is covered when its centre is inside, or on a top or left edge
+// (the top-left rule): two triangles that share an edge, listed either way round, give each pixel on it to
+// exactly one of them. Modes (RetroTriangle::mode):
+//   0 flat     the pixel becomes index 0;
+//   1 gouraud  floor(v + (bayer + 0.5) / 16), v the vertex indices weighted by the pixel's barycentrics;
+//   2 glenz    the pixel is ORed with index 0, so overlapping transparent faces combine their codes.
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r8ui) uniform uimage2D indexImage;
+
+// Must match retro::RetroTriangle (32 bytes): the three vertex indices in the low bytes of indexMode, the
+// mode in its high byte.
+struct Triangle {
+    int x[3];
+    int y[3];
+    uint indexMode;
+    uint pad;
+};
+
+layout(set = 0, binding = 1, std430) readonly buffer Triangles {
+    Triangle triangles[];
+};
+
+// Must match PolysPushConstants in src/render/scene_raster.cpp.
+layout(push_constant) uniform PushConstants {
+    uint count; // triangles to draw
+} pc;
+
+const uint kChunk = 64u; // one triangle per invocation of the 8x8 workgroup
+
+// A triangle as the pixels test it: vertices 1 and 2 swapped if needed so that its edge functions are
+// positive inside (clockwise as the screen shows it, y down).
+struct Staged {
+    ivec2 v[3];
+    ivec4 box;      // the 28.4 bounding box: min x, min y, max x, max y (empty for a degenerate triangle)
+    uint indexMode; // as uploaded, with indices 1 and 2 swapped if the vertices were
+    uint shift;     // gouraud: right shift that brings twice the area under 2^18
+};
+
+shared Staged chunk[kChunk];
+
+// Twice the signed area of (a, b, p): positive when p lies left of a -> b as the screen shows it.
+int edgeFunction(ivec2 a, ivec2 b, ivec2 p) {
+    return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+}
+
+// Top and left edges own the pixels exactly on them: an edge going up the screen (the interior to its
+// right), or a horizontal edge going right (the interior below).
+bool topLeft(ivec2 a, ivec2 b) {
+    int dy = b.y - a.y;
+    return dy < 0 || (dy == 0 && b.x > a.x);
+}
+
+bool coveredBy(int e, bool owns) {
+    return e > 0 || (e == 0 && owns);
+}
+
+Staged stage(Triangle t) {
+    Staged s;
+    s.v[0] = ivec2(t.x[0], t.y[0]);
+    s.v[1] = ivec2(t.x[1], t.y[1]);
+    s.v[2] = ivec2(t.x[2], t.y[2]);
+    s.indexMode = t.indexMode;
+    int area = edgeFunction(s.v[0], s.v[1], s.v[2]);
+    if (area < 0) {
+        ivec2 v = s.v[1];
+        s.v[1] = s.v[2];
+        s.v[2] = v;
+        uint i1 = (t.indexMode >> 8) & 0xffu;
+        uint i2 = (t.indexMode >> 16) & 0xffu;
+        s.indexMode = (t.indexMode & 0xff0000ffu) | (i2 << 8) | (i1 << 16);
+        area = -area;
+    }
+    if (area == 0) {
+        s.box = ivec4(1, 1, 0, 0); // covers nothing
+    } else {
+        s.box = ivec4(min(s.v[0], min(s.v[1], s.v[2])), max(s.v[0], max(s.v[1], s.v[2])));
+    }
+    s.shift = uint(max(0, findMSB(area) - 17));
+    return s;
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    bool onScreen = pixel.x < kRetroWidth && pixel.y < kRetroHeight;
+    ivec2 p = ivec2(pixel) * 16 + 8; // the pixel centre in 28.4
+
+    uint index = onScreen ? imageLoad(indexImage, ivec2(pixel)).r & 0xffu : 0u;
+    bool written = false;
+
+    for (uint base = 0u; base < pc.count; base += kChunk) {
+        // Every invocation, on screen or not, helps stage the chunk and reaches both barriers.
+        uint mine = base + gl_LocalInvocationIndex;
+        if (mine < pc.count) {
+            chunk[gl_LocalInvocationIndex] = stage(triangles[mine]);
+        }
+        barrier();
+
+        uint size = min(kChunk, pc.count - base);
+        for (uint i = 0u; onScreen && i < size; ++i) {
+            Staged s = chunk[i];
+            if (any(lessThan(p, s.box.xy)) || any(greaterThan(p, s.box.zw))) {
+                continue;
+            }
+            int w0 = edgeFunction(s.v[1], s.v[2], p);
+            int w1 = edgeFunction(s.v[2], s.v[0], p);
+            int w2 = edgeFunction(s.v[0], s.v[1], p);
+            if (!coveredBy(w0, topLeft(s.v[1], s.v[2])) || !coveredBy(w1, topLeft(s.v[2], s.v[0])) ||
+                !coveredBy(w2, topLeft(s.v[0], s.v[1]))) {
+                continue;
+            }
+
+            uint mode = s.indexMode >> 24;
+            uint i0 = s.indexMode & 0xffu;
+            if (mode == 1u) {
+                // Inside, every weight is >= 0. Shifted, they sum to under 2^18, so the dithered quotient
+                // below stays within 32 bits: 32 * 255 * 2^18 + 31 * 2^18 < 2^32.
+                uint u0 = uint(w0) >> s.shift, u1 = uint(w1) >> s.shift, u2 = uint(w2) >> s.shift;
+                // The total is never 0: unshifted it is twice the area (> 0), shifted at least 2^17 - 2.
+                uint total = u0 + u1 + u2;
+                uint i1 = (s.indexMode >> 8) & 0xffu, i2 = (s.indexMode >> 16) & 0xffu;
+                uint weighted = u0 * i0 + u1 * i1 + u2 * i2;
+                index = (32u * weighted + (2u * bayer4(pixel) + 1u) * total) / (32u * total);
+            } else if (mode == 2u) {
+                index |= i0;
+            } else {
+                index = i0;
+            }
+            written = true;
+        }
+        barrier();
+    }
+
+    if (written) {
+        imageStore(indexImage, ivec2(pixel), uvec4(index));
+    }
+}

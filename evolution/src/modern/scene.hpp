@@ -1,0 +1,121 @@
+#pragma once
+
+// What the path tracer renders: a scene's static part (meshes and materials, uploaded once) and one frame of
+// it (camera, placed instances, area lights). Built in code (every 2026 asset is procedural).
+
+#include "modern/caustics.hpp"
+#include "modern/environment.hpp"
+#include "modern/lensing.hpp"
+#include "modern/math.hpp"
+#include "modern/medium.hpp"
+#include "modern/particles.hpp"
+#include "modern/splats.hpp"
+#include "rt/geometry.hpp"
+#include "rt/gpu_types.hpp"
+
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <vector>
+
+namespace evo::modern {
+
+// A thin-lens camera looking from eye at target; up need only not be parallel to the view direction.
+// aperture is the lens diameter (0: a pinhole); focusDistance is measured along the view direction. shot
+// counts the camera's cuts: a change resets temporal history.
+struct Camera {
+    Vec3 eye, target, up;
+    float fovYDegrees;
+    float aperture = 0;
+    float focusDistance = 1;
+    std::uint32_t shot = 0;
+};
+
+// The most a scene's frames ever hold, anywhere in its chapters: the path tracer sizes its per-frame
+// buffers and TLAS for the largest over the scenes it has prepared, and refuses a frame that exceeds its
+// scene's capacity (std::length_error). Every scene task sweeps its chapters against it (checkSceneSweep).
+struct SceneCapacity {
+    std::uint32_t instances = 1024, lights = 64, materials = 256, spheres = 0, particles = 0, splats = 0;
+};
+
+// The meshes (BLAS per mesh) and materials of a scene, and what its frames may hold. An instance's hit group
+// is its material's materialClass. `spheres` are its static analytic spheres (Task 8), and the shader paths
+// name its particle, splat and medium compute shaders (empty: the scene has none; Tasks 8, 10 and 11).
+struct SceneStatic {
+    std::vector<rt::Mesh> meshes;
+    std::vector<rt::Material> materials;
+    SceneCapacity capacity;
+    std::vector<rt::SphereRecord> spheres;
+    std::filesystem::path particleShader, splatShader, mediumShader;
+};
+
+// One mesh placed in the world with a material. `light` names the SceneFrame light whose emitting surface
+// this instance is (the MIS partner of a BSDF ray that hits it; its emission then shows on the light's
+// emitting side only); kNoLight for every other instance, whose emission (if any) shows on both sides.
+// PathTracer::trace() refuses an instance and light that describe different emitters: the light must not be
+// a Portal; an Emitter light's emission is the material's emission * emissionScale, on a material without
+// the retro texture; a RetroScreen light's is (s, s, s), s = the emissionScale of a kRetroScreenTexture
+// material of class Emissive; and the transform must not mirror. The instance should be the very quad(w, h)
+// that rectLightForQuad(transform, w, h, ...) describes (not checked).
+//
+// A sphere instance (kind Spheres, Task 8) places spheres firstSphere .. firstSphere + sphereCount - 1 of the
+// scene's static spheres, or of the frame's particle field when dynamicSpheres is set, instead of a mesh.
+struct SceneInstance {
+    std::uint32_t mesh, material;
+    rt::Mat34 transform;
+    std::uint32_t light = rt::kNoLight;
+    rt::GeometryKind kind = rt::GeometryKind::Triangles;
+    std::uint32_t firstSphere = 0, sphereCount = 0;
+    bool dynamicSpheres = false;
+};
+
+// A frame of the light tree's lights (Task 12). Declared empty by Task 1 of step 5; Task 12 fills it in.
+struct TreeLightFrame {};
+
+// What one frame shows. Beyond step 4's camera, instances, lights and exposure, step 5's features each have
+// a member that is absent (empty, nullopt) in a frame without the feature; the path tracer then binds that
+// feature's resources to dummies:
+//   materials    empty: the scene's static table; else the whole table for this frame (a per-chapter light
+//                rig, blinking windows), at most the scene's capacity.materials entries
+//   environment  the sky (Task 2; default: step 4's night sky, never sampled by NEE)
+//   particles    the particle field (Task 8); splats (Task 10); medium (Task 11); treeLights (Task 12);
+//   caustics     (Task 13); lensing (Task 25)
+struct SceneFrame {
+    Camera camera;
+    std::vector<SceneInstance> instances;
+    std::vector<rt::RectLight> lights;
+    float exposureEV = 0;
+    // The luminance limit of a contribution after the first bounce (TraceSettings::clampIndirect), in the
+    // scene's own units: 64 by default; a scene lit far below that sets its own (the Studio, 2).
+    float clampIndirect = 64.f;
+    std::vector<rt::Material> materials;
+    EnvironmentDesc environment;
+    std::optional<ParticleFrame> particles;
+    std::optional<SplatFrame> splats;
+    std::optional<MediumFrame> medium;
+    std::vector<TreeLightFrame> treeLights;
+    std::optional<CausticFrame> caustics;
+    std::optional<LensingFrame> lensing;
+};
+
+// The light of a quad(width, height) mesh placed by `transform`: corner = the quad's bottom-left corner,
+// edgeU its bottom edge (left to right), edgeV its left edge (bottom to top), so it emits along the quad's
+// transformed +z, like the mesh. A RetroScreen light reads the retro picture at uv = (u, 1 - v), the quad's
+// own uv, times `emission` (= the screen material's emissionScale on every channel). Portal lights ignore
+// `emission` (their radiance is the sky). The light is seen through no portal (gate kNoLight). Throws
+// std::invalid_argument for a mirroring transform (negative determinant): its edges would make the light
+// face away from the side the mesh's front faces.
+rt::RectLight rectLightForQuad(const rt::Mat34& transform, float width, float height, rt::LightKind kind,
+                               Vec3 emission, float selectWeight);
+
+// The determinant of a transform's linear part (negative: it mirrors, turning front faces into back faces).
+float linearDeterminant(const rt::Mat34& transform);
+
+// A right-handed orthonormal view basis: forward = normalize(target - eye), right = normalize(forward x up),
+// up = right x forward.
+struct CameraBasis {
+    Vec3 right, up, forward;
+};
+CameraBasis cameraBasis(const Camera& camera);
+
+} // namespace evo::modern

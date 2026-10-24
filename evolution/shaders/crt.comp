@@ -1,0 +1,86 @@
+#version 460
+
+// The 1993 picture on the output: the 320x200 image fills a centred 4:3 rectangle (the output height times
+// 4/3 wide, or the width times 3/4 high when the output is narrower than 4:3); everything outside it is
+// black. Each pixel takes the nearest source pixel. With the CRT on, the same rectangle also gets
+//   barrel     the picture bulges by 2 %, normalised so the corners stay put: the rectangle's edges still
+//              sample the picture, so the content rectangle is identical with and without the CRT;
+//   bloom      a source pixel takes 15 % of how much brighter its four neighbours are on average (1 px);
+//   scanlines  odd source lines 25 % darker;
+//   mask       a phosphor triad: in each output column, the two channels other than its own at -6 %;
+//   vignette   darker towards the corners, by 10 % in the corners.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform readonly image2D retroImage; // 320x200
+layout(set = 0, binding = 1, rgba8) uniform writeonly image2D screen;    // width x height
+
+// Must match CompositorPushConstants in src/render/compositor.cpp (32 bytes), shared by both of the
+// compositor's passes.
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    float era;
+    float wipe;
+    float eraCut;
+    uint transition;
+    uint crt;     // 0 = plain nearest-neighbour pillarbox
+    uint visible; // bit 0 retro, bit 1 modern; without bit 0 the compositor skips this pass
+} pc;
+
+const ivec2 kRetroSize = ivec2(320, 200);
+const float kBarrel = 0.02;
+const float kBloom = 0.15;
+const float kScanline = 0.75;
+const float kMask = 0.06;
+const float kVignette = 0.10;
+
+vec3 source(ivec2 pixel) {
+    return imageLoad(retroImage, clamp(pixel, ivec2(0), kRetroSize - 1)).rgb;
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= pc.width || pixel.y >= pc.height) {
+        return;
+    }
+
+    uvec2 content = uvec2(pc.width, pc.height);
+    if (pc.width * 3u >= pc.height * 4u) {
+        content.x = pc.height * 4u / 3u;
+    } else {
+        content.y = pc.width * 3u / 4u;
+    }
+    uvec2 origin = (uvec2(pc.width, pc.height) - content) / 2u;
+    if (any(lessThan(pixel, origin)) || any(greaterThanEqual(pixel, origin + content))) {
+        imageStore(screen, ivec2(pixel), vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+
+    vec2 uv = (vec2(pixel - origin) + 0.5) / vec2(content); // (0, 1) across the rectangle
+    if (pc.crt == 0u) {
+        ivec2 nearest = ivec2(uv * vec2(kRetroSize));
+        imageStore(screen, ivec2(pixel), vec4(source(nearest), 1.0));
+        return;
+    }
+
+    vec2 centred = uv * 2.0 - 1.0;
+    float r2 = dot(centred, centred); // 2 in the corners
+    vec2 bulged = centred * (1.0 + kBarrel * r2) / (1.0 + 2.0 * kBarrel);
+    ivec2 nearest = ivec2(floor((bulged * 0.5 + 0.5) * vec2(kRetroSize)));
+    nearest = clamp(nearest, ivec2(0), kRetroSize - 1);
+
+    vec3 color = source(nearest);
+    vec3 around = 0.25 * (source(nearest + ivec2(1, 0)) + source(nearest - ivec2(1, 0)) +
+                          source(nearest + ivec2(0, 1)) + source(nearest - ivec2(0, 1)));
+    color += kBloom * max(around - color, 0.0);
+    if ((nearest.y & 1) == 1) {
+        color *= kScanline;
+    }
+    vec3 mask = vec3(1.0 - kMask);
+    mask[pixel.x % 3u] = 1.0;
+    color *= mask;
+    color *= 1.0 - kVignette * 0.5 * r2;
+
+    imageStore(screen, ivec2(pixel), vec4(clamp(color, 0.0, 1.0), 1.0));
+}

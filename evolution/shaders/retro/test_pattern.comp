@@ -1,0 +1,61 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The 1993 test pattern of the effects that have neither their own shader nor a text-only picture yet (BOOT
+// and CREDITS are text; FLYBY scrolls its greeting over this pattern): a palette index image of
+//   border  a 6-pixel frame of index 255 around the picture, so its edges show where the 4:3 box is;
+//   bands   a ramp of indices 0..254 down the 188 inner rows, one row each (so about a quarter of the indices
+//           never appear), shown in the grey palette as a gradient from black to white;
+//   block   a 40x40 block, a Bayer-dithered ramp to white (index 255) along its diagonal over a shade of
+//           48..207, moving 3 px across and 2 px down per retro frame and bouncing off the edges; the chapter
+//           hashes to its start position and its shade, so neighbouring chapters look different.
+// A pure function of (chapter, retroFrame), like every retro effect.
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D indexImage;
+
+// Must match RetroPushConstants in src/render/retro_stage.cpp (12 bytes).
+layout(push_constant) uniform PushConstants {
+    uint retroFrame;    // floor(localSeconds * retroRate)
+    uint chapter;       // the chapter index
+    float retroSeconds; // retroFrame / retroRate: the chapter-local time of this retro frame
+} pc;
+
+const uint kBorder = 6u;
+const uint kBlock = 40u;
+
+// Bounces t back and forth over [0, range].
+uint bounce(uint t, uint range) {
+    t %= 2u * range;
+    return t <= range ? t : 2u * range - t;
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= kRetroWidth || pixel.y >= kRetroHeight) {
+        return;
+    }
+
+    uint index;
+    if (pixel.x < kBorder || pixel.y < kBorder || pixel.x >= kRetroWidth - kBorder ||
+        pixel.y >= kRetroHeight - kBorder) {
+        index = 255u;
+    } else {
+        index = (pixel.y - kBorder) * 256u / (kRetroHeight - 2u * kBorder);
+    }
+
+    uint seed = hash(pc.chapter + 1u);
+    uvec2 block = uvec2(bounce((seed & 0xffffu) + 3u * pc.retroFrame, kRetroWidth - kBlock),
+                        bounce((seed >> 16) + 2u * pc.retroFrame, kRetroHeight - kBlock));
+    if (all(greaterThanEqual(pixel, block)) && all(lessThan(pixel, block + kBlock))) {
+        uvec2 local = pixel - block;
+        uint level = (local.x + local.y) * 16u / (2u * kBlock); // 0..15 along the diagonal
+        uint shade = 48u + hash(seed) % 160u;
+        index = bayer4(pixel) < level ? 255u : shade;
+    }
+
+    imageStore(indexImage, ivec2(pixel), uvec4(index));
+}

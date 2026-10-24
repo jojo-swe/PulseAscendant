@@ -1,0 +1,59 @@
+{
+  "method": "100 Hz log spectral flux; autocorrelation + comb tempo with 120 BPM log-normal prior; tempo disambiguated by phase-optimised bass onset mean on 90-180 BPM candidate grids (switch at >= 5 % better); DP beat tracking; +/-6 beat local linear smoothing (follows tempo drift); 4/4 bar position from bass onset and harmonic change in +/-24 beat windows",
+  "meter": 4,
+  "bpm_median": 139.811,
+  "tracks": [
+    {
+      "source": "Amiga Trance Demo.wav",
+      "sha256": "ab3fe61cc8971828365a5cbe99b8a6ac69cfe47d8edc179f1f4dbcbec1f69c59",
+      "frames": 9312000,
+      "bpm_median": 141.561,
+      "beats": 458,
+      "downbeats": 117,
+      "tempo_comb_bpm": 113.227,
+      "tempo_method": "bass-grid",
+      "tempo_candidates": {
+        "169.84": 0.1151,
+        "142.15": 0.2578,
+        "112.72": 0.1602,
+        "94.76": 0.1837
+      },
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 5.38
+    },
+    {
+      "source": "Guitar Trance.wav",
+      "sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d",
+      "frames": 10483200,
+      "bpm_median": 140.541,
+      "beats": 511,
+      "downbeats": 126,
+      "tempo_comb_bpm": 93.74,
+      "tempo_method": "bass-grid",
+      "tempo_candidates": {
+        "140.38": 0.2596,
+        "112.17": 0.1607,
+        "93.61": 0.1833
+      },
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 4.62
+    },
+    {
+      "source": "Rigid Arpeggios.wav",
+      "sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335",
+      "frames": 14340480,
+      "bpm_median": 138.298,
+      "beats": 686,
+      "downbeats": 175,
+      "tempo_comb_bpm": 92.296,
+      "tempo_method": "bass-grid",
+      "tempo_candidates": {
+        "137.90": 0.2139,
+        "110.44": 0.1564,
+        "91.91": 0.162
+      },
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 4.62
+    }
+  ]
+}

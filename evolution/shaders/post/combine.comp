@@ -1,0 +1,37 @@
+#version 460
+
+// The denoiser's last pass: remodulates the filtered illumination by the albedo and adds the primary-hit
+// emission, which never went through history or filtering (an emissive screen stays sharp and current), then
+// composes the volume layer over it: hdr = T * surface + in-scattered radiance (Decision 5). Without a
+// medium (0, 0, 0, 1) that is the surface exactly.
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly image2D illuminationImage; // RGB illumination
+layout(set = 0, binding = 1, rgba16f) uniform readonly image2D albedoImage;
+layout(set = 0, binding = 2, rgba16f) uniform readonly image2D emissionImage;
+layout(set = 0, binding = 3, rgba16f) uniform readonly image2D volumeImage; // RGB radiance, A transmittance
+layout(set = 0, binding = 4, rgba16f) uniform writeonly image2D hdrImage;
+
+// Must match CombinePush in src/post/denoiser.cpp (8 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
+        return;
+    }
+    vec3 illumination = imageLoad(illuminationImage, p).rgb;
+    vec3 albedo = safeAlbedo(imageLoad(albedoImage, p).rgb);
+    vec3 emission = finiteOrZero(imageLoad(emissionImage, p).rgb);
+    vec4 volume = imageLoad(volumeImage, p); // made safe by the accumulate pass
+    vec3 surface = illumination * albedo + emission;
+    imageStore(hdrImage, p, vec4(min(volume.a * surface + volume.rgb, vec3(kHalfMax)), 1.0));
+}
