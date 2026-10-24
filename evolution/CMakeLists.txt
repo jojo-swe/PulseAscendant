@@ -107,6 +107,14 @@ add_library(evo_text STATIC
 target_include_directories(evo_text PUBLIC src)
 target_link_libraries(evo_text PUBLIC evo_gfx)
 
+# Ray tracing: the geometry store (every mesh of a scene in one vertex and one index buffer), one compacted
+# BLAS per mesh built at setup, and a TLAS rebuilt every frame from per-slot instance buffers.
+add_library(evo_rt STATIC
+    src/rt/accel.cpp
+    src/rt/geometry.cpp)
+target_include_directories(evo_rt PUBLIC src)
+target_link_libraries(evo_rt PUBLIC evo_gfx)
+
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
 # registry, the palette builders, the BOOT prompt script, the sine scroller it draws on, and the 1993 scene
@@ -263,6 +271,24 @@ add_dependencies(descriptors_test Evolution_shaders descriptors_test_shaders)
 target_compile_definitions(descriptors_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
                                                     EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME descriptors COMMAND descriptors_test)
+
+# The geometry store, compacted BLASes and the per-frame TLAS against a CPU intersection through a ray-query
+# probe (test-only shader), including 64 frames with two in flight and a moving instance (Review Focus 3),
+# with the validation layer and its synchronization validation on; fails on any message.
+add_executable(accel_test tests/accel_test.cpp)
+target_link_libraries(accel_test PRIVATE evo_rt)
+add_custom_command(
+    OUTPUT "${EVO_TEST_SPIRV_DIR}/test_ray_query_probe.comp.spv"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 -o "${EVO_TEST_SPIRV_DIR}/test_ray_query_probe.comp.spv"
+            "${CMAKE_SOURCE_DIR}/shaders/test/ray_query_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/ray_query_probe.comp"
+    COMMENT "Compiling test shader test_ray_query_probe.comp"
+    VERBATIM)
+add_custom_target(accel_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/test_ray_query_probe.comp.spv")
+add_dependencies(accel_test accel_test_shaders)
+target_compile_definitions(accel_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_test(NAME accel COMMAND accel_test)
 
 # The renderer's passes at small sizes, with the validation layer on; fails on any message it reports.
 add_executable(renderer_test tests/renderer_test.cpp)
