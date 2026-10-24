@@ -132,11 +132,13 @@ constexpr std::array<Face, 34> kFuselageFaces = {{
 }};
 
 // The fuselage lies within |x| <= 0.34 (its middle section); the wings and pods lie outside, but for the
-// wing roots, which sink just under the fuselage's skin. This plane on either side separates them.
+// wing roots: a straight edge that sinks up to 0.075 units into the fuselage (at z = -0.3, where the hull is
+// widest). This plane on either side separates them; drawn after the fuselage, a wing can show a thin strip
+// of its root through the hull's side (a known seam, see flybyShipFaces).
 constexpr double kFuselageHalfWidth = 0.34;
 
-// The right wing, swept back hard with a little dihedral: a thin wedge, 0.08 thick at the root (inside the
-// fuselage, whose skin it meets at y = +-0.04) and sharp at the tip. The left wing is its mirror image.
+// The right wing, swept back hard with a little dihedral: a thin wedge, 0.08 thick at the root (sunk into the
+// fuselage) and sharp at the tip. The left wing is its mirror image.
 constexpr std::array<Vec3, 6> kWingVertices = {{
     {0.225, 0.04, 0.60},  // 0: root, leading edge, top
     {0.205, -0.04, 0.60}, // 1: root, leading edge, bottom
@@ -199,11 +201,11 @@ constexpr double kFlameHalfWidth = 0.10;
 static_assert(kFuselageFaces.size() + 2 * kWingFaces.size() + 2 * kPodFaces.size() + 2 * 2 ==
               kFlybyShipTriangles);
 
-// One directional light, from the right, a little above and behind the ship (towards the light, world
-// space), and the share of light every face gets regardless.
-const Vec3 kLight = normalize({0.75, 0.35, -0.55});
-constexpr double kAmbient = 0.26;
-constexpr double kDiffuse = 1.0 - kAmbient;
+// One directional light, from the right, above and a little behind the ship (towards the light, world space).
+// Full diffuse on top of the ambient, so a face turned squarely to the light saturates at shade 15: over the
+// flight every lit ramp runs from shade 0 (turned away) to 15.
+const Vec3 kLight = normalize({0.75, 0.45, -0.5});
+constexpr double kDiffuse = 1.0;
 
 constexpr double kFovY = 42; // degrees, the ship's camera and the stars'
 
@@ -266,6 +268,8 @@ Rotation shipRotation(double t) {
 struct Part {
     std::vector<Vec3> vertices;
     std::vector<Face> faces;
+    FlybyPart kind;
+    int side;           // 0 right, 1 left (0 for the fuselage)
     bool flame = false; // a flame: both sides drawn, in the flame's shade of the engine ramp
 };
 
@@ -287,12 +291,16 @@ Vec3 outwardNormal(const Part& part, const Face& face, const Vec3& centroid) {
     return dot(normal, sub(middle, centroid)) < 0 ? Vec3{-normal[0], -normal[1], -normal[2]} : normal;
 }
 
+// The part on side 0 (as modelled) or side 1 (mirrored in x).
 template <std::size_t V, std::size_t F>
-Part makePart(const std::array<Vec3, V>& vertices, const std::array<Face, F>& faces, bool mirror) {
+Part makePart(const std::array<Vec3, V>& vertices, const std::array<Face, F>& faces, FlybyPart kind,
+              int side) {
     Part part;
     for (const Vec3& v : vertices)
-        part.vertices.push_back({mirror ? -v[0] : v[0], v[1], v[2]});
+        part.vertices.push_back({side == 1 ? -v[0] : v[0], v[1], v[2]});
     part.faces.assign(faces.begin(), faces.end());
+    part.kind = kind;
+    part.side = side;
     return part;
 }
 
@@ -302,6 +310,8 @@ Part makeFlames(std::uint32_t retroFrame, int side) {
     const double length = 0.30 + 0.07 * static_cast<double>(h % 5u);
     const Vec3 c = {side * kNozzleCentre[0], kNozzleCentre[1], kFlamePlaneZ - 0.005};
     Part part;
+    part.kind = FlybyPart::Flame;
+    part.side = side > 0 ? 0 : 1;
     part.flame = true;
     part.vertices = {
         {c[0], c[1] + kFlameHalfWidth, c[2]}, {c[0], c[1] - kFlameHalfWidth, c[2]},
@@ -336,10 +346,10 @@ EngineShades engineShades(std::uint32_t retroFrame, int side) {
     return {static_cast<std::uint8_t>(11u + h % 5u), static_cast<std::uint8_t>(5u + (h >> 8) % 5u)};
 }
 
-// Draws a part's faces into the scene: each face the camera sees (all of a flame's), flat shaded; the
+// Appends a part's faces in world space: each face the camera sees (all of a flame's), flat shaded; the
 // engine faces in their flickering shade.
-void drawPart(RetroScene& scene, const Camera& camera, const Rotation& rotation, const Vec3& eyeModel,
-              const Part& part, EngineShades engine) {
+void drawPart(std::vector<FlybyFace>& faces, const Rotation& rotation, const Vec3& eyeModel, const Part& part,
+              EngineShades engine) {
     const Vec3 centroid = centroidOf(part);
     for (const Face& face : part.faces) {
         const Vec3& a = part.vertices[face.a];
@@ -354,18 +364,18 @@ void drawPart(RetroScene& scene, const Camera& camera, const Rotation& rotation,
             shade = part.flame ? engine.flame : engine.nozzle;
         } else {
             const double lambert = std::max(0.0, dot(rotation.apply(normal), kLight));
-            const double intensity = kAmbient + kDiffuse * lambert;
-            shade = static_cast<std::uint8_t>(
-                std::clamp(static_cast<int>(intensity * kFlybyShades), 0, kFlybyShades - 1));
+            shade = flybyShade(kFlybyAmbient + kDiffuse * lambert);
         }
-        const std::uint8_t index = static_cast<std::uint8_t>(rampBase(face.ramp) + shade);
-        const std::uint8_t indices[3] = {index, index, index};
-        double world[3][3];
+        FlybyFace out{};
+        out.ramp = rampBase(face.ramp);
+        out.index = static_cast<std::uint8_t>(out.ramp + shade);
+        out.part = part.kind;
+        out.side = part.side;
         for (int k = 0; k < 3; ++k) {
             const Vec3 w = rotation.apply(k == 0 ? a : k == 1 ? b : c);
-            world[k][0] = w[0], world[k][1] = w[1], world[k][2] = w[2];
+            out.world[k][0] = w[0], out.world[k][1] = w[1], out.world[k][2] = w[2];
         }
-        addTriangle(scene, camera, world, indices, kFlat);
+        faces.push_back(out);
     }
 }
 
@@ -502,10 +512,10 @@ Camera flybyCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
     camera.eye[0] = distance * std::cos(elevation) * std::sin(azimuth);
     camera.eye[1] = distance * std::sin(elevation);
     camera.eye[2] = -distance * std::cos(elevation) * std::cos(azimuth);
-    // Aimed below the ship, so the ship rides in the upper part of the frame (less so while the camera looks
-    // up at it from below, which already lifts it).
+    // Aimed below the ship, so the ship rides in the upper part of the frame, its lowest vertex at y <= 133
+    // px on every frame (less offset while the camera looks up at it from below, which already lifts it).
     camera.target[0] = 0;
-    camera.target[1] = lerp(-0.3, -0.75, eased);
+    camera.target[1] = lerp(-0.4, -0.95, eased);
     camera.target[2] = 0;
     camera.up[0] = 0;
     camera.up[1] = 1;
@@ -516,9 +526,9 @@ Camera flybyCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
 
 void flybyPalette(Palette& palette, const show::TimelineFrame&, std::uint32_t) {
     palette.fill(rgba(0, 0, 0));
-    ramp(palette, kFlybyHull, kFlybyShades, {14, 16, 32}, {200, 212, 238});
-    ramp(palette, kFlybyWing, kFlybyShades, {0, 22, 28}, {120, 242, 222});
-    ramp(palette, kFlybyCockpit, kFlybyShades, {40, 18, 0}, {255, 216, 100});
+    ramp(palette, kFlybyHull, kFlybyShades, {40, 44, 72}, {200, 212, 238});
+    ramp(palette, kFlybyWing, kFlybyShades, {8, 50, 58}, {120, 242, 222});
+    ramp(palette, kFlybyCockpit, kFlybyShades, {70, 36, 6}, {255, 216, 100});
     // Engine glow: deep orange to yellow-orange, then on to white.
     ramp(palette, kFlybyEngine, 8, {150, 34, 0}, {255, 150, 24});
     ramp(palette, kFlybyEngine + 8, 8, {255, 170, 50}, {255, 255, 255});
@@ -526,52 +536,67 @@ void flybyPalette(Palette& palette, const show::TimelineFrame&, std::uint32_t) {
     palette[kFlybyWhite] = rgba(255, 255, 255);
 }
 
-void flybyScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+std::uint8_t flybyShade(double intensity) {
+    return static_cast<std::uint8_t>(
+        std::clamp(static_cast<int>(std::floor(intensity * kFlybyShades)), 0, kFlybyShades - 1));
+}
+
+std::vector<FlybyFace> flybyShipFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
     const Camera camera = flybyCamera(frame, retroFrame);
     const Rotation rotation = shipRotation(static_cast<double>(retroFrame) / kFlybyRetroRate);
     const Vec3 eye = rotation.applyInverse({camera.eye[0], camera.eye[1], camera.eye[2]});
-    const std::size_t shipFirst = scene.triangles.size();
 
-    const Part fuselage = makePart(kFuselageVertices, kFuselageFaces, false);
+    const Part fuselage = makePart(kFuselageVertices, kFuselageFaces, FlybyPart::Fuselage, 0);
     // Index 0: the right side (+x), 1: the left.
-    const Part wings[2] = {makePart(kWingVertices, kWingFaces, false),
-                           makePart(kWingVertices, kWingFaces, true)};
-    const Part pods[2] = {makePart(kPodVertices, kPodFaces, false), makePart(kPodVertices, kPodFaces, true)};
+    const Part wings[2] = {makePart(kWingVertices, kWingFaces, FlybyPart::Wing, 0),
+                           makePart(kWingVertices, kWingFaces, FlybyPart::Wing, 1)};
+    const Part pods[2] = {makePart(kPodVertices, kPodFaces, FlybyPart::Pod, 0),
+                          makePart(kPodVertices, kPodFaces, FlybyPart::Pod, 1)};
     const Part flames[2] = {makeFlames(retroFrame, 1), makeFlames(retroFrame, -1)};
     const EngineShades engines[2] = {engineShades(retroFrame, 1), engineShades(retroFrame, -1)};
 
     // Painter's order from separating planes, like a fixed BSP of the model: of two parts on either side of a
-    // plane, the one on the camera's side is drawn last.
+    // plane, the one on the camera's side is drawn last. The plane x = 0 separates the two sides.
+    std::vector<FlybyFace> faces;
+    const int nearSide = eye[0] >= 0 ? 0 : 1;
     const auto drawFlames = [&] {
-        for (int side = 0; side < 2; ++side)
-            drawPart(scene, camera, rotation, eye, flames[side], engines[side]);
+        drawPart(faces, rotation, eye, flames[1 - nearSide], engines[1 - nearSide]);
+        drawPart(faces, rotation, eye, flames[nearSide], engines[nearSide]);
     };
     // A wing and the pod under it: the wing's bottom face separates them.
     const auto drawSide = [&](int side) {
         if (eyeOutside(wings[side], kWingBottomFace, eye)) { // below the wing: the pod is in front
-            drawPart(scene, camera, rotation, eye, wings[side], engines[side]);
-            drawPart(scene, camera, rotation, eye, pods[side], engines[side]);
+            drawPart(faces, rotation, eye, wings[side], engines[side]);
+            drawPart(faces, rotation, eye, pods[side], engines[side]);
         } else {
-            drawPart(scene, camera, rotation, eye, pods[side], engines[side]);
-            drawPart(scene, camera, rotation, eye, wings[side], engines[side]);
+            drawPart(faces, rotation, eye, pods[side], engines[side]);
+            drawPart(faces, rotation, eye, wings[side], engines[side]);
         }
     };
     const bool behind = eye[2] < kFlamePlaneZ; // the flames lie between the camera and the rest
     if (!behind)
         drawFlames();
-    // The plane x = 0 separates the two sides; x = +-kFuselageHalfWidth each side from the fuselage.
-    const int nearSide = eye[0] >= 0 ? 0 : 1;
+    // x = +-kFuselageHalfWidth separates each side from the fuselage.
     drawSide(1 - nearSide);
     if (std::abs(eye[0]) > kFuselageHalfWidth) {
-        drawPart(scene, camera, rotation, eye, fuselage, engines[0]);
+        drawPart(faces, rotation, eye, fuselage, EngineShades{});
         drawSide(nearSide);
     } else {
         drawSide(nearSide);
-        drawPart(scene, camera, rotation, eye, fuselage, engines[0]);
+        drawPart(faces, rotation, eye, fuselage, EngineShades{});
     }
     if (behind)
         drawFlames();
+    return faces;
+}
 
+void flybyScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    const Camera camera = flybyCamera(frame, retroFrame);
+    const std::size_t shipFirst = scene.triangles.size();
+    for (const FlybyFace& face : flybyShipFaces(frame, retroFrame)) {
+        const std::uint8_t indices[3] = {face.index, face.index, face.index};
+        addTriangle(scene, camera, face.world, indices, kFlat);
+    }
     addStars(scene, retroFrame, shipFirst);
 }
 

@@ -1,27 +1,26 @@
-// FLYBY, chapter 1: the registry entry, the palette and the scene on the CPU (the ship's model and shading
-// indices, the camera's swoop, the starfield, the engines' flicker), and the 320x200 palette index image from
-// the retro stage on the GPU: deterministic per retro frame, the ship covering 5..40 % of the frame at three
-// moments of the chapter and drawn only inside its projected bounding box, mostly in the upper 70 % of the
-// frame, over a field of stars. Runs with the validation layer on and fails on any message it reports.
+// FLYBY, chapter 1: the registry entry, the palette and the scene on the CPU (the ship's model, shading and
+// ramps, its painter's order against a ray-cast reference, its place in the upper 70 % of the frame on every
+// retro frame, the camera's swoop, the starfield, the engines' flicker), and the 320x200 palette index image
+// from the retro stage on the GPU: deterministic per retro frame, the ship covering 5..40 % of the frame at
+// three moments of the chapter (at least 4 % throughout) and drawn only inside its projected bounding box,
+// over a field of stars. Runs with the validation layer on and fails on any message it reports.
 
-#include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
-#include "gfx/frame_ring.hpp"
-#include "gfx/sync.hpp"
-#include "render/retro_stage.hpp"
 #include "retro/effects.hpp"
 #include "retro/flyby.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
 #include "retro/scroller.hpp"
+#include "retro_stage_fixture.hpp"
 #include "show/timeline.hpp"
-#include "text/text_pass.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -30,6 +29,8 @@
 namespace {
 
 using evo::render::RetroStage;
+using evo::retro::FlybyFace;
+using evo::retro::FlybyPart;
 using evo::retro::Palette;
 using evo::retro::RetroScene;
 using evo::show::Effect;
@@ -181,43 +182,207 @@ void testScene() {
     CHECK(end.eye[0] > 0 && end.eye[0] > std::abs(end.eye[2]) / 2 && end.eye[1] > 0);
 }
 
-// The stage's index image of a FLYBY frame (scene and greeting).
-class Fixture {
-public:
-    explicit Fixture(evo::gfx::Context& ctx)
-        : ring_(ctx), text_(ctx, ring_), stage_(ctx, ring_, text_),
-          buffer_(ctx, {kPixels, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "flyby test index readback"}) {}
+// The shading: shade 0 for a face turned from the light (ambient alone), 15 for one facing it squarely,
+// rising in between; never past 15 into the next ramp.
+void testShading() {
+    using evo::retro::flybyShade;
+    CHECK(flybyShade(evo::retro::kFlybyAmbient) == 0);
+    CHECK(flybyShade(1.0) == 15 && flybyShade(1.0 - 1e-12) == 15 && flybyShade(1.5) == 15);
+    CHECK(flybyShade(0.0) == 0 && flybyShade(-1.0) == 0);
+    for (int shade = 0; shade < 16; ++shade)
+        CHECK(flybyShade((shade + .5) / 16) == shade);
+}
 
-    std::vector<std::uint8_t> render(const TimelineFrame& frame, bool* rendered = nullptr) {
-        VkCommandBuffer cmd = ring_.begin();
-        const bool recorded = stage_.render(cmd, frame);
-        if (rendered)
-            *rendered = recorded;
-        evo::gfx::Image& index = stage_.indexImage();
-        index.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
-                         VK_ACCESS_2_TRANSFER_READ_BIT);
-        VkBufferImageCopy region{};
-        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        region.imageExtent = {kWidth, kHeight, 1};
-        vkCmdCopyImageToBuffer(cmd, index.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer_.handle(), 1,
-                               &region);
-        evo::gfx::bufferBarrier2(cmd, buffer_.handle(), VK_PIPELINE_STAGE_2_COPY_BIT,
-                                 VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT,
-                                 VK_ACCESS_2_HOST_READ_BIT);
-        ring_.wait(ring_.submit());
-        buffer_.invalidate();
-        const auto* data = static_cast<const std::uint8_t*>(buffer_.mapped());
-        return {data, data + kPixels};
+// The ship's faces on the CPU over the chapter: each in its declared ramp, the same faces flybyScene draws;
+// all four ramps in use; the lit ramps from shade 0 (ambient alone) to shade 15 (full light); and on every
+// retro frame every vertex of the ship at y <= 140 px, the upper 70 % of the frame, clear of the greeting and
+// the epoch card, with a few pixels to spare.
+void testShipFaces() {
+    std::set<std::uint8_t> ramps;
+    int lowestShade = 99, highestShade = -1;
+    for (std::uint32_t retroFrame = 0; retroFrame <= lastFrame(); retroFrame += 7) {
+        const TimelineFrame frame = flyby(timeIn(retroFrame));
+        const std::vector<FlybyFace> faces = evo::retro::flybyShipFaces(frame, retroFrame);
+        CHECK(!faces.empty() && faces.size() <= evo::retro::kFlybyShipTriangles);
+        for (const FlybyFace& face : faces) {
+            CHECK(face.ramp == evo::retro::kFlybyHull || face.ramp == evo::retro::kFlybyWing ||
+                  face.ramp == evo::retro::kFlybyCockpit || face.ramp == evo::retro::kFlybyEngine);
+            CHECK(face.index >= face.ramp && face.index < face.ramp + evo::retro::kFlybyShades);
+            // Flames glow; wings are teal; the fuselage is hull or canopy; a pod is hull or nozzle.
+            switch (face.part) {
+            case FlybyPart::Flame:
+                CHECK(face.ramp == evo::retro::kFlybyEngine);
+                break;
+            case FlybyPart::Wing:
+                CHECK(face.ramp == evo::retro::kFlybyWing);
+                break;
+            case FlybyPart::Fuselage:
+                CHECK(face.ramp == evo::retro::kFlybyHull || face.ramp == evo::retro::kFlybyCockpit);
+                break;
+            case FlybyPart::Pod:
+                CHECK(face.ramp == evo::retro::kFlybyHull || face.ramp == evo::retro::kFlybyEngine);
+                break;
+            }
+            ramps.insert(face.ramp);
+            if (face.ramp != evo::retro::kFlybyEngine) {
+                lowestShade = std::min(lowestShade, face.index - face.ramp);
+                highestShade = std::max(highestShade, face.index - face.ramp);
+            }
+        }
+        // flybyScene draws exactly these faces, in this order (none of them is clipped: the ship is whole on
+        // the screen), then the stars.
+        RetroScene fromFaces;
+        const evo::retro::Camera camera = evo::retro::flybyCamera(frame, retroFrame);
+        for (const FlybyFace& face : faces) {
+            const std::uint8_t indices[3] = {face.index, face.index, face.index};
+            evo::retro::addTriangle(fromFaces, camera, face.world, indices, evo::retro::kFlat);
+        }
+        const RetroScene scene = sceneAt(retroFrame);
+        CHECK(scene.triangles.size() == fromFaces.triangles.size());
+        for (std::size_t i = 0; i < scene.triangles.size(); ++i)
+            CHECK(std::equal(std::begin(scene.triangles[i].x), std::end(scene.triangles[i].x),
+                             std::begin(fromFaces.triangles[i].x)) &&
+                  std::equal(std::begin(scene.triangles[i].y), std::end(scene.triangles[i].y),
+                             std::begin(fromFaces.triangles[i].y)) &&
+                  scene.triangles[i].index[0] == fromFaces.triangles[i].index[0]);
     }
+    std::printf("flyby: ramps used %zu, lit shades %d..%d\n", ramps.size(), lowestShade, highestShade);
+    CHECK(ramps.size() == 4);
+    CHECK(lowestShade == 0 && highestShade == 15);
 
-    RetroStage& stage() { return stage_; }
+    std::int32_t lowest = INT32_MIN, highest = INT32_MAX;
+    for (std::uint32_t retroFrame = 0; retroFrame <= lastFrame(); ++retroFrame)
+        for (const evo::retro::RetroTriangle& t : sceneAt(retroFrame).triangles)
+            for (int v = 0; v < 3; ++v) {
+                lowest = std::max(lowest, t.y[v]);
+                highest = std::min(highest, t.y[v]);
+                CHECK(t.y[v] <= 140 * 16);
+            }
+    std::printf("flyby: the ship's vertices span y = %.2f..%.2f px over every retro frame\n", highest / 16.0,
+                lowest / 16.0);
+    CHECK(lowest <= 136 * 16); // a comfortable margin, not a fraction of a pixel
+    CHECK(highest >= 4 * 16);  // and it stays inside the frame at the top
+}
 
-private:
-    evo::gfx::FrameRing ring_;
-    evo::text::TextPass text_;
-    RetroStage stage_;
-    evo::gfx::Buffer buffer_;
+// The painter's order on the CPU: for every 7th retro frame, a ray through each pixel centre of an 80x50 grid
+// (every 4th pixel each way) against the ship's faces in world space. The face drawn last among those it hits
+// must show the nearest one's index, except at the two known seams (a wing root inside the fuselage, an
+// engine's crossed flames: one index, so they never show), and those only for a few rays.
+using Vec = std::array<double, 3>;
+
+Vec sub(const Vec& a, const Vec& b) {
+    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+}
+Vec cross(const Vec& a, const Vec& b) {
+    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+}
+double dot(const Vec& a, const Vec& b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+Vec normalize(const Vec& v) {
+    const double l = std::sqrt(dot(v, v));
+    return {v[0] / l, v[1] / l, v[2] / l};
+}
+
+// The distance along the ray to the triangle (two-sided), or a negative number for a miss.
+double hit(const Vec& origin, const Vec& direction, const double world[3][3]) {
+    const Vec a = {world[0][0], world[0][1], world[0][2]};
+    const Vec e1 = sub({world[1][0], world[1][1], world[1][2]}, a);
+    const Vec e2 = sub({world[2][0], world[2][1], world[2][2]}, a);
+    const Vec p = cross(direction, e2);
+    const double det = dot(e1, p);
+    if (std::abs(det) < 1e-14)
+        return -1;
+    const Vec s = sub(origin, a);
+    const double u = dot(s, p) / det;
+    if (u < 0 || u > 1)
+        return -1;
+    const Vec q = cross(s, e1);
+    const double v = dot(direction, q) / det;
+    if (v < 0 || u + v > 1)
+        return -1;
+    return dot(e2, q) / det;
+}
+
+// Rays whose last-drawn face is not the nearest, over the sampled frames: allowed (seam) and not.
+struct OrderErrors {
+    std::size_t wingRoots = 0, flames = 0, wrong = 0, rays = 0, worstFrameSeams = 0;
 };
+
+OrderErrors painterErrors() {
+    OrderErrors errors;
+    for (std::uint32_t retroFrame = 0; retroFrame <= lastFrame(); retroFrame += 7) {
+        const TimelineFrame frame = flyby(timeIn(retroFrame));
+        const std::vector<FlybyFace> faces = evo::retro::flybyShipFaces(frame, retroFrame);
+        const evo::retro::Camera camera = evo::retro::flybyCamera(frame, retroFrame);
+        const Vec eye = {camera.eye[0], camera.eye[1], camera.eye[2]};
+        const Vec forward = normalize(sub({camera.target[0], camera.target[1], camera.target[2]}, eye));
+        const Vec right = normalize(cross({camera.up[0], camera.up[1], camera.up[2]}, forward));
+        const Vec up = cross(forward, right);
+        const double focalY = 100.0 / std::tan(camera.fovYDegrees * 3.14159265358979323846 / 360.0);
+        const double focalX = focalY * evo::retro::kPixelAspect;
+        std::size_t frameSeams = 0;
+        for (int gy = 0; gy < 50; ++gy)
+            for (int gx = 0; gx < 80; ++gx) {
+                const double px = gx * 4 + 1.5, py = gy * 4 + 1.5;
+                const double vx = (px - 160) / focalX, vy = (100 - py) / focalY;
+                const Vec direction = {forward[0] + right[0] * vx + up[0] * vy,
+                                       forward[1] + right[1] * vx + up[1] * vy,
+                                       forward[2] + right[2] * vx + up[2] * vy};
+                int nearest = -1, last = -1;
+                double nearestT = 1e30, lastT = 0;
+                for (std::size_t i = 0; i < faces.size(); ++i) {
+                    const double t = hit(eye, direction, faces[i].world);
+                    if (t <= 0)
+                        continue;
+                    if (t < nearestT)
+                        nearest = static_cast<int>(i), nearestT = t;
+                    last = static_cast<int>(i), lastT = t;
+                }
+                if (last < 0)
+                    continue;
+                ++errors.rays;
+                const FlybyFace& a = faces[static_cast<std::size_t>(nearest)];
+                const FlybyFace& b = faces[static_cast<std::size_t>(last)];
+                if (lastT <= nearestT * (1 + 1e-9) || a.index == b.index)
+                    continue; // the nearest shows (or one level with it on a shared edge, or its twin)
+                const auto is = [&](FlybyPart x, FlybyPart y) {
+                    return (a.part == x && b.part == y) || (a.part == y && b.part == x);
+                };
+                if (is(FlybyPart::Wing, FlybyPart::Fuselage)) {
+                    ++errors.wingRoots;
+                    ++frameSeams;
+                } else if (a.part == FlybyPart::Flame && b.part == FlybyPart::Flame && a.side == b.side) {
+                    ++errors.flames;
+                    ++frameSeams;
+                } else {
+                    ++errors.wrong;
+                    if (errors.wrong <= 5)
+                        std::printf("flyby: retro frame %u, pixel (%.0f, %.0f): part %d side %d drawn over "
+                                    "the nearer part %d side %d\n",
+                                    retroFrame, px, py, static_cast<int>(b.part), b.side,
+                                    static_cast<int>(a.part), a.side);
+                }
+            }
+        errors.worstFrameSeams = std::max(errors.worstFrameSeams, frameSeams);
+    }
+    return errors;
+}
+
+void testPainterOrder() {
+    const OrderErrors errors = painterErrors();
+    std::printf(
+        "flyby: painter's order: %zu rays hit the ship; at the known seams %zu at a wing root and %zu "
+        "in a flame (at most %zu in a frame); %zu wrong\n",
+        errors.rays, errors.wingRoots, errors.flames, errors.worstFrameSeams, errors.wrong);
+    CHECK(errors.rays >= 10000);
+    CHECK(errors.wrong == 0);
+    // The wing root's strip under the hull's shoulder (the straight root lies up to 0.075 units inside the
+    // kinked shoulder line): about 1 % of the ship's rays, at most 10 of a frame's ~450 (where the near
+    // wing's leading edge runs on along the hull's underside).
+    CHECK(errors.worstFrameSeams <= 15);
+    CHECK(errors.wingRoots + errors.flames <= errors.rays / 50);
+}
 
 // The share of the frame the ship covers.
 double coverage(const std::vector<std::uint8_t>& indices) {
@@ -225,6 +390,7 @@ double coverage(const std::vector<std::uint8_t>& indices) {
 }
 
 void testImages(evo::gfx::Context& ctx) {
+    using Fixture = evo::test::RetroStageFixture;
     Fixture fixture(ctx);
 
     // Over the whole chapter, every second of it (diagnostic: the range of the ship's coverage).
@@ -236,6 +402,7 @@ void testImages(evo::gfx::Context& ctx) {
     }
     std::printf("flyby: the ship covers %.1f..%.1f %% of the frame, sampled every second\n", 100 * least,
                 100 * most);
+    CHECK(least >= .04); // even edge-on, mid-chapter
 
     for (double fraction : {.12, .5, .88}) {
         const std::uint32_t retroFrame = frameAt(fraction);
@@ -320,6 +487,9 @@ int main() {
         testRegistry();
         testPalette();
         testScene();
+        testShading();
+        testShipFaces();
+        testPainterOrder();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())

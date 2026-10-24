@@ -2,19 +2,14 @@
 // in the registry, and their 320x200 palette index images (and colours) from the retro stage on the GPU. Runs
 // with the validation layer on and fails on any message it reports.
 
-#include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
-#include "gfx/frame_ring.hpp"
-#include "gfx/readback.hpp"
-#include "gfx/sync.hpp"
-#include "render/retro_stage.hpp"
 #include "retro/effects.hpp"
 #include "retro/flyby.hpp"
 #include "retro/palette.hpp"
 #include "retro/scroller.hpp"
+#include "retro_stage_fixture.hpp"
 #include "show/timeline.hpp"
 #include "text/font8x8.hpp"
-#include "text/text_pass.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -32,6 +27,7 @@ using evo::render::RetroStage;
 using evo::retro::scrollerItems;
 using evo::show::Effect;
 using evo::show::TimelineFrame;
+using evo::test::RetroStageFixture;
 using evo::text::Item;
 
 int checksPassed = 0;
@@ -231,55 +227,7 @@ void testRegistry() {
     }
 }
 
-// A 320x200 palette index image and its palette-mapped colours.
-struct Picture {
-    std::vector<std::uint8_t> indices; // row by row
-    std::vector<std::uint8_t> rgb;     // row by row, 3 bytes a pixel
-
-    std::uint8_t at(int x, int y) const { return indices[static_cast<std::size_t>(y) * kWidth + x]; }
-};
-
-// A retro stage with its own ring and text pass; every render() submits, waits and reads both images back.
-class Fixture {
-public:
-    explicit Fixture(evo::gfx::Context& ctx)
-        : ring_(ctx), text_(ctx, ring_), stage_(ctx, ring_, text_),
-          indexBuffer_(ctx, {VkDeviceSize{kWidth} * kHeight, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true,
-                             "scroller test index readback"}),
-          colour_(ctx, kWidth, kHeight) {}
-
-    Picture render(const TimelineFrame& frame, bool* rendered = nullptr) {
-        VkCommandBuffer cmd = ring_.begin();
-        const bool recorded = stage_.render(cmd, frame);
-        if (rendered)
-            *rendered = recorded;
-        evo::gfx::Image& index = stage_.indexImage();
-        index.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
-                         VK_ACCESS_2_TRANSFER_READ_BIT);
-        VkBufferImageCopy region{};
-        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        region.imageExtent = {kWidth, kHeight, 1};
-        vkCmdCopyImageToBuffer(cmd, index.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               indexBuffer_.handle(), 1, &region);
-        evo::gfx::bufferBarrier2(cmd, indexBuffer_.handle(), VK_PIPELINE_STAGE_2_COPY_BIT,
-                                 VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT,
-                                 VK_ACCESS_2_HOST_READ_BIT);
-        colour_.record(cmd, stage_.image());
-        ring_.wait(ring_.submit());
-        indexBuffer_.invalidate();
-        const auto* data = static_cast<const std::uint8_t*>(indexBuffer_.mapped());
-        return {{data, data + indexBuffer_.size()}, colour_.rgb()};
-    }
-
-    RetroStage& stage() { return stage_; }
-
-private:
-    evo::gfx::FrameRing ring_;
-    evo::text::TextPass text_;
-    RetroStage stage_;
-    evo::gfx::Buffer indexBuffer_;
-    evo::gfx::Readback colour_;
-};
+using Picture = evo::test::RetroPicture;
 
 // Whether the 8x8 cell of a one-glyph item holds its glyph: `ink` where the font is set, and where it is not
 // `paper` (any index when paper < 0).
@@ -305,13 +253,13 @@ bool wholeInside(const Item& item, int width = 8) {
 }
 
 void testImages(evo::gfx::Context& ctx) {
-    Fixture fixture(ctx);
+    RetroStageFixture fixture(ctx, true);
 
     // CREDITS at t = 4: deep blue with the title and the scroller in white, every glyph where its item says.
     const std::uint32_t retroFrame = frameAt(4);
     const TimelineFrame credits = chapterFrame(kCreditsChapter, Effect::Credits, middleOf(retroFrame));
     bool rendered = false;
-    const Picture picture = fixture.render(credits, &rendered);
+    const Picture picture = fixture.renderPicture(credits, &rendered);
     CHECK(rendered && fixture.stage().retroFrame() == retroFrame);
     std::size_t blue = 0, white = 0;
     for (std::uint8_t index : picture.indices) {
@@ -354,7 +302,7 @@ void testImages(evo::gfx::Context& ctx) {
     CHECK(rendered);
     TimelineFrame again = chapterFrame(kCreditsChapter, Effect::Credits, (retroFrame + .95) / 35);
     again.kick = 1;
-    const Picture repeat = fixture.render(again, &rendered);
+    const Picture repeat = fixture.renderPicture(again, &rendered);
     CHECK(rendered && fixture.stage().retroFrame() == retroFrame);
     CHECK(repeat.indices == picture.indices && repeat.rgb == picture.rgb);
 
@@ -362,7 +310,7 @@ void testImages(evo::gfx::Context& ctx) {
     const std::uint32_t flybyFrame = frameAt(3);
     const TimelineFrame flyby = chapterFrame(kFlybyChapter, Effect::Flyby, middleOf(flybyFrame));
     CHECK(flyby.era == 0.f);
-    const Picture overlay = fixture.render(flyby, &rendered);
+    const Picture overlay = fixture.renderPicture(flyby, &rendered);
     CHECK(rendered && fixture.stage().retroFrame() == flybyFrame);
     const std::vector<Item> greeting = evo::retro::flybyText(flyby, flybyFrame);
     CHECK(!greeting.empty() && greeting.size() % 2 == 0);
@@ -392,6 +340,27 @@ void testImages(evo::gfx::Context& ctx) {
     }
     std::printf("flyby: %zu greeting glyphs checked at t = 3, %zu shadow pixels\n", checked, shadowPixels);
     CHECK(checked >= 10 && shadowPixels >= 100);
+
+    // In FLYBY only the greeting writes 255: every 255 pixel lies on the ink of one of its glyphs (partly
+    // visible glyphs included), so no stray white leaks out of the text pass or the scene.
+    const auto onInk = [&](int x, int y) {
+        for (std::size_t i = glyphs; i < greeting.size(); ++i) {
+            const int col = x - static_cast<int>(greeting[i].x), row = y - static_cast<int>(greeting[i].y);
+            if (col >= 0 && col < 8 && row >= 0 && row < 8 &&
+                (evo::text::glyph(greeting[i].text[0])[row] & (0x80u >> col)))
+                return true;
+        }
+        return false;
+    };
+    std::size_t greetingWhite = 0;
+    for (int y = 0; y < static_cast<int>(kHeight); ++y)
+        for (int x = 0; x < static_cast<int>(kWidth); ++x)
+            if (overlay.at(x, y) == 255) {
+                CHECK(onInk(x, y));
+                ++greetingWhite;
+            }
+    std::printf("flyby: %zu white pixels, all on the greeting's ink\n", greetingWhite);
+    CHECK(greetingWhite >= 100);
 }
 
 } // namespace
