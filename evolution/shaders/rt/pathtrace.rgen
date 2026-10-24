@@ -10,9 +10,10 @@
 // surface with a non-delta lobe, next-event estimation picks one light by selectWeight, samples a uniform
 // point on it and casts a shadow ray (portals: to infinity, the sky beyond), adding
 // throughput * f cos * Le / (pdf_select * pdf_area->solid angle) * w_MIS. A BSDF ray that hits a light, or
-// escapes through a portal, is weighted against that light's NEE density (power heuristic); after a delta
-// lobe (no NEE there) it keeps weight 1. Russian roulette from bounce 3; contributions after the first
-// bounce are clamped to a luminance of frame.clampIndirect; a non-finite sample contributes 0.
+// escapes through portals, is weighted against that light's NEE density (for portals: summed over every
+// portal the direction crosses, on both sides) with the power heuristic; after a delta lobe (no NEE there)
+// it keeps weight 1. Russian roulette from bounce 3; contributions after the first bounce are clamped to a
+// luminance of frame.clampIndirect; a non-finite sample contributes 0.
 //
 // Every random number is randomFloat(frameSeed, pixel, sampleIndex, dimension) (random.glsl). Only this
 // shader traces rays (recursion depth 1).
@@ -150,10 +151,17 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         return vec3(0.0);
     }
     float lightPdf = selectPdf * rectSolidAnglePdf(l, dist, cosLight);
+    vec3 origin = offsetOrigin(p, ng, wi);
+    if (l.kind == kLightPortal) {
+        // Portals may overlap as seen from p (one behind another): NEE then reaches this direction through
+        // each of them, so its density is the sum over every portal the direction crosses, the same sum that
+        // weighs a BSDF ray escaping this way. With this portal's density alone the weights of the two
+        // strategies would not sum to one.
+        lightPdf = portalPdf(origin, wi);
+    }
     if (!(lightPdf > 0.0) || isinf(lightPdf)) {
         return vec3(0.0);
     }
-    vec3 origin = offsetOrigin(p, ng, wi);
     // A portal is an opening: the shadow ray goes on into the sky, which must be clear too. Other lights are
     // surfaces: it stops just short of the sampled point.
     float tMax = l.kind == kLightPortal ? kRayMax : length(q - origin) * (1.0 - 1e-4);

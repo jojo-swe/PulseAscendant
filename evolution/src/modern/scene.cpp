@@ -1,6 +1,7 @@
 #include "modern/scene.hpp"
 
 #include <cmath>
+#include <stdexcept>
 
 namespace evo::modern {
 
@@ -20,8 +21,16 @@ void store(float out[3], Vec3 v) {
 
 } // namespace
 
+float linearDeterminant(const rt::Mat34& transform) {
+    const Vec3 x = linearPart(transform, {1, 0, 0}), y = linearPart(transform, {0, 1, 0}),
+               z = linearPart(transform, {0, 0, 1});
+    return dot(cross(x, y), z);
+}
+
 rt::RectLight rectLightForQuad(const rt::Mat34& transform, float width, float height, rt::LightKind kind,
                                Vec3 emission, float selectWeight) {
+    if (linearDeterminant(transform) < 0.f)
+        throw std::invalid_argument("rectLightForQuad: a mirroring transform (negative determinant)");
     const Vec3 corner = transformPoint(transform, {-0.5f * width, -0.5f * height, 0.f});
     const Vec3 edgeU = linearPart(transform, {width, 0.f, 0.f});
     const Vec3 edgeV = linearPart(transform, {0.f, height, 0.f});

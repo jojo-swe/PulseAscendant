@@ -98,7 +98,9 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
             const std::vector<std::uint32_t> words = loadSpirv(spv);
             // Recursion depth 1, mechanically: only the raygen traces, and nothing calls a callable (there is
             // no callable region). Neither lavapipe nor the validation layer enforces
-            // maxPipelineRayRecursionDepth; an RTX GPU would hang.
+            // maxPipelineRayRecursionDepth; an RTX GPU would hang. The NV opcodes (OpTraceNV,
+            // OpTraceRayMotionNV, OpExecuteCallableNV, OpHitObject*NV) are not checked: they need NV
+            // extensions, which this project never enables.
             if (stage != VK_SHADER_STAGE_RAYGEN_BIT_KHR && spirvHasOpcode(words, kSpirvOpTraceRayKHR))
                 throw std::invalid_argument("RayTracingPipeline: " + spv.filename().string() +
                                             " traces a ray, but only the raygen may (recursion depth 1)");

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <numbers>
 #include <span>
 #include <stdexcept>
@@ -128,6 +129,65 @@ void writeBuffer(const gfx::Buffer& buffer, const void* data, std::size_t bytes)
     buffer.flush();
 }
 
+// Equal within a relative 1e-5 (rounding between two ways of computing one value).
+bool nearlyEqual(float a, float b) {
+    return std::abs(double(a) - double(b)) <= 1e-5 * std::max(std::abs(double(a)), std::abs(double(b)));
+}
+
+Vec3 vec3(const float v[3]) {
+    return {v[0], v[1], v[2]};
+}
+
+// NEE uses a light's emission, area, kind and facing; a BSDF ray that hits the light's instance uses that
+// instance's material and facing. Multiple importance sampling weighs the two as estimators of one integral,
+// so they must describe the same emitter, or the picture is silently biased (Task 7 review I1). Expects the
+// instances' mesh, material and light indices checked.
+void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& materials) {
+    for (std::size_t i = 0; i < frame.lights.size(); ++i) {
+        const rt::RectLight& l = frame.lights[i];
+        const std::string what = "PathTracer::trace(): light " + std::to_string(i) + " ";
+        if (l.kind > static_cast<std::uint32_t>(rt::LightKind::Portal))
+            throw std::invalid_argument(what + "has kind " + std::to_string(l.kind) +
+                                        ", which is no LightKind");
+        const float area = length(cross(vec3(l.edgeU), vec3(l.edgeV)));
+        if (!nearlyEqual(l.area, area))
+            throw std::invalid_argument(what + "has area " + std::to_string(l.area) +
+                                        ", but |edgeU x edgeV| is " + std::to_string(area));
+    }
+    for (std::size_t i = 0; i < frame.instances.size(); ++i) {
+        const SceneInstance& in = frame.instances[i];
+        if (in.light == rt::kNoLight)
+            continue;
+        const rt::RectLight& l = frame.lights[in.light];
+        const rt::Material& m = materials[in.material];
+        const std::string what = "PathTracer::trace(): instance " + std::to_string(i) + " is light " +
+                                 std::to_string(in.light) + ", ";
+        const auto kind = static_cast<rt::LightKind>(l.kind);
+        if (kind == rt::LightKind::Portal)
+            throw std::invalid_argument(what + "a portal: an opening, not a surface");
+        if (linearDeterminant(in.transform) < 0.f)
+            throw std::invalid_argument(what + "but its transform mirrors: it emits from the light's back");
+        const bool screen = m.texture == rt::kRetroScreenTexture;
+        if (kind == rt::LightKind::Emitter) {
+            if (screen)
+                throw std::invalid_argument(what + "an Emitter, but its material shows the retro screen");
+            for (int c = 0; c < 3; ++c)
+                if (!nearlyEqual(l.emission[c], m.emission[c] * m.emissionScale))
+                    throw std::invalid_argument(what + "whose emission is not its material's emission * "
+                                                       "emissionScale");
+        } else {
+            if (!screen || m.materialClass != static_cast<std::uint32_t>(rt::MaterialClass::Emissive))
+                throw std::invalid_argument(what + "a RetroScreen, but its material is no Emissive material "
+                                                   "with the retro screen texture");
+            for (int c = 0; c < 3; ++c)
+                if (!nearlyEqual(l.emission[c], m.emissionScale))
+                    throw std::invalid_argument(what +
+                                                "a RetroScreen, whose emission is not (s, s, s) for its "
+                                                "material's emissionScale s");
+        }
+    }
+}
+
 } // namespace
 
 std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset) {
@@ -143,9 +203,9 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, const SceneStati
       materials_(materialBuffer(ctx, scene.materials)), blackScreen_(blackTexture(ctx)),
       pipeline_(ctx, shaders(), kBindings, sizeof(TracePush)), tlas_(ctx, ring, kMaxInstances) {
     meshCount_ = static_cast<std::uint32_t>(scene.meshes.size());
-    for (const rt::Material& m : scene.materials)
-        materialClasses_.push_back(m.materialClass);
+    sceneMaterials_ = scene.materials;
     samplesRetro_ = usesRetroScreen(scene);
+    ringBegin_ = ring.onBegin([this](std::uint32_t) { tracedThisFrame_ = false; });
     for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
         uniforms_[slot] = gfx::Buffer(
             ctx, {sizeof(rt::FrameUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "frame uniforms"});
@@ -193,6 +253,10 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
     // Everything that can be refused is checked before anything is written or recorded.
     if (!ring_.recording())
         throw std::logic_error("PathTracer::trace() outside FrameRing::begin()/submit()");
+    if (tracedThisFrame_)
+        throw std::logic_error(
+            "PathTracer::trace(): a second trace in one frame (the first reads this slot's "
+            "uniforms, instances and lights when it runs)");
     if (settings.spp == 0)
         throw std::invalid_argument("PathTracer::trace(): spp 0");
     if (frame.instances.size() > kMaxInstances)
@@ -207,14 +271,16 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
     records.reserve(frame.instances.size());
     for (std::size_t i = 0; i < frame.instances.size(); ++i) {
         const SceneInstance& in = frame.instances[i];
-        if (in.mesh >= meshCount_ || in.material >= materialClasses_.size() ||
+        if (in.mesh >= meshCount_ || in.material >= sceneMaterials_.size() ||
             (in.light != rt::kNoLight && in.light >= frame.lights.size()))
             throw std::out_of_range("PathTracer::trace(): instance " + std::to_string(i) +
                                     " names a mesh, material or light that does not exist");
         const auto index = static_cast<std::uint32_t>(i);
-        instances.push_back({in.mesh, in.transform, index, materialClasses_[in.material]});
+        instances.push_back({in.mesh, in.transform, index, sceneMaterials_[in.material].materialClass});
         records.push_back({in.mesh, in.material, in.light, 0});
     }
+    checkLights(frame, sceneMaterials_);
+    tracedThisFrame_ = true; // nothing is refused from here on
 
     const CameraBasis basis = cameraBasis(frame.camera);
     const Camera& prev = previousCamera ? *previousCamera : frame.camera;
@@ -239,7 +305,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
     u.width = width_;
     u.height = height_;
     u.frameSeed = settings.frameSeed;
-    u.spp = settings.spp;
+    u.spp = settings.spp; // spp and instanceCount: not read by the shaders (for a debugger's eyes)
     u.maxBounces = settings.maxBounces;
     u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
               (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u);
@@ -288,7 +354,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
     pipeline_.bind(cmd, ring_, writes);
 
     // ceil(spp / kSppPerDispatch) dispatches. lighting, emission and albedo keep a running mean, so each
-    // dispatch reads what the one before wrote; the other guides come from the first dispatch alone.
+    // dispatch reads what the one before wrote; the other guides come from the first dispatch alone. Every
+    // dispatch still gets a barrier on all six: the raygen writes the guides statically, and synchronization
+    // validation judges a dispatch by the accesses its pipeline could make, not the ones it makes.
     constexpr VkAccessFlags2 kReadWrite =
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
@@ -296,11 +364,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
         for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               kReadWrite);
-        if (d == 0)
-            for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion})
-                image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL,
-                                  VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-                                  VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion})
+            image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+                              VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         const TracePush push{d * kSppPerDispatch,
                              std::min(kSppPerDispatch, settings.spp - d * kSppPerDispatch)};
         pipeline_.push(cmd, &push, sizeof push);

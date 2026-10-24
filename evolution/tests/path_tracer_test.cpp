@@ -1,20 +1,25 @@
 // The path tracer on lavapipe, with the validation layer and synchronization validation on; fails on any
 // message. 64x64 unless noted.
 //
-// (a) an emitter quad: its emission lands in the emission image exactly and nothing in lighting;
+// (a) an emitter quad: its emission lands in the emission image exactly and nothing in lighting, in one
+//     dispatch and in two (the running mean across dispatches);
 // (b) MIS is unbiased: a Cornell box with and without next-event estimation has the same mean, and NEE is
-// less
-//     noisy; plus analytic cases: a diffuse floor under a rectangular light equals Lambert's polygon formula
-//     with and without NEE, a rough metal and a smooth-coated floor agree with and without NEE, and a mirror
-//     floor (delta: no NEE, no MIS) gives the same bytes either way;
-// (c) a furnace: inside a closed 0.5-albedo sphere emitting 1 the lighting is the geometric series 1;
+//     less noisy; plus analytic cases: a diffuse floor under one rectangular light, and under two selected
+//     1 : 3, equals Lambert's polygon formula with and without NEE; a rough metal and a smooth-coated floor
+//     agree with and without NEE; a mirror floor (delta: no NEE, no MIS) gives the same bytes either way; a
+//     panel lit through a window portal, and through two stacked portals, equals a quadrature of the sky with
+//     and without NEE; a retro screen of two colours lights the floor the same with and without NEE, channel
+//     by channel, each colour on its own side;
+// (c) a furnace: inside a closed 0.5-albedo sphere emitting 1 the lighting is the geometric series 1, with
+//     Russian roulette off and on;
 // (d) a frame is a pure function of its seed (all six images), and another seed changes it;
 // (e) Review Focus 8: the stress scene stays finite in every value of every image;
 // (f) Review Focus 9: spp 8 records exactly 2 trace dispatches (spp 1: 1, spp 5: 2);
 // (g) the guides: depth, normal and motion of a plane, for a static and a moving camera;
 // (h) the retro screen as a textured light: its picture in the emission image (decoded from sRGB once) and
 //     its colour on the floor in front of it through NEE;
-// and the seed formula, frameSeedFor, and the refusals.
+// and the seed formula, frameSeedFor, and the refusals (including lights that disagree with the instance
+// that is their surface, and a second trace in one frame).
 //
 // With --look <dir> [spp] it only renders a larger scene (glass, chrome, checker floor, coated wood) to look
 // at.
@@ -38,6 +43,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -183,10 +189,14 @@ public:
     Tracer(gfx::Context& ctx, const TestScene& scene, std::uint32_t width, std::uint32_t height)
         : ctx_(ctx), ring_(ctx), tracer_(ctx, ring_, scene.statics, width, height) {}
 
+    // afterTrace runs between the trace and the readback, in the same frame.
     Frame trace(const modern::SceneFrame& frame, const TraceSettings& settings, gfx::Image& retro,
-                const std::optional<Camera>& previous = std::nullopt) {
+                const std::optional<Camera>& previous = std::nullopt,
+                const std::function<void(VkCommandBuffer)>& afterTrace = {}) {
         VkCommandBuffer cmd = ring_.begin();
         tracer_.trace(cmd, frame, previous, settings, retro);
+        if (afterTrace)
+            afterTrace(cmd);
         modern::GBuffer& g = tracer_.gbuffer();
         std::vector<PendingRead> reads;
         for (gfx::Image* image : {&g.lighting, &g.emission, &g.albedo, &g.normal, &g.depth, &g.motion})
@@ -206,20 +216,28 @@ private:
     modern::PathTracer tracer_;
 };
 
-// A retro picture as the retro stage makes it: 320 x 200 R8G8B8A8_SRGB with every mip level, of one colour.
-gfx::Image makeRetro(gfx::Context& ctx, std::uint8_t r, std::uint8_t g, std::uint8_t b) {
+struct Rgb8 {
+    std::uint8_t r, g, b;
+};
+
+// A retro picture as the retro stage makes it: 320 x 200 R8G8B8A8_SRGB with every mip level; pixel(x, y)
+// gives each texel's sRGB bytes, row 0 at the top.
+gfx::Image makeRetro(gfx::Context& ctx, const std::function<Rgb8(std::uint32_t x, std::uint32_t y)>& pixel) {
     gfx::Image image(
         ctx, {320, 200, VK_FORMAT_R8G8B8A8_SRGB,
               VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
               gfx::mipLevelsFor(320, 200), "test retro picture"});
     gfx::Buffer staging(ctx, {320 * 200 * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, "test retro staging"});
     auto* bytes = static_cast<std::uint8_t*>(staging.mapped());
-    for (std::size_t i = 0; i < 320 * 200; ++i) {
-        bytes[4 * i] = r;
-        bytes[4 * i + 1] = g;
-        bytes[4 * i + 2] = b;
-        bytes[4 * i + 3] = 255;
-    }
+    for (std::uint32_t y = 0; y < 200; ++y)
+        for (std::uint32_t x = 0; x < 320; ++x) {
+            const std::size_t i = std::size_t(y) * 320 + x;
+            const Rgb8 c = pixel(x, y);
+            bytes[4 * i] = c.r;
+            bytes[4 * i + 1] = c.g;
+            bytes[4 * i + 2] = c.b;
+            bytes[4 * i + 3] = 255;
+        }
     staging.flush();
     ctx.immediate([&](VkCommandBuffer cmd) {
         image.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
@@ -233,6 +251,11 @@ gfx::Image makeRetro(gfx::Context& ctx, std::uint8_t r, std::uint8_t g, std::uin
                            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     });
     return image;
+}
+
+// A retro picture of one colour.
+gfx::Image makeRetro(gfx::Context& ctx, std::uint8_t r, std::uint8_t g, std::uint8_t b) {
+    return makeRetro(ctx, [&](std::uint32_t, std::uint32_t) { return Rgb8{r, g, b}; });
 }
 
 // An image the tracer must not touch (scenes that do not sample the retro screen).
@@ -297,28 +320,35 @@ void testEmitterQuad(gfx::Context& ctx) {
     const auto start = std::chrono::steady_clock::now();
     const TestScene scene = test::emitterQuadScene();
     gfx::Image unused = unusedImage(ctx);
-    Frame f;
-    {
-        Tracer tracer(ctx, scene, 64, 64);
-        f = tracer.trace(scene.frame, {.spp = 4, .frameSeed = 1}, unused);
-    }
-    // The quad covers |ndc| < 0.5 / (2 tan 20) = 0.687 of the picture: pixels 11 to 52.
-    int inside = 0;
-    for (std::uint32_t y = 14; y < 50; ++y)
-        for (std::uint32_t x = 14; x < 50; ++x) {
-            for (std::uint32_t c = 0; c < 3; ++c) {
-                CHECK(std::abs(f.emission.at(x, y, c) - 2.f) <= 1e-6f);
-                CHECK(f.lighting.at(x, y, c) == 0.f);
-            }
-            ++inside;
+    // spp 8 takes two dispatches: the second averages its samples into the first's (half precision).
+    for (const std::uint32_t spp : {4u, 8u}) {
+        Frame f;
+        {
+            Tracer tracer(ctx, scene, 64, 64);
+            f = tracer.trace(scene.frame, {.spp = spp, .frameSeed = 1}, unused);
+            CHECK(tracer.pathTracer().lastStats().traceDispatches == spp / 4);
         }
-    CHECK(inside == 36 * 36);
-    // Outside the quad the camera sees the sky: emission, not lighting, and depth -1.
-    CHECK(f.depth.at(1, 1) == -1.f);
-    CHECK(f.emission.luminance(1, 1) > 0.f && f.emission.luminance(1, 1) < 1.f);
-    CHECK(f.depth.at(32, 32) > 1.99f && f.depth.at(32, 32) < 2.01f);
-    idle(ctx);
-    std::printf("(a) emitter quad: emission 2 inside, lighting 0 (%.1f s)\n", secondsSince(start));
+        // The quad covers |ndc| < 0.5 / (2 tan 20) = 0.687 of the picture: pixels 11 to 52.
+        int inside = 0;
+        for (std::uint32_t y = 14; y < 50; ++y)
+            for (std::uint32_t x = 14; x < 50; ++x) {
+                for (std::uint32_t c = 0; c < 3; ++c) {
+                    CHECK(std::abs(f.emission.at(x, y, c) - 2.f) <= 1e-6f);
+                    CHECK(f.lighting.at(x, y, c) == 0.f);
+                    CHECK(f.albedo.at(x, y, c) == 0.f); // the emitter's black base
+                }
+                ++inside;
+            }
+        CHECK(inside == 36 * 36);
+        // Outside the quad the camera sees the sky: emission, not lighting, and depth -1.
+        CHECK(f.depth.at(1, 1) == -1.f);
+        CHECK(f.emission.luminance(1, 1) > 0.f && f.emission.luminance(1, 1) < 1.f);
+        CHECK(f.albedo.at(1, 1, 0) == 1.f);
+        CHECK(f.depth.at(32, 32) > 1.99f && f.depth.at(32, 32) < 2.01f);
+        idle(ctx);
+    }
+    std::printf("(a) emitter quad at spp 4 and 8: emission 2 inside, lighting 0 (%.1f s)\n",
+                secondsSince(start));
 }
 
 // --- (b)
@@ -379,24 +409,94 @@ double polygonIrradiance(Vec3 p, Vec3 n, const std::array<Vec3, 4>& corners) {
     return 0.5 * std::abs(sx * n.x + sy * n.y + sz * n.z);
 }
 
-// The floor of analyticLightScene seen through each pixel centre, lit directly (maxBounces 1): Lambert's
-// formula for a diffuse floor of albedo `albedo`.
+// The floor (y = 0) of analyticLightScene or twoLightScene seen through each pixel centre, lit directly
+// (maxBounces 1) by every light: Lambert's formula for a diffuse floor of albedo `albedo`, green channel.
 std::vector<double> analyticDirect(const TestScene& scene, std::uint32_t size, double albedo) {
-    const rt::RectLight& l = scene.frame.lights[0];
-    const Vec3 corner{l.corner[0], l.corner[1], l.corner[2]};
-    const Vec3 u{l.edgeU[0], l.edgeU[1], l.edgeU[2]};
-    const Vec3 v{l.edgeV[0], l.edgeV[1], l.edgeV[2]};
-    const std::array<Vec3, 4> corners = {corner, corner + u, corner + u + v, corner + v};
-    std::vector<double> expected(std::size_t(size) * size);
+    std::vector<double> expected(std::size_t(size) * size, 0.0);
+    const Camera& camera = scene.frame.camera;
+    for (const rt::RectLight& l : scene.frame.lights) {
+        const Vec3 corner{l.corner[0], l.corner[1], l.corner[2]};
+        const Vec3 u{l.edgeU[0], l.edgeU[1], l.edgeU[2]};
+        const Vec3 v{l.edgeV[0], l.edgeV[1], l.edgeV[2]};
+        const std::array<Vec3, 4> corners = {corner, corner + u, corner + u + v, corner + v};
+        for (std::uint32_t y = 0; y < size; ++y)
+            for (std::uint32_t x = 0; x < size; ++x) {
+                const Vec3 d = pixelDirection(camera, size, size, x + 0.5, y + 0.5);
+                const float t = -camera.eye.y / d.y;
+                const Vec3 p = camera.eye + d * t;
+                expected[std::size_t(y) * size + x] +=
+                    albedo / std::numbers::pi * polygonIrradiance(p, {0, 1, 0}, corners) * l.emission[1];
+            }
+    }
+    return expected;
+}
+
+// The relative error of a picture's channel against expected values, over the whole picture and its worst
+// block of block x block pixels.
+struct Agreement {
+    double got = 0, want = 0, worstBlock = 0;
+    double error() const { return got / want - 1; }
+};
+Agreement compareBlocks(const Plane& plane, std::uint32_t channel, const std::vector<double>& expected,
+                        std::uint32_t block = 4) {
+    Agreement a;
+    for (std::uint32_t by = 0; by < plane.height; by += block)
+        for (std::uint32_t bx = 0; bx < plane.width; bx += block) {
+            double blockGot = 0, blockWant = 0;
+            for (std::uint32_t y = by; y < by + block; ++y)
+                for (std::uint32_t x = bx; x < bx + block; ++x) {
+                    blockGot += plane.at(x, y, channel);
+                    blockWant += expected[std::size_t(y) * plane.width + x];
+                }
+            a.worstBlock = std::max(a.worstBlock, std::abs(blockGot / blockWant - 1));
+            a.got += blockGot;
+            a.want += blockWant;
+        }
+    a.got /= double(plane.width) * plane.height;
+    a.want /= double(plane.width) * plane.height;
+    return a;
+}
+
+// sky.glsl's skyRadiance below the horizon (the dark ground and the city's glow), the only part the window
+// scene's panel sees. A port: keep it equal to the shader.
+Vec3 groundSkyRadiance(Vec3 direction) {
+    const Vec3 d = modern::normalize(direction);
+    if (!(d.y < 0.f))
+        throw std::logic_error("groundSkyRadiance: a direction above the horizon");
+    const float glow = std::exp(-std::abs(d.y) * 12.f);
+    return Vec3{0.004f, 0.004f, 0.005f} + Vec3{0.10f, 0.055f, 0.025f} * glow;
+}
+
+// The panel of windowScene seen through each pixel centre, lit directly through the window: albedo / pi times
+// the irradiance, a midpoint quadrature of sky * cos(panel) * cos(window) / r^2 over the window's area.
+std::array<std::vector<double>, 3> windowDirect(const TestScene& scene, std::uint32_t size) {
+    constexpr int kSteps = 96;
+    const double height = test::kWindowTop - test::kWindowBottom, width = 2 * test::kWindowHalfWidth;
+    const double dA = height / kSteps * width / kSteps;
+    std::array<std::vector<double>, 3> expected;
+    for (auto& e : expected)
+        e.assign(std::size_t(size) * size, 0.0);
     const Camera& camera = scene.frame.camera;
     for (std::uint32_t y = 0; y < size; ++y)
         for (std::uint32_t x = 0; x < size; ++x) {
             const Vec3 d = pixelDirection(camera, size, size, x + 0.5, y + 0.5);
-            const float t = -camera.eye.y / d.y;
-            const Vec3 p = camera.eye + d * t;
-            expected[std::size_t(y) * size + x] = albedo / std::numbers::pi *
-                                                  polygonIrradiance(p, {0, 1, 0}, corners) *
-                                                  test::kAnalyticEmission;
+            const Vec3 p = camera.eye + d * (-camera.eye.x / d.x); // on the panel, x = 0
+            double e[3] = {0, 0, 0};
+            for (int i = 0; i < kSteps; ++i)
+                for (int j = 0; j < kSteps; ++j) {
+                    const Vec3 q{test::kWindowX, float(test::kWindowBottom + (i + 0.5) * height / kSteps),
+                                 float(-test::kWindowHalfWidth + (j + 0.5) * width / kSteps)};
+                    const Vec3 toWindow = q - p;
+                    const double r2 = modern::dot(toWindow, toWindow);
+                    const double cosine = toWindow.x / std::sqrt(r2); // the same on the panel and the window
+                    const Vec3 sky = groundSkyRadiance(toWindow);
+                    const double weight = cosine * cosine / r2 * dA;
+                    e[0] += sky.x * weight;
+                    e[1] += sky.y * weight;
+                    e[2] += sky.z * weight;
+                }
+            for (int c = 0; c < 3; ++c)
+                expected[c][std::size_t(y) * size + x] = test::kPanelAlbedo / std::numbers::pi * e[c];
         }
     return expected;
 }
@@ -417,24 +517,32 @@ void testAnalyticMis(gfx::Context& ctx) {
             settings.nee = nee;
             settings.spp = nee ? 64 : 512; // BSDF sampling alone finds the light far less often
             const Frame f = tracer.trace(scene.frame, settings, unused);
-            double got = 0, want = 0, worstBlock = 0;
-            for (std::uint32_t by = 0; by < kSize; by += 4)
-                for (std::uint32_t bx = 0; bx < kSize; bx += 4) {
-                    double blockGot = 0, blockWant = 0;
-                    for (std::uint32_t y = by; y < by + 4; ++y)
-                        for (std::uint32_t x = bx; x < bx + 4; ++x) {
-                            blockGot += f.lighting.at(x, y, 1);
-                            blockWant += expected[std::size_t(y) * kSize + x];
-                        }
-                    worstBlock = std::max(worstBlock, std::abs(blockGot / blockWant - 1));
-                    got += blockGot;
-                    want += blockWant;
-                }
+            const Agreement a = compareBlocks(f.lighting, 1, expected);
             std::printf(
                 "    diffuse floor, NEE %d: mean %.5f, analytic %.5f (%.2f %%), worst 4x4 block %.2f %%\n",
-                nee, got / (kSize * kSize), want / (kSize * kSize), 100 * (got / want - 1), 100 * worstBlock);
-            CHECK(std::abs(got / want - 1) < (nee ? 0.01 : 0.02));
-            CHECK(worstBlock < (nee ? 0.03 : 0.06));
+                nee, a.got, a.want, 100 * a.error(), 100 * a.worstBlock);
+            CHECK(std::abs(a.error()) < (nee ? 0.01 : 0.02));
+            CHECK(a.worstBlock < (nee ? 0.03 : 0.06));
+        }
+    }
+    // Two lights selected 1 : 3: the floor is the sum of both Lambert terms. Dropping or misplacing the
+    // selection probability on either side of MIS (or picking with other odds than lightSelectPdf says)
+    // weights the two terms wrongly.
+    {
+        const TestScene scene = test::twoLightScene();
+        const std::vector<double> expected = analyticDirect(scene, kSize, 0.5);
+        Tracer tracer(ctx, scene, kSize, kSize);
+        for (bool nee : {true, false}) {
+            TraceSettings settings = direct;
+            settings.nee = nee;
+            settings.spp = nee ? 128 : 512; // NEE finds the dimmer light 3 times in 4: noisier than one light
+            const Frame f = tracer.trace(scene.frame, settings, unused);
+            const Agreement a = compareBlocks(f.lighting, 1, expected);
+            std::printf(
+                "    two lights, NEE %d: mean %.5f, analytic %.5f (%.2f %%), worst 4x4 block %.2f %%\n", nee,
+                a.got, a.want, 100 * a.error(), 100 * a.worstBlock);
+            CHECK(std::abs(a.error()) < (nee ? 0.01 : 0.02));
+            CHECK(a.worstBlock < 0.1);
         }
     }
     // Glossy and layered floors: no closed form, but NEE + MIS and BSDF sampling alone must agree.
@@ -473,6 +581,104 @@ void testAnalyticMis(gfx::Context& ctx) {
     std::printf("(b) analytic MIS cases (%.1f s)\n", secondsSince(start));
 }
 
+// A panel lit through a window portal: NEE through the portal (to the sky beyond) and BSDF rays escaping
+// through it, weighted by MIS, sum to the sky's light; so does BSDF sampling alone. A missing or doubled
+// escape weight or a wrong portal density biases the NEE run. With two stacked portals an escaping ray
+// crosses both, so its NEE density, and a portal sample's, is the sum over the two (Review M1).
+void testPortalMis(gfx::Context& ctx) {
+    const auto start = std::chrono::steady_clock::now();
+    constexpr std::uint32_t kSize = 32;
+    gfx::Image unused = unusedImage(ctx);
+    const TraceSettings direct{.spp = 64, .maxBounces = 1, .frameSeed = 21, .clampIndirect = 1e30f};
+    const std::array<std::vector<double>, 3> expected = windowDirect(test::windowScene(false), kSize);
+    int failures = 0;
+    for (bool stacked : {false, true}) {
+        const TestScene scene = test::windowScene(stacked);
+        Tracer tracer(ctx, scene, kSize, kSize);
+        for (bool nee : {true, false}) {
+            if (stacked && !nee)
+                continue; // without NEE the portals play no part: the same paths as one portal
+            TraceSettings settings = direct;
+            settings.nee = nee;
+            settings.spp = nee ? 64 : 512;
+            const Frame f = tracer.trace(scene.frame, settings, unused);
+            for (std::uint32_t c = 0; c < 3; ++c) {
+                const Agreement a = compareBlocks(f.lighting, c, expected[c], 8);
+                std::printf("    %s, NEE %d, channel %u: mean %.6f, quadrature %.6f (%.2f %%), worst 8x8 "
+                            "block %.2f %%\n",
+                            stacked ? "two stacked portals" : "one portal", nee, c, a.got, a.want,
+                            100 * a.error(), 100 * a.worstBlock);
+                const bool agrees =
+                    std::abs(a.error()) < (nee ? 0.01 : 0.02) && a.worstBlock < (nee ? 0.05 : 0.1);
+                failures += agrees ? 0 : 1;
+            }
+        }
+    }
+    CHECK(failures == 0);
+    idle(ctx);
+    std::printf("(b) portal MIS against the sky's quadrature (%.1f s)\n", secondsSince(start));
+}
+
+// A retro screen of two colours as a textured light: NEE (the light's uv) and BSDF rays hitting the screen
+// (the mesh's uv) must see the same picture, so the floor agrees with and without NEE channel by channel. A
+// picture split left and right pins u, one split top and bottom pins v; each colour lights its own side.
+void testTwoToneScreen(gfx::Context& ctx) {
+    const auto start = std::chrono::steady_clock::now();
+    constexpr std::uint32_t kSize = 32;
+    const TestScene scene = test::retroScreenScene();
+    const Camera& camera = scene.frame.camera;
+    const Rgb8 red{255, 0, 0}, green{0, 255, 0};
+    gfx::Image leftRed =
+        makeRetro(ctx, [&](std::uint32_t x, std::uint32_t) { return x < 160 ? red : green; });
+    gfx::Image topRed = makeRetro(ctx, [&](std::uint32_t, std::uint32_t y) { return y < 100 ? red : green; });
+    // The red and green lighting around a floor point (3 x 3 pixels).
+    auto patch = [&](const Frame& f, Vec3 point) {
+        const PixelPos pos = project(camera, kSize, kSize, point);
+        const auto px = std::uint32_t(pos.x), py = std::uint32_t(pos.y);
+        std::array<double, 2> rg{0, 0};
+        for (std::uint32_t y = py - 1; y <= py + 1; ++y)
+            for (std::uint32_t x = px - 1; x <= px + 1; ++x) {
+                CHECK(f.depth.at(x, y) > 0.f && f.emission.luminance(x, y) == 0.f); // the floor
+                rg[0] += f.lighting.at(x, y, 0);
+                rg[1] += f.lighting.at(x, y, 1);
+            }
+        return rg;
+    };
+    Tracer tracer(ctx, scene, kSize, kSize);
+    const TraceSettings direct{.spp = 64, .maxBounces = 1, .frameSeed = 31, .clampIndirect = 1e30f};
+    for (const auto& [name, picture] : {std::pair<const char*, gfx::Image*>{"left red", &leftRed},
+                                        std::pair<const char*, gfx::Image*>{"top red", &topRed}}) {
+        TraceSettings settings = direct;
+        const Frame withNee = tracer.trace(scene.frame, settings, *picture);
+        settings.nee = false;
+        settings.spp = 512;
+        const Frame without = tracer.trace(scene.frame, settings, *picture);
+        for (std::uint32_t c = 0; c < 2; ++c) {
+            double a = 0, b = 0;
+            for (std::uint32_t y = 0; y < kSize; ++y)
+                for (std::uint32_t x = 0; x < kSize; ++x) {
+                    a += withNee.lighting.at(x, y, c);
+                    b += without.lighting.at(x, y, c);
+                }
+            std::printf("    %s, %s: %.5f with NEE, %.5f without (%.2f %%)\n", name, c == 0 ? "red" : "green",
+                        a / (kSize * kSize), b / (kSize * kSize), 100 * (a / b - 1));
+            CHECK(a > 0 && std::abs(a / b - 1) < 0.03);
+        }
+        if (picture == &leftRed) {
+            const auto left = patch(withNee, test::kFloorLeft), right = patch(withNee, test::kFloorRight);
+            std::printf("    left red: floor left red/green %.4f/%.4f, right %.4f/%.4f\n", left[0] / 9,
+                        left[1] / 9, right[0] / 9, right[1] / 9);
+            CHECK(left[0] > 1.5 * left[1] && right[1] > 1.5 * right[0]);
+        } else {
+            const auto near = patch(withNee, test::kFloorNear); // nearer the screen's bottom (green) half
+            std::printf("    top red: floor near the screen red/green %.4f/%.4f\n", near[0] / 9, near[1] / 9);
+            CHECK(near[1] > 1.5 * near[0]);
+        }
+    }
+    idle(ctx);
+    std::printf("(b) two-tone retro screen, NEE vs BSDF per channel (%.1f s)\n", secondsSince(start));
+}
+
 // --- (c)
 // -----------------------------------------------------------------------------------------------------
 
@@ -480,26 +686,48 @@ void testFurnace(gfx::Context& ctx) {
     const auto start = std::chrono::steady_clock::now();
     const TestScene scene = test::furnaceScene();
     gfx::Image unused = unusedImage(ctx);
-    Frame f;
-    {
-        Tracer tracer(ctx, scene, 64, 64);
-        f = tracer.trace(scene.frame, {.spp = 2, .maxBounces = 32, .frameSeed = 3, .russianRoulette = false},
-                         unused);
-    }
-    double emission = 0, minLighting = 1e9, maxLighting = 0;
-    for (std::uint32_t y = 0; y < 64; ++y)
-        for (std::uint32_t x = 0; x < 64; ++x) {
-            emission += f.emission.at(x, y, 0);
-            minLighting = std::min(minLighting, double(f.lighting.at(x, y, 0)));
-            maxLighting = std::max(maxLighting, double(f.lighting.at(x, y, 0)));
+    // Russian roulette (from bounce 3) ends paths early and divides the survivors by their odds: unbiased,
+    // only noisier, so it takes more samples. Its mean must stay within the noise of the run without it.
+    double meanWithout = 0, sigmaWithout = 0;
+    for (const bool roulette : {false, true}) {
+        Frame f;
+        {
+            Tracer tracer(ctx, scene, 64, 64);
+            f = tracer.trace(
+                scene.frame,
+                {.spp = roulette ? 8u : 2u, .maxBounces = 32, .frameSeed = 3, .russianRoulette = roulette},
+                unused);
         }
-    emission /= 64 * 64;
-    const double lighting = f.lighting.meanLuminance();
-    std::printf("(c) furnace: emission %.6f, lighting mean %.6f (min %.6f, max %.6f) (%.1f s)\n", emission,
-                lighting, minLighting, maxLighting, secondsSince(start));
-    CHECK(std::abs(emission - 1.0) < 1e-3);
-    CHECK(std::abs(lighting - 1.0) < 0.02);
-    idle(ctx);
+        double emission = 0, minLighting = 1e9, maxLighting = 0, sum = 0, sumSquares = 0;
+        for (std::uint32_t y = 0; y < 64; ++y)
+            for (std::uint32_t x = 0; x < 64; ++x) {
+                const double l = f.lighting.at(x, y, 0);
+                emission += f.emission.at(x, y, 0);
+                minLighting = std::min(minLighting, l);
+                maxLighting = std::max(maxLighting, l);
+                sum += l;
+                sumSquares += l * l;
+            }
+        constexpr double kPixels = 64 * 64;
+        emission /= kPixels;
+        const double lighting = f.lighting.meanLuminance();
+        // The standard error of the mean, from the spread of the pixels (each the mean of spp samples).
+        const double sigma =
+            std::sqrt(std::max(sumSquares / kPixels - (sum / kPixels) * (sum / kPixels), 0.0) / kPixels);
+        std::printf(
+            "(c) furnace, roulette %d: emission %.6f, lighting mean %.6f +- %.6f (min %.6f, max %.6f) "
+            "(%.1f s)\n",
+            roulette, emission, lighting, sigma, minLighting, maxLighting, secondsSince(start));
+        CHECK(std::abs(emission - 1.0) < 1e-3);
+        CHECK(std::abs(lighting - 1.0) < 0.02);
+        if (roulette) {
+            CHECK(std::abs(lighting - meanWithout) < 4 * std::hypot(sigma, sigmaWithout));
+        } else {
+            meanWithout = lighting;
+            sigmaWithout = sigma;
+        }
+        idle(ctx);
+    }
 }
 
 // --- (d)
@@ -716,9 +944,103 @@ void testRefusals(gfx::Context& ctx) {
     modern::SceneFrame badLight = scene.frame;
     badLight.instances[0].light = 1;
     CHECK(refuses(std::out_of_range(""), badLight));
+
+    // A light and the instance that is its surface must describe one emitter (MIS weighs NEE towards the
+    // light against BSDF rays hitting the instance). The Cornell box's light 0 is instance 8, an Emitter
+    // of 12.
+    constexpr std::size_t kLightInstance = 8;
+    CHECK(scene.frame.instances[kLightInstance].light == 0);
+    auto withLight = [&](auto change) {
+        modern::SceneFrame frame = scene.frame;
+        change(frame.lights[0], frame.instances[kLightInstance]);
+        return frame;
+    };
+    using Light = rt::RectLight;
+    using Instance = modern::SceneInstance;
+    // Emission other than the material's emission * emissionScale.
+    CHECK(refuses(std::invalid_argument(""), withLight([](Light& l, Instance&) { l.emission[1] = 12.01f; })));
+    // An area other than |edgeU x edgeV|.
+    CHECK(refuses(std::invalid_argument(""), withLight([](Light& l, Instance&) { l.area *= 1.001f; })));
+    // A mirroring transform: the instance emits from the side the light does not.
+    CHECK(refuses(std::invalid_argument(""), withLight([](Light&, Instance& in) {
+                      in.transform = modern::compose(in.transform, modern::scale({-1, 1, 1}));
+                  })));
+    CHECK(throws<std::invalid_argument>([&] {
+        modern::rectLightForQuad(modern::scale({1, -1, 1}), 1, 1, rt::LightKind::Emitter, {1, 1, 1}, 1.f);
+    }));
+    // A light no instance names is checked too: its kind and its area (a portal's included).
+    modern::SceneFrame badPortal = scene.frame;
+    badPortal.lights.push_back(modern::rectLightForQuad(test::place({0, 1.9f, 0}, test::kX, 90, {1, 1, 1}), 1,
+                                                        1, rt::LightKind::Portal, {0, 0, 0}, 1.f));
+    modern::SceneFrame badKind = badPortal;
+    badKind.lights.back().kind = 3;
+    CHECK(refuses(std::invalid_argument(""), badKind));
+    badPortal.lights.back().area = 2.f;
+    CHECK(refuses(std::invalid_argument(""), badPortal));
     // Nothing was recorded: the frame still traces.
     tracer.trace(cmd, scene.frame, std::nullopt, {}, unused);
     ring.wait(ring.submit());
+    idle(ctx);
+
+    // The retro screen: its light must be a RetroScreen light of emission (s, s, s), s = the screen
+    // material's emissionScale, on an instance of a kRetroScreenTexture material.
+    {
+        const TestScene screenScene = test::retroScreenScene();
+        gfx::Image retro = makeRetro(ctx, 255, 255, 255);
+        gfx::FrameRing screenRing(ctx);
+        modern::PathTracer screenTracer(ctx, screenRing, screenScene.statics, 8, 8);
+        constexpr std::size_t kScreenInstance = 2;
+        CHECK(screenScene.frame.instances[kScreenInstance].light == 0);
+        VkCommandBuffer screenCmd = screenRing.begin();
+        auto screenRefuses = [&](auto change) {
+            modern::SceneFrame frame = screenScene.frame;
+            change(frame.lights[0], frame.instances[kScreenInstance]);
+            return throws<std::invalid_argument>(
+                [&] { screenTracer.trace(screenCmd, frame, std::nullopt, {}, retro); });
+        };
+        // A portal is an opening, not a surface (its emission (2, 2, 2) would pass for the screen's).
+        CHECK(screenRefuses(
+            [](Light& l, Instance&) { l.kind = static_cast<std::uint32_t>(rt::LightKind::Portal); }));
+        CHECK(screenRefuses([](Light& l, Instance&) { l.emission[2] = 2.5f; }));
+        CHECK(
+            screenRefuses([](Light& l, Instance&) { l.emission[0] = l.emission[1] = l.emission[2] = 1.f; }));
+        // An Emitter on the textured material (its own emission * scale is 0 here, so only the texture is
+        // wrong).
+        CHECK(screenRefuses([](Light& l, Instance&) {
+            l.kind = static_cast<std::uint32_t>(rt::LightKind::Emitter);
+            l.emission[0] = l.emission[1] = l.emission[2] = 0.f;
+        }));
+        // A RetroScreen light on an instance of the white floor material, which has no texture (emissionScale
+        // 1, so the emission (1, 1, 1) would pass).
+        CHECK(screenRefuses([](Light& l, Instance& in) {
+            in.material = 0;
+            l.emission[0] = l.emission[1] = l.emission[2] = 1.f;
+        }));
+        screenTracer.trace(screenCmd, screenScene.frame, std::nullopt, {}, retro);
+        screenRing.wait(screenRing.submit());
+        idle(ctx);
+    }
+}
+
+// Review M2: a second trace in one frame is refused before it writes anything, so the frame's first trace
+// still reads its own uniforms, instances and lights when it runs.
+void testSecondTrace(gfx::Context& ctx) {
+    std::printf("expecting a refused second trace in one frame:\n");
+    const TestScene scene = test::cornellBox();
+    gfx::Image unused = unusedImage(ctx);
+    Tracer tracer(ctx, scene, 16, 16);
+    const TraceSettings settings{.spp = 1, .frameSeed = 4};
+    const Frame once = tracer.trace(scene.frame, settings, unused);
+    tracer.trace(scene.frame, settings, unused); // back to the same slot of the ring
+    modern::SceneFrame moved = scene.frame;
+    moved.camera.eye.x += 0.3f;
+    const Frame twice = tracer.trace(scene.frame, settings, unused, std::nullopt, [&](VkCommandBuffer cmd) {
+        CHECK(throws<std::logic_error>([&] {
+            tracer.pathTracer().trace(cmd, moved, std::nullopt, {.spp = 2, .frameSeed = 5}, unused);
+        }));
+    });
+    for (std::size_t i = 0; i < 6; ++i)
+        CHECK(once.all()[i]->bytes == twice.all()[i]->bytes);
     idle(ctx);
 }
 
@@ -753,6 +1075,7 @@ int main(int argc, char** argv) {
                 return 0;
             }
             testRefusals(ctx);
+            testSecondTrace(ctx);
             testDispatches(ctx);
             testEmitterQuad(ctx);
             testGuides(ctx);
@@ -761,6 +1084,8 @@ int main(int argc, char** argv) {
             testRetroScreen(ctx);
             testStress(ctx);
             testAnalyticMis(ctx);
+            testPortalMis(ctx);
+            testTwoToneScreen(ctx);
             testCornellMis(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

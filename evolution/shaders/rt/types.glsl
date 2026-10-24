@@ -96,7 +96,7 @@ struct FrameUniforms { // 176 bytes
     uint width;
     uint height;
     uint frameSeed;
-    uint spp;
+    uint spp; // spp and instanceCount are filled in but not read by any shader
     uint maxBounces;
     uint flags;
     uint lightCount;

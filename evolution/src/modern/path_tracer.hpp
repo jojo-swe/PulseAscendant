@@ -19,6 +19,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace evo::modern {
 
@@ -39,13 +40,15 @@ inline constexpr std::uint32_t kSppPerDispatch = 4;
 std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset);
 
 // The path tracer's outputs and guides, all at the trace size:
-//   lighting  RGBA32F  mean over the frame's samples of path radiance without primary-hit emission
-//   emission  RGBA16F  mean primary-hit emission (and the sky on a primary miss)
-//   albedo    RGBA16F  mean primary-hit demodulation albedo (diffuse: baseColor; metal: F0; glass and miss:
-//   1) normal    RGBA16F  xyz world shading normal of the primary hit facing the camera, w roughness (0 on a
-//   miss) depth     R32F     linear view depth of the primary hit (centre ray, unjittered), -1 on a miss
-//   motion    RGBA16F  xy = previous pixel centre - current pixel centre from the previous camera, z = 1
-//   valid
+// - lighting, RGBA32F: the mean over the frame's samples of path radiance without primary-hit emission;
+// - emission, RGBA16F: the mean primary-hit emission (and the sky on a primary miss);
+// - albedo, RGBA16F: the mean primary-hit demodulation albedo (diffuse: baseColor; metal: F0; glass and a
+//   miss: 1);
+// - normal, RGBA16F: xyz the world shading normal of the primary hit, facing the camera; w its roughness (0
+//   on a miss);
+// - depth, R32F: the linear view depth of the primary hit (centre ray, unjittered), -1 on a miss;
+// - motion, RGBA16F: xy = previous pixel centre - current pixel centre from the previous camera; z = 1 if
+//   valid.
 // Every image is left in GENERAL after the trace's last write (Image tracks it).
 struct GBuffer {
     gfx::Image lighting, emission, albedo, normal, depth, motion;
@@ -76,8 +79,10 @@ public:
     // guide (nullopt: motion invalid). retroScreen (R8G8B8A8_SRGB, mipmapped) is sampled through
     // sampledView() in GENERAL; trace() records the barrier. Throws, before recording anything,
     // std::invalid_argument for spp 0, std::length_error for more than kMaxInstances instances or kMaxLights
-    // lights, std::out_of_range for an instance naming a mesh, material or light that does not exist, and
-    // std::logic_error outside ring.begin()/submit().
+    // lights, std::out_of_range for an instance naming a mesh, material or light that does not exist,
+    // std::invalid_argument for a light that disagrees with the instance that is its surface (see
+    // SceneInstance), a light whose kind is no LightKind or whose area is not |edgeU x edgeV|, and
+    // std::logic_error outside ring.begin()/submit() or for a second trace in one frame.
     void trace(VkCommandBuffer cmd, const SceneFrame& frame, const std::optional<Camera>& previousCamera,
                const TraceSettings& settings, gfx::Image& retroScreen);
 
@@ -98,9 +103,11 @@ private:
     gfx::FrameRing& ring_;
     std::uint32_t width_ = 0, height_ = 0;
     std::uint32_t meshCount_ = 0;
-    std::vector<std::uint32_t> materialClasses_;
+    std::vector<rt::Material> sceneMaterials_;
     bool samplesRetro_ = false;
     Stats stats_{};
+    bool tracedThisFrame_ = false;           // reset by the ring's begin()
+    gfx::FrameRing::Subscription ringBegin_; // active while ring_ lives
 
     // Declared before the TLAS so that they outlive it (and the frames that trace it).
     rt::GeometryStore store_;

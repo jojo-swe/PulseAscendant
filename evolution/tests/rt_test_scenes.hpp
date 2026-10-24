@@ -153,6 +153,83 @@ inline TestScene analyticLightScene(const rt::Material& floor) {
     return s;
 }
 
+// The analytic scene with two lights instead of one: a 0.8 x 0.8 light of emission kTwoLightEmission[0] and a
+// 0.6 x 1 light of emission kTwoLightEmission[1] at y = 1, selected 1 : 3 (a wrong selection probability on
+// either side of MIS biases the floor).
+inline constexpr float kTwoLightEmission[2] = {4.f, 1.5f};
+
+inline TestScene twoLightScene() {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    const float e0 = kTwoLightEmission[0], e1 = kTwoLightEmission[1];
+    s.statics.materials = {lambert({0.5f, 0.5f, 0.5f}), lambert({0, 0, 0}), emitter({e0, e0, e0}),
+                           emitter({e1, e1, e1})};
+    const rt::Mat34 a = place({-0.6f, kAnalyticLightHeight, 0}, kX, 90, {0.8f, 0.8f, 1});
+    const rt::Mat34 b = place({0.7f, kAnalyticLightHeight, 0.2f}, kX, 90, {0.6f, 1, 1});
+    s.frame.instances = {{kCubeMesh, 1, place({0, 1, 0}, kY, 0, {5, 3, 5})},
+                         {kQuadMesh, 0, place({0, 0, 0}, kX, -90, {4, 4, 1})},
+                         {kQuadMesh, 2, a, 0},
+                         {kQuadMesh, 3, b, 1}};
+    s.frame.lights = {modern::rectLightForQuad(a, 1, 1, rt::LightKind::Emitter, {e0, e0, e0}, 1.f),
+                      modern::rectLightForQuad(b, 1, 1, rt::LightKind::Emitter, {e1, e1, e1}, 3.f)};
+    s.frame.camera = {{0, 0.5f, 0}, {0, 0, 0}, {0, 0, -1}, 60.f};
+    return s;
+}
+
+// A black box, x in [-1, 2], y in [-3, 1.5], z in [-2, 2], with a window: a hole in its x = 2 wall, y in
+// [kWindowBottom, kWindowTop], z in [-kWindowHalfWidth, kWindowHalfWidth], and a portal light in it. Inside,
+// a 0.5 diffuse panel at x = 0 faces the window (+x); the camera at x = 0.8 looks at the panel. Every
+// direction from the panel's visible part through the window points below the horizon, where the sky is
+// smooth (dark ground and the city's glow, no stars and no moon), so a few samples per pixel converge.
+// stacked: a second, larger portal 0.4 m behind the first that every ray through the window crosses too (the
+// two are selected 1 : 1); the light reaching the panel is the same.
+inline constexpr float kWindowBottom = -2.2f, kWindowTop = -0.8f, kWindowHalfWidth = 0.8f;
+inline constexpr float kWindowX = 2.f;
+inline constexpr float kPanelAlbedo = 0.5f;
+
+inline TestScene windowScene(bool stacked) {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    s.statics.materials = {lambert({kPanelAlbedo, kPanelAlbedo, kPanelAlbedo}), lambert({0, 0, 0})};
+    auto& in = s.frame.instances;
+    in.push_back({kQuadMesh, 0, place({0, 0, 0}, kY, 90, {1.2f, 1.2f, 1})}); // the panel, facing +x
+    // Black walls, each a little larger than its face so that no crack lets light in at the edges.
+    auto wallX = [&](float x, float y0, float y1, float z0, float z1) { // in the plane x
+        in.push_back(
+            {kQuadMesh, 1, place({x, 0.5f * (y0 + y1), 0.5f * (z0 + z1)}, kY, 90, {z1 - z0, y1 - y0, 1})});
+    };
+    auto wallY = [&](float y, float x0, float x1, float z0, float z1) {
+        in.push_back(
+            {kQuadMesh, 1, place({0.5f * (x0 + x1), y, 0.5f * (z0 + z1)}, kX, 90, {x1 - x0, z1 - z0, 1})});
+    };
+    auto wallZ = [&](float z, float x0, float x1, float y0, float y1) {
+        in.push_back(
+            {kQuadMesh, 1, place({0.5f * (x0 + x1), 0.5f * (y0 + y1), z}, kY, 0, {x1 - x0, y1 - y0, 1})});
+    };
+    const float m = 0.05f; // overlap
+    wallX(-1, -3 - m, 1.5f + m, -2 - m, 2 + m);
+    wallY(1.5f, -1 - m, kWindowX + m, -2 - m, 2 + m);
+    wallY(-3, -1 - m, kWindowX + m, -2 - m, 2 + m);
+    wallZ(-2, -1 - m, kWindowX + m, -3 - m, 1.5f + m);
+    wallZ(2, -1 - m, kWindowX + m, -3 - m, 1.5f + m);
+    // The window wall: four strips around the hole.
+    wallX(kWindowX, kWindowTop, 1.5f + m, -2 - m, 2 + m);
+    wallX(kWindowX, -3 - m, kWindowBottom, -2 - m, 2 + m);
+    wallX(kWindowX, kWindowBottom - m, kWindowTop + m, -2 - m, -kWindowHalfWidth);
+    wallX(kWindowX, kWindowBottom - m, kWindowTop + m, kWindowHalfWidth, 2 + m);
+    // The portal: the hole, facing into the box (-x).
+    const float h = kWindowTop - kWindowBottom, w = 2 * kWindowHalfWidth;
+    s.frame.lights.push_back(modern::rectLightForQuad(
+        place({kWindowX, 0.5f * (kWindowBottom + kWindowTop), 0}, kY, -90, {w, h, 1}), 1, 1,
+        rt::LightKind::Portal, {0, 0, 0}, 1.f));
+    if (stacked)
+        s.frame.lights.push_back(
+            modern::rectLightForQuad(place({kWindowX + 0.4f, -1.65f, 0}, kY, -90, {2.2f, 2.3f, 1}), 1, 1,
+                                     rt::LightKind::Portal, {0, 0, 0}, 1.f));
+    s.frame.camera = {{0.8f, 0, 0}, {0, 0, 0}, {0, 1, 0}, 60.f};
+    return s;
+}
+
 // (g) A 20 x 20 plane at z = -3 facing the camera at the origin (roughness 0.6).
 inline constexpr float kPlaneRoughness = 0.6f;
 
@@ -172,6 +249,8 @@ inline TestScene planeScene() {
 inline constexpr float kScreenScale = 2.f;
 inline const Vec3 kScreenCentre{0, 0.4f, -1.5f};
 inline const Vec3 kFloorPatch{0, 0, -0.9f};
+// Floor points in front of the screen's left and right edges and just in front of its bottom edge.
+inline const Vec3 kFloorLeft{-0.3f, 0, -1.2f}, kFloorRight{0.3f, 0, -1.2f}, kFloorNear{0, 0, -1.35f};
 
 inline TestScene retroScreenScene() {
     TestScene s;
