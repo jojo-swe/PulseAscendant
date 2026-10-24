@@ -1,0 +1,96 @@
+#version 460
+
+// One à-trous iteration of the denoiser: a 5x5 B3 kernel (1/16, 1/4, 3/8) with taps `step` pixels apart,
+// each weighted by depth, normal and luminance edge stops; the variance travels with squared weights so the
+// next, wider iteration stops at a smaller luminance difference. A miss (depth <= 0) is copied unfiltered
+// and never taken as a tap.
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly image2D source; // RGB illumination, A variance
+layout(set = 0, binding = 1, r32f) uniform readonly image2D depthImage;
+layout(set = 0, binding = 2, rgba16f) uniform readonly image2D normalImage;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D target;
+
+// Must match AtrousPush in src/post/denoiser.cpp (24 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    uint step;
+    float sigmaDepth;
+    float sigmaNormal;
+    float sigmaLuminance;
+} pc;
+
+const float kKernel[3] = float[3](3.0 / 8.0, 1.0 / 4.0, 1.0 / 16.0);
+const float kGauss[2] = float[2](1.0 / 2.0, 1.0 / 4.0);
+
+ivec2 clampToImage(ivec2 q) {
+    return clamp(q, ivec2(0), ivec2(int(pc.width) - 1, int(pc.height) - 1));
+}
+
+bool inside(ivec2 q) {
+    return q.x >= 0 && q.y >= 0 && q.x < int(pc.width) && q.y < int(pc.height);
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
+        return;
+    }
+
+    vec4 centre = imageLoad(source, p);
+    float depth = imageLoad(depthImage, p).r;
+    if (depth <= 0.0) {
+        imageStore(target, p, centre);
+        return;
+    }
+    vec3 normal = imageLoad(normalImage, p).xyz;
+    float lum = luminance(centre.rgb);
+
+    // The luminance edge stop scales with the local standard deviation: a 3x3 Gaussian of the variance.
+    float variance = 0.0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            variance += kGauss[abs(dx)] * kGauss[abs(dy)] * imageLoad(source, clampToImage(p + ivec2(dx, dy))).a;
+        }
+    }
+    float phiLuminance = pc.sigmaLuminance * sqrt(max(variance, 0.0)) + 1e-4;
+    float phiDepth = pc.sigmaDepth * float(pc.step) * 0.01 * max(depth, 1e-3);
+
+    vec3 sum = vec3(0.0);
+    float sumWeight = 0.0;
+    float sumVariance = 0.0;
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            ivec2 q = p + ivec2(dx, dy) * int(pc.step);
+            if (!inside(q)) {
+                continue;
+            }
+            float k = kKernel[abs(dx)] * kKernel[abs(dy)];
+            vec4 tap = centre;
+            float w = 1.0; // the centre tap
+            if (dx != 0 || dy != 0) {
+                float qDepth = imageLoad(depthImage, q).r;
+                if (qDepth <= 0.0) {
+                    continue;
+                }
+                tap = imageLoad(source, q);
+                vec3 qNormal = imageLoad(normalImage, q).xyz;
+                w = exp(-abs(depth - qDepth) / phiDepth) *
+                    pow(max(0.0, dot(normal, qNormal)), pc.sigmaNormal) *
+                    exp(-abs(lum - luminance(tap.rgb)) / phiLuminance);
+            }
+            float kw = k * w;
+            sum += kw * tap.rgb;
+            sumWeight += kw;
+            sumVariance += kw * kw * tap.a;
+        }
+    }
+    // sumWeight >= the centre's 9/64.
+    imageStore(target, p, vec4(sum / sumWeight, min(sumVariance / (sumWeight * sumWeight), kHalfMax)));
+}
