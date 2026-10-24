@@ -1,13 +1,13 @@
-# Handoff — EVOLUTION (uppdaterad 2026-10-21, sessionens slut)
+# Handoff — EVOLUTION (uppdaterad 2026-10-24, steg 1 klart)
 
 Läs detta först i nästa session. Specen och planerna ligger bredvid.
 
 ## Läge
 
 - **Spec:** `2026-10-21-evolution-design.md` — godkänd av ägaren. Alla standardval i avsnitt 9 gäller (Vulkan 1.3 + RT krävs, Studion, DOS-boot, två epoker, CRT på, engelsk text, syntetisk placeholder-musik). Credits-texten är inte bekräftad.
-- **Steg 0-plan:** `2026-10-21-step0-skeleton.md` — sex tasks. Status per task står längst ner här.
+- **Planer:** `2026-10-21-step0-skeleton.md` (steg 0, klart), `2026-10-23-step1-audio-timeline.md` (steg 1, klart; amendment med tre akter), `2026-10-24-step2-retro-pipeline.md` (steg 2, nästa). Status per task står längre ner här.
 - **Branch:** `claude/evolution-showcase-plan`, utkast-PR #3 i jojo-swe/PulseAscendant. Allt arbete under `evolution/`.
-- **Musik:** ägaren levererar Suno-låtar senare. Bygg mot syntetisk placeholder tills dess (steg 1).
+- **Musik:** levererad. Tre Suno-låtar av joyolo, en per akt: Amiga Trance Demo (194,00 s), Guitar Trance (218,40 s), Rigid Arpeggios (298,76 s), totalt 711,16 s. MP3:orna i `music/source/` och WAV:arna i `assets/music/` är git-ignorerade; `python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Rigid Arpeggios.mp3"` återskapar `show.wav`, headers och kvitton. Proveniens i `licenses/MUSIC-NOTICE.md`. Placeholder-låten används bara av Python-testerna.
 - **Arbetssätt ägaren vill ha:** denna session är hjärnan/kontrollern; Opus-subagenter gör de enklare tasks (implementation och granskning). Processen: superpowers:subagent-driven-development med en implementer + en reviewer per task.
 
 ## Slutleverans (ägarens beställning 2026-10-23)
@@ -43,22 +43,46 @@ Beslut i steg 0 (utöver tidigare): min upplösning 16; VK_KHR_swapchain via ext
 
 **Till steg 2, första task (från slutgranskningen):** `Offscreen`/`Context::immediate()` är en återvändsgränd — bygg en frame-ring med timeline-semafor, en `Image`-typ som spårar layout och genererar barriärer (delad `gfx/sync.hpp`), pass som funktioner, readback endast vid export. Skapa context före fönstret (ingen blinkande ruta vid exit 2). Övriga uppskjutna småfynd: `--duration` saknar övre gräns; Debug/Release delar `bin/` på VS; windowed saknad loader → exit 1 via SDL; float-tid i push constants (precision vid 5 min); JSON-skrivare för `--show-info`; PNG-writer håller tre kopior; multi-track `direct_show` otestad; `python_tools` saknar TIMEOUT.
 
-## Steg 1 — pågår (plan `2026-10-23-step1-audio-timeline.md`)
+## Steg 1 — KLART (2026-10-24, plan `2026-10-23-step1-audio-timeline.md`)
 
 | Task | Status | Commit |
 |---|---|---|
 | 1. Python-pipeline + placeholder-låt | **klar**, granskad | d29aee7 |
-| 2. WAV-läsare + transport | **klar** | d0039ea |
-| 3. Cue-sheet + timeline | **klar**; ommålad till tre akter | b53f227 + musikbytet (tempofix, tre låtar, 711,16 s) |
-| 4. Era/övergångar | | |
-| 5. SDL3-spelare + klocka | | |
-| 6. Frame synlig i testmönstret | | |
-| 7. README + handoff | | |
+| 2. WAV-läsare + transport | **klar**, granskad | d0039ea |
+| 3. Cue-sheet + timeline | **klar**, granskad; ommålad till tre akter | b53f227; musikbytet 2f04ad3, b001965, 1cb89c6, ac4832b, 2c2b2dd, 7ddc231 |
+| 4. Era/övergångar | **klar**, granskad (en fixrunda) | 5840f24, bf8d8be |
+| 5. SDL3-spelare + klocka | **klar**, granskad | 9c809b9 |
+| 6. Frame synlig i testmönstret | **klar** | f726216 |
+| 7. README + handoff | **klar** | `Document the music pipeline and step 1 controls` |
 
-Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 default); exakta beat-tider (4 decimaler); `show_targets.json` är ett objekt `{max_chapter_seconds, chapters:[…]}` — Task 3 cross-check läser `.chapters`/`chapterTargets[]`. Placeholder: hi-hats på fjärdedelar (åttondelar fick tempo-estimatorn att läsa 2/3-tempo). De riktiga trance-låtarna lästes också på 2/3-tempo (3/16-delays); `beat_grid.disambiguate_period()` väljer nu tempo efter basonseter på kandidatgridden (Amiga Trance Demo 141,6, Guitar Trance 140,5, Rigid Arpeggios 138,3 BPM; placeholdern oförändrad 134). Showen är tre akter, 31 kapitel, 34 135 680 frames = 711,16 s (planens amendment). Känt, ej åtgärdat: DP-trackern kan hamna ur fas (rätt tempo, fel fas) på material med hi-hat på varje slag plus 3/16-eko (`test_hat_echo_on_every_beat_keeps_the_tempo` testar bara tempot).
+15/15 CTest gröna på lavapipe (`options, png, png_decode, context, offscreen, swapchain, render_stream, capture, exit_codes, python_tools, audio_transport, timeline, era, clock, show_info`), plus `windowed` och `silent_mode` bakom `EVO_RUNTIME_TESTS`. Bygget renderar fortfarande testmönstret, men det visar timelinens läge (kapitel, epok 1993/2026, övergång, beat och kick).
+
+Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 default); exakta beat-tider (4 decimaler); `show_targets.json` är ett objekt `{max_chapter_seconds, chapters:[…]}` — Task 3 cross-check läser `.chapters`/`chapterTargets[]`. Placeholder: hi-hats på fjärdedelar (åttondelar fick tempo-estimatorn att läsa 2/3-tempo). De riktiga trance-låtarna lästes också på 2/3-tempo (3/16-delays); `beat_grid.disambiguate_period()` väljer nu tempo efter basonseter på kandidatgridden (Amiga Trance Demo 141,6, Guitar Trance 140,5, Rigid Arpeggios 138,3 BPM; placeholdern oförändrad 134). Showen är tre akter, 31 kapitel, 34 135 680 frames = 711,16 s (planens amendment). BeatSwap-pariteten är förankrad i downbeat D (flippen på D landar alltid på 2026). `--show-info` skriver musiksökvägen `assets/music/show.wav` relativt exe:n, samma som `--music`-defaulten. Configure länkar `assets/music/show.wav` till `bin/assets/music/` när den finns (kopia på Windows); annars SILENT MODE. Klockan faller tillbaka till monoton tid om strömmen dör mitt i showen. `chapterForKey`/`windowTitle` är publika för tester. `silent_mode` spelar en gles tyst WAV av showens exakta längd, så bara ljuddrivrutinen avgör.
+
+**Uppskjutna småfynd från steg 1** (ledgern försvinner med containern; detta är listan):
+- JSON i `showInfoJson`: locale (imbue classic) och escaping av titlar.
+- Accentens övre gräns kan slå fel på en ulp (jämför step/rate <= .76*duration).
+- Samplingsfrekvensen (48 kHz) står på flera ställen.
+- ~~`effectNames` storlek ej assertad~~ — redan åtgärdat (`static_assert` i `cues.hpp`).
+- WAV-läsarens felvägar saknar tester; `WAVE_FORMAT_EXTENSIBLE` avvisas.
+- `Transport` har hög minnestopp (~1,5 GiB vid taket).
+- Byte till tyst läge mitt i showen rapporteras inte på stderr.
+- `positionSeconds` kan bli lika med längden (viks av `ShowClock`).
+- `clock_test` sätter SDL-hint med fel prioritet (använd `SDL_HINT_OVERRIDE`).
+- Ordval om kapitel i `--help` och `app.hpp` (1–9/0 = kapitel 1–10 resp. index 0–9).
+- Multi-track `direct_show` otestad; `python_tools` saknar TIMEOUT.
+- DP-trackern kan hamna ur fas (rätt tempo, fel fas) på material med hi-hat på varje slag plus 3/16-eko (`test_hat_echo_on_every_beat_keeps_the_tempo` testar bara tempot).
+- När D kollapsar på kapitlets första beat blir det ett klipp utan flash (bara syntetiskt).
+- Raytraces bar-flippar följer trackerns etiketter (downbeat-lucka vid beat 298 flyttar dem ett slag).
+- `eraCut` syns inte i testmönstret (ingen plats i push constants).
+- Övrigt från granskningarna: råa tag-bytes i WAV-felmeddelanden; testluckor (JSON-accent, `beatAt` efter sista beat); näst bästa tempokandidat ignoreras och `tempo_candidates` kan få nyckelkollisioner; ac4832b bygger inte ensam (bara bisect); `marks()`-hjälparen i era-testet speglar koden; wipe-fallbacken testas bara syntetiskt.
+
+## Steg 2 — nästa (plan `2026-10-24-step2-retro-pipeline.md`)
+
+Render-grunden och 1993-pipelinen: Image/Buffer/FrameRing/ComputePipeline/Readback, renderer + retro-steg + CRT + compositor, 8×8-font, BOOT, PLASMA, sinusscroller, storyboard. **Task 1 ska också ta steg 0-punkterna ovan** ("Till steg 2, första task": frame-ring med timeline-semafor, `Image` med layoutspårning och delad `gfx/sync.hpp`, pass som funktioner, readback bara vid export, context före fönstret). Övriga uppskjutna småfynd från steg 0 och 1 tas när de berör en task.
 
 ## Så här återupptas arbetet
 
-1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (3 tester).
-2. Fortsätt steg 1 vid första task utan "klar" i tabellen ovan: `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief evolution/docs/plans/2026-10-21-step0-skeleton.md 3`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
-4. När steg 0 är klart: slutgranskning av hela branchen, sedan steg 1 (ljud + timeline + placeholder-låt) får sin egen plan.
+1. Installera miljön (ovan), bygg och kör `ctest` i `evolution/` — allt ska vara grönt (15 tester). Lägg MP3:orna i `music/source/` och kör `prepare_show.py` (se Musik ovan) om du vill höra showen; konfigurera om efteråt så att `show.wav` länkas in.
+2. Fortsätt med steg 2, Task 1: `bash <superpowers>/skills/subagent-driven-development/scripts/task-brief evolution/docs/plans/2026-10-24-step2-retro-pipeline.md 1`, implementer (Opus) + reviewer per task. Ledgern i `.superpowers/` är git-ignorerad och försvinner med containern; den här filen är ledgerns ersättning — uppdatera den vid sessionsslut.
+3. När steg 2 är klart: slutgranskning av steg 2, sedan nästa stegs plan.

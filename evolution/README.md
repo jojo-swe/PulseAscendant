@@ -6,8 +6,9 @@ as a hard requirement. It is a standalone project inside PulseAscendant; the des
 implementation plans live in [`docs/plans/`](docs/plans/), starting with
 [`2026-10-21-evolution-design.md`](docs/plans/2026-10-21-evolution-design.md).
 
-> **Status:** step 0 of the plan. The build renders only a compute-shader test pattern; the demo itself
-> comes in later steps.
+> **Status:** step 1 of the plan is complete. The music plays and drives a timeline of 31 chapters in
+> three acts, but the build still renders a compute-shader test pattern that shows the timeline state
+> (chapter, 1993/2026 era, transition, beat and kick). Step 2 brings the 1993 pipeline.
 
 ## Requirements
 
@@ -34,9 +35,14 @@ cmake --build --preset linux
 ctest --preset linux
 ```
 
-The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/bin/shaders/`. The tests run
-headless (they also pass on lavapipe) and need Python 3, which configure looks for. Tests that open a
-window are off by default; configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
+The executable is `build/linux/bin/Evolution`, with its shaders in `build/linux/bin/shaders/`. When
+`assets/music/show.wav` exists at configure time, it is linked to `build/linux/bin/assets/music/show.wav`
+(Windows copies it), so a dev build plays the music with no flags; without it the demo runs in SILENT MODE.
+
+The 15 tests run headless (they also pass on lavapipe) and need Python 3 (`python_tools` also numpy): `options`, `png`,
+`png_decode`, `context`, `offscreen`, `swapchain`, `render_stream`, `capture`, `exit_codes`, `python_tools`,
+`audio_transport`, `timeline`, `era`, `clock` and `show_info`. The two that open a window, `windowed` and
+`silent_mode`, are off by default; configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
 
 ## Build on Windows
 
@@ -62,9 +68,38 @@ The preset builds Release into `build\windows\`; the executable is `build\window
 with its shaders in `build\windows\bin\shaders\` (no per-configuration subdirectory, so a Debug build
 replaces the Release one).
 
+## Music
+
+The soundtrack is three tracks generated with Suno by joyolo, one per act, played back to back without
+gaps (credits and provenance in [`licenses/MUSIC-NOTICE.md`](licenses/MUSIC-NOTICE.md)):
+
+| Act | Track | Tempo | Starts at | Length |
+|---|---|---|---|---|
+| I | Amiga Trance Demo | 141.6 BPM | 0 s | 194.00 s |
+| II | Guitar Trance | 140.5 BPM | 194.0 s | 218.40 s |
+| III | Rigid Arpeggios | 138.3 BPM | 412.4 s | 298.76 s |
+
+The show is 711.16 s long. The MP3s in `music/source/` and the WAVs in `assets/music/` are git-ignored.
+With the MP3s in place, this regenerates `assets/music/show.wav`, the generated headers in
+`src/show/generated/` and the receipts in [`music/`](music/README.md) (needs numpy and ffmpeg):
+
+```sh
+cd evolution
+python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Rigid Arpeggios.mp3"
+```
+
+The headers and receipts are committed, so the build has the whole show without the audio; chapter
+targets come from `tools/show_targets.json`. Trance delays at 3/16 put strong onsets 1.5 beats apart, so
+`beat_grid.disambiguate_period()` rescores the candidate tempos by the bass onsets on each one's grid
+rather than trusting the autocorrelation, which reads them at 2/3 of their tempo. The `python_tools` test
+runs the pipeline into a temporary directory on a 270 s, 134 BPM placeholder song synthesised by
+`tools/make_placeholder.py`, with `tools/show_targets_placeholder.json`.
+
 ## Usage
 
-Run `Evolution` without arguments for a 1280×720 window; Esc quits and F11 toggles fullscreen.
+Run `Evolution` without arguments for a 1280×720 window that plays the show from the start. Keys:
+← / → previous / next chapter (wrapping around the show), 1–9 and 0 jump to chapters 1–10, M mutes,
+F11 toggles fullscreen, Esc quits. The window title shows the chapter and the show time.
 
 ```text
 Usage: Evolution [options]
@@ -79,10 +114,18 @@ Options:
   --headless           Render without opening a window
   --render-stream      Write raw RGB frames to stdout (implies --headless)
   --capture-dir PATH   Write one PNG frame, at --time, to PATH (implies --headless)
+  --music PATH         Music WAV to play (default: assets/music/show.wav beside the
+                       executable); a WAV of another length than the show is refused
+  --no-audio           Run without audio, on the system clock (SILENT MODE)
+  --mute               Start muted (M toggles); the music still keeps the time
+  --show-info          Print the show's chapters and music as JSON and exit
   --validation         Enable the Vulkan validation layers
   --device-info        Print information about the selected GPU and exit
   --fullscreen         Start the window in fullscreen
   -h, --help           Show this help and exit
+
+Keys (window): Left/Right previous/next chapter, 1-9 and 0 chapters 1-10, M mute,
+F11 fullscreen, Esc quit
 ```
 
 Examples:
@@ -97,7 +140,16 @@ Evolution --render-stream --width 640 --height 360 --fps 30 --duration 2 |
 
 # The selected GPU as JSON
 Evolution --device-info
+
+# The show as JSON: duration, music file, tracks, and each chapter's effect, transition, start and accent
+Evolution --show-info
 ```
+
+In the window the time comes from the music: the clock is the position the listener hears, and the show
+loops at its end. If the music cannot play (no WAV, a WAV of the wrong length, no audio device, or
+`--no-audio`), EVOLUTION prints `SILENT MODE: <reason>` on stderr and runs on the monotonic clock from
+`--time`; otherwise it prints `AUDIO: <file>`. `--show-info` needs neither a GPU nor SDL video. The headless
+modes never play audio and always render at `t = time + i / fps`.
 
 `--render-stream` writes frames `0 .. ceil(duration × fps) − 1` at `t = time + i / fps`, top-down,
 3 bytes per pixel, with progress on stderr. `--capture-dir` creates missing directories and overwrites
