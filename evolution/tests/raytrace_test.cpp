@@ -120,10 +120,10 @@ void testQuantiser() {
           evo::retro::raytraceBayer(0, 1) == 12 && evo::retro::raytraceBayer(3, 3) == 5 &&
           evo::retro::raytraceBayer(4, 4) == 0);
     std::size_t greys = 0, cubes = 0;
-    for (int r = 0; r < 256; r += 3)
-        for (int g = 0; g < 256; g += 5)
-            for (int b = 0; b < 256; b += 7)
-                for (std::uint32_t bayer = 0; bayer < 16; bayer += 5) {
+    for (int r = 0; r < 256; r += 5)
+        for (int g = 0; g < 256; g += 7)
+            for (int b = 0; b < 256; b += 11)
+                for (std::uint32_t bayer = 0; bayer < 16; ++bayer) {
                     // T in units of 1/32: 32 c + 51 (2 bayer - 15).
                     const int offset = 51 * (2 * static_cast<int>(bayer) - 15);
                     const std::array<int, 3> t = {32 * r + offset, 32 * g + offset, 32 * b + offset};
@@ -175,10 +175,71 @@ void testQuantiser() {
         worst / 16.0, worstBrightness / 48.0);
     CHECK(worst <= 15 * 16);
     CHECK(worstBrightness <= 7 * 48);
+
+    // The ordered dither is unbiased: the 16 Bayer moves 51 (2 bayer - 15) / 32 sum to exactly 0. So where
+    // the greys never win (the cube alone), a flat colour's 16 thresholds average to it within 25/16 = 1.5625
+    // levels a channel: the mean level of a channel is floor(c / 51) plus the share of the 16 thresholds past
+    // its fraction, a whole number of 16ths, at most 25 / 51 of a sixteenth of a step (25 of 816) away.
+    int offsets = 0;
+    for (int bayer = 0; bayer < 16; ++bayer)
+        offsets += 51 * (2 * bayer - 15);
+    CHECK(offsets == 0);
+    std::size_t cubeOnly = 0;
+    int worstCube = 0;
+    for (int r = 0; r < 256; r += 3)
+        for (int g = 0; g < 256; g += 3)
+            for (int b = 0; b < 256; b += 3) {
+                std::array<int, 3> sum{};
+                bool grey = false;
+                for (std::uint32_t bayer = 0; bayer < 16; ++bayer) {
+                    const std::uint8_t index = evo::retro::raytraceQuantise(
+                        static_cast<std::uint8_t>(r), static_cast<std::uint8_t>(g),
+                        static_cast<std::uint8_t>(b), bayer);
+                    grey |= index >= evo::retro::kRaytraceGreys;
+                    const auto c = rgbOf(p[index]);
+                    for (int k = 0; k < 3; ++k)
+                        sum[k] += c[k];
+                }
+                if (grey)
+                    continue;
+                ++cubeOnly;
+                const int in[3] = {r, g, b};
+                for (int k = 0; k < 3; ++k)
+                    worstCube = std::max(worstCube, std::abs(sum[k] - 16 * in[k]));
+            }
+    std::printf(
+        "raytrace: %zu cube-only colours average within %.4f levels a channel over the 16 thresholds\n",
+        cubeOnly, worstCube / 16.0);
+    CHECK(cubeOnly >= 300000); // most of the 86^3 colours sampled
+    CHECK(worstCube <= 25);    // 1.5625 levels
     // A cube colour comes out as itself everywhere.
     for (std::uint32_t bayer = 0; bayer < 16; ++bayer) {
         CHECK(evo::retro::raytraceQuantise(255, 0, 0, bayer) == 16 + 36 * 5);
         CHECK(evo::retro::raytraceQuantise(102, 153, 204, bayer) == 16 + 36 * 2 + 6 * 3 + 4);
+    }
+}
+
+// The spheres of the CPU twin: the phase reduction to [-pi, pi) changes no angle's sine or cosine, so the
+// orbits are the header's formulas.
+void testSpheres() {
+    CHECK(std::abs(evo::retro::raytracePhase(0.25) - 0.25) < 1e-15);
+    for (double x : {0.0, 1.0, 3.0, 7.5, 20.0, 51.3, 400.0}) {
+        const double reduced = evo::retro::raytracePhase(x);
+        CHECK(reduced >= -3.14159265358979 && reduced < 3.14159265359);
+        CHECK(std::abs(std::sin(reduced) - std::sin(x)) < 1e-12 &&
+              std::abs(std::cos(reduced) - std::cos(x)) < 1e-12);
+    }
+    for (double t : {0.0, 2.7, 13.1, 29.9}) {
+        const auto spheres = evo::retro::raytraceSpheres(t);
+        CHECK(spheres[0].centre[0] == 0 && spheres[0].centre[1] == 1.3 && spheres[0].radius == 1.3);
+        for (int i = 1; i < evo::retro::kRaytraceSpheres; ++i) {
+            const double a = 0.6 * t + (i - 1) * 2 * 3.14159265358979323846 / 5;
+            const auto& s = spheres[static_cast<std::size_t>(i)];
+            CHECK(std::abs(s.centre[0] - 3 * std::sin(a)) < 1e-12);
+            CHECK(std::abs(s.centre[1] - (0.6 + 0.9 * std::abs(std::sin(1.7 * t + 1.3 * i)))) < 1e-12);
+            CHECK(std::abs(s.centre[2] + 3 * std::cos(a)) < 1e-12);
+            CHECK(s.radius == 0.6);
+        }
     }
 }
 
@@ -373,6 +434,92 @@ void testImages(evo::gfx::Context& ctx) {
     CHECK(other.render(raytrace(timeIn(clearestFrame(count / 2), .7))) == images[1]);
 }
 
+// A sphere's projected disc: its centre's pixel position, its radii across and down in pixels, its depth.
+struct Disc {
+    double x, y, rx, ry, z;
+};
+Disc discOf(const evo::retro::RaytraceSphere& s) {
+    const evo::retro::Projected c = evo::retro::project(evo::retro::raytraceCamera(), s.centre);
+    const double ry = s.radius / c.z * 100.0 /
+                      std::tan(evo::retro::raytraceCamera().fovYDegrees * 3.14159265358979 / 360.0);
+    return {c.x, c.y, ry * evo::retro::kPixelAspect, ry, c.z};
+}
+
+// The pixels within `inner` of sphere `which`'s disc, on the screen, that no nearer sphere's disc (with a
+// margin of 15 %) covers.
+std::vector<std::size_t> clearPixels(std::uint32_t retroFrame, int which, double inner) {
+    const auto spheres = evo::retro::raytraceSpheres(retroFrame / static_cast<double>(kRate));
+    const Disc d = discOf(spheres[static_cast<std::size_t>(which)]);
+    std::vector<std::size_t> pixels;
+    for (int y = 0; y < kHeight; ++y)
+        for (int x = 0; x < kWidth; ++x) {
+            const double u = (x + .5 - d.x) / d.rx, v = (y + .5 - d.y) / d.ry;
+            if (u * u + v * v > inner * inner)
+                continue;
+            bool hidden = false;
+            for (int s = 0; s < evo::retro::kRaytraceSpheres; ++s) {
+                const Disc o = discOf(spheres[static_cast<std::size_t>(s)]);
+                const double ou = (x + .5 - o.x) / o.rx, ov = (y + .5 - o.y) / o.ry;
+                hidden |= s != which && o.z < d.z && ou * ou + ov * ov < 1.15 * 1.15;
+            }
+            if (!hidden)
+                pixels.push_back(static_cast<std::size_t>(y) * kWidth + x);
+        }
+    return pixels;
+}
+
+// The glass sphere's green-cyan tint: green the strongest, clearly above red (the sky is bluest in chrome).
+bool greenCyan(const std::array<int, 3>& c) {
+    return c[1] >= c[0] + 51 && c[1] >= c[2] && c[2] >= c[0];
+}
+
+// The scene's constants are written twice, in raytrace.comp and raytrace.cpp: where the CPU twin projects the
+// glass sphere (kRaytraceGlassSphere), the GPU image shows green-cyan glass, and where it projects a chrome
+// orbiter, it does not. On the frame where the glass sphere shows the largest disc that nothing covers.
+void testGlass(evo::gfx::Context& ctx) {
+    const Palette p = palette();
+    const auto count = static_cast<std::uint32_t>(std::floor(raytrace(0).chapterDuration * kRate));
+    const int glass = evo::retro::kRaytraceGlassSphere;
+    std::uint32_t best = 0;
+    std::size_t most = 0;
+    for (std::uint32_t f = 0; f < count; ++f) {
+        const auto spheres = evo::retro::raytraceSpheres(f / static_cast<double>(kRate));
+        const Disc d = discOf(spheres[static_cast<std::size_t>(glass)]);
+        const std::size_t clear = clearPixels(f, glass, .7).size();
+        // Wholly clear of the nearer spheres: as many pixels as the disc has on the screen.
+        const double area = 3.14159265358979 * .49 * d.rx * d.ry;
+        if (clear > most && clear >= area * .9)
+            best = f, most = clear;
+    }
+    CHECK(most >= 150);
+    RetroStageFixture fixture(ctx);
+    const std::vector<std::uint8_t> image = fixture.render(raytrace(timeIn(best)));
+    const auto share = [&](int which) {
+        const std::vector<std::size_t> pixels = clearPixels(best, which, .7);
+        std::size_t tinted = 0;
+        for (std::size_t i : pixels)
+            tinted += greenCyan(rgbOf(p[image[i]]));
+        return std::make_pair(tinted, pixels.size());
+    };
+    const auto [tinted, pixels] = share(glass);
+    std::printf("raytrace: retro frame %u: the glass sphere's disc (%zu px) is %zu green-cyan\n", best,
+                pixels, tinted);
+    CHECK(tinted * 2 >= pixels);
+    std::size_t chromes = 0;
+    for (int s = 1; s < evo::retro::kRaytraceSpheres; ++s) {
+        if (s == glass)
+            continue;
+        const auto [chromeTinted, chromePixels] = share(s);
+        if (chromePixels < 100)
+            continue;
+        ++chromes;
+        std::printf("raytrace: retro frame %u: chrome sphere %d's disc (%zu px) is %zu green-cyan\n", best, s,
+                    chromePixels, chromeTinted);
+        CHECK(chromeTinted * 10 <= chromePixels);
+    }
+    CHECK(chromes >= 1);
+}
+
 } // namespace
 
 int main() {
@@ -381,12 +528,14 @@ int main() {
         testRegistry();
         testPalette();
         testQuantiser();
+        testSpheres();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())
                 std::printf("warning: validation layer unavailable; only the pixels are checked\n");
             testGpuQuantiser(ctx);
             testImages(ctx);
+            testGlass(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(evo::gfx::validationMessagesReported() == 0);

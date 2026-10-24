@@ -211,8 +211,7 @@ void addPoint(RetroScene& scene, const Camera& camera, const double world[3], st
     point.y = toFixed(s.y);
     point.index = index;
     point.size = size;
-    // The square's first pixel as points.comp computes it.
-    const std::int32_t firstX = (point.x - size * 8 + 8) >> 4, firstY = (point.y - size * 8 + 8) >> 4;
+    const auto [firstX, firstY] = pointCorner(point);
     if (firstX + size <= 0 || firstX >= kScreenWidth || firstY + size <= 0 || firstY >= kScreenHeight)
         return;
     scene.points.push_back(point);

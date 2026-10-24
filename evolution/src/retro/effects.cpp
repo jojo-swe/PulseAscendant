@@ -21,6 +21,8 @@ namespace evo::retro {
 
 // FLYBY's greeting scrolls by the retro frame at the scroller's rate.
 static_assert(kFlybyRetroRate == kScrollerRetroRate);
+// PORTAL reuses FLYBY's ship, stars and flicker, all keyed by FLYBY's retro frame.
+static_assert(kPortalRetroRate == kFlybyRetroRate);
 
 EffectFrame resolveEffect(const EffectInfo& info, const show::TimelineFrame& frame,
                           std::uint32_t retroFrame) {
@@ -28,30 +30,59 @@ EffectFrame resolveEffect(const EffectInfo& info, const show::TimelineFrame& fra
 }
 
 const EffectInfo& effectFor(show::Effect effect) {
-    static constexpr EffectInfo kTestPattern{kTestPatternShader, kDefaultRetroRate, grayPalette};
-    static constexpr EffectInfo kRaytrace{kRaytraceShader, kRaytraceRetroRate, raytracePalette};
-    static constexpr EffectInfo kBoot{nullptr, kBootRetroRate, bootPalette, bootText, bootBackground};
-    static constexpr EffectInfo kPlasma{kPlasmaShader, kPlasmaRetroRate, plasmaPalette};
-    static constexpr EffectInfo kFlyby{nullptr,   kFlybyRetroRate, flybyPalette,
-                                       flybyText, nullptr,         flybyScene};
-    static constexpr EffectInfo kDots{nullptr, kDotsRetroRate, dotsPalette, nullptr, nullptr, dotsScene};
-    static constexpr EffectInfo kTunnel{nullptr, kTunnelRetroRate, tunnelPalette,
-                                        nullptr, nullptr,          tunnelScene};
-    static constexpr EffectInfo kGlenzEffect{
-        kGlenzCopperShader, kGlenzRetroRate, glenzPalette, nullptr, nullptr, glenzScene};
-    static constexpr EffectInfo kCity{nullptr, kCityRetroRate, cityPalette,
-                                      nullptr, cityBackground, cityScene};
-    static constexpr EffectInfo kLens{kRotozoomShader, kRotozoomRetroRate, rotozoomPalette, nullptr, nullptr,
-                                      nullptr,         rotozoomTexture};
+    static constexpr EffectInfo kTestPattern{
+        .shader = kTestPatternShader, .retroRate = kDefaultRetroRate, .palette = grayPalette};
+    static constexpr EffectInfo kRaytrace{
+        .shader = kRaytraceShader, .retroRate = kRaytraceRetroRate, .palette = raytracePalette};
+    static constexpr EffectInfo kBoot{.shader = nullptr,
+                                      .retroRate = kBootRetroRate,
+                                      .palette = bootPalette,
+                                      .text = bootText,
+                                      .background = bootBackground};
+    static constexpr EffectInfo kPlasma{
+        .shader = kPlasmaShader, .retroRate = kPlasmaRetroRate, .palette = plasmaPalette};
+    static constexpr EffectInfo kFlyby{.shader = nullptr,
+                                       .retroRate = kFlybyRetroRate,
+                                       .palette = flybyPalette,
+                                       .text = flybyText,
+                                       .scene = flybyScene};
+    static constexpr EffectInfo kDots{
+        .shader = nullptr, .retroRate = kDotsRetroRate, .palette = dotsPalette, .scene = dotsScene};
+    static constexpr EffectInfo kTunnel{
+        .shader = nullptr, .retroRate = kTunnelRetroRate, .palette = tunnelPalette, .scene = tunnelScene};
+    static constexpr EffectInfo kGlenzEffect{.shader = kGlenzCopperShader,
+                                             .retroRate = kGlenzRetroRate,
+                                             .palette = glenzPalette,
+                                             .scene = glenzScene};
+    static constexpr EffectInfo kCity{.shader = nullptr,
+                                      .retroRate = kCityRetroRate,
+                                      .palette = cityPalette,
+                                      .background = cityBackground,
+                                      .scene = cityScene};
+    static constexpr EffectInfo kLens{.shader = kRotozoomShader,
+                                      .retroRate = kRotozoomRetroRate,
+                                      .palette = rotozoomPalette,
+                                      .texture = rotozoomTexture};
     // The megamix: its own entry is the white flash between two cuts.
-    static constexpr EffectInfo kFinale{nullptr,          kFinaleRetroRate, finalePalette, nullptr,
-                                        finaleBackground, nullptr,          nullptr,       finaleResolve};
-    static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
-                                         creditsBackground};
-    static constexpr EffectInfo kPortal{nullptr,    kPortalRetroRate, portalPalette,
-                                        portalText, nullptr,          portalScene};
-    static constexpr EffectInfo kReboot{nullptr, kBootRetroRate, bootPalette, rebootText};
-    static constexpr EffectInfo kTheEnd{nullptr, kTheEndRetroRate, theEndPalette, theEndText};
+    static constexpr EffectInfo kFinale{.shader = nullptr,
+                                        .retroRate = kFinaleRetroRate,
+                                        .palette = finalePalette,
+                                        .background = finaleBackground,
+                                        .resolve = finaleResolve};
+    static constexpr EffectInfo kCredits{.shader = nullptr,
+                                         .retroRate = kScrollerRetroRate,
+                                         .palette = creditsPalette,
+                                         .text = creditsText,
+                                         .background = creditsBackground};
+    static constexpr EffectInfo kPortal{.shader = nullptr,
+                                        .retroRate = kPortalRetroRate,
+                                        .palette = portalPalette,
+                                        .text = portalText,
+                                        .scene = portalScene};
+    static constexpr EffectInfo kReboot{
+        .shader = nullptr, .retroRate = kBootRetroRate, .palette = bootPalette, .text = rebootText};
+    static constexpr EffectInfo kTheEnd{
+        .shader = nullptr, .retroRate = kTheEndRetroRate, .palette = theEndPalette, .text = theEndText};
     switch (effect) {
     case show::Effect::Boot:
         return kBoot;
@@ -67,10 +98,10 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kGlenzEffect;
     case show::Effect::Lens:
         return kLens;
-    case show::Effect::Finale:
-        return kFinale;
     case show::Effect::City:
         return kCity;
+    case show::Effect::Finale:
+        return kFinale;
     case show::Effect::Credits:
         return kCredits;
     case show::Effect::Raytrace:

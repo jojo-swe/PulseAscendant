@@ -37,11 +37,17 @@ const vec3 kZenith = vec3(0.10, 0.20, 0.60);
 
 vec4 spheres[kSpheres]; // centre, radius
 
+// A phase reduced to [-pi, pi) before sin and cos, whose accuracy far from 0 varies by vendor
+// (raytracePhase in src/retro/raytrace.cpp).
+float phase(float x) {
+    return kTau * (fract(x / kTau + 0.5) - 0.5);
+}
+
 void placeSpheres(float t) {
     spheres[0] = vec4(0.0, 1.3, 0.0, 1.3);
     for (int i = 1; i < kSpheres; ++i) {
-        float angle = 0.6 * t + float(i - 1) * kTau / 5.0;
-        float bounce = abs(sin(1.7 * t + 1.3 * float(i)));
+        float angle = phase(0.6 * t + float(i - 1) * kTau / 5.0);
+        float bounce = abs(sin(phase(1.7 * t + 1.3 * float(i))));
         spheres[i] = vec4(kOrbit * sin(angle), 0.6 + 0.9 * bounce, -kOrbit * cos(angle), 0.6);
     }
 }
@@ -69,9 +75,11 @@ float trace(vec3 origin, vec3 direction, out int id) {
             id = i;
         }
     }
+    // The floor is never a ray's origin (it does not reflect, and origins are clamped to y >= 0), so any hit
+    // ahead counts: near a sphere's contact a reflected ray may start a hair above it.
     if (direction.y < -1e-6) {
         float t = -origin.y / direction.y;
-        if (t > 1e-3 && t < nearest) {
+        if (t > 0.0 && t < nearest) {
             nearest = t;
             id = kFloor;
         }
@@ -123,13 +131,15 @@ vec3 shade(vec3 origin, vec3 direction) {
         float highlight = light * pow(max(dot(reflected, toLight), 0.0), 60.0);
         if (id == kGlass) {
             vec3 tint = vec3(0.30, 0.95, 0.70);
-            colour += weight * (tint * (0.08 + 0.3 * light * max(dot(normal, toLight), 0.0)) + vec3(highlight));
+            float diffuse = 0.3 * light * max(dot(normal, toLight), 0.0);
+            colour += weight * (tint * (0.08 + diffuse) + vec3(highlight));
             weight *= 0.65 * tint;
         } else {
             colour += weight * vec3(highlight);
             weight *= vec3(0.80, 0.82, 0.86); // chrome
         }
         origin = point + 1e-3 * normal;
+        origin.y = max(origin.y, 0.0); // off a sphere's underside at its contact: never below the floor
         direction = reflected;
     }
     return colour + weight * vec3(0.25); // a third reflection is not traced

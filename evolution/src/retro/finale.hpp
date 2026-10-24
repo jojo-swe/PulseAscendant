@@ -24,9 +24,10 @@ namespace evo::retro {
 // FINALE's own (none; the epoch card is the HUD's), so FLYBY's greeting does not show.
 //
 // Every two beats rather than the plan's two bars: the chapter is 12.2 s, about 7 bars, so two bars would
-// show at most five of the six; and BeatSwap shows 1993 only on every other beat before its downbeat D and
-// 2026 from D on, so a cut every two beats puts each of the six on its own 1993 beat, the flash where the
-// beat swaps back to 1993.
+// show at most five of the six; and with the current beat data BeatSwap shows 1993 only on every other beat
+// before its downbeat D and 2026 from D on, so a cut every two beats puts each of the six on its own 1993
+// beat, the flash where the beat swaps back to 1993 (era_test's checkBeatSwap pins that pattern for FINALE,
+// the one BeatSwap chapter too short for the four-bar window).
 inline constexpr std::uint32_t kFinaleRetroRate = 35;
 inline constexpr int kFinaleBeatsPerCut = 2;
 inline constexpr std::array<show::Effect, 6> kFinaleCuts = {show::Effect::Flyby,  show::Effect::Dots,
@@ -37,14 +38,20 @@ inline constexpr std::uint8_t kFinaleWhite = 255;
 
 // The cuts of a FINALE frame's chapter: the retro frames their beats fall in (the flash frames), ascending.
 std::vector<std::uint32_t> finaleCutFrames(const show::TimelineFrame& frame);
+// The first beat of the grid at or after `offset` track seconds (within 1e-6): the beat a chapter starting
+// there starts on; beat 0 for an offset before the track's first beat.
+int finaleFirstBeat(const show::BeatGridView& grid, double offset);
 
 // A sub-effect's home chapter, and the frame it gets there at a home retro frame: the timeline in the middle
 // of that retro frame (clamped into the chapter).
 int finaleHomeChapter(show::Effect effect);
 show::TimelineFrame finaleHomeFrame(show::Effect effect, std::uint32_t homeRetroFrame);
 // Where a sub-effect's cut starts in its home chapter, in home retro frames: FLYBY at 60 % (the side view),
-// DOTS just before the year arrives, TUNNEL once the solid tube is whole, GLENZ on its accent, LENS with the
-// lens bouncing high in the middle, RAYTRACE halfway (mid-orbit).
+// DOTS just before the year arrives, TUNNEL once the solid tube is whole, GLENZ on its accent, LENS at
+// kFinaleLensStartSeconds (the lens wholly on the screen, high, at the right end of its run, where
+// rotozoom.hpp's lens(t) has tri = 1: t = 6.2 / 2; finale_test checks where it is), RAYTRACE halfway
+// (mid-orbit).
+inline constexpr double kFinaleLensStartSeconds = 3.1;
 std::uint32_t finaleHomeStart(show::Effect effect);
 
 // The EffectInfo parts of FINALE: the resolver, and the flash (its own entry: a clear to kFinaleWhite, every

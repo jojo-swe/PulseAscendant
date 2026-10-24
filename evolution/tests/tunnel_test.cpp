@@ -98,10 +98,12 @@ RetroScene sceneAt(std::uint32_t retroFrame) {
 }
 
 bool isDot(std::uint8_t index) {
-    return index >= evo::retro::kTunnelDotRamp && index < evo::retro::kTunnelDotRamp + 64;
+    return index >= evo::retro::kTunnelDotRamp &&
+           index < evo::retro::kTunnelDotRamp + evo::retro::kTunnelDotShades;
 }
 bool isTube(std::uint8_t index) {
-    return index >= evo::retro::kTunnelTubeA && index < evo::retro::kTunnelTubeB + 32;
+    return index >= evo::retro::kTunnelTubeA &&
+           index < evo::retro::kTunnelTubeB + evo::retro::kTunnelTubeShades;
 }
 
 int brightness(std::uint32_t entry) {
@@ -149,7 +151,7 @@ struct Dot {
 };
 
 Dot expectedDot(const TunnelRing& ring, std::size_t i, std::uint32_t retroFrame) {
-    const double a = kTau * static_cast<double>(i) / 64 + twist(retroFrame, ring.w);
+    const double a = kTau * static_cast<double>(i) / evo::retro::kTunnelRingDots + twist(retroFrame, ring.w);
     const double world[3] = {ring.centre[0] + evo::retro::kTunnelRadius * std::cos(a),
                              ring.centre[1] + evo::retro::kTunnelRadius * std::sin(a), ring.z};
     const evo::retro::Projected p = evo::retro::project(evo::retro::tunnelCamera(), world);
@@ -157,11 +159,12 @@ Dot expectedDot(const TunnelRing& ring, std::size_t i, std::uint32_t retroFrame)
     dot.x = p.x, dot.y = p.y;
     const double fade = std::clamp(
         (evo::retro::kTunnelFar - ring.z) / (evo::retro::kTunnelFar - evo::retro::kTunnelNear), 0.0, 1.0);
-    dot.index = static_cast<std::uint8_t>(evo::retro::kTunnelDotRamp + std::lround(63 * std::pow(fade, 1.5)));
+    dot.index = static_cast<std::uint8_t>(
+        evo::retro::kTunnelDotRamp + std::lround((evo::retro::kTunnelDotShades - 1) * std::pow(fade, 1.5)));
     dot.size = ring.z < evo::retro::kTunnelDotsLarge ? 3 : ring.z < evo::retro::kTunnelDotsMedium ? 2 : 1;
     // The square's first pixel as points.comp computes it.
-    const std::int32_t fx = evo::retro::toFixed(p.x), fy = evo::retro::toFixed(p.y);
-    const std::int32_t firstX = (fx - dot.size * 8 + 8) >> 4, firstY = (fy - dot.size * 8 + 8) >> 4;
+    const auto [firstX, firstY] =
+        evo::retro::pointCorner({evo::retro::toFixed(p.x), evo::retro::toFixed(p.y), 0, dot.size});
     dot.visible = !(firstX + dot.size <= 0 || firstX >= static_cast<std::int32_t>(kWidth) ||
                     firstY + dot.size <= 0 || firstY >= static_cast<std::int32_t>(kHeight));
     return dot;
@@ -195,14 +198,18 @@ void testPalette() {
         CHECK(brightness(palette[first]) < 3 * 40); // fades into the dark
         CHECK(brightness(palette[first + count - 1]) > 3 * 180);
     };
-    rising(64, 64);
-    rising(128, 32);
-    rising(160, 32);
+    using evo::retro::kTunnelDotRamp, evo::retro::kTunnelDotShades;
+    using evo::retro::kTunnelTubeA, evo::retro::kTunnelTubeB, evo::retro::kTunnelTubeShades;
+    rising(kTunnelDotRamp, kTunnelDotShades);
+    rising(kTunnelTubeA, kTunnelTubeShades);
+    rising(kTunnelTubeB, kTunnelTubeShades);
     // A blue, B violet: B has more red than A at the same shade.
-    for (std::size_t i = 8; i < 32; ++i)
-        CHECK((palette[160 + i] & 0xff) > (palette[128 + i] & 0xff));
+    for (std::size_t i = 8; i < kTunnelTubeShades; ++i)
+        CHECK((palette[kTunnelTubeB + i] & 0xff) > (palette[kTunnelTubeA + i] & 0xff));
+    static_assert(kTunnelDotRamp + kTunnelDotShades == kTunnelTubeA &&
+                  kTunnelTubeA + kTunnelTubeShades == kTunnelTubeB);
     for (std::size_t i = 1; i < 255; ++i)
-        if (i < 64 || i >= 192)
+        if (i < kTunnelDotRamp || i >= kTunnelTubeB + kTunnelTubeShades)
             CHECK(palette[i] == evo::retro::rgba(0, 0, 0));
     Palette later{};
     evo::retro::tunnelPalette(later, tunnel(15), 600);
@@ -304,7 +311,8 @@ void testDots() {
                 // A whole ring: its dots' mean is its centre (all at one depth), on the projected path.
                 const double world[3] = {ring.centre[0], ring.centre[1], ring.z};
                 const evo::retro::Projected c = evo::retro::project(camera, world);
-                const double error = std::hypot(sumX / 64 - c.x, sumY / 64 - c.y);
+                const double dots = evo::retro::kTunnelRingDots;
+                const double error = std::hypot(sumX / dots - c.x, sumY / dots - c.y);
                 worstCentre = std::max(worstCentre, error);
                 CHECK(error <= 1);
                 // Far to near, each whole ring wider than the last; partly hidden rings only nearer.
@@ -316,22 +324,23 @@ void testDots() {
                 partialSeen = true;
             }
         }
-        CHECK(total == 96 * 64);
+        CHECK(total == evo::retro::kTunnelRings * evo::retro::kTunnelRingDots);
         CHECK(next == scene.points.size()); // nothing else drawn
         fewest = std::min(fewest, scene.points.size());
         most = std::max(most, scene.points.size());
     }
     std::printf(
-        "tunnel: dots %zu..%zu of 6144 on screen before the tube; %zu whole rings within %.3f px of the "
+        "tunnel: dots %zu..%zu of %zu on screen before the tube; %zu whole rings within %.3f px of the "
         "path; dots within %.4f px of the ring radius\n",
-        fewest, most, ringsChecked, worstCentre, worstRadius);
-    CHECK(fewest >= 5900 && most <= 6144); // measured 5946..6015
+        fewest, most, evo::retro::kTunnelRings * evo::retro::kTunnelRingDots, ringsChecked, worstCentre,
+        worstRadius);
+    CHECK(fewest >= 5900); // measured 5946..6015
 }
 
 // The tube from its first frame to the end: at most kTubeBudget triangles on every retro frame (the
 // rasteriser takes 2048), flat in the tube's ramps, the faces exactly what the scene draws; the dots give way
 // as the front sweeps in and are gone after it.
-constexpr std::size_t kTubeBudget = 1200;
+constexpr std::size_t kTubeBudget = 1000; // measured 927
 
 void testTube() {
     const TimelineFrame first = tunnel(1);
@@ -424,6 +433,64 @@ void testTubeOrder() {
     std::printf("tunnel: tube painter's order: %zu rays hit the tube, %zu wrong\n", rays, wrong);
     CHECK(rays >= 20000);
     CHECK(wrong == 0);
+}
+
+// The tube's order during the sweep, where its outside shows: on every retro frame of the sweep, a ray
+// through every 2nd pixel (a 160x100 grid). A band is convex, so a ray that crosses both its outside and its
+// inside meets the outside first: drawing a band's outer faces after its inner ones (tunnel.cpp) is what
+// keeps the outside in front. At most 2 rays may show a face behind the nearest (measured: 1; drawing each
+// band's outer faces before its inner ones gives 11, which testTubeOrder's sparser grid does not see).
+void testTubeSweepOrder() {
+    const std::uint32_t tubeFrame = evo::retro::tunnelTubeFrame(tunnel(1));
+    const auto whole =
+        tubeFrame + static_cast<std::uint32_t>(std::ceil(evo::retro::kTunnelTubeSweepSeconds * kRate));
+    constexpr int kGridX = 160, kGridY = 100;
+    std::vector<evo::test::Ray> rays;
+    for (int gy = 0; gy < kGridY; ++gy)
+        for (int gx = 0; gx < kGridX; ++gx)
+            rays.push_back(evo::test::rayThrough(evo::retro::tunnelCamera(), gx * 2 + .5, gy * 2 + .5));
+    std::size_t hits = 0, wrong = 0;
+    for (std::uint32_t retroFrame = tubeFrame; retroFrame < whole; ++retroFrame) {
+        const std::vector<TunnelFace> faces = evo::retro::tunnelTubeFaces(frameOf(retroFrame), retroFrame);
+        std::vector<double> nearestT(rays.size(), 1e30), lastT(rays.size(), 0);
+        std::vector<int> nearest(rays.size(), -1), last(rays.size(), -1);
+        for (std::size_t i = 0; i < faces.size(); ++i) {
+            // Only the rays within the face's projected box (every vertex is in front of the camera).
+            double minX = 1e30, maxX = -1e30, minY = 1e30, maxY = -1e30;
+            for (const auto& v : faces[i].world) {
+                const evo::retro::Projected p = evo::retro::project(evo::retro::tunnelCamera(), v);
+                CHECK(p.z > 0);
+                minX = std::min(minX, p.x), maxX = std::max(maxX, p.x);
+                minY = std::min(minY, p.y), maxY = std::max(maxY, p.y);
+            }
+            const int gx0 = std::max(0, static_cast<int>(std::floor((minX - .5) / 2)) - 1);
+            const int gx1 = std::min(kGridX - 1, static_cast<int>(std::ceil((maxX - .5) / 2)) + 1);
+            const int gy0 = std::max(0, static_cast<int>(std::floor((minY - .5) / 2)) - 1);
+            const int gy1 = std::min(kGridY - 1, static_cast<int>(std::ceil((maxY - .5) / 2)) + 1);
+            for (int gy = gy0; gy <= gy1; ++gy)
+                for (int gx = gx0; gx <= gx1; ++gx) {
+                    const auto r = static_cast<std::size_t>(gy * kGridX + gx);
+                    const double t = evo::test::hit(rays[r], faces[i].world);
+                    if (t <= 0)
+                        continue;
+                    if (t < nearestT[r])
+                        nearest[r] = static_cast<int>(i), nearestT[r] = t;
+                    last[r] = static_cast<int>(i), lastT[r] = t;
+                }
+        }
+        for (std::size_t r = 0; r < rays.size(); ++r) {
+            if (last[r] < 0)
+                continue;
+            ++hits;
+            if (lastT[r] > nearestT[r] * (1 + 1e-9) && faces[static_cast<std::size_t>(last[r])].index !=
+                                                           faces[static_cast<std::size_t>(nearest[r])].index)
+                ++wrong;
+        }
+    }
+    std::printf("tunnel: tube order over the sweep (frames %u..%u): %zu rays hit the tube, %zu wrong\n",
+                tubeFrame, whole - 1, hits, wrong);
+    CHECK(hits >= 100000); // measured 124563
+    CHECK(wrong <= 2);
 }
 
 // The nearest hit along a ray beyond the near plane among the faces, or infinity.
@@ -568,6 +635,7 @@ int main() {
         testDots();
         testTube();
         testTubeOrder();
+        testTubeSweepOrder();
         testTubeCulling();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});

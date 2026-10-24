@@ -86,7 +86,7 @@ Camera portalCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame) 
     camera.eye[1] = distance * std::sin(elevation);
     camera.eye[2] = -distance * std::cos(elevation) * std::cos(azimuth);
     camera.up[1] = 1;
-    camera.fovYDegrees = 42; // FLYBY's, which its stars keep
+    camera.fovYDegrees = kFlybyFovY; // FLYBY's, which its stars keep
     return camera;
 }
 
@@ -108,7 +108,7 @@ void portalScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint3
     std::size_t kept = 0;
     for (std::size_t i = 0; i < scene.points.size(); ++i) {
         const RetroPoint p = scene.points[i];
-        const int x = (p.x - p.size * 8 + 8) >> 4, y = (p.y - p.size * 8 + 8) >> 4;
+        const auto [x, y] = pointCorner(p);
         if (x < inset.x || x + p.size > kScreenWidth - inset.x || y < inset.y ||
             y + p.size > kScreenHeight - inset.y)
             continue;

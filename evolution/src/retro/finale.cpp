@@ -35,6 +35,13 @@ std::uint32_t homeLastFrame(show::Effect effect) {
 
 } // namespace
 
+int finaleFirstBeat(const show::BeatGridView& grid, double offset) {
+    const int beat = grid.beatAt(offset + kChapterEdge);
+    if (beat < 0)
+        return 0; // before the track's first beat
+    return grid.beatTime(beat) < offset - kChapterEdge ? beat + 1 : beat;
+}
+
 std::vector<std::uint32_t> finaleCutFrames(const show::TimelineFrame& frame) {
     // An allowed fixed fact (retro/effects.hpp), as for GLENZ: the chapter's start in its track and the
     // track's tracked beats.
@@ -42,9 +49,7 @@ std::vector<std::uint32_t> finaleCutFrames(const show::TimelineFrame& frame) {
     const int track = show::trackAt(start);
     const show::BeatGridView grid = show::beatGrid(track);
     const double offset = start - show::trackStart(track);
-    int first = grid.beatAt(offset + kChapterEdge); // the beat the chapter starts on
-    if (first < 0 || grid.beatTime(first) < offset - kChapterEdge)
-        ++first;
+    const int first = finaleFirstBeat(grid, offset); // the beat the chapter starts on
     std::vector<std::uint32_t> cuts;
     for (int beat = first + kFinaleBeatsPerCut; beat < grid.count(); beat += kFinaleBeatsPerCut) {
         const double local = grid.beatTime(beat) - offset;
@@ -85,8 +90,8 @@ std::uint32_t finaleHomeStart(show::Effect effect) {
         return tunnelTubeFrame(home) + framesOf(kTunnelTubeSweepSeconds, rate) + 1;
     case show::Effect::Glenz:
         return framesOf(home.accentSeconds, rate);
-    case show::Effect::Lens: // the lens high in the middle of its run, over the logo
-        return framesOf(3.1, rate);
+    case show::Effect::Lens: // the lens high at the right end of its run (rotozoomView), over the logo
+        return framesOf(kFinaleLensStartSeconds, rate);
     case show::Effect::Raytrace: // mid-orbit
         return framesOf(0.5 * home.chapterDuration, rate);
     default:
@@ -99,7 +104,7 @@ EffectFrame finaleResolve(const show::TimelineFrame& frame, std::uint32_t retroF
     const auto segment =
         static_cast<std::size_t>(std::upper_bound(cuts.begin(), cuts.end(), retroFrame) - cuts.begin());
     if (segment > 0 && cuts[segment - 1] == retroFrame)
-        return {frame.effect, frame, retroFrame}; // the flash: FINALE's own entry
+        return {show::Effect::Finale, frame, retroFrame}; // the flash: FINALE's own entry
     const std::uint32_t from = segment > 0 ? cuts[segment - 1] : 0;
     const show::Effect sub = kFinaleCuts[segment % kFinaleCuts.size()];
     // n FINALE frames into the cut are floor(n * rate / 35) frames at the sub-effect's rate.

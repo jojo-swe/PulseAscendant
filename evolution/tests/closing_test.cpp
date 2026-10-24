@@ -6,6 +6,7 @@
 // reports.
 
 #include "gfx/context.hpp"
+#include "ray_cast.hpp"
 #include "retro/boot.hpp"
 #include "retro/effects.hpp"
 #include "retro/flyby.hpp"
@@ -20,6 +21,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -286,7 +288,8 @@ void testTheEndImages(evo::gfx::Context& ctx) {
     for (std::uint32_t f : {fade, frameCount(any) - 1}) {
         const RetroPicture picture = fixture.renderPicture(theEnd(timeIn(any, f)));
         CHECK(count(picture.indices, 0) == picture.indices.size());
-        CHECK(std::count(picture.rgb.begin(), picture.rgb.end(), 0) == static_cast<long>(picture.rgb.size()));
+        CHECK(std::count(picture.rgb.begin(), picture.rgb.end(), 0) ==
+              static_cast<std::ptrdiff_t>(picture.rgb.size()));
     }
     // Deterministic within a retro frame.
     const std::vector<std::uint8_t> once = fixture.render(theEnd(timeIn(any, 100, .1)));
@@ -420,7 +423,7 @@ void testPortalScene() {
         bezelFrames += inset.x > 0;
         CHECK(scene.points.size() <= ship.points.size());
         for (const RetroPoint& p : scene.points) {
-            const int firstX = (p.x - p.size * 8 + 8) >> 4, firstY = (p.y - p.size * 8 + 8) >> 4;
+            const auto [firstX, firstY] = evo::retro::pointCorner(p);
             CHECK(firstX >= inset.x && firstX + p.size <= kWidth - inset.x);
             CHECK(firstY >= inset.y && firstY + p.size <= kHeight - inset.y);
         }
@@ -430,69 +433,49 @@ void testPortalScene() {
     CHECK(bezelFrames + 35 >= frameCount(any)); // the bezel shows within the first second
 }
 
-// FLYBY's painter's order holds from PORTAL's camera too, which passes behind the ship between the planes
-// x = +-0.34 that FLYBY's flight never crosses (the fuselage is then drawn last): a ray through every 2nd
-// pixel of every 7th retro frame must see the face drawn last be the nearest one (or show its index), except
-// at FLYBY's two known seams.
-using Vec = std::array<double, 3>;
-Vec sub(const Vec& a, const Vec& b) {
-    return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-}
-Vec cross(const Vec& a, const Vec& b) {
-    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-}
-double dot(const Vec& a, const Vec& b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-Vec normalize(const Vec& v) {
-    const double l = std::sqrt(dot(v, v));
-    return {v[0] / l, v[1] / l, v[2] / l};
-}
-double hit(const Vec& origin, const Vec& direction, const double world[3][3]) {
-    const Vec a = {world[0][0], world[0][1], world[0][2]};
-    const Vec e1 = sub({world[1][0], world[1][1], world[1][2]}, a);
-    const Vec e2 = sub({world[2][0], world[2][1], world[2][2]}, a);
-    const Vec p = cross(direction, e2);
-    const double det = dot(e1, p);
-    if (std::abs(det) < 1e-14)
-        return -1;
-    const Vec s = sub(origin, a);
-    const double u = dot(s, p) / det;
-    if (u < 0 || u > 1)
-        return -1;
-    const Vec q = cross(s, e1);
-    const double v = dot(direction, q) / det;
-    if (v < 0 || u + v > 1)
-        return -1;
-    return dot(e2, q) / det;
-}
-
+// FLYBY's painter's order holds from PORTAL's camera too, which swings round behind the ship and so, on a few
+// frames, takes the centre-plane branch FLYBY's flight never takes (flybyUsesCentrePlane: the eye within
+// x = +-0.34 in the ship's model space, the fuselage drawn last). A ray through every 2nd pixel of every 7th
+// retro frame, and of every frame in that branch, must see the face drawn last be the nearest one (or show
+// its index), except at FLYBY's two known seams.
 void testPortalPainterOrder() {
     using evo::retro::FlybyFace;
     using evo::retro::FlybyPart;
     const TimelineFrame any = portal(1);
-    std::size_t rays = 0, seams = 0, wrong = 0, between = 0;
-    for (std::uint32_t f = 0; f < frameCount(any); f += 7) {
+    std::vector<std::uint32_t> frames, branch;
+    for (std::uint32_t f = 0; f < frameCount(any); ++f) {
+        const bool centre =
+            evo::retro::flybyUsesCentrePlane(evo::retro::portalCamera(portal(timeIn(any, f)), f), f);
+        if (centre)
+            branch.push_back(f);
+        if (f % 7 == 0 || centre)
+            frames.push_back(f);
+    }
+    std::string branchFrames;
+    for (std::uint32_t f : branch)
+        branchFrames += " " + std::to_string(f);
+    std::printf("portal: retro frames in FLYBY's centre-plane branch:%s\n", branchFrames.c_str());
+
+    std::size_t rays = 0, seams = 0, wrong = 0, branchRays = 0;
+    for (std::uint32_t f : frames) {
         const TimelineFrame frame = portal(timeIn(any, f));
         const evo::retro::Camera camera = evo::retro::portalCamera(frame, f);
         const std::vector<FlybyFace> faces = evo::retro::flybyShipFacesFrom(camera, f);
-        const Vec eye = {camera.eye[0], camera.eye[1], camera.eye[2]};
-        between += std::abs(eye[0]) < 0.34;
-        const Vec forward = normalize(sub({camera.target[0], camera.target[1], camera.target[2]}, eye));
-        const Vec right = normalize(cross({camera.up[0], camera.up[1], camera.up[2]}, forward));
-        const Vec up = cross(forward, right);
-        const double focalY = 100.0 / std::tan(camera.fovYDegrees * 3.14159265358979323846 / 360.0);
-        const double focalX = focalY * evo::retro::kPixelAspect;
+        const bool centre = evo::retro::flybyUsesCentrePlane(camera, f);
+        if (centre) {
+            // The branch taken: the last face but the flames is the fuselage's.
+            const auto lastSolid = std::find_if(faces.rbegin(), faces.rend(), [](const FlybyFace& face) {
+                return face.part != FlybyPart::Flame;
+            });
+            CHECK(lastSolid != faces.rend() && lastSolid->part == FlybyPart::Fuselage);
+        }
         for (int gy = 0; gy < 100; ++gy)
             for (int gx = 0; gx < 160; ++gx) {
-                const double vx = (gx * 2 + .5 - 160) / focalX, vy = (100 - gy * 2 - .5) / focalY;
-                const Vec direction = {forward[0] + right[0] * vx + up[0] * vy,
-                                       forward[1] + right[1] * vx + up[1] * vy,
-                                       forward[2] + right[2] * vx + up[2] * vy};
+                const evo::test::Ray ray = evo::test::rayThrough(camera, gx * 2 + .5, gy * 2 + .5);
                 int nearest = -1, last = -1;
                 double nearestT = 1e30, lastT = 0;
                 for (std::size_t i = 0; i < faces.size(); ++i) {
-                    const double t = hit(eye, direction, faces[i].world);
+                    const double t = evo::test::hit(ray, faces[i].world);
                     if (t <= 0)
                         continue;
                     if (t < nearestT)
@@ -502,6 +485,7 @@ void testPortalPainterOrder() {
                 if (last < 0)
                     continue;
                 ++rays;
+                branchRays += centre;
                 const FlybyFace& a = faces[static_cast<std::size_t>(nearest)];
                 const FlybyFace& b = faces[static_cast<std::size_t>(last)];
                 if (lastT <= nearestT * (1 + 1e-9) || a.index == b.index)
@@ -513,13 +497,17 @@ void testPortalPainterOrder() {
                 (wingRoot || flame ? seams : wrong)++;
             }
     }
-    std::printf("portal: painter's order: %zu rays on the ship, %zu at FLYBY's seams, %zu wrong; %zu sampled "
-                "frames from between x = +-0.34\n",
-                rays, seams, wrong, between);
+    std::printf("portal: painter's order: %zu rays on the ship over %zu frames, %zu at FLYBY's seams, %zu "
+                "wrong; %zu frames (%zu rays) in the centre-plane branch\n",
+                rays, frames.size(), seams, wrong, branch.size(), branchRays);
     CHECK(rays >= 6000);
     CHECK(wrong == 0);
     CHECK(seams <= rays / 50);
-    CHECK(between >= 3);
+    // The ship's bank and sway carry the eye across the centre plane three times once the camera is behind
+    // it (measured: 8 frames, 139-140, 242-244 and 375-377 of 402), each crossing a few frames long; all of
+    // them are in the sample above, but the ship is small by then (measured: 82 rays on it).
+    CHECK(branch.size() >= 6 && branch.size() <= 16);
+    CHECK(branchRays >= 40);
 }
 
 bool isShip(std::uint8_t index) {
