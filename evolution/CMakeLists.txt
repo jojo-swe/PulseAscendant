@@ -115,6 +115,17 @@ add_library(evo_rt STATIC
 target_include_directories(evo_rt PUBLIC src)
 target_link_libraries(evo_rt PUBLIC evo_gfx)
 
+# Post-processing of the 2026 side: the denoiser (demodulate, reproject and accumulate, a-trous, remodulate plus
+# the primary-hit emission). Its shaders load from <build>/bin/shaders as post_<name>.comp.spv.
+add_library(evo_post STATIC
+    src/post/denoiser.cpp)
+target_include_directories(evo_post PUBLIC src)
+target_link_libraries(evo_post PUBLIC evo_gfx)
+evo_add_shaders(evo_post
+    shaders/post/accumulate.comp
+    shaders/post/atrous.comp
+    shaders/post/combine.comp)
+
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
 # registry, the palette builders, the BOOT prompt script, the sine scroller it draws on, and the 1993 scene
@@ -497,6 +508,14 @@ target_link_libraries(material_test PRIVATE evo_rt)
 target_compile_definitions(material_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(material_test material_test_shaders)
 add_test(NAME material COMMAND material_test)
+
+# The denoiser on synthetic G-buffers uploaded from the CPU: accumulation, history rejection and reset, motion
+# reprojection, a-trous edges and noise, emission passthrough (Review Focus 5), non-finite input (Review Focus
+# 8), determinism; with the validation layer and its synchronization validation on; fails on any message.
+add_executable(denoiser_test tests/denoiser_test.cpp)
+target_link_libraries(denoiser_test PRIVATE evo_post)
+target_compile_definitions(denoiser_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_test(NAME denoiser COMMAND denoiser_test)
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
 # validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked).

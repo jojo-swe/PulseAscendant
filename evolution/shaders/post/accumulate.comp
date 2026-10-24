@@ -1,0 +1,158 @@
+#version 460
+
+// The denoiser's temporal pass: demodulates this frame's lighting by the albedo, reprojects the previous
+// frame's history through the motion guide and blends it in, and keeps luminance moments for the variance
+// the à-trous passes stop at (see src/post/denoiser.hpp for the rules).
+//
+// History (ping-pong, RGBA16F): colour = RGB illumination + A variance; moments = R length, G m1, B m2;
+// guides = XYZ normal + W depth, what the next frame validates its taps against.
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform readonly image2D lightingImage;
+layout(set = 0, binding = 1, rgba16f) uniform readonly image2D albedoImage;
+layout(set = 0, binding = 2, rgba16f) uniform readonly image2D normalImage;
+layout(set = 0, binding = 3, r32f) uniform readonly image2D depthImage;
+layout(set = 0, binding = 4, rgba16f) uniform readonly image2D motionImage;
+layout(set = 0, binding = 5, rgba16f) uniform readonly image2D prevColor;
+layout(set = 0, binding = 6, rgba16f) uniform readonly image2D prevMoments;
+layout(set = 0, binding = 7, rgba16f) uniform readonly image2D prevGuides;
+layout(set = 0, binding = 8, rgba16f) uniform writeonly image2D outColor;
+layout(set = 0, binding = 9, rgba16f) uniform writeonly image2D outMoments;
+layout(set = 0, binding = 10, rgba16f) uniform writeonly image2D outGuides;
+
+// Must match AccumulatePush in src/post/denoiser.cpp (32 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    uint useHistory; // 0 after a reset or with temporal filtering off: every pixel starts over
+    uint maxHistory;
+    float alphaColor;
+    float alphaMoments;
+    float sigmaDepth;
+    float sigmaNormal;
+} pc;
+
+const float kDepthTolerance = 0.05; // |z_prev - z| <= 0.05 z
+const float kNormalTolerance = 0.9; // dot(n_prev, n) >= 0.9
+const float kMinTapWeight = 0.01;   // less bilinear weight than this on valid taps counts as no history
+const int kSpatialRadius = 2;       // the 5x5 neighbourhood that stands in for short histories
+
+bool inside(ivec2 q) {
+    return q.x >= 0 && q.y >= 0 && q.x < int(pc.width) && q.y < int(pc.height);
+}
+
+float illuminationLuminance(ivec2 q) {
+    return luminance(demodulate(imageLoad(lightingImage, q).rgb, imageLoad(albedoImage, q).rgb));
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
+        return;
+    }
+
+    vec3 illumination = demodulate(imageLoad(lightingImage, p).rgb, imageLoad(albedoImage, p).rgb);
+    vec3 normal = imageLoad(normalImage, p).xyz;
+    float depth = imageLoad(depthImage, p).r;
+    vec4 motion = imageLoad(motionImage, p);
+
+    float lum = luminance(illumination);
+    float m1 = lum;
+    float m2 = min(lum * lum, kHalfMax);
+
+    // Reprojection: the previous pixel centre's 2x2 bilinear footprint, each tap kept when it is inside and
+    // its guides match.
+    bool valid = false;
+    vec3 prevIllumination = vec3(0.0);
+    vec2 prevMoment = vec2(0.0);
+    float prevLength = 0.0;
+    if (pc.useHistory != 0u && motion.z > 0.5 && depth > 0.0) {
+        vec2 base = vec2(p) + motion.xy; // previous centre - 0.5, in texel coordinates
+        ivec2 origin = ivec2(floor(base));
+        vec2 f = base - vec2(origin);
+        float weights[4] = float[4]((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+        ivec2 offsets[4] = ivec2[4](ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1));
+        float sumWeight = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            ivec2 q = origin + offsets[i];
+            if (weights[i] <= 0.0 || !inside(q)) {
+                continue;
+            }
+            vec4 guide = imageLoad(prevGuides, q);
+            if (abs(guide.w - depth) > kDepthTolerance * depth || dot(guide.xyz, normal) < kNormalTolerance) {
+                continue;
+            }
+            vec4 moments = imageLoad(prevMoments, q);
+            prevIllumination += weights[i] * imageLoad(prevColor, q).rgb;
+            prevMoment += weights[i] * moments.gb;
+            prevLength += weights[i] * moments.r;
+            sumWeight += weights[i];
+        }
+        if (sumWeight >= kMinTapWeight) {
+            valid = true;
+            prevIllumination /= sumWeight;
+            prevMoment /= sumWeight;
+            prevLength /= sumWeight;
+        }
+    }
+
+    // A select, not a blend with alpha 1: the first frame of a history copies the current value exactly.
+    float historyLength = valid ? min(prevLength + 1.0, float(pc.maxHistory)) : 1.0;
+    vec3 color = illumination;
+    if (valid) {
+        float alpha = max(pc.alphaColor, 1.0 / historyLength);
+        float alphaMoments = max(pc.alphaMoments, 1.0 / historyLength);
+        color = mix(prevIllumination, illumination, alpha);
+        m1 = mix(prevMoment.x, m1, alphaMoments);
+        m2 = mix(prevMoment.y, m2, alphaMoments);
+    }
+
+    float variance;
+    if (historyLength >= 4.0) {
+        variance = max(m2 - m1 * m1, 0.0);
+    } else {
+        // Too few frames for temporal moments: the moments of the 5x5 neighbourhood on the same surface
+        // (weighted like the à-trous edge stops at step 1), boosted while the history is short.
+        float sumWeight = 0.0, s1 = 0.0, s2 = 0.0;
+        if (depth > 0.0) {
+            for (int dy = -kSpatialRadius; dy <= kSpatialRadius; ++dy) {
+                for (int dx = -kSpatialRadius; dx <= kSpatialRadius; ++dx) {
+                    ivec2 q = p + ivec2(dx, dy);
+                    if (!inside(q)) {
+                        continue;
+                    }
+                    float qDepth = imageLoad(depthImage, q).r;
+                    if (qDepth <= 0.0) {
+                        continue;
+                    }
+                    float distance = float(max(abs(dx), abs(dy)));
+                    float w = 1.0;
+                    if (distance > 0.0) {
+                        float phiDepth = pc.sigmaDepth * 0.01 * max(depth, 1e-3) * distance;
+                        w = exp(-abs(qDepth - depth) / phiDepth) *
+                            pow(max(0.0, dot(normal, imageLoad(normalImage, q).xyz)), pc.sigmaNormal);
+                    }
+                    float l = distance > 0.0 ? illuminationLuminance(q) : lum;
+                    sumWeight += w;
+                    s1 += w * l;
+                    s2 += w * min(l * l, kHalfMax);
+                }
+            }
+        }
+        variance = 0.0;
+        if (sumWeight > 0.0) {
+            s1 /= sumWeight;
+            s2 /= sumWeight;
+            variance = max(s2 - s1 * s1, 0.0) * (4.0 / historyLength);
+        }
+    }
+
+    imageStore(outColor, p, vec4(min(color, vec3(kHalfMax)), min(variance, kHalfMax)));
+    imageStore(outMoments, p, vec4(historyLength, m1, m2, 0.0));
+    imageStore(outGuides, p, vec4(normal, depth));
+}
