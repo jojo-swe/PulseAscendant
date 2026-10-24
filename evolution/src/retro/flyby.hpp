@@ -59,6 +59,8 @@ struct FlybyFace {
 // fuselage, so when a wing is drawn after the fuselage a sliver of its root can show through the hull; and an
 // engine's two crossed flame triangles cut through each other.
 std::vector<FlybyFace> flybyShipFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame);
+// The same seen from another camera (PORTAL flies the ship away); flybyShipFaces uses flybyCamera.
+std::vector<FlybyFace> flybyShipFacesFrom(const Camera& camera, std::uint32_t retroFrame);
 // The stars of the field; those the ship covers are left out of a frame's scene.
 inline constexpr std::size_t kFlybyStars = 512;
 
@@ -71,5 +73,7 @@ void flybyPalette(Palette& palette, const show::TimelineFrame& frame, std::uint3
 // pixels lies under the ship (points are drawn after all triangles). The ship's order is its painter's order:
 // do not call sortBackToFront on this scene (FINALE reuses this provider), as mean depths misorder its parts.
 void flybyScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame);
+// FLYBY's scene seen from another camera (the stars keep their own); flybyScene uses flybyCamera.
+void flybySceneFrom(RetroScene& scene, const Camera& camera, std::uint32_t retroFrame);
 
 } // namespace evo::retro

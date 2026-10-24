@@ -8,8 +8,9 @@ implementation plans live in [`docs/plans/`](docs/plans/), starting with
 
 > **Status:** step 3 of the plan (the 1993 effects) is under way. The music drives a timeline of 31 chapters
 > in three acts, and the 1993 side renders through its own pipeline (below): BOOT, FLYBY, DOTS, PLASMA,
-> TUNNEL, GLENZ, RAYTRACE and the CREDITS sine scroller are finished on the 1993 side, the other effects still show a
-> grey test pattern there, and the 2026 side is still a placeholder gradient.
+> TUNNEL, GLENZ, RAYTRACE, PORTAL, REBOOT, the CREDITS sine scroller and THE END are finished on the 1993
+> side, the other effects still show a grey test pattern there, and the 2026 side is still a placeholder
+> gradient.
 
 ## Requirements
 
@@ -139,6 +140,12 @@ The effects so far:
 - **RAYTRACE** (chapter 7): a "precalculated" ray-traced animation at 10 fps: chrome spheres and a
   glass-coloured one bouncing round a big chrome sphere over a red and white checkerboard, hard shadows, two
   reflection bounces, one ray per pixel, dithered into a fixed 6×6×6 colour cube and 24 greys.
+- **PORTAL** (chapter 10): FLYBY's ship turns away and shrinks into the stars while a beige monitor bezel
+  closes in to a 4:3 frame, `THE SCREEN` typed in its corner, before the camera pulls out of the CRT.
+- **REBOOT** (chapter 20): BOOT's prompt again with a second script, `evolution.exe /2026` and on to
+  `Entering the glass`, until the portal takes the camera through the glass.
+- **THE END** (chapter 30): `THE END` centred at three times the font's size, fading from white to black
+  through the palette's 64 DAC levels, then black.
 - **Scrollers**: CREDITS (chapter 29, now a 1993 chapter) rolls the credits on a sine wave over deep blue
   under a static EVOLUTION title; FLYBY's greeting is the other.
 

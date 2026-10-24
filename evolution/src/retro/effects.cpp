@@ -8,8 +8,10 @@
 #include "retro/flyby.hpp"
 #include "retro/glenz.hpp"
 #include "retro/palette.hpp"
+#include "retro/portal.hpp"
 #include "retro/raytrace.hpp"
 #include "retro/scroller.hpp"
+#include "retro/the_end.hpp"
 #include "retro/tunnel.hpp"
 
 namespace evo::retro {
@@ -31,6 +33,10 @@ const EffectInfo& effectFor(show::Effect effect) {
                                        glenzScene};
     static constexpr EffectInfo kCredits{nullptr, kScrollerRetroRate, creditsPalette, creditsText,
                                          creditsBackground};
+    static constexpr EffectInfo kPortal{nullptr,    kPortalRetroRate, portalPalette,
+                                        portalText, nullptr,          portalScene};
+    static constexpr EffectInfo kReboot{nullptr, kBootRetroRate, bootPalette, rebootText};
+    static constexpr EffectInfo kTheEnd{nullptr, kTheEndRetroRate, theEndPalette, theEndText};
     switch (effect) {
     case show::Effect::Boot:
         return kBoot;
@@ -48,6 +54,12 @@ const EffectInfo& effectFor(show::Effect effect) {
         return kCredits;
     case show::Effect::Raytrace:
         return kRaytrace;
+    case show::Effect::Portal:
+        return kPortal;
+    case show::Effect::Reboot:
+        return kReboot;
+    case show::Effect::TheEnd:
+        return kTheEnd;
     default:
         return kTestPattern;
     }

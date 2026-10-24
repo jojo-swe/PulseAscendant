@@ -6,7 +6,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace evo::retro {
@@ -43,5 +45,25 @@ std::vector<std::string> bootScreen(const show::TimelineFrame& frame, std::uint3
 void bootPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame);
 std::uint8_t bootBackground(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 std::vector<text::Item> bootText(const show::TimelineFrame& frame, std::uint32_t retroFrame);
+
+// The prompt's typing engine, which BOOT, REBOOT and PORTAL's caption share. A script is a list of writes in
+// time order: at `at` seconds into the chapter, `text` appears all at once (charactersPerSecond 0) or one
+// character after another, the first 1 / charactersPerSecond after `at`. promptWritten is everything written
+// up to and including retro frame `retroFrame` (at kBootRetroRate), newlines included; the cursor blinks at
+// 2 Hz, on in the first quarter of every half second, judged at the centre of the retro frame.
+struct PromptWrite {
+    double at;
+    std::string_view text;
+    std::uint32_t charactersPerSecond;
+};
+std::string promptWritten(std::span<const PromptWrite> script, std::uint32_t retroFrame);
+bool promptCursorOn(std::uint32_t retroFrame);
+
+// Chapter 20, REBOOT: the Studio's CRT boots 1993 again, the same prompt with a second script (`C:\DEMO>`
+// then `evolution.exe /2026` typed, `Reinitialising reality ...`, `Ray tracing hardware ... found`,
+// `Entering the glass`), BOOT's look and palette on black, until the portal takes the camera through the
+// glass. No flash: the portal is the cut. rebootScreen is the screen as text, as bootScreen.
+std::vector<std::string> rebootScreen(const show::TimelineFrame& frame, std::uint32_t retroFrame);
+std::vector<text::Item> rebootText(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
 } // namespace evo::retro

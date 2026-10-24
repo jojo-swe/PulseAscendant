@@ -125,9 +125,11 @@ add_library(evo_render STATIC
     src/retro/tunnel.cpp
     src/retro/palette.cpp
     src/retro/palettes.cpp
+    src/retro/portal.cpp
     src/retro/raytrace.cpp
     src/retro/scene.cpp
-    src/retro/scroller.cpp)
+    src/retro/scroller.cpp
+    src/retro/the_end.cpp)
 target_include_directories(evo_render PUBLIC src)
 target_link_libraries(evo_render PUBLIC evo_gfx evo_show evo_text)
 
@@ -316,6 +318,15 @@ add_dependencies(raytrace_test Evolution_shaders raytrace_test_shaders)
 target_compile_definitions(raytrace_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
                                                  EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME raytrace COMMAND raytrace_test)
+
+# PORTAL, REBOOT and THE END, the 1993 side's closing chapters: their scripts, fade, camera and bezel on the
+# CPU, and their index images from the retro stage, with the validation layer on; fails on any message it
+# reports.
+add_executable(closing_test tests/closing_test.cpp)
+target_link_libraries(closing_test PRIVATE evo_render)
+target_compile_definitions(closing_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(closing_test Evolution_shaders)
+add_test(NAME closing COMMAND closing_test)
 
 # The sine scroller: its glyph positions on the CPU, and CREDITS and FLYBY's greeting from the retro stage,
 # with the validation layer on; fails on any message it reports.

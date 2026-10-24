@@ -542,7 +542,10 @@ std::uint8_t flybyShade(double intensity) {
 }
 
 std::vector<FlybyFace> flybyShipFaces(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    const Camera camera = flybyCamera(frame, retroFrame);
+    return flybyShipFacesFrom(flybyCamera(frame, retroFrame), retroFrame);
+}
+
+std::vector<FlybyFace> flybyShipFacesFrom(const Camera& camera, std::uint32_t retroFrame) {
     const Rotation rotation = shipRotation(static_cast<double>(retroFrame) / kFlybyRetroRate);
     const Vec3 eye = rotation.applyInverse({camera.eye[0], camera.eye[1], camera.eye[2]});
 
@@ -591,9 +594,12 @@ std::vector<FlybyFace> flybyShipFaces(const show::TimelineFrame& frame, std::uin
 }
 
 void flybyScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    const Camera camera = flybyCamera(frame, retroFrame);
+    flybySceneFrom(scene, flybyCamera(frame, retroFrame), retroFrame);
+}
+
+void flybySceneFrom(RetroScene& scene, const Camera& camera, std::uint32_t retroFrame) {
     const std::size_t shipFirst = scene.triangles.size();
-    for (const FlybyFace& face : flybyShipFaces(frame, retroFrame)) {
+    for (const FlybyFace& face : flybyShipFacesFrom(camera, retroFrame)) {
         const std::uint8_t indices[3] = {face.index, face.index, face.index};
         addTriangle(scene, camera, face.world, indices, kFlat);
     }
