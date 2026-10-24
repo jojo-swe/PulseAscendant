@@ -75,9 +75,22 @@ Beslut i steg 1: `direct()` har `max_chapter_seconds` (40 för EVOLUTION, 18 def
 - `eraCut` syns inte i testmönstret (ingen plats i push constants).
 - Övrigt från granskningarna: råa tag-bytes i WAV-felmeddelanden; testluckor (JSON-accent, `beatAt` efter sista beat); näst bästa tempokandidat ignoreras och `tempo_candidates` kan få nyckelkollisioner; ac4832b bygger inte ensam (bara bisect); `marks()`-hjälparen i era-testet speglar koden; wipe-fallbacken testas bara syntetiskt.
 
-## Steg 2 — nästa (plan `2026-10-24-step2-retro-pipeline.md`)
+## Steg 2 — pågår (plan `2026-10-24-step2-retro-pipeline.md`)
 
-Render-grunden och 1993-pipelinen: Image/Buffer/FrameRing/ComputePipeline/Readback, renderer + retro-steg + CRT + compositor, 8×8-font, BOOT, PLASMA, sinusscroller, storyboard. **Task 1 ska också ta steg 0-punkterna ovan** ("Till steg 2, första task": frame-ring med timeline-semafor, `Image` med layoutspårning och delad `gfx/sync.hpp`, pass som funktioner, readback bara vid export, context före fönstret). Övriga uppskjutna småfynd från steg 0 och 1 tas när de berör en task.
+| Task | Status | Commit |
+|---|---|---|
+| 1. Render-grund (Image, Buffer, FrameRing, ComputePipeline, Readback) | **klar**, granskad (en fixrunda) | e676fd4, b13f2d9, 0cd7e88 |
+| 2. Renderer, retro-steg, CRT-pillarbox, compositor | pågår | |
+| 3. 8×8-font + textpass | | |
+| 4. BOOT | | |
+| 5. PLASMA | | |
+| 6. Sinusscroller | | |
+| 7. Storyboard-verktyg + README | | |
+
+Steg 1:s slutgranskning (Fable) godkände grunden efter en fixvåg: 3 ms raised-cosine-toning vid aktskarvarna (ägaren informerad), UTF-8-sökvägar och argv på Windows, rapport vid byte till tyst läge, kompensation för enhetsbuffert plus `--audio-offset MS` (positivt = bilden tidigare relativt ljudet), testhärdning. Uppskjutet från den: BeatSwap i Dots får bara en bar-flipp innan beat-flipparna (överväg att förlänga fönstret i stället för att släppa en flipp, steg 6); WAV i int16 för halva minnet; RIFF-storlek 0xFFFFFFFF ger otydligt fel; exportens bildrutenät (711,16 s är inte heltal 60 fps-rutor — steg 8: padda ljudet till rutnätet); ägarkontroller på Windows med hörlurar (skarvar, A/V-offset, urkoppling av hörlurar). Från steg 2 Task 1: läsgenvägen i `Image::transition` spårar stage/access som separata unioner; `recording_` fastnar efter undantag mitt i en frame; `rgb()` före completion bara dokumenterat; grep-testets luckor (`immediate(`/`waitAll(`); `windowed_unsupported` matchar bara meddelandet; push-storlek 0; pipeline utan bindings.
+
+
+Render-grunden (steg 0-punkterna) är nu på plats i Task 1: frame-ring med timeline-semafor, `Image` med layoutspårning och delad `gfx/sync.hpp`, compute-pass, readback bara vid export, context före fönstret. Övriga uppskjutna småfynd från steg 0 och 1 tas när de berör en task.
 
 ## Så här återupptas arbetet
 
