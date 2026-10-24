@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -358,6 +359,112 @@ void testAllocatorReusesPools(Context& ctx) {
     other.wait(other.submit());
 }
 
+// (a2) Several acceleration structure bindings, one of them an array of two, written in one call from five
+// distinct handles: every write carries its own VkWriteDescriptorSetAccelerationStructureKHR in pNext, all
+// alive until vkUpdateDescriptorSets. Run with MALLOC_PERTURB_ (see CMakeLists.txt) so a pNext into freed
+// memory reads as garbage the validation layer reports.
+void testAccelerationStructureWrites(Context& ctx) {
+    const std::array<Binding, 5> bindings = {
+        Binding{0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR},
+        Binding{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+        Binding{2, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR},
+        Binding{3, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR},
+        Binding{4, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 2},
+    };
+    DescriptorLayout layout(ctx, bindings, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+    std::vector<std::unique_ptr<UnbuiltTlas>> tlases;
+    for (int i = 0; i < 5; ++i)
+        tlases.push_back(std::make_unique<UnbuiltTlas>(ctx));
+    Buffer buffer(ctx, {64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "as writes buffer"});
+    DescriptorAllocator allocator(ctx);
+    FrameRing ring(ctx);
+
+    ring.begin();
+    const VkDescriptorSet set = allocator.allocate(ring, layout);
+    const std::vector<DescriptorWrite> writes = {
+        DescriptorWrite::accelerationStructure(0, tlases[0]->handle()),
+        DescriptorWrite::buffer(1, {buffer.handle(), 0, VK_WHOLE_SIZE}),
+        DescriptorWrite::accelerationStructure(2, tlases[1]->handle()),
+        DescriptorWrite::accelerationStructure(3, tlases[2]->handle()),
+        DescriptorWrite{4, {}, {}, {tlases[3]->handle(), tlases[4]->handle()}},
+    };
+    writeDescriptors(ctx, set, layout, writes);
+    ring.wait(ring.submit());
+    CHECK(ctx.validationMessageCount() == 0);
+}
+
+// (d2) A slot's pools are reset only after that slot's previous frame completed: a begin() callback sees
+// the timeline at or past the value the slot last submitted, for 10 frames recorded back to back with two in
+// flight and no host waits of the test's own; each frame allocates sets and dispatches through them.
+void testPoolResetWaitsForTheSlot(Context& ctx) {
+    ComputePipeline probe(ctx, kProbe, kProbeBindings, 0);
+    DescriptorLayout layout(ctx, kProbeBindings, VK_SHADER_STAGE_COMPUTE_BIT);
+    DescriptorAllocator allocator(ctx);
+    Buffer input(ctx, {sizeof kInputValue, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "ordering input"});
+    Buffer output(ctx, {sizeof(Vec4s), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "ordering output"});
+    std::vector<Image> textures;
+    FrameRing ring(ctx);
+
+    std::array<std::uint64_t, FrameRing::kFramesInFlight> submitted{};
+    int callbacks = 0;
+    bool ordered = true;
+    const FrameRing::Subscription check = ring.onBegin([&](std::uint32_t slot) {
+        std::uint64_t value = 0;
+        vkGetSemaphoreCounterValue(ctx.device(), ring.timeline(), &value);
+        ordered = ordered && value >= submitted[slot];
+        ++callbacks;
+    });
+    for (int frame = 0; frame < 10; ++frame) {
+        const std::uint32_t slot = ring.slot();
+        VkCommandBuffer cmd = ring.begin();
+        if (textures.empty()) {
+            for (std::size_t i = 0; i < kTextureColours.size(); ++i)
+                textures.push_back(clearedTexture(ctx, cmd, kTextureColours[i], "ordering texture"));
+            textures.push_back(clearedTexture(ctx, cmd, kStorageColour, "ordering storage", true));
+        }
+        for (int i = 0; i < 20; ++i)
+            CHECK(allocator.allocate(ring, layout) != VK_NULL_HANDLE);
+        std::vector<VkDescriptorImageInfo> images;
+        for (std::size_t i = 0; i < 3; ++i)
+            images.push_back(
+                {ctx.nearestSampler(), textures[i].view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+        images.push_back({VK_NULL_HANDLE, textures[3].view(), VK_IMAGE_LAYOUT_GENERAL});
+        const std::array<VkDescriptorBufferInfo, 2> buffers = {
+            VkDescriptorBufferInfo{input.handle(), 0, VK_WHOLE_SIZE},
+            VkDescriptorBufferInfo{output.handle(), 0, VK_WHOLE_SIZE}};
+        probe.bind(cmd, ring, images, buffers);
+        probe.dispatch(cmd, 1, 1);
+        // The next frame's dispatch writes the output again (write after write).
+        bufferBarrier2(cmd, output.handle(), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        submitted[slot] = ring.submit();
+    }
+    ring.waitAll(); // shutdown
+    CHECK(callbacks == 10);
+    CHECK(ordered);
+}
+
+// (d3) A layout that needs more of a type than a standard pool holds (200 combined image samplers against
+// 128) gets one pool sized for it, not a failure or an endless series of pools.
+void testOversizedLayoutGetsOnePool(Context& ctx) {
+    const std::array<Binding, 1> bindings = {Binding{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 200}};
+    DescriptorLayout layout(ctx, bindings, VK_SHADER_STAGE_COMPUTE_BIT);
+    Image texture(ctx, {1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, 1, "oversized texture"});
+    DescriptorAllocator allocator(ctx);
+    FrameRing ring(ctx);
+    ring.begin();
+    const VkDescriptorSet set = allocator.allocate(ring, layout);
+    CHECK(set != VK_NULL_HANDLE);
+    CHECK(allocator.poolCount() == 1);
+    const VkDescriptorImageInfo info{ctx.linearSampler(), texture.view(),
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    const std::vector<DescriptorWrite> writes = {DescriptorWrite{0, std::vector(200, info), {}, {}}};
+    writeDescriptors(ctx, set, layout, writes);
+    ring.wait(ring.submit());
+    CHECK(ctx.validationMessageCount() == 0);
+}
+
 // (e) The ray tracing properties come from the driver; on lavapipe they are {32, 16, 32, 31, 8}.
 void testRayTracingProperties(Context& ctx) {
     const RayTracingProperties& rt = ctx.rayTracingProperties();
@@ -496,8 +603,9 @@ unsigned testSyncValidationReportsMissingBarrier(Context& ctx) {
                 "barrier):\n");
     std::fflush(stdout);
     frame(false);
+    // Exactly the one SYNC-HAZARD-READ-AFTER-WRITE at the probe's dispatch; anything more is another problem.
     const unsigned raised = ctx.validationMessageCount();
-    CHECK(raised >= 1);
+    CHECK(raised == 1);
     return raised;
 }
 
@@ -515,6 +623,9 @@ int main() {
             testWritesAreChecked(ctx);
             testProbeReadsArrayAndBuffer(ctx);
             testAllocatorReusesPools(ctx);
+            testAccelerationStructureWrites(ctx);
+            testPoolResetWaitsForTheSlot(ctx);
+            testOversizedLayoutGetsOnePool(ctx);
             testRayTracingProperties(ctx);
             testAlignedBuffer(ctx);
             testCreateDeviceBuffer(ctx);
@@ -522,6 +633,14 @@ int main() {
         }
         // Also counts what the layer reported while the objects and the Context were destroyed.
         CHECK(validationMessagesReported() == 0);
+
+        // Synchronization validation without validation is ignored (with a warning on stderr).
+        {
+            std::printf("expecting a warning that syncValidation needs validation:\n");
+            std::fflush(stdout);
+            auto ctx = Context::create({.validation = false, .syncValidation = true});
+            CHECK(!ctx.validationEnabled() && !ctx.syncValidationEnabled());
+        }
 
         unsigned expected = 0;
         {

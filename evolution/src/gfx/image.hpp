@@ -39,7 +39,9 @@ struct ImageDesc {
 class Image {
 public:
     Image() = default;
-    // Throws std::invalid_argument for an empty size, no mip levels or more than mipLevelsFor(width, height).
+    // Throws std::invalid_argument for an empty size, no mip levels or more than mipLevelsFor(width, height),
+    // and std::runtime_error for a two-format image (viewFormat set) whose formats, usage, size or levels the
+    // device does not support (vkGetPhysicalDeviceImageFormatProperties2 with the format list).
     Image(Context& ctx, const ImageDesc& desc);
     ~Image();
     Image(Image&& other) noexcept;
@@ -58,7 +60,7 @@ public:
     // GENERAL, and leaves every level in GENERAL ordered before (dstStage, dstAccess); the tracked state
     // follows. An sRGB image averages in linear light. Throws std::logic_error, recording nothing, if the
     // format lacks BLIT_SRC, BLIT_DST or SAMPLED_IMAGE_FILTER_LINEAR or the usage lacks TRANSFER_SRC or
-    // TRANSFER_DST. A one-level image only transitions.
+    // TRANSFER_DST. A one-level image only transitions, needs neither, and still counts in mipGenerations().
     void generateMips(VkCommandBuffer cmd, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
 
     VkImage handle() const { return image_; }
@@ -73,7 +75,8 @@ public:
     VkFormat viewFormat() const { return viewFormat_; }
     VkImageAspectFlags aspect() const { return aspect_; } // DEPTH (+ STENCIL) for depth formats, else COLOR
     std::uint32_t mipLevels() const { return mipLevels_; }
-    // How many times generateMips() has recorded; for tests that pin when an image is re-mipped.
+    // How many times generateMips() has recorded (one-level images included); for tests that pin when an
+    // image is re-mipped.
     std::uint64_t mipGenerations() const { return mipGenerations_; }
 
 private:

@@ -109,6 +109,9 @@ struct FeatureChain {
     // Each required flag, as a name plus a pointer into this chain.
     std::vector<std::pair<const char*, VkBool32*>> required() {
         return {
+            // Sampler arrays indexed by a loop or a material index (glslang never declares the capability, so
+            // the validation layer cannot tell; the spec needs the feature all the same).
+            {"shaderSampledImageArrayDynamicIndexing", &core.features.shaderSampledImageArrayDynamicIndexing},
             {"bufferDeviceAddress", &v12.bufferDeviceAddress},
             {"descriptorIndexing", &v12.descriptorIndexing},
             {"runtimeDescriptorArray", &v12.runtimeDescriptorArray},
@@ -230,6 +233,10 @@ Context Context::create(const ContextOptions& options) {
         volkInitializeCustom(options.loader);
     else if (volkInitialize() != VK_SUCCESS)
         throw MissingRequirements({"Vulkan loader (vulkan-1.dll / libvulkan.so.1)"});
+
+    if (options.syncValidation && !options.validation)
+        std::fprintf(stderr, "warning: ContextOptions::syncValidation needs validation; no synchronization "
+                             "validation\n");
 
     // --- Instance ---
     std::vector<const char*> layers;

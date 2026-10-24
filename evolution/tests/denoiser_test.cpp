@@ -1,11 +1,13 @@
 // The denoiser on synthetic G-buffers uploaded from the CPU: demodulate, reproject and accumulate, à-trous,
 // remodulate plus the primary-hit emission. Noise converges under accumulation; a reset (or a rejected
 // reprojection) starts the history over, and a first frame equals the stateless (export) path byte for byte
-// (Review Focus 6); a moving pattern follows its motion vectors; à-trous keeps a depth edge and removes noise
-// from flat regions; the emission never enters history or filtering (Review Focus 5); NaN, Inf and huge
-// samples never reach the output or the history (Review Focus 8); the same inputs give the same bytes. Frames
-// run with two in flight, with the validation layer and its synchronization validation on; fails on any
-// message.
+// (Review Focus 6); a moving pattern follows its motion vectors, fractional motion interpolates bilinearly;
+// the temporal variance estimates the sample variance, also for bright pixels; à-trous keeps depth edges and
+// lighting-only edges at length 1 and removes noise from flat regions; a firefly decays at the stated rate;
+// non-finite guides never match; the emission never enters history or filtering (Review Focus 5); NaN, Inf
+// and huge samples never reach the output or the history (Review Focus 8); the same inputs give the same
+// bytes. Frames run with two in flight, with the validation layer and its synchronization validation on;
+// fails on any message.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -29,6 +31,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -227,10 +230,11 @@ public:
     }
 
     // Records one denoise with the given images in place of the harness's own (to check refusals).
-    void denoiseWith(const post::GBufferView& view, gfx::Image& hdr) {
+    void denoiseWith(const post::GBufferView& view, gfx::Image& hdr,
+                     const post::DenoiseSettings& settings = {}) {
         VkCommandBuffer cmd = ring_->begin();
         try {
-            denoiser_->denoise(cmd, view, {}, hdr);
+            denoiser_->denoise(cmd, view, settings, hdr);
         } catch (...) {
             ring_->submit();
             throw;
@@ -468,8 +472,8 @@ void testResetMatchesFreshAndStateless(gfx::Context& ctx) {
     CHECK(switched.hdrBits == first.hdrBits);
 
     // The first frame of a denoiser with 0 iterations shows the input's illumination unchanged, up to the
-    // half conversion (which Vulkan lets round to nearest or towards zero: within one half ulp, 2^-11 of
-    // values below 1).
+    // half conversion (which Vulkan lets round to nearest or towards zero: within one ulp of [0.5, 1),
+    // 2^-11).
     Harness plain(ctx);
     const Output unfiltered = plain.runOne(probe, noFilter());
     Frame copy = probe;
@@ -581,18 +585,43 @@ void testReprojectionFollowsMotion(gfx::Context& ctx) {
     CHECK(wrongWorst > 0.1);
 }
 
-// (e) À-trous on one stateless frame: a 0.1 | 0.9 edge with a depth step keeps both sides, and the noise of
-// the flat regions drops at least threefold.
-void testAtrousKeepsEdgesAndRemovesNoise(gfx::Context& ctx) {
-    std::printf("a-trous keeps a depth edge and removes noise\n");
+// Mean of the RGB output over one column.
+double columnMean(const Output& out, std::uint32_t x) {
+    double sum = 0.0;
+    for (std::uint32_t y = 0; y < kSize; ++y)
+        for (std::uint32_t c = 0; c < 3; ++c)
+            sum += out.hdr(x, y, c);
+    return sum / (kSize * 3.0);
+}
+
+// Standard deviation of the RGB output around `mean` over columns [x0, x1), away from the top and bottom.
+double flatStddev(const Output& out, std::uint32_t x0, std::uint32_t x1, double mean) {
+    double sum = 0.0;
+    int count = 0;
+    for (std::uint32_t y = 8; y < kSize - 8; ++y)
+        for (std::uint32_t x = x0; x < x1; ++x)
+            for (std::uint32_t c = 0; c < 3; ++c) {
+                const double d = out.hdr(x, y, c) - mean;
+                sum += d * d;
+                ++count;
+            }
+    return std::sqrt(sum / count);
+}
+
+// One stateless frame (every pixel at length 1, as at export below 16 spp) with a 0.1 | 0.9 lighting edge
+// down the middle and noise of the given amplitude, filtered with 0 and with 3 à-trous iterations. Checks
+// the two edge columns against 0.1 and 0.9 within the given tolerances and that the noise of the flat
+// regions drops at least threefold.
+void checkEdgeAndNoise(gfx::Context& ctx, float amplitude, bool depthStep, double leftTolerance,
+                       double rightTolerance) {
     constexpr std::uint32_t kEdge = kSize / 2;
     Frame frame = flatFrame();
     for (std::uint32_t y = 0; y < kSize; ++y)
         for (std::uint32_t x = 0; x < kSize; ++x) {
             const float base = x < kEdge ? 0.1f : 0.9f;
             for (std::uint32_t c = 0; c < 3; ++c)
-                frame.at(frame.lighting, x, y)[c] = base + 0.1f * noise(7, x, y, c);
-            frame.depth[std::size_t{y} * kSize + x] = x < kEdge ? 1.0f : 2.0f;
+                frame.at(frame.lighting, x, y)[c] = base + 2.0f * amplitude * noise(7, x, y, c);
+            frame.depth[std::size_t{y} * kSize + x] = depthStep && x >= kEdge ? 2.0f : 1.0f;
         }
 
     post::DenoiseSettings settings;
@@ -604,30 +633,10 @@ void testAtrousKeepsEdgesAndRemovesNoise(gfx::Context& ctx) {
     Harness filteredHarness(ctx);
     const Output filtered = filteredHarness.runOne(frame, settings);
 
-    const auto columnMean = [&](const Output& out, std::uint32_t x) {
-        double sum = 0.0;
-        for (std::uint32_t y = 0; y < kSize; ++y)
-            for (std::uint32_t c = 0; c < 3; ++c)
-                sum += out.hdr(x, y, c);
-        return sum / (kSize * 3.0);
-    };
     const double leftEdge = columnMean(filtered, kEdge - 1), rightEdge = columnMean(filtered, kEdge);
     std::printf("  edge columns %.4f | %.4f\n", leftEdge, rightEdge);
-    CHECK(std::fabs(leftEdge - 0.1) <= 0.005);
-    CHECK(std::fabs(rightEdge - 0.9) <= 0.045);
-
-    const auto flatStddev = [&](const Output& out, std::uint32_t x0, std::uint32_t x1, double mean) {
-        double sum = 0.0;
-        int count = 0;
-        for (std::uint32_t y = 8; y < kSize - 8; ++y)
-            for (std::uint32_t x = x0; x < x1; ++x)
-                for (std::uint32_t c = 0; c < 3; ++c) {
-                    const double d = out.hdr(x, y, c) - mean;
-                    sum += d * d;
-                    ++count;
-                }
-        return std::sqrt(sum / count);
-    };
+    CHECK(std::fabs(leftEdge - 0.1) <= leftTolerance);
+    CHECK(std::fabs(rightEdge - 0.9) <= rightTolerance);
     for (const auto& [x0, x1, mean] :
          {std::tuple{8u, kEdge - 8, 0.1}, std::tuple{kEdge + 8, kSize - 8, 0.9}}) {
         const double before = flatStddev(unfiltered, x0, x1, mean),
@@ -635,6 +644,188 @@ void testAtrousKeepsEdgesAndRemovesNoise(gfx::Context& ctx) {
         std::printf("  flat %u..%u: stddev %.5f -> %.5f (%.1fx)\n", x0, x1, before, after, before / after);
         CHECK(before / after >= 3.0);
     }
+}
+
+// (e) À-trous on one stateless frame: a 0.1 | 0.9 edge with a depth step and noise ±0.05 keeps both sides
+// within 5 %, and the noise of the flat regions drops at least threefold.
+void testAtrousKeepsEdgesAndRemovesNoise(gfx::Context& ctx) {
+    std::printf("a-trous keeps a depth edge and removes noise\n");
+    checkEdgeAndNoise(ctx, 0.05f, true, 0.005, 0.045);
+}
+
+// (e2) The same with nothing but the lighting to tell the sides apart (one depth, one normal: a shadow edge)
+// and noise ±0.02: the short-history variance must not count the edge as noise, or every shadow edge at
+// export would be blurred. Both edge columns within 10 %, flat noise down at least threefold.
+void testAtrousKeepsLightingEdges(gfx::Context& ctx) {
+    std::printf("a-trous keeps a lighting-only edge and removes noise\n");
+    checkEdgeAndNoise(ctx, 0.02f, false, 0.01, 0.09);
+}
+
+// Reprojection between pixel centres: a linear ramp, then a flat frame with motion -1.5, -0.5 or -0.25. Each
+// pixel's previous value is the ramp interpolated linearly between the two previous pixels its centre falls
+// between, so the history at length 2 is exactly (bilinear(previous history) + current) / 2.
+void testFractionalMotionInterpolates(gfx::Context& ctx) {
+    std::printf("fractional motion interpolates the history bilinearly\n");
+    Frame ramp = flatFrame();
+    for (std::uint32_t y = 0; y < kSize; ++y)
+        for (std::uint32_t x = 0; x < kSize; ++x) {
+            float* l = ramp.at(ramp.lighting, x, y);
+            l[0] = l[1] = l[2] = 0.25f + static_cast<float>(x) / 128.0f;
+        }
+    for (const float motion : {-1.5f, -0.5f, -0.25f}) {
+        Frame flat = flatFrame();
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                float* l = flat.at(flat.lighting, x, y);
+                l[0] = l[1] = l[2] = 0.5f;
+                flat.at(flat.motion, x, y)[0] = motion;
+            }
+        Harness harness(ctx);
+        const auto out = harness.run({ramp, flat}, noFilter());
+        double worst = 0.0;
+        bool lengths = true;
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 2; x < kSize; ++x) {
+                const float base = static_cast<float>(x) + motion;
+                const auto origin = static_cast<std::uint32_t>(std::floor(base));
+                const float f = base - std::floor(base);
+                for (std::uint32_t c = 0; c < 3; ++c) {
+                    const float previous = (1.0f - f) * out[0].history(origin, y, c) +
+                                           (f > 0.0f ? f * out[0].history(origin + 1, y, c) : 0.0f);
+                    const float expected = 0.5f * (previous + 0.5f);
+                    worst =
+                        std::max(worst, static_cast<double>(std::fabs(out[1].history(x, y, c) - expected)));
+                }
+                lengths = lengths && out[1].length(x, y) == 2.0f;
+            }
+        std::printf("  motion %.2f: worst error %.6f\n", motion, worst);
+        CHECK(worst <= 1.0 / 2048.0); // one ulp of [0.5, 1): the half conversion of the result
+        CHECK(lengths);
+    }
+}
+
+// The temporal variance (from length 4 on) estimates the variance of the samples: grey uniform noise in
+// [0, 1) has luminance variance 1/12; the exponential moments with alpha 0.2 settle at 2 (1 - a) / (2 - a)
+// of it (0.89), so after 32 frames the mean over the image is 1/12 within 30 %.
+void testTemporalVariance(gfx::Context& ctx) {
+    std::printf("temporal variance estimates the sample variance\n");
+    std::vector<Frame> frames;
+    for (std::uint32_t i = 0; i < 32; ++i) {
+        Frame frame = noisyFrame(500 + i, 0.5f, 0.5f);
+        for (std::size_t p = 0; p < std::size_t{kSize} * kSize; ++p)
+            frame.lighting[p * 4 + 1] = frame.lighting[p * 4 + 2] = frame.lighting[p * 4]; // grey
+        frames.push_back(frame);
+    }
+    Harness harness(ctx);
+    const auto out = harness.run(frames, noFilter());
+    double sum = 0.0;
+    for (std::uint32_t y = 0; y < kSize; ++y)
+        for (std::uint32_t x = 0; x < kSize; ++x)
+            sum += out.back().history(x, y, 3);
+    const double mean = sum / (kSize * kSize);
+    std::printf("  mean variance %.5f (1/12 = %.5f)\n", mean, 1.0 / 12.0);
+    CHECK(std::fabs(mean - 1.0 / 12.0) <= 0.3 / 12.0);
+}
+
+// Bright illumination keeps a variance: grey 500 with uniform noise ±50 (variance 833) gives a positive
+// variance at length 1 (spatial) and about the sample variance once the temporal moments take over. The
+// squared luminance (250000) is beyond the half range, so the moments must not be stored as m2.
+void testBrightVariance(gfx::Context& ctx) {
+    std::printf("bright illumination keeps its variance\n");
+    std::vector<Frame> frames;
+    for (std::uint32_t i = 0; i < 8; ++i) {
+        Frame frame = noisyFrame(600 + i, 500.0f, 50.0f);
+        for (std::size_t p = 0; p < std::size_t{kSize} * kSize; ++p)
+            frame.lighting[p * 4 + 1] = frame.lighting[p * 4 + 2] = frame.lighting[p * 4];
+        frames.push_back(frame);
+    }
+    Harness harness(ctx);
+    const auto out = harness.run(frames, noFilter());
+    constexpr double kVariance = 100.0 * 100.0 / 12.0;
+    for (const std::size_t i : {std::size_t{0}, std::size_t{7}}) {
+        double sum = 0.0, smallest = 1e30;
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                sum += out[i].history(x, y, 3);
+                smallest = std::min(smallest, static_cast<double>(out[i].history(x, y, 3)));
+            }
+        const double mean = sum / (kSize * kSize);
+        std::printf("  frame %zu: mean variance %.1f, smallest %.1f (samples %.1f)\n", i + 1, mean, smallest,
+                    kVariance);
+        CHECK(smallest > 0.0);
+        if (i == 7)
+            CHECK(mean >= 0.5 * kVariance && mean <= 1.2 * kVariance);
+    }
+}
+
+// A firefly decays: one 1e30 sample (demodulated and clamped to 60000) at a pixel with a long history
+// enters with alpha 0.2 (12000) and then fades by 0.8 per frame. Below 0.5 + 1 takes ln(12000) / ln(1.25)
+// = 42.1 frames, so 43 frames after it, nowhere in the history or output is above 1.5.
+void testFireflyDecays(gfx::Context& ctx) {
+    std::printf("a firefly decays out of the history\n");
+    constexpr std::uint32_t kWarm = 8, kDecay = 43;
+    std::vector<Frame> frames;
+    for (std::uint32_t i = 0; i < kWarm + 1 + kDecay; ++i) {
+        Frame frame = flatFrame();
+        for (float& v : frame.lighting)
+            v = 0.5f;
+        frames.push_back(frame);
+    }
+    float* firefly = frames[kWarm].at(frames[kWarm].lighting, 30, 30);
+    firefly[0] = firefly[1] = firefly[2] = 1e30f;
+    Harness harness(ctx);
+    const auto out = harness.run(frames, {});
+    const auto peak = [&](const Output& o, bool history) {
+        float worst = 0.0f;
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x)
+                for (std::uint32_t c = 0; c < 3; ++c)
+                    worst = std::max(worst, history ? o.history(x, y, c) : o.hdr(x, y, c));
+        return worst;
+    };
+    std::printf(
+        "  firefly history: %.1f, then after 10 frames %.2f, after %u frames %.3f (output peak %.3f)\n",
+        out[kWarm].history(30, 30, 0), out[kWarm + 10].history(30, 30, 0), kDecay,
+        out.back().history(30, 30, 0), peak(out.back(), false));
+    for (const Output& o : out) {
+        CHECK(allFinite(o.hdrBits));
+        CHECK(allFinite(o.historyBits));
+    }
+    // The decay follows 0.5 + 12000 * 0.8^k (within half precision).
+    const double expected10 = 0.5 + 12000.0 * std::pow(0.8, 10);
+    CHECK(std::fabs(out[kWarm + 10].history(30, 30, 0) - expected10) <= 0.01 * expected10);
+    CHECK(peak(out.back(), true) < 1.5f);
+    CHECK(peak(out.back(), false) < 1.5f);
+}
+
+// Non-finite guides never count as a match: a NaN normal or NaN depth in the previous frame's guides rejects
+// that tap (length 1), and a NaN or infinite depth in the current frame is a miss that no neighbour filters
+// with.
+void testNonFiniteGuides(gfx::Context& ctx) {
+    std::printf("non-finite guides are rejected\n");
+    const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
+    Frame first = flatFrame(), second = flatFrame();
+    for (Frame* frame : {&first, &second})
+        for (float& v : frame->lighting)
+            v = 0.5f;
+    first.at(first.normal, 10, 10)[0] = nan;
+    first.depth[std::size_t{20} * kSize + 20] = nan;
+    second.depth[std::size_t{40} * kSize + 40] = nan;
+    second.depth[std::size_t{50} * kSize + 50] = inf;
+    Harness harness(ctx);
+    const auto out = harness.run({first, second, second}, {});
+    for (const Output& o : out) {
+        CHECK(allFinite(o.hdrBits));
+        CHECK(allFinite(o.historyBits));
+    }
+    CHECK(out[1].length(10, 10) == 1.0f);
+    CHECK(out[1].length(20, 20) == 1.0f);
+    CHECK(out[2].length(40, 40) == 1.0f);
+    CHECK(out[2].length(50, 50) == 1.0f);
+    CHECK(out[1].length(11, 11) == 2.0f);
+    // The neighbours of the non-finite depths are still the flat 0.5.
+    for (const auto& [x, y] : {std::pair{41u, 40u}, std::pair{50u, 51u}})
+        CHECK(std::fabs(out[2].hdr(x, y, 0) - 0.5f) <= 1e-3f);
 }
 
 // (f) The primary-hit emission bypasses history and filtering: a checker that flips every frame appears in
@@ -684,8 +875,8 @@ void testEmissionPassesThrough(gfx::Context& ctx) {
     }
 }
 
-// (g) One NaN, one +Inf and one huge finite sample never make the output or the history non-finite, in the
-// frame they arrive or later.
+// (g) One NaN, one +Inf and huge finite samples of either sign never make the output or the history
+// non-finite, in the frame they arrive or later.
 void testNonFiniteInputStaysOut(gfx::Context& ctx) {
     std::printf("NaN and Inf never reach output or history\n");
     std::vector<Frame> frames;
@@ -695,9 +886,10 @@ void testNonFiniteInputStaysOut(gfx::Context& ctx) {
     nan[0] = std::numeric_limits<float>::quiet_NaN();
     float* inf = frames[1].at(frames[1].lighting, 20, 20);
     inf[1] = std::numeric_limits<float>::infinity();
-    frames[2].at(frames[2].lighting, 30, 30)[2] = 1e30f; // beyond half range
-    frames[3].at(frames[3].albedo, 40, 40)[0] = 0.0f;    // demodulation by zero
-    frames[3].at(frames[3].lighting, 40, 40)[0] = 1e4f;  // illumination 1e7
+    frames[2].at(frames[2].lighting, 30, 30)[2] = 1e30f;  // beyond half range
+    frames[2].at(frames[2].lighting, 35, 35)[1] = -1e30f; // and negative
+    frames[3].at(frames[3].albedo, 40, 40)[0] = 0.0f;     // demodulation by zero
+    frames[3].at(frames[3].lighting, 40, 40)[0] = 1e4f;   // illumination 1e7
     frames[3].at(frames[3].emission, 50, 50)[0] = std::numeric_limits<float>::quiet_NaN();
 
     Harness harness(ctx);
@@ -707,6 +899,9 @@ void testNonFiniteInputStaysOut(gfx::Context& ctx) {
         CHECK(allFinite(o.historyBits));
         CHECK(allFinite(o.lengthBits));
     }
+    // Radiance is never negative: the -1e30 sample counts as 0 (else it would store -65504 or -Inf).
+    CHECK(out[2].history(35, 35, 1) >= 0.0f);
+    CHECK(out[2].hdr(35, 35, 1) >= 0.0f);
     // The NaN pixel's lighting counted as 0: the next frames recover towards 0.5.
     CHECK(std::fabs(out[4].history(10, 10, 0) - 0.5f) < 0.3f);
 }
@@ -757,6 +952,28 @@ void testRefusalsAndResize(gfx::Context& ctx) {
         gfx::FrameRing ring(ctx);
         post::Denoiser denoiser(ctx, ring, 0, 4);
     }));
+    // Sigmas must be positive and finite, alphas in (0, 1].
+    const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
+    post::GBufferView good{harness.lighting_, harness.emission_, harness.albedo_,
+                           harness.normal_,   harness.depth_,    harness.motion_};
+    for (float post::DenoiseSettings::*field :
+         {&post::DenoiseSettings::sigmaDepth, &post::DenoiseSettings::sigmaNormal,
+          &post::DenoiseSettings::sigmaLuminance})
+        for (const float bad : {0.0f, -1.0f, nan, inf}) {
+            post::DenoiseSettings settings;
+            settings.*field = bad;
+            CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(good, harness.hdr_, settings); }));
+        }
+    for (float post::DenoiseSettings::*field :
+         {&post::DenoiseSettings::alphaColor, &post::DenoiseSettings::alphaMoments})
+        for (const float bad : {0.0f, -0.5f, 1.5f, nan, inf}) {
+            post::DenoiseSettings settings;
+            settings.*field = bad;
+            CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(good, harness.hdr_, settings); }));
+        }
+    post::DenoiseSettings alphaOne;
+    alphaOne.alphaColor = alphaOne.alphaMoments = 1.0f;
+    harness.denoiseWith(good, harness.hdr_, alphaOne); // 1 is allowed: no accumulation
 
     harness.run({noisyFrame(1, 0.5f, 0.1f), noisyFrame(2, 0.5f, 0.1f)}, {});
     harness.resize(32, 16);
@@ -780,7 +997,7 @@ int main() {
             if (!ctx.validationEnabled())
                 std::printf("warning: validation layer unavailable; only the results are checked\n");
             else if (!ctx.syncValidationEnabled())
-                std::printf("warning: synchronization validation unavailable\n");
+                std::printf("SKIP sync validation: the layer's synchronization validation is unavailable\n");
             // Between tests the queue goes idle: the installed layer's synchronization validation does not
             // credit host waits on the timeline semaphore, so memory VMA hands from one test's images to the
             // next would look like a hazard. Within a test nothing a frame uses is freed.
@@ -795,7 +1012,19 @@ int main() {
             settle();
             testAtrousKeepsEdgesAndRemovesNoise(ctx);
             settle();
+            testAtrousKeepsLightingEdges(ctx);
+            settle();
             testEmissionPassesThrough(ctx);
+            settle();
+            testFractionalMotionInterpolates(ctx);
+            settle();
+            testTemporalVariance(ctx);
+            settle();
+            testBrightVariance(ctx);
+            settle();
+            testFireflyDecays(ctx);
+            settle();
+            testNonFiniteGuides(ctx);
             settle();
             testNonFiniteInputStaysOut(ctx);
             settle();

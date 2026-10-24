@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -19,6 +20,12 @@ constexpr VkAccessFlags2 kWriteAccess =
     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
     VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_HOST_WRITE_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT |
     VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+
+std::string hex(std::uint32_t value) {
+    char text[16];
+    std::snprintf(text, sizeof text, "%x", value);
+    return text;
+}
 
 // The aspect a view of a format sees: the depth of a depth/stencil format, else its only aspect.
 VkImageAspectFlags viewAspect(VkImageAspectFlags aspect) {
@@ -59,6 +66,32 @@ Image::Image(Context& ctx, const ImageDesc& desc)
         formatList.viewFormatCount = static_cast<std::uint32_t>(formats.size());
         formatList.pViewFormats = formats.data();
         imageInfo.pNext = &formatList;
+
+        // Whether the device supports this combination (an extended usage such as storage on an sRGB image
+        // is optional): a clear error rather than a failed vkCreateImage.
+        VkPhysicalDeviceImageFormatInfo2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2};
+        query.pNext = &formatList;
+        query.format = imageInfo.format;
+        query.type = imageInfo.imageType;
+        query.tiling = imageInfo.tiling;
+        query.usage = imageInfo.usage;
+        query.flags = imageInfo.flags;
+        VkImageFormatProperties2 supported{VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2};
+        const VkResult result =
+            vkGetPhysicalDeviceImageFormatProperties2(ctx.physicalDevice(), &query, &supported);
+        const VkImageFormatProperties& limits = supported.imageFormatProperties;
+        if (result != VK_SUCCESS || desc.width > limits.maxExtent.width ||
+            desc.height > limits.maxExtent.height || desc.mipLevels > limits.maxMipLevels)
+            throw std::runtime_error(
+                "Image '" + std::string(desc.name) + "': the device does not support format " +
+                std::to_string(static_cast<int>(format_)) + " viewed as " +
+                std::to_string(static_cast<int>(viewFormat_)) + " with usage 0x" + hex(desc.usage) + " at " +
+                std::to_string(desc.width) + "x" + std::to_string(desc.height) + " with " +
+                std::to_string(desc.mipLevels) + " mip levels" +
+                (result == VK_SUCCESS ? " (at most " + std::to_string(limits.maxExtent.width) + "x" +
+                                            std::to_string(limits.maxExtent.height) + ", " +
+                                            std::to_string(limits.maxMipLevels) + " levels)"
+                                      : std::string()));
     }
 
     VmaAllocationCreateInfo allocInfo{};
@@ -185,6 +218,11 @@ void Image::generateMips(VkCommandBuffer cmd, VkPipelineStageFlags2 dstStage, Vk
     constexpr VkFormatFeatureFlags kBlit = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
                                            VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
     constexpr VkImageUsageFlags kTransfer = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (mipLevels_ == 1) { // nothing to blit, so no blit support needed
+        ++mipGenerations_;
+        transition(cmd, VK_IMAGE_LAYOUT_GENERAL, dstStage, dstAccess);
+        return;
+    }
     VkFormatProperties properties{};
     vkGetPhysicalDeviceFormatProperties(ctx_->physicalDevice(), format_, &properties);
     if ((properties.optimalTilingFeatures & kBlit) != kBlit)
@@ -193,10 +231,6 @@ void Image::generateMips(VkCommandBuffer cmd, VkPipelineStageFlags2 dstStage, Vk
     if ((usage_ & kTransfer) != kTransfer)
         throw std::logic_error("Image::generateMips() needs TRANSFER_SRC and TRANSFER_DST usage");
     ++mipGenerations_;
-    if (mipLevels_ == 1) {
-        transition(cmd, VK_IMAGE_LAYOUT_GENERAL, dstStage, dstAccess);
-        return;
-    }
 
     // Every level into GENERAL after everything recorded before: level 0's picture is made visible to the
     // first blit's read, and the other levels' earlier reads are done before the blits overwrite them.

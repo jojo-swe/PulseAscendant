@@ -12,9 +12,21 @@ float luminance(vec3 rgb) {
     return dot(rgb, vec3(0.2126, 0.7152, 0.0722));
 }
 
-// A comparison rather than isnan/isinf: false for NaN and for either infinity.
+// From the bits rather than isnan/isinf (which fast-math compilers may fold away): false for NaN and for
+// either infinity, whose exponent bits are all set.
 bool isFinite(float x) {
-    return abs(x) <= 3.0e38;
+    return (floatBitsToUint(x) & 0x7F800000u) != 0x7F800000u;
+}
+
+// A primary hit: positive, finite linear depth. A miss is -1; NaN or infinity counts as a miss too.
+bool isHit(float depth) {
+    return depth > 0.0 && isFinite(depth);
+}
+
+// The normal edge stop max(0, dot)^sigma, 0 for a NaN dot product.
+float normalWeight(vec3 a, vec3 b, float sigma) {
+    float d = dot(a, b);
+    return d > 0.0 ? pow(d, sigma) : 0.0;
 }
 
 // Each component that is NaN or infinite becomes 0.
@@ -29,9 +41,9 @@ vec3 safeAlbedo(vec3 albedo) {
 }
 
 // Demodulated illumination: lighting / max(albedo, 1e-3), a non-finite sample counting as 0 first, clamped
-// to the half range.
+// to [0, half maximum] (radiance is never negative, and a huge negative value would store as -Inf).
 vec3 demodulate(vec3 lighting, vec3 albedo) {
-    return min(finiteOrZero(lighting) / max(safeAlbedo(albedo), vec3(1e-3)), vec3(kHalfMax));
+    return clamp(finiteOrZero(lighting) / max(safeAlbedo(albedo), vec3(1e-3)), vec3(0.0), vec3(kHalfMax));
 }
 
 #endif

@@ -4,8 +4,10 @@
 // frame's history through the motion guide and blends it in, and keeps luminance moments for the variance
 // the à-trous passes stop at (see src/post/denoiser.hpp for the rules).
 //
-// History (ping-pong, RGBA16F): colour = RGB illumination + A variance; moments = R length, G m1, B m2;
-// guides = XYZ normal + W depth, what the next frame validates its taps against.
+// History (ping-pong, RGBA16F): colour = RGB illumination + A variance; moments = R length, G mean
+// luminance, B temporal luminance variance; guides = XYZ normal + W depth, what the next frame validates its
+// taps against. The moments keep the variance itself rather than the second moment m2: the square of a
+// bright luminance (500^2) is beyond the half range, and m2 - m1^2 would cancel catastrophically anyway.
 
 #extension GL_GOOGLE_include_directive : require
 
@@ -41,13 +43,112 @@ const float kDepthTolerance = 0.05; // |z_prev - z| <= 0.05 z
 const float kNormalTolerance = 0.9; // dot(n_prev, n) >= 0.9
 const float kMinTapWeight = 0.01;   // less bilinear weight than this on valid taps counts as no history
 const int kSpatialRadius = 2;       // the 5x5 neighbourhood that stands in for short histories
+const int kSpatialWidth = 2 * kSpatialRadius + 1;
+const float kMinSpatialWeight = 4.0; // see spatialVariance()
 
 bool inside(ivec2 q) {
     return q.x >= 0 && q.y >= 0 && q.x < int(pc.width) && q.y < int(pc.height);
 }
 
-float illuminationLuminance(ivec2 q) {
-    return luminance(demodulate(imageLoad(lightingImage, q).rgb, imageLoad(albedoImage, q).rgb));
+// The 5x5 neighbourhood of the current frame: each pixel's illumination luminance and its weight, 1 for the
+// centre, else the depth and normal edge stops against the centre (as the à-trous at step 1), 0 for a pixel
+// outside the image or a miss.
+float neighbourLuminance[kSpatialWidth * kSpatialWidth];
+float neighbourWeight[kSpatialWidth * kSpatialWidth];
+
+int neighbourIndex(int dx, int dy) {
+    return (dy + kSpatialRadius) * kSpatialWidth + dx + kSpatialRadius;
+}
+
+void loadNeighbourhood(ivec2 p, float lum, float depth, vec3 normal) {
+    for (int dy = -kSpatialRadius; dy <= kSpatialRadius; ++dy) {
+        for (int dx = -kSpatialRadius; dx <= kSpatialRadius; ++dx) {
+            int i = neighbourIndex(dx, dy);
+            ivec2 q = p + ivec2(dx, dy);
+            neighbourLuminance[i] = lum;
+            neighbourWeight[i] = 0.0;
+            if (dx == 0 && dy == 0) {
+                neighbourWeight[i] = 1.0;
+                continue;
+            }
+            if (!inside(q)) {
+                continue;
+            }
+            float qDepth = imageLoad(depthImage, q).r;
+            if (!isHit(qDepth)) {
+                continue;
+            }
+            float phiDepth = pc.sigmaDepth * 0.01 * max(depth, 1e-3) * float(max(abs(dx), abs(dy)));
+            neighbourWeight[i] = exp(-abs(qDepth - depth) / phiDepth) *
+                                 normalWeight(normal, imageLoad(normalImage, q).xyz, pc.sigmaNormal);
+            neighbourLuminance[i] =
+                luminance(demodulate(imageLoad(lightingImage, q).rgb, imageLoad(albedoImage, q).rgb));
+        }
+    }
+}
+
+// The luminance variance of one frame from its neighbourhood, for pixels whose history is too short for
+// temporal moments (every pixel at export). A plain 5x5 variance counts any edge in the lighting as noise
+// (a shadow edge on one surface: same depth, same normal) and the à-trous then blurs straight across it, so
+// the estimate is the smaller of two that ignore structure the centre is not part of:
+//   - Kuwahara: the smallest variance of the four 3x3 quadrants that have the centre as a corner. One of
+//     them lies on the centre's side of a straight edge or inside a corner.
+//   - Differences: the smallest, over four directions (horizontal, vertical, both diagonals), of half the
+//     mean squared difference between neighbouring pixels. Along an edge or a thin line the differences are
+//     noise only; for independent noise half the mean squared difference is the variance, however sparse
+//     the noise (where a quadrant of zeros would fool Kuwahara alone).
+// Both are weighted by the depth and normal stops, so geometry edges are excluded as before. A quadrant or
+// direction counts only with a total weight of kMinSpatialWeight (a quadrant cut off by the image border or
+// by other geometry would hold one or two pixels and claim no noise); with none left the variance is 0.
+float spatialVariance() {
+    float best = -1.0;
+    for (int sy = -1; sy <= 1; sy += 2) {
+        for (int sx = -1; sx <= 1; sx += 2) {
+            float sumWeight = 0.0, sum = 0.0;
+            for (int j = 0; j <= kSpatialRadius; ++j) {
+                for (int i = 0; i <= kSpatialRadius; ++i) {
+                    int k = neighbourIndex(sx * i, sy * j);
+                    sumWeight += neighbourWeight[k];
+                    sum += neighbourWeight[k] * neighbourLuminance[k];
+                }
+            }
+            if (sumWeight < kMinSpatialWeight) {
+                continue;
+            }
+            float mean = sum / sumWeight;
+            float spread = 0.0;
+            for (int j = 0; j <= kSpatialRadius; ++j) {
+                for (int i = 0; i <= kSpatialRadius; ++i) {
+                    int k = neighbourIndex(sx * i, sy * j);
+                    float d = neighbourLuminance[k] - mean;
+                    spread += neighbourWeight[k] * d * d;
+                }
+            }
+            best = best < 0.0 ? spread / sumWeight : min(best, spread / sumWeight);
+        }
+    }
+    const ivec2 directions[4] = ivec2[4](ivec2(1, 0), ivec2(0, 1), ivec2(1, 1), ivec2(1, -1));
+    for (int e = 0; e < 4; ++e) {
+        float sumWeight = 0.0, sum = 0.0;
+        for (int dy = -kSpatialRadius; dy <= kSpatialRadius; ++dy) {
+            for (int dx = -kSpatialRadius; dx <= kSpatialRadius; ++dx) {
+                ivec2 b = ivec2(dx, dy) + directions[e];
+                if (abs(b.x) > kSpatialRadius || abs(b.y) > kSpatialRadius) {
+                    continue;
+                }
+                int ka = neighbourIndex(dx, dy), kb = neighbourIndex(b.x, b.y);
+                float w = neighbourWeight[ka] * neighbourWeight[kb];
+                float d = neighbourLuminance[ka] - neighbourLuminance[kb];
+                sumWeight += w;
+                sum += w * d * d;
+            }
+        }
+        if (sumWeight >= kMinSpatialWeight) {
+            float v = 0.5 * sum / sumWeight;
+            best = best < 0.0 ? v : min(best, v);
+        }
+    }
+    return max(best, 0.0);
 }
 
 void main() {
@@ -60,99 +161,85 @@ void main() {
     vec3 normal = imageLoad(normalImage, p).xyz;
     float depth = imageLoad(depthImage, p).r;
     vec4 motion = imageLoad(motionImage, p);
-
+    bool hit = isHit(depth);
     float lum = luminance(illumination);
-    float m1 = lum;
-    float m2 = min(lum * lum, kHalfMax);
 
     // Reprojection: the previous pixel centre's 2x2 bilinear footprint, each tap kept when it is inside and
-    // its guides match.
+    // its guides match. The guide tests are positive (a NaN guide never matches).
     bool valid = false;
     vec3 prevIllumination = vec3(0.0);
-    vec2 prevMoment = vec2(0.0);
-    float prevLength = 0.0;
-    if (pc.useHistory != 0u && motion.z > 0.5 && depth > 0.0) {
+    float prevLength = 0.0, prevMean = 0.0, prevVariance = 0.0;
+    if (pc.useHistory != 0u && motion.z > 0.5 && hit) {
         vec2 base = vec2(p) + motion.xy; // previous centre - 0.5, in texel coordinates
         ivec2 origin = ivec2(floor(base));
         vec2 f = base - vec2(origin);
         float weights[4] = float[4]((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
         ivec2 offsets[4] = ivec2[4](ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1));
+        float tapMean[4] = float[4](0.0, 0.0, 0.0, 0.0);
+        float tapVariance[4] = float[4](0.0, 0.0, 0.0, 0.0);
         float sumWeight = 0.0;
         for (int i = 0; i < 4; ++i) {
             ivec2 q = origin + offsets[i];
-            if (weights[i] <= 0.0 || !inside(q)) {
-                continue;
+            bool keep = false;
+            if (weights[i] > 0.0 && inside(q)) {
+                vec4 guide = imageLoad(prevGuides, q);
+                keep = abs(guide.w - depth) <= kDepthTolerance * depth &&
+                       dot(guide.xyz, normal) >= kNormalTolerance;
             }
-            vec4 guide = imageLoad(prevGuides, q);
-            if (abs(guide.w - depth) > kDepthTolerance * depth || dot(guide.xyz, normal) < kNormalTolerance) {
+            if (!keep) {
+                weights[i] = 0.0;
                 continue;
             }
             vec4 moments = imageLoad(prevMoments, q);
             prevIllumination += weights[i] * imageLoad(prevColor, q).rgb;
-            prevMoment += weights[i] * moments.gb;
             prevLength += weights[i] * moments.r;
+            prevMean += weights[i] * moments.g;
+            tapMean[i] = moments.g;
+            tapVariance[i] = moments.b;
             sumWeight += weights[i];
         }
         if (sumWeight >= kMinTapWeight) {
             valid = true;
             prevIllumination /= sumWeight;
-            prevMoment /= sumWeight;
             prevLength /= sumWeight;
+            prevMean /= sumWeight;
+            // The variance of the taps' mixture: their variances plus the spread of their means.
+            for (int i = 0; i < 4; ++i) {
+                float d = tapMean[i] - prevMean;
+                prevVariance += weights[i] * (tapVariance[i] + d * d);
+            }
+            prevVariance /= sumWeight;
         }
     }
 
     // A select, not a blend with alpha 1: the first frame of a history copies the current value exactly.
     float historyLength = valid ? min(prevLength + 1.0, float(pc.maxHistory)) : 1.0;
     vec3 color = illumination;
+    float mean = lum;
+    float temporalVariance = 0.0;
     if (valid) {
         float alpha = max(pc.alphaColor, 1.0 / historyLength);
         float alphaMoments = max(pc.alphaMoments, 1.0 / historyLength);
         color = mix(prevIllumination, illumination, alpha);
-        m1 = mix(prevMoment.x, m1, alphaMoments);
-        m2 = mix(prevMoment.y, m2, alphaMoments);
+        // The exponentially weighted mean and variance; the same as blending m1 and m2 and taking
+        // m2 - m1^2, without the squares.
+        float delta = lum - prevMean;
+        mean = prevMean + alphaMoments * delta;
+        temporalVariance = (1.0 - alphaMoments) * (prevVariance + alphaMoments * delta * delta);
     }
 
-    float variance;
-    if (historyLength >= 4.0) {
-        variance = max(m2 - m1 * m1, 0.0);
-    } else {
-        // Too few frames for temporal moments: the moments of the 5x5 neighbourhood on the same surface
-        // (weighted like the à-trous edge stops at step 1), boosted while the history is short.
-        float sumWeight = 0.0, s1 = 0.0, s2 = 0.0;
-        if (depth > 0.0) {
-            for (int dy = -kSpatialRadius; dy <= kSpatialRadius; ++dy) {
-                for (int dx = -kSpatialRadius; dx <= kSpatialRadius; ++dx) {
-                    ivec2 q = p + ivec2(dx, dy);
-                    if (!inside(q)) {
-                        continue;
-                    }
-                    float qDepth = imageLoad(depthImage, q).r;
-                    if (qDepth <= 0.0) {
-                        continue;
-                    }
-                    float distance = float(max(abs(dx), abs(dy)));
-                    float w = 1.0;
-                    if (distance > 0.0) {
-                        float phiDepth = pc.sigmaDepth * 0.01 * max(depth, 1e-3) * distance;
-                        w = exp(-abs(qDepth - depth) / phiDepth) *
-                            pow(max(0.0, dot(normal, imageLoad(normalImage, q).xyz)), pc.sigmaNormal);
-                    }
-                    float l = distance > 0.0 ? illuminationLuminance(q) : lum;
-                    sumWeight += w;
-                    s1 += w * l;
-                    s2 += w * min(l * l, kHalfMax);
-                }
-            }
-        }
+    float variance = temporalVariance;
+    if (historyLength < 4.0) {
+        // Too few frames for temporal moments: the edge-robust spatial estimate, boosted while the history
+        // is short (x4 at length 1, as SVGF) so a fresh history is filtered harder.
         variance = 0.0;
-        if (sumWeight > 0.0) {
-            s1 /= sumWeight;
-            s2 /= sumWeight;
-            variance = max(s2 - s1 * s1, 0.0) * (4.0 / historyLength);
+        if (hit) {
+            loadNeighbourhood(p, lum, depth, normal);
+            variance = spatialVariance() * (4.0 / historyLength);
         }
     }
 
     imageStore(outColor, p, vec4(min(color, vec3(kHalfMax)), min(variance, kHalfMax)));
-    imageStore(outMoments, p, vec4(historyLength, m1, m2, 0.0));
+    imageStore(outMoments, p, vec4(historyLength, min(mean, kHalfMax), min(temporalVariance, kHalfMax), 0.0));
     imageStore(outGuides, p, vec4(normal, depth));
 }
