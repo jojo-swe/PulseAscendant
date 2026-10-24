@@ -20,6 +20,13 @@ layout(scalar, set = 0, binding = 3) readonly buffer Vertices { Vertex vertices[
 layout(scalar, set = 0, binding = 4) readonly buffer MeshRecords { MeshRecord meshRecords[]; };
 layout(scalar, set = 0, binding = 5) writeonly buffer Words { uint words[]; };
 layout(scalar, set = 0, binding = 6) readonly buffer Frames { FrameUniforms frames[]; };
+layout(scalar, set = 0, binding = 7) readonly buffer Transforms { Mat34 transforms[]; };
+layout(scalar, set = 0, binding = 8) readonly buffer Environments { EnvironmentUniforms environments[]; };
+layout(scalar, set = 0, binding = 9) readonly buffer Media { MediumUniforms media[]; };
+layout(scalar, set = 0, binding = 10) readonly buffer Spheres { SphereRecord spheres[]; };
+layout(scalar, set = 0, binding = 11) readonly buffer TreeLights { TreeLight treeLights[]; };
+layout(scalar, set = 0, binding = 12) readonly buffer TreeNodes { LightTreeNode treeNodes[]; };
+layout(scalar, set = 0, binding = 13) readonly buffer Lenses { LensingUniforms lenses[]; };
 
 const uint kElements = 2;
 
@@ -44,6 +51,11 @@ void put3(vec3 v) {
     putF(v.z);
 }
 
+void put4(vec4 v) {
+    put3(v.xyz);
+    putF(v.w);
+}
+
 void main() {
     for (uint e = 0; e < kElements; ++e) {
         Material m = materials[e];
@@ -61,6 +73,10 @@ void main() {
         putF(m.patternScale);
         put3(m.baseColor2);
         putU(m.materialClass);
+        putU(m.flags);
+        putF(m.abbe);
+        putU(m.medium);
+        putF(m.pad);
     }
     for (uint e = 0; e < kElements; ++e) {
         RectLight l = lights[e];
@@ -71,14 +87,14 @@ void main() {
         putU(l.kind);
         putF(l.selectWeight);
         putF(l.area);
-        putU(l.pad);
+        putU(l.gate);
     }
     for (uint e = 0; e < kElements; ++e) {
         InstanceRecord r = instances[e];
         putU(r.mesh);
         putU(r.material);
         putU(r.light);
-        putU(r.pad);
+        putU(r.flags);
     }
     for (uint e = 0; e < kElements; ++e) {
         Vertex v = vertices[e];
@@ -121,8 +137,78 @@ void main() {
         putU(f.instanceCount);
         putF(f.clampIndirect);
         putF(f.lightWeightSum);
-        putU(f.pad0);
-        putU(f.pad1);
+        putF(f.regularizeRoughness);
+        putU(f.treeLightCount);
+        putU(f.mediumFlags);
+        putU(f.causticReceivers);
+        putU(f.lensing);
+        putU(f.pad2);
+        putF(f.shutterOffset);
+        putF(f.environmentSelect);
+        putU(f.sliceIndex);
+        putU(f.sliceCount);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        Mat34 m = transforms[e];
+        put4(m.rows[0]);
+        put4(m.rows[1]);
+        put4(m.rows[2]);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        EnvironmentUniforms v = environments[e];
+        putU(v.kind);
+        putF(v.intensity);
+        putF(v.discCosRadius);
+        putF(v.discShare);
+        put3(v.discDirection);
+        putF(v.domeShare);
+        put3(v.discRadiance);
+        putF(v.starDensity);
+        put3(v.zenith);
+        putF(v.starBrightness);
+        put3(v.horizon);
+        putF(v.townDensity);
+        put3(v.ground);
+        putF(v.haze);
+        put3(v.glowDirection);
+        putF(v.glowStrength);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        for (uint k = 0; k < 32; ++k) {
+            putU(media[e].words[k]);
+        }
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        SphereRecord v = spheres[e];
+        put3(v.center);
+        putF(v.radius);
+        put3(v.color);
+        putU(v.material);
+        put3(v.prevCenter);
+        putF(v.emission);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        TreeLight v = treeLights[e];
+        put3(v.center);
+        putF(v.radius);
+        put3(v.emission);
+        putU(v.sphere);
+        putU(v.trail);
+        putU(v.depth);
+        putU(v.pad0);
+        putU(v.pad1);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        LightTreeNode v = treeNodes[e];
+        put3(v.boundsMin);
+        putF(v.power);
+        put3(v.boundsMax);
+        putU(v.child);
+    }
+    for (uint e = 0; e < kElements; ++e) {
+        for (uint k = 0; k < 8; ++k) {
+            putU(lenses[e].words[k]);
+        }
     }
 
     putU(kMaterialPbr);
@@ -140,6 +226,16 @@ void main() {
     putU(kLightPortal);
     putU(kTraceFlagNee);
     putU(kTraceFlagRussianRoulette);
+    putU(kNoMedium);
+    putU(kMaterialCameraOnlyEmission);
+    putU(kMaterialCausticReceiver);
+    putU(kMaterialThinWalled);
+    putU(kLightTree);
+    putU(kInstanceSpheres);
+    putU(kInstanceDynamicSpheres);
+    putU(kGeometryTriangles);
+    putU(kGeometrySpheres);
+    putU(kHitGroupsPerKind);
 
     // random.glsl's hash, against the CPU mirror rt::pcgHash (material_test's kHashInputs).
     const uint hashInputs[8] = uint[8](0u, 1u, 2u, 48000u, 0x9E3779B9u, 0x7FFFFFFFu, 0xFFFFFFFFu, 123456789u);

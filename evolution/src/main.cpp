@@ -42,17 +42,6 @@ std::vector<std::string> utf8Arguments(int argc, char** argv) {
     return std::vector<std::string>(argv + 1, argv + argc);
 }
 
-// The name of the 2026 scene an effect renders, for --show-info.
-const char* sceneName(evo::show::Effect effect) {
-    switch (evo::modern::sceneFor(effect)) {
-    case evo::modern::SceneId::Placeholder:
-        return "Placeholder";
-    case evo::modern::SceneId::Studio:
-        return "Studio";
-    }
-    return "?";
-}
-
 // Exit codes: 0 success, 1 error, 2 the machine cannot run EVOLUTION. main() adds 3.
 int run(const evo::Options& options) {
     try {
@@ -93,7 +82,7 @@ int main(int argc, char** argv) {
     }
     // Needs neither SDL video nor Vulkan: the show is compiled in.
     if (options.showInfo) {
-        std::printf("%s\n", evo::show::showInfoJson(sceneName).c_str());
+        std::printf("%s\n", evo::show::showInfoJson(evo::modern::effectSceneName).c_str());
         return 0;
     }
 

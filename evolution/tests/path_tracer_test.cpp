@@ -183,19 +183,20 @@ Plane finishRead(const PendingRead& read) {
     return plane;
 }
 
-// A path tracer for one scene with its own frame ring (declared first: the tracer's TLAS waits for the ring's
-// frames when it goes, before the ring itself).
+// A path tracer for one scene with its own frame ring (the scene's GPU side and the ring are declared first:
+// the tracer's TLAS waits for the ring's frames when it goes, before the BLASes and the ring themselves).
 class Tracer {
 public:
     Tracer(gfx::Context& ctx, const TestScene& scene, std::uint32_t width, std::uint32_t height)
-        : ctx_(ctx), ring_(ctx), tracer_(ctx, ring_, scene.statics, width, height) {}
+        : ctx_(ctx), gpu_(ctx, scene.statics), ring_(ctx),
+          tracer_(ctx, ring_, width, height, modern::tracerCapacity(scene.statics.capacity)) {}
 
     // afterTrace runs between the trace and the readback, in the same frame.
     Frame trace(const modern::SceneFrame& frame, const TraceSettings& settings, gfx::Image& retro,
                 const std::optional<Camera>& previous = std::nullopt,
                 const std::function<void(VkCommandBuffer)>& afterTrace = {}) {
         VkCommandBuffer cmd = ring_.begin();
-        tracer_.trace(cmd, frame, previous, settings, retro);
+        tracer_.trace(cmd, gpu_, frame, previous, settings, &retro);
         if (afterTrace)
             afterTrace(cmd);
         modern::GBuffer& g = tracer_.gbuffer();
@@ -209,10 +210,13 @@ public:
     }
 
     modern::PathTracer& pathTracer() { return tracer_; }
+    const modern::SceneGpu& scene() const { return gpu_; }
+    bool samplesRetro() const { return gpu_.samplesRetro(); }
     gfx::FrameRing& ring() { return ring_; }
 
 private:
     gfx::Context& ctx_;
+    modern::SceneGpu gpu_;
     gfx::FrameRing ring_;
     modern::PathTracer tracer_;
 };
@@ -767,7 +771,7 @@ void testStress(gfx::Context& ctx) {
     gfx::Image retro = makeRetro(ctx, 255, 255, 255);
     {
         Tracer tracer(ctx, scene, 64, 64);
-        CHECK(tracer.pathTracer().samplesRetro());
+        CHECK(tracer.samplesRetro());
         for (bool nee : {true, false}) {
             const Frame f =
                 tracer.trace(scene.frame, {.spp = 4, .maxBounces = 6, .frameSeed = 77, .nee = nee}, retro,
@@ -859,7 +863,7 @@ void testRetroScreen(gfx::Context& ctx) {
     Frame withRed, withGreen;
     {
         Tracer tracer(ctx, scene, 64, 64);
-        CHECK(tracer.pathTracer().samplesRetro());
+        CHECK(tracer.samplesRetro());
         const TraceSettings settings{.spp = 16, .frameSeed = 9};
         withRed = tracer.trace(scene.frame, settings, red);
         withGreen = tracer.trace(scene.frame, settings, green);
@@ -917,30 +921,48 @@ void testRefusals(gfx::Context& ctx) {
     {
         modern::SceneStatic noMaterials = scene.statics;
         noMaterials.materials.clear();
-        gfx::FrameRing ring(ctx);
-        CHECK(throws<std::invalid_argument>([&] { modern::PathTracer(ctx, ring, noMaterials, 8, 8); }));
+        CHECK(throws<std::invalid_argument>([&] { modern::SceneGpu(ctx, noMaterials); }));
         modern::SceneStatic badClass = scene.statics;
         badClass.materials[0].materialClass = 4;
-        CHECK(throws<std::invalid_argument>([&] { modern::PathTracer(ctx, ring, badClass, 8, 8); }));
-        CHECK(throws<std::invalid_argument>([&] { modern::PathTracer(ctx, ring, scene.statics, 0, 8); }));
+        CHECK(throws<std::invalid_argument>([&] { modern::SceneGpu(ctx, badClass); }));
+        modern::SceneStatic overCapacity = scene.statics;
+        overCapacity.capacity.materials = 2;
+        CHECK(throws<std::invalid_argument>([&] { modern::SceneGpu(ctx, overCapacity); }));
+        gfx::FrameRing ring(ctx);
+        CHECK(throws<std::invalid_argument>([&] { modern::PathTracer(ctx, ring, 0, 8, {}); }));
     }
     idle(ctx);
+    const modern::SceneGpu gpu(ctx, scene.statics);
     gfx::FrameRing ring(ctx);
-    modern::PathTracer tracer(ctx, ring, scene.statics, 8, 8);
-    CHECK(!tracer.samplesRetro());
+    modern::PathTracer tracer(ctx, ring, 8, 8, modern::tracerCapacity(scene.statics.capacity));
+    CHECK(!gpu.samplesRetro());
     CHECK(throws<std::logic_error>(
-        [&] { tracer.trace(VK_NULL_HANDLE, scene.frame, std::nullopt, {}, unused); })); // not recording
+        [&] { tracer.trace(VK_NULL_HANDLE, gpu, scene.frame, std::nullopt, {}, &unused); })); // not recording
     VkCommandBuffer cmd = ring.begin();
     auto refuses = [&](auto exception, modern::SceneFrame frame, TraceSettings settings = {}) {
-        return throws<decltype(exception)>([&] { tracer.trace(cmd, frame, std::nullopt, settings, unused); });
+        return throws<decltype(exception)>(
+            [&] { tracer.trace(cmd, gpu, frame, std::nullopt, settings, &unused); });
     };
     CHECK(refuses(std::invalid_argument(""), scene.frame, {.spp = 0}));
     modern::SceneFrame many = scene.frame;
-    many.instances.resize(modern::PathTracer::kMaxInstances + 1, scene.frame.instances[0]);
+    many.instances.resize(scene.statics.capacity.instances + 1, scene.frame.instances[0]);
     CHECK(refuses(std::length_error(""), many));
     modern::SceneFrame manyLights = scene.frame;
-    manyLights.lights.resize(modern::PathTracer::kMaxLights + 1, scene.frame.lights[0]);
+    manyLights.lights.resize(scene.statics.capacity.lights + 1, scene.frame.lights[0]);
     CHECK(refuses(std::length_error(""), manyLights));
+    // A per-frame material table: its classes are hit groups, and it may not bring the retro screen into a
+    // scene traced without it.
+    modern::SceneFrame badTable = scene.frame;
+    badTable.materials = scene.statics.materials;
+    badTable.materials[2].materialClass = 7;
+    CHECK(refuses(std::invalid_argument(""), badTable));
+    badTable.materials = scene.statics.materials;
+    badTable.materials[2].texture = rt::kRetroScreenTexture;
+    CHECK(refuses(std::invalid_argument(""), badTable));
+    // A sphere instance needs step 5's Task 8.
+    modern::SceneFrame sphere = scene.frame;
+    sphere.instances[0].kind = rt::GeometryKind::Spheres;
+    CHECK(refuses(std::invalid_argument(""), sphere));
     modern::SceneFrame badMesh = scene.frame;
     badMesh.instances[0].mesh = 99;
     CHECK(refuses(std::out_of_range(""), badMesh));
@@ -979,12 +1001,23 @@ void testRefusals(gfx::Context& ctx) {
     badPortal.lights.push_back(modern::rectLightForQuad(test::place({0, 1.9f, 0}, test::kX, 90, {1, 1, 1}), 1,
                                                         1, rt::LightKind::Portal, {0, 0, 0}, 1.f));
     modern::SceneFrame badKind = badPortal;
-    badKind.lights.back().kind = 3;
+    badKind.lights.back().kind = 4; // no LightKind
     CHECK(refuses(std::invalid_argument(""), badKind));
+    badKind.lights.back().kind = 3; // Tree: step 5's Task 12
+    CHECK(refuses(std::invalid_argument(""), badKind));
+    // A gate names a Portal light of the frame (the Cornell box's light 0 is an Emitter).
+    modern::SceneFrame gated = badPortal;
+    gated.lights[0].gate = 0;
+    CHECK(refuses(std::invalid_argument(""), gated));
+    gated.lights[0].gate = 7;
+    CHECK(refuses(std::invalid_argument(""), gated));
     badPortal.lights.back().area = 2.f;
     CHECK(refuses(std::invalid_argument(""), badPortal));
-    // Nothing was recorded: the frame still traces.
-    tracer.trace(cmd, scene.frame, std::nullopt, {}, unused);
+    // Nothing was recorded: the frame still traces, here with the emitter gated by the portal; a second
+    // trace in the frame is refused.
+    gated.lights[0].gate = 1; // the portal
+    tracer.trace(cmd, gpu, gated, std::nullopt, {}, &unused);
+    CHECK(throws<std::logic_error>([&] { tracer.trace(cmd, gpu, scene.frame, std::nullopt, {}, &unused); }));
     ring.wait(ring.submit());
     idle(ctx);
 
@@ -993,8 +1026,10 @@ void testRefusals(gfx::Context& ctx) {
     {
         const TestScene screenScene = test::retroScreenScene();
         gfx::Image retro = makeRetro(ctx, 255, 255, 255);
+        const modern::SceneGpu screenGpu(ctx, screenScene.statics);
         gfx::FrameRing screenRing(ctx);
-        modern::PathTracer screenTracer(ctx, screenRing, screenScene.statics, 8, 8);
+        modern::PathTracer screenTracer(ctx, screenRing, 8, 8,
+                                        modern::tracerCapacity(screenScene.statics.capacity));
         constexpr std::size_t kScreenInstance = 2;
         CHECK(screenScene.frame.instances[kScreenInstance].light == 0);
         VkCommandBuffer screenCmd = screenRing.begin();
@@ -1002,7 +1037,7 @@ void testRefusals(gfx::Context& ctx) {
             modern::SceneFrame frame = screenScene.frame;
             change(frame.lights[0], frame.instances[kScreenInstance]);
             return throws<std::invalid_argument>(
-                [&] { screenTracer.trace(screenCmd, frame, std::nullopt, {}, retro); });
+                [&] { screenTracer.trace(screenCmd, screenGpu, frame, std::nullopt, {}, &retro); });
         };
         // A portal is an opening, not a surface (its emission (2, 2, 2) would pass for the screen's).
         CHECK(screenRefuses(
@@ -1022,7 +1057,10 @@ void testRefusals(gfx::Context& ctx) {
             in.material = 0;
             l.emission[0] = l.emission[1] = l.emission[2] = 1.f;
         }));
-        screenTracer.trace(screenCmd, screenScene.frame, std::nullopt, {}, retro);
+        // A scene that shows the retro screen needs the retro image.
+        CHECK(throws<std::invalid_argument>(
+            [&] { screenTracer.trace(screenCmd, screenGpu, screenScene.frame, std::nullopt, {}, nullptr); }));
+        screenTracer.trace(screenCmd, screenGpu, screenScene.frame, std::nullopt, {}, &retro);
         screenRing.wait(screenRing.submit());
         idle(ctx);
     }
@@ -1042,7 +1080,8 @@ void testSecondTrace(gfx::Context& ctx) {
     moved.camera.eye.x += 0.3f;
     const Frame twice = tracer.trace(scene.frame, settings, unused, std::nullopt, [&](VkCommandBuffer cmd) {
         CHECK(throws<std::logic_error>([&] {
-            tracer.pathTracer().trace(cmd, moved, std::nullopt, {.spp = 2, .frameSeed = 5}, unused);
+            tracer.pathTracer().trace(cmd, tracer.scene(), moved, std::nullopt, {.spp = 2, .frameSeed = 5},
+                                      &unused);
         }));
     });
     for (std::size_t i = 0; i < 6; ++i)

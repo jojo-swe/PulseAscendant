@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <span>
 #include <vector>
 
 namespace evo {
@@ -53,12 +54,12 @@ int runCapture(const Options& options) {
     render::RenderSettings settings{width, height, options.crt, options.hud};
     settings.mode = render::RenderMode::Export;
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
+    settings.detail = modern::SceneDetail{options.detail};
     render::Renderer renderer(ctx, ring, settings);
     show::TimelineFrame frame = show::sampleTimeline(options.time);
     applyForcedEra(frame);
-    // A Studio chapter's GPU side (BLASes, pipeline, denoiser images) as setup, before the frame.
-    if (modern::sceneFor(frame.effect) != modern::SceneId::Placeholder)
-        renderer.prepare();
+    // The frame's path-traced scene (BLASes, pipeline, denoiser images) as setup, before the frame.
+    renderer.prepare(std::span<const double>(&options.time, 1));
     VkCommandBuffer cmd = ring.begin();
     renderer.render(cmd, frame);
     readback.record(cmd, renderer.output());

@@ -158,4 +158,6 @@ vec3 materialEmission(Material m) {
     return m.emission * m.emissionScale;
 }
 
+#include "caustics.glsl" // causticRadiance(HitPoint), Task 13's hook
+
 #endif

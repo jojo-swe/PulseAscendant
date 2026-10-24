@@ -4,6 +4,7 @@
 #include "text/font8x8.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -90,7 +91,8 @@ Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings
     : ring_(ring), crt_(checked(settings).crt), hud_(settings.hud), hudTitle_(settings.hudTitle),
       mode_(settings.mode), spp_(settings.spp),
       maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)), text_(ctx, ring),
-      retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height),
+      retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height, settings.detail,
+                                        settings.sceneFactory, settings.sceneMap),
       compositor_(ctx, ring, text_, settings.width, settings.height) {}
 
 Renderer::~Renderer() {
@@ -111,6 +113,17 @@ void Renderer::resize(std::uint32_t width, std::uint32_t height) {
     modern_.resize(width, height);
     compositor_.resize(width, height);
     history_.markResize(); // reported even if the size is back to the last frame's when the stage runs
+}
+
+void Renderer::prepare(std::span<const double> showSeconds) {
+    std::array<bool, modern::kSceneCount> done{};
+    for (const double seconds : showSeconds) {
+        const modern::SceneId id = modern_.sceneOf(show::sampleTimeline(seconds).effect);
+        bool& prepared = done[static_cast<std::size_t>(id)];
+        if (!prepared)
+            modern_.prepare(id);
+        prepared = true;
+    }
 }
 
 void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {

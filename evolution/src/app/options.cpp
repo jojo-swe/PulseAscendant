@@ -44,6 +44,20 @@ double parseSeconds(const std::string& flag, const std::string& text) {
     return value;
 }
 
+// --detail: a fraction in (0, 1].
+float parseDetail(const std::string& flag, const std::string& text) {
+    double value = 0.0;
+    const char* end = text.data() + text.size();
+    auto [ptr, error] = std::from_chars(text.data(), end, value);
+    if (error != std::errc() || ptr != end || !std::isfinite(value)) {
+        throw std::runtime_error(flag + " expects a number, got '" + text + "'");
+    }
+    if (!(value > 0.0 && value <= 1.0)) {
+        throw std::runtime_error(flag + " must be greater than 0 and at most 1, got " + text);
+    }
+    return static_cast<float>(value);
+}
+
 // --audio-offset: a signed number of milliseconds within +-kMaxAudioOffsetMs.
 double parseAudioOffset(const std::string& flag, const std::string& text) {
     double value = 0.0;
@@ -81,6 +95,8 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.fps = parseInt(flag, nextValue(), kMinFps, kMaxFps);
         } else if (flag == "--spp") {
             options.spp = parseInt(flag, nextValue(), kMinSpp, kMaxSpp);
+        } else if (flag == "--detail") {
+            options.detail = parseDetail(flag, nextValue());
         } else if (flag == "--time") {
             const std::string& text = nextValue();
             options.time = parseSeconds(flag, text);
@@ -162,6 +178,8 @@ std::string helpText() {
            "  --spp N              Path-traced samples per pixel per frame, 1..4096 (default 1 in\n"
            "                       the window, which accumulates them over frames; 64 for\n"
            "                       --capture-dir and --render-stream, where every frame stands alone)\n"
+           "  --detail F           Detail of the 2026 scenes, 0 < F <= 1 (default 1): particle,\n"
+           "                       splat, voxel and photon counts scale with it (for quick tests)\n"
            "  --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream\n"
            "                       needs a duration greater than 0\n"
            "  --headless           Render without opening a window\n"

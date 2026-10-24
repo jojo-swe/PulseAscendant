@@ -136,9 +136,19 @@ int main() {
         CHECK(!parseError({"--spp", "2.5"}).empty());
         CHECK(parseError({"--spp"}) == "--spp needs a value");
 
+        // --detail: the 2026 scenes' detail, 0 < F <= 1, default 1.
+        CHECK(defaults.detail == 1.f);
+        CHECK(evo::parseOptions({"--detail", "0.004"}).detail == 0.004f);
+        CHECK(evo::parseOptions({"--detail", "1"}).detail == 1.f);
+        CHECK(parseError({"--detail", "0"}) == "--detail must be greater than 0 and at most 1, got 0");
+        CHECK(parseError({"--detail", "1.5"}) == "--detail must be greater than 0 and at most 1, got 1.5");
+        CHECK(!parseError({"--detail", "-0.5"}).empty());
+        CHECK(parseError({"--detail", "x"}) == "--detail expects a number, got 'x'");
+        CHECK(parseError({"--detail"}) == "--detail needs a value");
+
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
         for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset",
-                                 "--no-crt", "--no-hud", "--spp"})
+                                 "--no-crt", "--no-hud", "--spp", "--detail"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);

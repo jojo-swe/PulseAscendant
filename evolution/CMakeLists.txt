@@ -173,14 +173,17 @@ add_library(evo_modern STATIC
     src/modern/mesh_builder.cpp
     src/modern/path_tracer.cpp
     src/modern/scene.cpp
+    src/modern/scene_gpu.cpp
     src/modern/scenes.cpp
     src/modern/studio.cpp)
 target_include_directories(evo_modern PUBLIC src)
 target_link_libraries(evo_modern PUBLIC evo_rt)
 target_link_libraries(evo_modern PUBLIC evo_show) # the scene interface reads show::TimelineFrame
 
-# The path tracer's shaders (rt_<name>.<stage>.spv beside the executable); anything linking evo_modern builds
-# them.
+# The path tracer's shaders (rt_<name>.<stage>.spv beside the executable), and the 2026 scenes' compute
+# shaders: every shaders/modern/<scene>_<what>.comp loads as modern_<scene>_<what>.comp.spv (a scene task adds
+# its file; the directory is globbed). Anything linking evo_modern builds them.
+file(GLOB EVO_MODERN_SCENE_SHADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/modern/*.comp")
 evo_add_shaders(evo_modern
     shaders/rt/pathtrace.rgen
     shaders/rt/sky.rmiss
@@ -188,7 +191,8 @@ evo_add_shaders(evo_modern
     shaders/rt/pbr.rchit
     shaders/rt/glass.rchit
     shaders/rt/emissive.rchit
-    shaders/rt/checker.rchit)
+    shaders/rt/checker.rchit
+    ${EVO_MODERN_SCENE_SHADERS})
 
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.
@@ -758,3 +762,54 @@ target_compile_definitions(seek_determinism_test PRIVATE EVO_TEST_SHADER_DIR="${
 add_dependencies(seek_determinism_test Evolution_shaders evo_modern_shaders)
 add_test(NAME seek_determinism COMMAND seek_determinism_test)
 set_tests_properties(seek_determinism PROPERTIES TIMEOUT 300)
+
+# --- Step 5: the shared path tracer, the scene table and the scene tests -----------------------------------
+
+# evo_gpu_test(<name> <executable> [TIMEOUT seconds] [PROCESSORS n]): a heavy lavapipe test (path tracing, many
+# frames). It runs with the build's shaders (EVO_TEST_SHADER_DIR) and the test output directory
+# (EVO_TEST_OUT_DIR), TIMEOUT 300 and PROCESSORS 2 by default (so CTest overlaps fewer of them), and is
+# reported skipped when the layer lacks synchronization validation ("SKIP sync validation").
+function(evo_gpu_test name exe)
+    cmake_parse_arguments(PARSE_ARGV 2 arg "" "TIMEOUT;PROCESSORS" "")
+    if(NOT arg_TIMEOUT)
+        set(arg_TIMEOUT 300)
+    endif()
+    if(NOT arg_PROCESSORS)
+        set(arg_PROCESSORS 2)
+    endif()
+    target_compile_definitions(${exe} PRIVATE
+        EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+        EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
+    add_dependencies(${exe} Evolution_shaders evo_modern_shaders)
+    add_test(NAME ${name} COMMAND ${exe})
+    set_tests_properties(${name} PROPERTIES TIMEOUT ${arg_TIMEOUT} PROCESSORS ${arg_PROCESSORS}
+                                            SKIP_REGULAR_EXPRESSION "SKIP sync validation")
+endfunction()
+
+# The scene test fixture (tests/scene_fixture.hpp): checkChapterPictures and checkSceneSweep, the standard
+# checks every step 5 scene test runs.
+add_library(evo_scene_fixture STATIC tests/scene_fixture.cpp)
+target_link_libraries(evo_scene_fixture PUBLIC evo_render evo_modern)
+target_include_directories(evo_scene_fixture PUBLIC tests)
+
+# evo_scene_test(<scene>): tests/scene_<scene>_test.cpp as the CTest test scene_<scene>, linked with the
+# fixture: evo_gpu_test(scene_<scene> scene_<scene>_test TIMEOUT 300 PROCESSORS 2).
+function(evo_scene_test scene)
+    add_executable(scene_${scene}_test tests/scene_${scene}_test.cpp)
+    target_link_libraries(scene_${scene}_test PRIVATE evo_scene_fixture)
+    evo_gpu_test(scene_${scene} scene_${scene}_test TIMEOUT 300 PROCESSORS 2)
+endfunction()
+
+# The scene table (CPU): a row per effect, the Studio's five chapters, names, --show-info's scene field, the
+# Studio's camera() against its frames, and the fixture's sweep over the Studio's chapters.
+add_executable(scene_table_test tests/scene_table_test.cpp)
+target_link_libraries(scene_table_test PRIVATE evo_scene_fixture)
+add_test(NAME scene_table COMMAND scene_table_test)
+
+# One path tracer and one denoiser across scenes (Task 1 of step 5), with synchronization validation: a Studio
+# frame after another scene equals a fresh one, one pipeline for two scenes, image memory independent of the
+# scene count, per-frame materials, instance capacities, shotFor without frame(), and the fixture's picture
+# checks on the Studio.
+add_executable(shared_tracer_test tests/shared_tracer_test.cpp)
+target_link_libraries(shared_tracer_test PRIVATE evo_scene_fixture)
+evo_gpu_test(shared_tracer shared_tracer_test)

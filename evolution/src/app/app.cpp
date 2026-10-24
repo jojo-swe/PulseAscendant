@@ -195,8 +195,9 @@ int runWindowed(const Options& options) {
     settings.hudTitle = true;
     settings.mode = render::RenderMode::Interactive;
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
+    settings.detail = modern::SceneDetail{options.detail};
     render::Renderer renderer(ctx, ring, settings);
-    renderer.prepare(); // the Studio's BLASes and pipeline now, not as a hitch in chapter 9
+    renderer.prepareAll(); // every scene's BLASes and the pipeline now, not as a hitch at a chapter start
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
@@ -304,16 +305,14 @@ int runRenderStream(const Options& options) {
     render::RenderSettings settings{width, height, options.crt, options.hud};
     settings.mode = render::RenderMode::Export;
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
+    settings.detail = modern::SceneDetail{options.detail};
     render::Renderer renderer(ctx, ring, settings);
-    // When the range shows the Studio, its GPU side (BLASes, pipeline, denoiser images) as setup, before the
-    // first frame.
+    // The GPU side of every path-traced scene the range shows (BLASes, and on the first the pipeline and the
+    // shared images) as setup, before the first frame.
+    std::vector<double> times(static_cast<std::size_t>(frames));
     for (long i = 0; i < frames; ++i)
-        if (modern::sceneFor(
-                show::sampleTimeline(options.time + static_cast<double>(i) / options.fps).effect) !=
-            modern::SceneId::Placeholder) {
-            renderer.prepare();
-            break;
-        }
+        times[static_cast<std::size_t>(i)] = options.time + static_cast<double>(i) / options.fps;
+    renderer.prepare(times);
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();
         show::TimelineFrame frame = show::sampleTimeline(options.time + static_cast<double>(i) / options.fps);

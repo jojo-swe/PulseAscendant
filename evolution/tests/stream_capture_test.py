@@ -17,13 +17,13 @@ The stream runs at 64 fps, faster than every retro rate (35 and 10 Hz), so conse
 retro cache inside one retro frame; every time compared is a multiple of 1/64 s, so
 T - 5/64 + 5/64 is exactly T in double precision.
 
-Step 4 (Review Focus 2): the Studio chapters path trace, with the TLAS rebuilt every frame, and the export
-stays pure: no temporal history, the seed from the show time alone. Path tracing is what costs time on
-lavapipe, so the chapters come in two parts that CTest runs in parallel: "studio" (the chapters that show the
-Studio, Decision 1, and any chapter --show-info reports with a scene other than the placeholder) and "rest"
-(every other chapter); "all" runs both. CTest passes --spp 2 at 160x90. All five Studio chapters must report
-the "Studio" scene, and the "studio" part must path trace, so it never compares placeholders where it means
-path-traced frames.
+Step 4 (Review Focus 2): the path-traced chapters, with the TLAS rebuilt every frame, and the export stays
+pure: no temporal history, the seed from the show time alone. Path tracing is what costs time on lavapipe, so
+the chapters come in two parts that CTest runs in parallel: "studio", the traced part (every chapter whose
+--show-info "scene" is not "Placeholder": the Studio's five, Decision 1 of step 4, and each step 5 scene's
+chapters as they land), and "rest" (every other chapter); "all" runs both. CTest passes --spp 2 at 160x90.
+All five Studio chapters must report the "Studio" scene and be in the traced part, so it never compares
+placeholders where it means path-traced frames.
 
 Usage: stream_capture_test.py <Evolution> <tmpdir> studio|rest|all [Evolution options...]; the options
 (e.g. --validation --spp 2) are passed to every run."""
@@ -49,8 +49,8 @@ PARTS = ("studio", "rest", "all")
 
 
 def in_part(chapter, part):
-    studio = chapter["title"] in STUDIO_CHAPTERS or chapter["scene"] != "Placeholder"
-    return part == "all" or (part == "studio") == studio
+    traced = chapter["scene"] != "Placeholder"
+    return part == "all" or (part == "studio") == traced
 
 
 def run(command, env=None, stderr_out=None):
@@ -157,8 +157,8 @@ def main(exe, tmpdir, part, extra):
     chosen = [chapter for chapter in info["chapters"] if in_part(chapter, part)]
     traced = [chapter["title"] for chapter in chosen if chapter["scene"] != "Placeholder"]
     print(f"stream_capture: part '{part}', {len(chosen)} chapters, path traced: {', '.join(traced) or 'none'}")
-    if part in ("studio", "all") and set(traced) != set(STUDIO_CHAPTERS):
-        sys.exit(f"part '{part}' path traces {traced}, expected every one of {STUDIO_CHAPTERS}")
+    if part in ("studio", "all") and not set(STUDIO_CHAPTERS) <= set(traced):
+        sys.exit(f"part '{part}' path traces {traced}, expected every one of {STUDIO_CHAPTERS} among them")
     compared = {"unforced": 0, 1993: 0, 2026: 0}
     for chapter in chosen:
         start, duration, eras = chapter["start"], chapter["duration"], chapter["eras"]

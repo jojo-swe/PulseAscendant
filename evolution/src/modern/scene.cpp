@@ -42,6 +42,7 @@ rt::RectLight rectLightForQuad(const rt::Mat34& transform, float width, float he
     light.kind = static_cast<std::uint32_t>(kind);
     light.selectWeight = selectWeight;
     light.area = length(cross(edgeU, edgeV));
+    light.gate = rt::kNoLight;
     return light;
 }
 

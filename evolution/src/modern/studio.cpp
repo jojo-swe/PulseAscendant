@@ -521,7 +521,7 @@ float studioExposureEV(show::Effect effect) {
     }
 }
 
-Studio::Studio() {
+Studio::Studio(SceneDetail) {
     static_.meshes = buildMeshes();
     static_.materials = buildMaterials(kScreenEmission);
     std::array<rt::RectLight, kLightCount> lights{};

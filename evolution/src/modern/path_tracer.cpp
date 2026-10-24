@@ -3,11 +3,14 @@
 #include "gfx/descriptors.hpp"
 #include "gfx/paths.hpp"
 #include "gfx/sync.hpp"
+#include "rt/bindings.hpp"
 #include "rt/gpu_types.hpp"
 #include "rt/random.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <numbers>
@@ -19,41 +22,35 @@ namespace evo::modern {
 
 namespace {
 
-// The set shaders/rt/common.glsl declares.
-enum : std::uint32_t {
-    kTlasBinding = 0,
-    kLightingBinding,
-    kEmissionBinding,
-    kAlbedoBinding,
-    kNormalBinding,
-    kDepthBinding,
-    kMotionBinding,
-    kFrameBinding,
-    kMaterialsBinding,
-    kLightsBinding,
-    kInstancesBinding,
-    kVerticesBinding,
-    kIndicesBinding,
-    kMeshRecordsBinding,
-    kRetroScreenBinding,
-};
-
-const std::array<gfx::Binding, 15> kBindings = {
-    gfx::Binding{kTlasBinding, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR},
-    gfx::Binding{kLightingBinding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    gfx::Binding{kEmissionBinding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    gfx::Binding{kAlbedoBinding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    gfx::Binding{kNormalBinding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    gfx::Binding{kDepthBinding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    gfx::Binding{kMotionBinding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    gfx::Binding{kFrameBinding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    gfx::Binding{kMaterialsBinding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    gfx::Binding{kLightsBinding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    gfx::Binding{kInstancesBinding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    gfx::Binding{kVerticesBinding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    gfx::Binding{kIndicesBinding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    gfx::Binding{kMeshRecordsBinding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    gfx::Binding{kRetroScreenBinding, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+// The set shaders/rt/common.glsl declares (src/rt/bindings.hpp).
+const std::array<gfx::Binding, EVO_BINDING_COUNT> kBindings = {
+    gfx::Binding{EVO_BINDING_TLAS, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR},
+    gfx::Binding{EVO_BINDING_LIGHTING, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    gfx::Binding{EVO_BINDING_EMISSION, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    gfx::Binding{EVO_BINDING_ALBEDO, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    gfx::Binding{EVO_BINDING_NORMAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    gfx::Binding{EVO_BINDING_DEPTH, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    gfx::Binding{EVO_BINDING_MOTION, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    gfx::Binding{EVO_BINDING_FRAME, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_MATERIALS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_LIGHTS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_INSTANCES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_VERTICES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_INDICES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_MESH_RECORDS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_RETRO_SCREEN, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+    gfx::Binding{EVO_BINDING_ENVIRONMENT, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_TREE_NODES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_TREE_LIGHTS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_MEDIUM, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_DENSITY, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+    gfx::Binding{EVO_BINDING_MAJORANT, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+    gfx::Binding{EVO_BINDING_PREVIOUS_TRANSFORMS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_STATIC_SPHERES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_PARTICLE_SPHERES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_CAUSTIC_MAPS, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+    gfx::Binding{EVO_BINDING_LENSING, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+    gfx::Binding{EVO_BINDING_VOLUME, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
 };
 
 // pathtrace.rgen's push constants: which of the frame's samples this dispatch traces.
@@ -61,7 +58,15 @@ struct TracePush {
     std::uint32_t sampleBase, sampleCount;
 };
 
-constexpr std::uint32_t kHitGroups = 4; // = MaterialClass
+// The largest struct a feature binding may declare (MediumUniforms): the dummy buffer covers any of them.
+constexpr VkDeviceSize kDummyBufferBytes = 256;
+static_assert(sizeof(rt::MediumUniforms) <= kDummyBufferBytes &&
+              sizeof(rt::EnvironmentUniforms) <= kDummyBufferBytes &&
+              sizeof(rt::LensingUniforms) <= kDummyBufferBytes && sizeof(rt::Mat34) <= kDummyBufferBytes &&
+              sizeof(rt::SphereRecord) <= kDummyBufferBytes && sizeof(rt::TreeLight) <= kDummyBufferBytes &&
+              sizeof(rt::LightTreeNode) <= kDummyBufferBytes);
+
+std::atomic<std::uint32_t> gPipelinesCreated{0};
 
 gfx::RtShaders shaders() {
     const std::filesystem::path dir = gfx::shaderDir();
@@ -73,29 +78,18 @@ gfx::RtShaders shaders() {
     return s;
 }
 
-const SceneStatic& checked(const SceneStatic& scene, std::uint32_t width, std::uint32_t height) {
+std::uint32_t checkedSize(std::uint32_t width, std::uint32_t height) {
     if (width == 0 || height == 0)
         throw std::invalid_argument("PathTracer: empty size");
-    if (scene.materials.empty())
-        throw std::invalid_argument("PathTracer: a scene needs at least one material");
-    for (std::size_t i = 0; i < scene.materials.size(); ++i)
-        if (scene.materials[i].materialClass >= kHitGroups)
-            throw std::invalid_argument("PathTracer: material " + std::to_string(i) + " has class " +
-                                        std::to_string(scene.materials[i].materialClass) +
-                                        ", which is no hit group");
-    return scene;
+    return width;
 }
 
-gfx::Buffer materialBuffer(gfx::Context& ctx, const std::vector<rt::Material>& materials) {
-    const auto bytes = std::as_bytes(std::span(materials));
-    return gfx::createDeviceBuffer(
-        ctx, {bytes.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "materials"}, bytes);
-}
-
-// The texture of a scene that shows no retro screen: one black texel, ready for sampling in GENERAL.
-gfx::Image blackTexture(gfx::Context& ctx) {
-    gfx::Image image(ctx, {1, 1, VK_FORMAT_R8G8B8A8_SRGB,
-                           VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, "black screen"});
+// A one-texel image, cleared to zero and ready for sampling in GENERAL: the retro screen of a scene that
+// shows none (black), and the stand-ins of the feature images.
+gfx::Image clearedTexture(gfx::Context& ctx, VkFormat format, VkImageViewType type, const char* name) {
+    gfx::ImageDesc desc{1, 1, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, name};
+    desc.viewType = type;
+    gfx::Image image(ctx, desc);
     ctx.immediate([&](VkCommandBuffer cmd) { // setup
         image.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_CLEAR_BIT,
                          VK_ACCESS_2_TRANSFER_WRITE_BIT);
@@ -108,9 +102,10 @@ gfx::Image blackTexture(gfx::Context& ctx) {
     return image;
 }
 
-bool usesRetroScreen(const SceneStatic& scene) {
-    return std::any_of(scene.materials.begin(), scene.materials.end(),
-                       [](const rt::Material& m) { return m.texture == rt::kRetroScreenTexture; });
+gfx::Buffer zeroedBuffer(gfx::Context& ctx) {
+    const std::vector<std::byte> zeros(kDummyBufferBytes);
+    return gfx::createDeviceBuffer(
+        ctx, {kDummyBufferBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "pt dummy"}, zeros);
 }
 
 void store(float out[3], Vec3 v) {
@@ -129,63 +124,10 @@ void writeBuffer(const gfx::Buffer& buffer, const void* data, std::size_t bytes)
     buffer.flush();
 }
 
-// Equal within a relative 1e-5 (rounding between two ways of computing one value).
-bool nearlyEqual(float a, float b) {
-    return std::abs(double(a) - double(b)) <= 1e-5 * std::max(std::abs(double(a)), std::abs(double(b)));
-}
-
-Vec3 vec3(const float v[3]) {
-    return {v[0], v[1], v[2]};
-}
-
-// NEE uses a light's emission, area, kind and facing; a BSDF ray that hits the light's instance uses that
-// instance's material and facing. Multiple importance sampling weighs the two as estimators of one integral,
-// so they must describe the same emitter, or the picture is silently biased (Task 7 review I1). Expects the
-// instances' mesh, material and light indices checked.
-void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& materials) {
-    for (std::size_t i = 0; i < frame.lights.size(); ++i) {
-        const rt::RectLight& l = frame.lights[i];
-        const std::string what = "PathTracer::trace(): light " + std::to_string(i) + " ";
-        if (l.kind > static_cast<std::uint32_t>(rt::LightKind::Portal))
-            throw std::invalid_argument(what + "has kind " + std::to_string(l.kind) +
-                                        ", which is no LightKind");
-        const float area = length(cross(vec3(l.edgeU), vec3(l.edgeV)));
-        if (!nearlyEqual(l.area, area))
-            throw std::invalid_argument(what + "has area " + std::to_string(l.area) +
-                                        ", but |edgeU x edgeV| is " + std::to_string(area));
-    }
-    for (std::size_t i = 0; i < frame.instances.size(); ++i) {
-        const SceneInstance& in = frame.instances[i];
-        if (in.light == rt::kNoLight)
-            continue;
-        const rt::RectLight& l = frame.lights[in.light];
-        const rt::Material& m = materials[in.material];
-        const std::string what = "PathTracer::trace(): instance " + std::to_string(i) + " is light " +
-                                 std::to_string(in.light) + ", ";
-        const auto kind = static_cast<rt::LightKind>(l.kind);
-        if (kind == rt::LightKind::Portal)
-            throw std::invalid_argument(what + "a portal: an opening, not a surface");
-        if (linearDeterminant(in.transform) < 0.f)
-            throw std::invalid_argument(what + "but its transform mirrors: it emits from the light's back");
-        const bool screen = m.texture == rt::kRetroScreenTexture;
-        if (kind == rt::LightKind::Emitter) {
-            if (screen)
-                throw std::invalid_argument(what + "an Emitter, but its material shows the retro screen");
-            for (int c = 0; c < 3; ++c)
-                if (!nearlyEqual(l.emission[c], m.emission[c] * m.emissionScale))
-                    throw std::invalid_argument(what + "whose emission is not its material's emission * "
-                                                       "emissionScale");
-        } else {
-            if (!screen || m.materialClass != static_cast<std::uint32_t>(rt::MaterialClass::Emissive))
-                throw std::invalid_argument(what + "a RetroScreen, but its material is no Emissive material "
-                                                   "with the retro screen texture");
-            for (int c = 0; c < 3; ++c)
-                if (!nearlyEqual(l.emission[c], m.emissionScale))
-                    throw std::invalid_argument(what +
-                                                "a RetroScreen, whose emission is not (s, s, s) for its "
-                                                "material's emissionScale s");
-        }
-    }
+// A host-visible storage buffer of `count` elements (at least one: a buffer of size 0 is invalid).
+gfx::Buffer slotBuffer(gfx::Context& ctx, std::size_t elementBytes, std::uint32_t count, const char* name) {
+    return gfx::Buffer(ctx,
+                       {elementBytes * std::max(count, 1u), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, name});
 }
 
 } // namespace
@@ -196,29 +138,67 @@ std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset) {
     return rt::pcgHash(index + 0x9E3779B9u * framesSinceReset);
 }
 
-PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, const SceneStatic& scene, std::uint32_t width,
-                       std::uint32_t height)
-    : ctx_(ctx), ring_(ring), width_(width), height_(height),
-      store_(ctx, checked(scene, width, height).meshes), blases_(ctx, store_),
-      materials_(materialBuffer(ctx, scene.materials)), blackScreen_(blackTexture(ctx)),
-      pipeline_(ctx, shaders(), kBindings, sizeof(TracePush)), tlas_(ctx, ring, kMaxInstances) {
-    meshCount_ = static_cast<std::uint32_t>(scene.meshes.size());
-    sceneMaterials_ = scene.materials;
-    samplesRetro_ = usesRetroScreen(scene);
+TracerCapacity tracerCapacity(const SceneCapacity& scene) {
+    return {scene.instances, scene.lights, scene.materials};
+}
+
+TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b) {
+    return {std::max(a.instances, b.instances), std::max(a.lights, b.lights),
+            std::max(a.materials, b.materials)};
+}
+
+std::uint32_t PathTracer::pipelinesCreated() {
+    return gPipelinesCreated.load();
+}
+
+PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
+                       const TracerCapacity& capacity)
+    : ctx_(ctx), ring_(ring), width_(checkedSize(width, height)), height_(height),
+      capacity_(unite(capacity, {1, 1, 1})),
+      blackScreen_(clearedTexture(ctx, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_VIEW_TYPE_2D, "black screen")),
+      pipeline_(ctx, shaders(), kBindings, sizeof(TracePush)), dummyBuffer_(zeroedBuffer(ctx)),
+      dummyDensity_(
+          clearedTexture(ctx, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_VIEW_TYPE_3D, "pt dummy density")),
+      dummyMajorant_(clearedTexture(ctx, VK_FORMAT_R16_SFLOAT, VK_IMAGE_VIEW_TYPE_3D, "pt dummy majorant")),
+      dummyCaustics_(clearedTexture(ctx, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+                                    "pt dummy caustics")) {
+    ++gPipelinesCreated;
     ringBegin_ = ring.onBegin([this](std::uint32_t) { tracedThisFrame_ = false; });
-    for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
+    for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot)
         uniforms_[slot] = gfx::Buffer(
             ctx, {sizeof(rt::FrameUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "frame uniforms"});
-        instanceRecords_[slot] =
-            gfx::Buffer(ctx, {sizeof(rt::InstanceRecord) * kMaxInstances, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                              true, "instance records"});
-        lights_[slot] = gfx::Buffer(ctx, {sizeof(rt::RectLight) * kMaxLights,
-                                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "rect lights"});
-    }
+    createFrameBuffers();
+    tlas_.emplace(ctx_, ring_, capacity_.instances);
     createImages();
 }
 
 PathTracer::~PathTracer() = default;
+
+void PathTracer::createFrameBuffers() {
+    for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
+        instanceRecords_[slot] =
+            slotBuffer(ctx_, sizeof(rt::InstanceRecord), capacity_.instances, "instance records");
+        lights_[slot] = slotBuffer(ctx_, sizeof(rt::RectLight), capacity_.lights, "rect lights");
+        materials_[slot] = slotBuffer(ctx_, sizeof(rt::Material), capacity_.materials, "frame materials");
+    }
+}
+
+void PathTracer::reserve(const TracerCapacity& capacity) {
+    const TracerCapacity grown = unite(capacity_, capacity);
+    if (grown.instances == capacity_.instances && grown.lights == capacity_.lights &&
+        grown.materials == capacity_.materials)
+        return;
+    // The frames in flight may still read the TLAS and this slot's buffers; nothing of the frame being
+    // recorded (if any) uses them before trace().
+    ring_.waitAll(); // setup
+    const bool moreInstances = grown.instances != capacity_.instances;
+    capacity_ = grown;
+    createFrameBuffers();
+    if (moreInstances) {
+        tlas_.reset();
+        tlas_.emplace(ctx_, ring_, capacity_.instances);
+    }
+}
 
 void PathTracer::createImages() {
     const VkImageUsageFlags usage =
@@ -232,6 +212,13 @@ void PathTracer::createImages() {
     gbuffer_.normal = make(VK_FORMAT_R16G16B16A16_SFLOAT, "pt normal");
     gbuffer_.depth = make(VK_FORMAT_R32_SFLOAT, "pt depth");
     gbuffer_.motion = make(VK_FORMAT_R16G16B16A16_SFLOAT, "pt motion");
+    gbuffer_.volume = make(VK_FORMAT_R16G16B16A16_SFLOAT, "pt volume");
+}
+
+VkDeviceSize PathTracer::imageBytes() const {
+    // lighting 16, emission, albedo, normal, motion and volume 8 each, depth 4 bytes per pixel.
+    constexpr VkDeviceSize kBytesPerPixel = 16 + 8 + 8 + 8 + 4 + 8 + 8;
+    return kBytesPerPixel * width_ * height_;
 }
 
 void PathTracer::resize(std::uint32_t width, std::uint32_t height) {
@@ -247,9 +234,9 @@ void PathTracer::resize(std::uint32_t width, std::uint32_t height) {
     createImages();
 }
 
-void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
+void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFrame& frame,
                        const std::optional<Camera>& previousCamera, const TraceSettings& settings,
-                       gfx::Image& retroScreen) {
+                       gfx::Image* retroScreen, const TraceExtras& extras) {
     // Everything that can be refused is checked before anything is written or recorded.
     if (!ring_.recording())
         throw std::logic_error("PathTracer::trace() outside FrameRing::begin()/submit()");
@@ -259,27 +246,37 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
             "uniforms, instances and lights when it runs)");
     if (settings.spp == 0)
         throw std::invalid_argument("PathTracer::trace(): spp 0");
-    if (frame.instances.size() > kMaxInstances)
-        throw std::length_error("PathTracer::trace(): " + std::to_string(frame.instances.size()) +
-                                " instances, at most " + std::to_string(kMaxInstances));
-    if (frame.lights.size() > kMaxLights)
-        throw std::length_error("PathTracer::trace(): " + std::to_string(frame.lights.size()) +
-                                " lights, at most " + std::to_string(kMaxLights));
+    if (scene.samplesRetro() && retroScreen == nullptr)
+        throw std::invalid_argument(
+            "PathTracer::trace(): the scene shows the retro screen, but no retro image");
+    auto tooMany = [](const char* what, std::size_t count, std::uint32_t most) {
+        return std::length_error("PathTracer::trace(): " + std::to_string(count) + " " + what +
+                                 ", more than the tracer's capacity of " + std::to_string(most) +
+                                 " (reserve() it)");
+    };
+    if (frame.instances.size() > capacity_.instances)
+        throw tooMany("instances", frame.instances.size(), capacity_.instances);
+    if (frame.lights.size() > capacity_.lights)
+        throw tooMany("lights", frame.lights.size(), capacity_.lights);
+    if (frame.materials.size() > capacity_.materials)
+        throw tooMany("materials", frame.materials.size(), capacity_.materials);
+    checkSceneFrame(scene.source(), frame);
+    const std::vector<rt::Material>& materials =
+        frame.materials.empty() ? scene.source().materials : frame.materials;
     std::vector<rt::Instance> instances;
     std::vector<rt::InstanceRecord> records;
     instances.reserve(frame.instances.size());
     records.reserve(frame.instances.size());
     for (std::size_t i = 0; i < frame.instances.size(); ++i) {
         const SceneInstance& in = frame.instances[i];
-        if (in.mesh >= meshCount_ || in.material >= sceneMaterials_.size() ||
-            (in.light != rt::kNoLight && in.light >= frame.lights.size()))
-            throw std::out_of_range("PathTracer::trace(): instance " + std::to_string(i) +
-                                    " names a mesh, material or light that does not exist");
         const auto index = static_cast<std::uint32_t>(i);
-        instances.push_back({in.mesh, in.transform, index, sceneMaterials_[in.material].materialClass});
-        records.push_back({in.mesh, in.material, in.light, 0});
+        const auto materialClass = static_cast<rt::MaterialClass>(materials[in.material].materialClass);
+        instances.push_back({in.mesh, in.transform, index, rt::hitGroupFor(materialClass, in.kind)});
+        const bool spheres = in.kind == rt::GeometryKind::Spheres;
+        const std::uint32_t flags = (spheres ? rt::kInstanceSpheres : 0u) |
+                                    (spheres && in.dynamicSpheres ? rt::kInstanceDynamicSpheres : 0u);
+        records.push_back({spheres ? in.firstSphere : in.mesh, in.material, in.light, flags});
     }
-    checkLights(frame, sceneMaterials_);
     tracedThisFrame_ = true; // nothing is refused from here on
 
     const CameraBasis basis = cameraBasis(frame.camera);
@@ -314,49 +311,80 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
     u.clampIndirect = settings.clampIndirect;
     for (const rt::RectLight& light : frame.lights)
         u.lightWeightSum += std::max(light.selectWeight, 0.f);
+    // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
+    // regularisation, no tree lights, medium, caustics or lensing, and NEE never samples the environment.
+    u.sliceIndex = 0;
+    u.sliceCount = 1;
 
     // This slot's buffers: the ring's begin() waited for the frame that last read them.
     const std::uint32_t slot = ring_.slot();
     writeBuffer(uniforms_[slot], &u, sizeof u);
     writeBuffer(instanceRecords_[slot], records.data(), records.size() * sizeof(rt::InstanceRecord));
     writeBuffer(lights_[slot], frame.lights.data(), frame.lights.size() * sizeof(rt::RectLight));
+    if (!frame.materials.empty())
+        writeBuffer(materials_[slot], frame.materials.data(), frame.materials.size() * sizeof(rt::Material));
+    const gfx::Buffer& materialTable = frame.materials.empty() ? scene.staticMaterials() : materials_[slot];
 
-    tlas_.build(cmd, blases_, instances);
+    tlas_->build(cmd, scene.blases(), instances);
 
-    gfx::Image& screen = samplesRetro_ ? retroScreen : blackScreen_;
-    screen.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-                      VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    gfx::Image& screen = scene.samplesRetro() ? *retroScreen : blackScreen_;
+    // The feature images: the frame's, or the stand-ins (already in GENERAL, sampled).
+    gfx::Image& density = extras.density ? *extras.density : dummyDensity_;
+    gfx::Image& majorant = extras.majorant ? *extras.majorant : dummyMajorant_;
+    gfx::Image& caustics = extras.causticMaps ? *extras.causticMaps : dummyCaustics_;
+    for (gfx::Image* image : {&screen, &density, &majorant, &caustics})
+        image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+                          VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
     auto storageImage = [](std::uint32_t binding, const gfx::Image& image) {
         return gfx::DescriptorWrite::image(binding, {VK_NULL_HANDLE, image.view(), VK_IMAGE_LAYOUT_GENERAL});
     };
+    auto sampledImage = [&](std::uint32_t binding, const gfx::Image& image) {
+        return gfx::DescriptorWrite::image(
+            binding, {ctx_.trilinearSampler(), image.sampledView(), VK_IMAGE_LAYOUT_GENERAL});
+    };
     auto storageBuffer = [](std::uint32_t binding, const gfx::Buffer& buffer) {
         return gfx::DescriptorWrite::buffer(binding, {buffer.handle(), 0, VK_WHOLE_SIZE});
     };
-    const std::array<gfx::DescriptorWrite, 15> writes = {
-        gfx::DescriptorWrite::accelerationStructure(kTlasBinding, tlas_.handle()),
-        storageImage(kLightingBinding, gbuffer_.lighting),
-        storageImage(kEmissionBinding, gbuffer_.emission),
-        storageImage(kAlbedoBinding, gbuffer_.albedo),
-        storageImage(kNormalBinding, gbuffer_.normal),
-        storageImage(kDepthBinding, gbuffer_.depth),
-        storageImage(kMotionBinding, gbuffer_.motion),
-        storageBuffer(kFrameBinding, uniforms_[slot]),
-        storageBuffer(kMaterialsBinding, materials_),
-        storageBuffer(kLightsBinding, lights_[slot]),
-        storageBuffer(kInstancesBinding, instanceRecords_[slot]),
-        storageBuffer(kVerticesBinding, store_.vertices()),
-        storageBuffer(kIndicesBinding, store_.indices()),
-        storageBuffer(kMeshRecordsBinding, store_.meshRecords()),
-        gfx::DescriptorWrite::image(kRetroScreenBinding,
-                                    {ctx_.trilinearSampler(), screen.sampledView(), VK_IMAGE_LAYOUT_GENERAL}),
+    auto extraBuffer = [&](std::uint32_t binding, const gfx::Buffer* buffer) {
+        return storageBuffer(binding, buffer ? *buffer : dummyBuffer_);
+    };
+    const std::array<gfx::DescriptorWrite, EVO_BINDING_COUNT> writes = {
+        gfx::DescriptorWrite::accelerationStructure(EVO_BINDING_TLAS, tlas_->handle()),
+        storageImage(EVO_BINDING_LIGHTING, gbuffer_.lighting),
+        storageImage(EVO_BINDING_EMISSION, gbuffer_.emission),
+        storageImage(EVO_BINDING_ALBEDO, gbuffer_.albedo),
+        storageImage(EVO_BINDING_NORMAL, gbuffer_.normal),
+        storageImage(EVO_BINDING_DEPTH, gbuffer_.depth),
+        storageImage(EVO_BINDING_MOTION, gbuffer_.motion),
+        storageBuffer(EVO_BINDING_FRAME, uniforms_[slot]),
+        storageBuffer(EVO_BINDING_MATERIALS, materialTable),
+        storageBuffer(EVO_BINDING_LIGHTS, lights_[slot]),
+        storageBuffer(EVO_BINDING_INSTANCES, instanceRecords_[slot]),
+        storageBuffer(EVO_BINDING_VERTICES, scene.geometry().vertices()),
+        storageBuffer(EVO_BINDING_INDICES, scene.geometry().indices()),
+        storageBuffer(EVO_BINDING_MESH_RECORDS, scene.geometry().meshRecords()),
+        sampledImage(EVO_BINDING_RETRO_SCREEN, screen),
+        extraBuffer(EVO_BINDING_ENVIRONMENT, extras.environment),
+        extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes),
+        extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights),
+        extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
+        sampledImage(EVO_BINDING_DENSITY, density),
+        sampledImage(EVO_BINDING_MAJORANT, majorant),
+        extraBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS, extras.previousTransforms),
+        extraBuffer(EVO_BINDING_STATIC_SPHERES, extras.staticSpheres),
+        extraBuffer(EVO_BINDING_PARTICLE_SPHERES, extras.particleSpheres),
+        sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
+        extraBuffer(EVO_BINDING_LENSING, extras.lensing),
+        storageImage(EVO_BINDING_VOLUME, gbuffer_.volume),
     };
     pipeline_.bind(cmd, ring_, writes);
 
     // ceil(spp / kSppPerDispatch) dispatches. lighting, emission and albedo keep a running mean, so each
     // dispatch reads what the one before wrote; the other guides come from the first dispatch alone. Every
-    // dispatch still gets a barrier on all six: the raygen writes the guides statically, and synchronization
-    // validation judges a dispatch by the accesses its pipeline could make, not the ones it makes.
+    // dispatch still gets a barrier on all seven: the raygen writes the guides statically, and
+    // synchronization validation judges a dispatch by the accesses its pipeline could make, not the ones it
+    // makes.
     constexpr VkAccessFlags2 kReadWrite =
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
@@ -364,7 +392,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneFrame& frame,
         for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               kReadWrite);
-        for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion})
+        for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion, &gbuffer_.volume})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         const TracePush push{d * kSppPerDispatch,

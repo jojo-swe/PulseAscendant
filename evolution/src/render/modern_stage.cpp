@@ -1,11 +1,12 @@
 #include "render/modern_stage.hpp"
 
-#include "modern/modern_scene.hpp"
 #include "modern/path_tracer.hpp"
+#include "modern/scene_gpu.hpp"
 #include "post/denoiser.hpp"
 
-#include <optional>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace evo::render {
 
@@ -16,6 +17,11 @@ constexpr float kPlaceholderExposureEV = 0.f;
 // A-trous iterations: always in the window; in exports only below kExportFilterSpp samples per pixel.
 constexpr std::uint32_t kAtrousIterations = 3;
 constexpr std::uint32_t kExportFilterSpp = 16;
+// post::Denoiser's images per pixel: eight RGBA16F images (the colour, moments, guides and a-trous ping-pong
+// pairs, denoiser.hpp). The denoiser does not report its own size; keep this in step with it.
+constexpr VkDeviceSize kDenoiserBytesPerPixel = 8 * 8;
+// hdr_ (RGBA16F) and image_ (RGBA8).
+constexpr VkDeviceSize kStageBytesPerPixel = 8 + 4;
 
 gfx::ImageDesc hdrDesc(std::uint32_t width, std::uint32_t height) {
     return {width, height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT, 1, "modern hdr"};
@@ -31,39 +37,72 @@ gfx::ImageDesc imageDesc(std::uint32_t width, std::uint32_t height) {
             "modern"};
 }
 
+std::size_t indexOf(modern::SceneId id) {
+    const auto index = static_cast<std::size_t>(id);
+    if (index >= modern::kSceneCount)
+        throw std::out_of_range("ModernStage: no scene " + std::to_string(index));
+    return index;
+}
+
 } // namespace
 
-struct ModernStage::Traced {
-    std::unique_ptr<modern::ModernScene> scene;
-    // Built on first use. The denoiser and the tracer each wait for the ring when they go.
-    std::optional<modern::PathTracer> tracer;
-    std::optional<post::Denoiser> denoiser;
-    std::optional<modern::Camera> previousCamera; // the last frame's, while the history continues
-};
-
-ModernStage::ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height)
-    : ctx_(ctx), ring_(ring), width_(width), height_(height), fill_(ctx, gfx::FillTarget::Hdr),
-      tonemap_(ctx, ring), hdr_(ctx, hdrDesc(width, height)), image_(ctx, imageDesc(width, height)),
-      studio_(std::make_unique<Traced>()) {
-    studio_->scene = modern::makeScene(modern::SceneId::Studio);
-}
+ModernStage::ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
+                         modern::SceneDetail detail, modern::SceneFactory factory, modern::SceneMap map)
+    : ctx_(ctx), ring_(ring), width_(width), height_(height), detail_(detail),
+      factory_(factory ? std::move(factory) : modern::SceneFactory(&modern::makeScene)),
+      map_(map ? std::move(map) : modern::SceneMap(&modern::sceneFor)), fill_(ctx, gfx::FillTarget::Hdr),
+      tonemap_(ctx, ring), hdr_(ctx, hdrDesc(width, height)), image_(ctx, imageDesc(width, height)) {}
 
 ModernStage::~ModernStage() = default;
 
-ModernStage::Traced& ModernStage::traced(modern::SceneId id) {
-    if (id != modern::SceneId::Studio)
-        throw std::logic_error("ModernStage: no path-traced scene for this id");
-    Traced& t = *studio_;
-    if (!t.tracer) {
-        // setup: the BLASes, pipeline and images, once per scene (PathTracer waits for its uploads)
-        t.tracer.emplace(ctx_, ring_, t.scene->staticScene(), width_, height_);
-        t.denoiser.emplace(ctx_, ring_, width_, height_);
+const modern::ModernScene& ModernStage::scene(modern::SceneId id) const {
+    std::unique_ptr<modern::ModernScene>& slot = scenes_[indexOf(id)];
+    if (!slot) {
+        if (id == modern::SceneId::Placeholder)
+            throw std::logic_error("ModernStage: the placeholder is no path-traced scene");
+        slot = factory_(id, detail_);
+        if (!slot)
+            throw std::invalid_argument(std::string("ModernStage: no scene object for ") +
+                                        modern::sceneName(id));
     }
-    return t;
+    return *slot;
 }
 
-void ModernStage::prepare() {
-    traced(modern::SceneId::Studio);
+void ModernStage::prepare(modern::SceneId id) {
+    const std::size_t index = indexOf(id);
+    if (id == modern::SceneId::Placeholder || gpus_[index])
+        return;
+    // setup: the scene's geometry, BLASes and materials (SceneGpu waits for its uploads), then the shared
+    // tracer and denoiser on the first scene, or the tracer's buffers grown to this scene's capacity.
+    const modern::SceneStatic& statics = scene(id).staticScene();
+    gpus_[index] = std::make_unique<modern::SceneGpu>(ctx_, statics);
+    const modern::TracerCapacity capacity = modern::tracerCapacity(statics.capacity);
+    if (!tracer_) {
+        tracer_ = std::make_unique<modern::PathTracer>(ctx_, ring_, width_, height_, capacity);
+        denoiser_ = std::make_unique<post::Denoiser>(ctx_, ring_, width_, height_);
+    } else {
+        tracer_->reserve(capacity);
+    }
+}
+
+void ModernStage::prepareAll() {
+    for (std::size_t i = 0; i < show::kEffectCount; ++i)
+        prepare(sceneOf(static_cast<show::Effect>(i)));
+}
+
+VkDeviceSize ModernStage::imageBytes() const {
+    if (!tracer_)
+        return 0;
+    const VkDeviceSize pixels = VkDeviceSize(width_) * height_;
+    return tracer_->imageBytes() + (kDenoiserBytesPerPixel + kStageBytesPerPixel) * pixels;
+}
+
+VkDeviceSize ModernStage::gpuBytes() const {
+    VkDeviceSize bytes = imageBytes();
+    for (const auto& gpu : gpus_)
+        if (gpu)
+            bytes += gpu->bytes();
+    return bytes;
 }
 
 void ModernStage::resize(std::uint32_t width, std::uint32_t height) {
@@ -71,53 +110,60 @@ void ModernStage::resize(std::uint32_t width, std::uint32_t height) {
     height_ = height;
     hdr_ = gfx::Image(ctx_, hdrDesc(width, height));
     image_ = gfx::Image(ctx_, imageDesc(width, height));
-    if (studio_->tracer) {
-        studio_->tracer->resize(width, height);
-        studio_->denoiser->resize(width, height);
-        studio_->previousCamera.reset();
+    if (tracer_) {
+        tracer_->resize(width, height);
+        denoiser_->resize(width, height);
+        previousCamera_.reset();
     }
 }
 
+modern::SceneId ModernStage::sceneOf(show::Effect effect) const {
+    return map_(effect);
+}
+
 std::uint32_t ModernStage::shotFor(const show::TimelineFrame& frame) const {
-    if (modern::sceneFor(frame.effect) == modern::SceneId::Studio)
-        return studio_->scene->frame(frame).camera.shot;
-    return 0;
+    const modern::SceneId id = sceneOf(frame.effect);
+    return id == modern::SceneId::Placeholder ? 0u : scene(id).camera(frame).shot;
 }
 
 bool ModernStage::samplesRetro(const show::TimelineFrame& frame) const {
-    return modern::sceneFor(frame.effect) == modern::SceneId::Studio && studio_->scene->samplesRetro();
+    const modern::SceneId id = sceneOf(frame.effect);
+    return id != modern::SceneId::Placeholder && scene(id).samplesRetro();
 }
 
-modern::PathTracer* ModernStage::studioTracer() {
-    return studio_->tracer ? &*studio_->tracer : nullptr;
+modern::PathTracer* ModernStage::tracer() {
+    return tracer_.get();
+}
+
+const modern::SceneGpu* ModernStage::sceneGpu(modern::SceneId id) const {
+    return gpus_[indexOf(id)].get();
 }
 
 void ModernStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame, const HistoryState& state,
                          gfx::Image* retroImage) {
-    switch (modern::sceneFor(frame.effect)) {
-    case modern::SceneId::Placeholder: {
-        gfx::FillParams params;
-        params.localSeconds = static_cast<float>(frame.localSeconds);
-        params.era = 1.0f;     // the 2026 look over the whole image
-        params.transition = 0; // Cut: no wipe split, no cross-fade
-        params.kick = frame.kick;
-        params.beatPhase = frame.beatPhase;
-        params.chapter = static_cast<std::uint32_t>(frame.chapter);
-        fill_.record(cmd, ring_, hdr_, params);
-        tonemap_.record(cmd, hdr_, image_, kPlaceholderExposureEV);
-        break;
+    const modern::SceneId id = sceneOf(frame.effect);
+    if (id != modern::SceneId::Placeholder) {
+        renderTraced(cmd, id, frame, state, retroImage);
+        return;
     }
-    case modern::SceneId::Studio:
-        renderTraced(cmd, traced(modern::SceneId::Studio), frame, state, retroImage);
-        break;
-    }
+    gfx::FillParams params;
+    params.localSeconds = static_cast<float>(frame.localSeconds);
+    params.era = 1.0f;     // the 2026 look over the whole image
+    params.transition = 0; // Cut: no wipe split, no cross-fade
+    params.kick = frame.kick;
+    params.beatPhase = frame.beatPhase;
+    params.chapter = static_cast<std::uint32_t>(frame.chapter);
+    fill_.record(cmd, ring_, hdr_, params);
+    tonemap_.record(cmd, hdr_, image_, kPlaceholderExposureEV);
 }
 
-void ModernStage::renderTraced(VkCommandBuffer cmd, Traced& t, const show::TimelineFrame& frame,
+void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const show::TimelineFrame& frame,
                                const HistoryState& state, gfx::Image* retroImage) {
-    if (retroImage == nullptr)
-        throw std::invalid_argument("ModernStage: a path-traced scene needs the retro image");
-    const modern::SceneFrame scene = t.scene->frame(frame);
+    const modern::ModernScene& object = scene(id);
+    if (object.samplesRetro() && retroImage == nullptr)
+        throw std::invalid_argument("ModernStage: a scene that shows the retro screen needs the retro image");
+    prepare(id); // setup on the first frame of an unprepared scene (see the class comment)
+    const modern::SceneFrame scene = object.frame(frame);
     const bool interactive = state.mode == RenderMode::Interactive;
     const bool continues = interactive && state.reset == HistoryReset::None;
 
@@ -126,17 +172,18 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, Traced& t, const show::Timel
     trace.maxBounces = state.maxBounces;
     trace.frameSeed = state.frameSeed;
     trace.clampIndirect = scene.clampIndirect;
-    t.tracer->trace(cmd, scene, continues ? t.previousCamera : std::nullopt, trace, *retroImage);
+    tracer_->trace(cmd, *gpus_[indexOf(id)], scene, continues ? previousCamera_ : std::nullopt, trace,
+                   retroImage);
 
     post::DenoiseSettings denoise;
     denoise.temporal = interactive;
     denoise.atrousIterations = interactive || state.spp < kExportFilterSpp ? kAtrousIterations : 0u;
     if (state.reset != HistoryReset::None)
-        t.denoiser->resetHistory();
-    modern::GBuffer& g = t.tracer->gbuffer();
-    t.denoiser->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion}, denoise, hdr_);
+        denoiser_->resetHistory();
+    modern::GBuffer& g = tracer_->gbuffer();
+    denoiser_->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion}, denoise, hdr_);
     tonemap_.record(cmd, hdr_, image_, scene.exposureEV);
-    t.previousCamera = scene.camera;
+    previousCamera_ = scene.camera;
 }
 
 } // namespace evo::render

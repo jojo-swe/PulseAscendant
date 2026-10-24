@@ -28,20 +28,27 @@ struct ImageDesc {
     // with MUTABLE_FORMAT and EXTENDED_USAGE, so for example an R8G8B8A8_SRGB image (sampled, and mipmapped,
     // in linear light) can be written through an R8G8B8A8_UNORM storage view, byte for byte.
     VkFormat viewFormat = VK_FORMAT_UNDEFINED;
+    // The kind of image: 2D (the default), 3D (`depth` slices: a density grid) or a 2D array (`layers`
+    // layers). A 3D image or an array has one mip level and one format.
+    VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+    std::uint32_t depth = 1;  // 3D only
+    std::uint32_t layers = 1; // 2D arrays only
 };
 
-// A 2D device-local image with a view of its first mip level and a view of all of them. It remembers its
-// layout, its last write and the reads since, so transition() records exactly the barrier the next use needs.
-// The tracked state is one state for the whole image (every mip level): generateMips() orders its levels
-// itself and leaves them all in that state again. The tracked state is the state at the end of everything
-// recorded so far, so an image must be used from one command stream in submission order (which the frame
-// ring guarantees).
+// A device-local image (2D, or 3D or a 2D array: ImageDesc::viewType) with a view of its first mip level and
+// a view of all of them (every layer, every slice). It remembers its layout, its last write and the reads
+// since, so transition() records exactly the barrier the next use needs. The tracked state is one state for
+// the whole image (every mip level): generateMips() orders its levels itself and leaves them all in that
+// state again. The tracked state is the state at the end of everything recorded so far, so an image must be
+// used from one command stream in submission order (which the frame ring guarantees).
 class Image {
 public:
     Image() = default;
     // Throws std::invalid_argument for an empty size, no mip levels or more than mipLevelsFor(width, height),
-    // and std::runtime_error for a two-format image (viewFormat set) whose formats, usage, size or levels the
-    // device does not support (vkGetPhysicalDeviceImageFormatProperties2 with the format list).
+    // a view type other than 2D, 3D and 2D_ARRAY, a depth with another type than 3D or layers with another
+    // than 2D_ARRAY, and a 3D image or array with mip levels or two formats; std::runtime_error for a
+    // two-format image (viewFormat set) whose formats, usage, size or levels the device does not support
+    // (vkGetPhysicalDeviceImageFormatProperties2 with the format list).
     Image(Context& ctx, const ImageDesc& desc);
     ~Image();
     Image(Image&& other) noexcept;
@@ -71,6 +78,9 @@ public:
     VkImageView sampledView() const { return sampledView_; }
     VkImageLayout layout() const { return layout_; }
     VkExtent2D extent() const { return extent_; }
+    VkImageViewType viewType() const { return viewType_; }
+    std::uint32_t depth() const { return depth_; }
+    std::uint32_t layers() const { return layers_; }
     VkFormat format() const { return format_; }
     VkFormat viewFormat() const { return viewFormat_; }
     VkImageAspectFlags aspect() const { return aspect_; } // DEPTH (+ STENCIL) for depth formats, else COLOR
@@ -88,6 +98,8 @@ private:
     VkImageView view_ = VK_NULL_HANDLE;
     VkImageView sampledView_ = VK_NULL_HANDLE; // == view_ when one view serves both
     VkExtent2D extent_{0, 0};
+    VkImageViewType viewType_ = VK_IMAGE_VIEW_TYPE_2D;
+    std::uint32_t depth_ = 1, layers_ = 1;
     VkFormat format_ = VK_FORMAT_UNDEFINED;
     VkFormat viewFormat_ = VK_FORMAT_UNDEFINED;
     VkImageAspectFlags aspect_ = VK_IMAGE_ASPECT_COLOR_BIT;

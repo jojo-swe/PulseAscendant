@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -116,11 +117,15 @@ rt::Material sentinelMaterial(std::uint32_t e) {
     m.baseColor2[1] = floatSentinel(17, e);
     m.baseColor2[2] = floatSentinel(18, e);
     m.materialClass = uintSentinel(19, e);
+    m.flags = uintSentinel(20, e);
+    m.abbe = floatSentinel(21, e);
+    m.medium = uintSentinel(22, e);
+    m.pad = floatSentinel(23, e);
     return m;
 }
-constexpr std::array<bool, 20> kMaterialIsUint{false, false, false, false, false, false, false,
-                                               false, false, false, false, false, false, true,
-                                               true,  false, false, false, false, true};
+constexpr std::array<bool, 24> kMaterialIsUint{false, false, false, false, false, false, false, false,
+                                               false, false, false, false, false, true,  true,  false,
+                                               false, false, false, true,  true,  false, true,  false};
 
 rt::RectLight sentinelLight(std::uint32_t e) {
     rt::RectLight l{};
@@ -133,7 +138,7 @@ rt::RectLight sentinelLight(std::uint32_t e) {
     l.kind = uintSentinel(12, e);
     l.selectWeight = floatSentinel(13, e);
     l.area = floatSentinel(14, e);
-    l.pad = uintSentinel(15, e);
+    l.gate = uintSentinel(15, e);
     return l;
 }
 constexpr std::array<bool, 16> kLightIsUint{false, false, false, false, false, false, false, false,
@@ -158,19 +163,22 @@ rt::MeshRecord sentinelMeshRecord(std::uint32_t e) {
     return {uintSentinel(0, e), uintSentinel(1, e), uintSentinel(2, e), uintSentinel(3, e)};
 }
 
-// FrameUniforms: 44 words; the uint fields are prevValid (27), width .. instanceCount (32-39) and the pads.
-constexpr std::array<bool, 44> kFrameIsUint = [] {
-    std::array<bool, 44> isUint{};
+// FrameUniforms: 52 words; the uint fields are prevValid (27), width .. instanceCount (32-39),
+// treeLightCount .. pad2 (43-47), sliceIndex and sliceCount (50, 51).
+constexpr std::array<bool, 52> kFrameIsUint = [] {
+    std::array<bool, 52> isUint{};
     isUint[27] = true;
     for (std::size_t k = 32; k < 40; ++k)
         isUint[k] = true;
-    isUint[42] = isUint[43] = true;
+    for (std::size_t k = 43; k < 48; ++k)
+        isUint[k] = true;
+    isUint[50] = isUint[51] = true;
     return isUint;
 }();
 
 rt::FrameUniforms sentinelFrame(std::uint32_t e) {
     rt::FrameUniforms f{};
-    float* const floats[44] = {&f.cameraPosition[0],
+    float* const floats[52] = {&f.cameraPosition[0],
                                &f.cameraPosition[1],
                                &f.cameraPosition[2],
                                &f.tanHalfFovY,
@@ -212,17 +220,43 @@ rt::FrameUniforms sentinelFrame(std::uint32_t e) {
                                nullptr,
                                &f.clampIndirect,
                                &f.lightWeightSum,
+                               &f.regularizeRoughness,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               nullptr,
+                               &f.shutterOffset,
+                               &f.environmentSelect,
                                nullptr,
                                nullptr};
-    std::uint32_t* const uints[44] = {
-        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   nullptr,
-        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   nullptr,
-        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   nullptr,
-        nullptr, nullptr,       nullptr,  nullptr,       nullptr,          nullptr,   &f.prevValid,
-        nullptr, nullptr,       nullptr,  nullptr,       &f.width,         &f.height, &f.frameSeed,
-        &f.spp,  &f.maxBounces, &f.flags, &f.lightCount, &f.instanceCount, nullptr,   nullptr,
-        &f.pad0, &f.pad1};
-    for (std::uint32_t k = 0; k < 44; ++k) {
+    std::uint32_t* const uints[52] = {nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      nullptr,        &f.prevValid,
+                                      nullptr,        nullptr,
+                                      nullptr,        nullptr,
+                                      &f.width,       &f.height,
+                                      &f.frameSeed,   &f.spp,
+                                      &f.maxBounces,  &f.flags,
+                                      &f.lightCount,  &f.instanceCount,
+                                      nullptr,        nullptr,
+                                      nullptr,        &f.treeLightCount,
+                                      &f.mediumFlags, &f.causticReceivers,
+                                      &f.lensing,     &f.pad2,
+                                      nullptr,        nullptr,
+                                      &f.sliceIndex,  &f.sliceCount};
+    for (std::uint32_t k = 0; k < 52; ++k) {
         if (kFrameIsUint[k])
             *uints[k] = uintSentinel(k, e);
         else
@@ -230,6 +264,37 @@ rt::FrameUniforms sentinelFrame(std::uint32_t e) {
     }
     return f;
 }
+
+// A struct of N plain 4-byte fields (the step 5 feature structs and Mat34), filled with the sentinels word by
+// word: gpu_types.hpp pins every field's offsetof at 4 k for its declaration index k, so word k is field k.
+template <typename T, std::size_t N> T sentinelWords(const std::array<bool, N>& isUint, std::uint32_t e) {
+    static_assert(sizeof(T) == 4 * N && rt::kGpuMirror<T>);
+    std::array<std::uint32_t, N> words{};
+    for (std::uint32_t k = 0; k < N; ++k)
+        words[k] = isUint[k] ? uintSentinel(k, e) : std::bit_cast<std::uint32_t>(floatSentinel(k, e));
+    T value{};
+    std::memcpy(&value, words.data(), sizeof value);
+    return value;
+}
+
+template <std::size_t N> constexpr std::array<bool, N> uintsAt(std::initializer_list<std::size_t> indices) {
+    std::array<bool, N> isUint{};
+    for (std::size_t k : indices)
+        isUint[k] = true;
+    return isUint;
+}
+template <std::size_t N> constexpr std::array<bool, N> allUints() {
+    std::array<bool, N> isUint{};
+    isUint.fill(true);
+    return isUint;
+}
+constexpr std::array<bool, 12> kMat34IsUint{};
+constexpr auto kEnvironmentIsUint = uintsAt<28>({0});
+constexpr auto kMediumIsUint = allUints<32>();
+constexpr auto kSphereIsUint = uintsAt<12>({7});
+constexpr auto kTreeLightIsUint = uintsAt<12>({7, 8, 9, 10, 11});
+constexpr auto kTreeNodeIsUint = uintsAt<8>({7});
+constexpr auto kLensingIsUint = allUints<8>();
 
 // The inputs struct_layout.comp hashes with random.glsl's pcgHash; the CPU mirror rt::pcgHash (which
 // frameSeedFor uses) must give the same words.
@@ -251,7 +316,21 @@ void testStructLayout(Context& ctx) {
     std::vector<rt::Vertex> vertices;
     std::vector<rt::MeshRecord> records;
     std::vector<rt::FrameUniforms> frames;
+    std::vector<rt::Mat34> transforms;
+    std::vector<rt::EnvironmentUniforms> environments;
+    std::vector<rt::MediumUniforms> media;
+    std::vector<rt::SphereRecord> spheres;
+    std::vector<rt::TreeLight> treeLights;
+    std::vector<rt::LightTreeNode> treeNodes;
+    std::vector<rt::LensingUniforms> lenses;
     for (std::uint32_t e = 0; e < kElements; ++e) {
+        transforms.push_back(sentinelWords<rt::Mat34>(kMat34IsUint, e));
+        environments.push_back(sentinelWords<rt::EnvironmentUniforms>(kEnvironmentIsUint, e));
+        media.push_back(sentinelWords<rt::MediumUniforms>(kMediumIsUint, e));
+        spheres.push_back(sentinelWords<rt::SphereRecord>(kSphereIsUint, e));
+        treeLights.push_back(sentinelWords<rt::TreeLight>(kTreeLightIsUint, e));
+        treeNodes.push_back(sentinelWords<rt::LightTreeNode>(kTreeNodeIsUint, e));
+        lenses.push_back(sentinelWords<rt::LensingUniforms>(kLensingIsUint, e));
         frames.push_back(sentinelFrame(e));
         materials.push_back(sentinelMaterial(e));
         lights.push_back(sentinelLight(e));
@@ -274,6 +353,20 @@ void testStructLayout(Context& ctx) {
         expectWords(expected, std::array<bool, 4>{true, true, true, true}, e);
     for (std::uint32_t e = 0; e < kElements; ++e)
         expectWords(expected, kFrameIsUint, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kMat34IsUint, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kEnvironmentIsUint, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kMediumIsUint, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kSphereIsUint, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kTreeLightIsUint, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kTreeNodeIsUint, e);
+    for (std::uint32_t e = 0; e < kElements; ++e)
+        expectWords(expected, kLensingIsUint, e);
     const std::vector<std::uint32_t> constants{static_cast<std::uint32_t>(rt::MaterialClass::Pbr),
                                                static_cast<std::uint32_t>(rt::MaterialClass::Glass),
                                                static_cast<std::uint32_t>(rt::MaterialClass::Emissive),
@@ -288,11 +381,33 @@ void testStructLayout(Context& ctx) {
                                                static_cast<std::uint32_t>(rt::LightKind::RetroScreen),
                                                static_cast<std::uint32_t>(rt::LightKind::Portal),
                                                rt::kTraceFlagNee,
-                                               rt::kTraceFlagRussianRoulette};
+                                               rt::kTraceFlagRussianRoulette,
+                                               rt::kNoMedium,
+                                               rt::kMaterialCameraOnlyEmission,
+                                               rt::kMaterialCausticReceiver,
+                                               rt::kMaterialThinWalled,
+                                               static_cast<std::uint32_t>(rt::LightKind::Tree),
+                                               rt::kInstanceSpheres,
+                                               rt::kInstanceDynamicSpheres,
+                                               static_cast<std::uint32_t>(rt::GeometryKind::Triangles),
+                                               static_cast<std::uint32_t>(rt::GeometryKind::Spheres),
+                                               rt::kHitGroupsPerKind};
     expected.insert(expected.end(), constants.begin(), constants.end());
     for (std::uint32_t input : kHashInputs)
         expected.push_back(rt::pcgHash(input));
-    CHECK(expected.size() == kElements * (20 + 16 + 4 + 8 + 4 + 44) + 15 + kHashInputs.size());
+    CHECK(expected.size() ==
+          kElements * (24 + 16 + 4 + 8 + 4 + 52 + 12 + 28 + 32 + 12 + 12 + 8 + 8) + 25 + kHashInputs.size());
+    // The step 5 ABI (Task 1): sizes and the hit group of each geometry kind.
+    static_assert(sizeof(rt::Material) == 96 && sizeof(rt::FrameUniforms) == 208 &&
+                  sizeof(rt::EnvironmentUniforms) == 112 && sizeof(rt::MediumUniforms) == 128 &&
+                  sizeof(rt::SphereRecord) == 48 && sizeof(rt::TreeLight) == 48 &&
+                  sizeof(rt::LightTreeNode) == 32 && sizeof(rt::LensingUniforms) == 32);
+    static_assert(rt::hitGroupFor(rt::MaterialClass::Checker, rt::GeometryKind::Triangles) == 3 &&
+                  rt::hitGroupFor(rt::MaterialClass::Pbr, rt::GeometryKind::Spheres) == 4 &&
+                  rt::hitGroupFor(rt::MaterialClass::Checker, rt::GeometryKind::Spheres) == 7);
+    // New fields default so that step 4's pictures do not change: no flags, no dispersion, no medium.
+    const rt::Material plain{};
+    CHECK(plain.flags == 0 && plain.abbe == 0.f && plain.medium == rt::kNoMedium);
     static_assert(rt::pcgHash(0) == 129708002u); // the reference value of PCG-RXS-M-XS for 0
 
     const Buffer materialBuffer = upload(ctx, materials, "layout materials");
@@ -301,18 +416,26 @@ void testStructLayout(Context& ctx) {
     const Buffer vertexBuffer = upload(ctx, vertices, "layout vertices");
     const Buffer recordBuffer = upload(ctx, records, "layout mesh records");
     const Buffer frameBuffer = upload(ctx, frames, "layout frame uniforms");
+    const Buffer transformBuffer = upload(ctx, transforms, "layout transforms");
+    const Buffer environmentBuffer = upload(ctx, environments, "layout environments");
+    const Buffer mediumBuffer = upload(ctx, media, "layout media");
+    const Buffer sphereBuffer = upload(ctx, spheres, "layout spheres");
+    const Buffer treeLightBuffer = upload(ctx, treeLights, "layout tree lights");
+    const Buffer treeNodeBuffer = upload(ctx, treeNodes, "layout tree nodes");
+    const Buffer lensBuffer = upload(ctx, lenses, "layout lensing");
     Buffer words = storage(ctx, sizeof(std::uint32_t) * (expected.size() + 8), "layout words");
     std::memset(words.mapped(), 0xEE, words.size());
     words.flush();
 
     std::vector<Binding> bindings;
-    for (std::uint32_t b = 0; b < 7; ++b)
+    for (std::uint32_t b = 0; b < 14; ++b)
         bindings.push_back({b, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER});
     ComputePipeline pipeline(ctx, EVO_TEST_SPIRV_DIR "/test_struct_layout.comp.spv", bindings, 0);
-    runOnce(
-        ctx, pipeline,
-        {&materialBuffer, &lightBuffer, &instanceBuffer, &vertexBuffer, &recordBuffer, &words, &frameBuffer},
-        words, nullptr, 0, 1, 1, 1, 1);
+    runOnce(ctx, pipeline,
+            {&materialBuffer, &lightBuffer, &instanceBuffer, &vertexBuffer, &recordBuffer, &words,
+             &frameBuffer, &transformBuffer, &environmentBuffer, &mediumBuffer, &sphereBuffer,
+             &treeLightBuffer, &treeNodeBuffer, &lensBuffer},
+            words, nullptr, 0, 1, 1, 1, 1);
 
     const auto* back = static_cast<const std::uint32_t*>(words.mapped());
     std::size_t mismatches = 0;

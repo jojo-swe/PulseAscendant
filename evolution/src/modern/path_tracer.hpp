@@ -1,9 +1,10 @@
 #pragma once
 
 // The 2026 side's path tracer: one raygen that loops over bounces with next-event estimation and multiple
-// importance sampling against rectangular area lights (emitters, the retro screen, portals onto the sky); one
-// closest-hit per material class that only evaluates its material into the payload; misses for the sky and
-// for shadow rays. Only the raygen traces (recursion depth 1).
+// importance sampling against rectangular area lights (emitters, the retro screen, portals onto the sky) and
+// the environment; one closest-hit per material class that only evaluates its material into the payload;
+// misses for the sky and for shadow rays. Only the raygen traces (recursion depth 1). One PathTracer serves
+// every scene (its SceneGpu holds the scene's geometry, BLASes and materials).
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -11,6 +12,7 @@
 #include "gfx/image.hpp"
 #include "gfx/rt_pipeline.hpp"
 #include "modern/scene.hpp"
+#include "modern/scene_gpu.hpp"
 #include "rt/accel.hpp"
 #include "rt/geometry.hpp"
 
@@ -48,77 +50,115 @@ std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset);
 //   on a miss);
 // - depth, R32F: the linear view depth of the primary hit (centre ray, unjittered), -1 on a miss;
 // - motion, RGBA16F: xy = previous pixel centre - current pixel centre from the previous camera; z = 1 if
-//   valid.
+//   valid;
+// - volume, RGBA16F: rgb the radiance in-scattered on the primary segment, a its transmittance; (0, 0, 0, 1)
+//   without a medium (the tracer writes that until step 5's Task 11).
 // Every image is left in GENERAL after the trace's last write (Image tracks it).
 struct GBuffer {
-    gfx::Image lighting, emission, albedo, normal, depth, motion;
+    gfx::Image lighting, emission, albedo, normal, depth, motion, volume;
 };
 
+// What the path tracer's buffers hold at most: the instances (the TLAS), lights and per-frame materials of
+// any frame it traces. The largest over the scenes prepared (ModernStage).
+struct TracerCapacity {
+    std::uint32_t instances = 0, lights = 0, materials = 0;
+};
+// The capacity a scene needs.
+TracerCapacity tracerCapacity(const SceneCapacity& scene);
+// The larger of two capacities, field by field.
+TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
+
+// The step 5 feature resources a frame binds besides the scene's own (bindings EVO_BINDING_ENVIRONMENT ..
+// EVO_BINDING_LENSING in src/rt/bindings.hpp): one pointer per resource, owned and written by the feature
+// (its task), which must keep it alive and unchanged until the frame completes; a buffer written per frame is
+// one of the feature's per-slot buffers. Null binds a one-element dummy of the tracer's own. An image is
+// sampled in GENERAL; trace() records its barrier.
+struct TraceExtras {
+    const gfx::Buffer* environment = nullptr;        // 15: EnvironmentUniforms (Task 2)
+    const gfx::Buffer* treeNodes = nullptr;          // 16: LightTreeNode[] (Task 12)
+    const gfx::Buffer* treeLights = nullptr;         // 17: TreeLight[] (Task 12)
+    const gfx::Buffer* medium = nullptr;             // 18: MediumUniforms (Task 11)
+    gfx::Image* density = nullptr;                   // 19: 3D RGBA16F density + emission (Task 11)
+    gfx::Image* majorant = nullptr;                  // 20: 3D R16F majorant per cell (Task 11)
+    const gfx::Buffer* previousTransforms = nullptr; // 21: Mat34[] per instance (Task 9)
+    const gfx::Buffer* staticSpheres = nullptr;      // 22: SphereRecord[] (Task 8)
+    const gfx::Buffer* particleSpheres = nullptr;    // 23: SphereRecord[] (Task 8)
+    gfx::Image* causticMaps = nullptr;               // 24: 2D array RGBA16F irradiance (Task 13)
+    const gfx::Buffer* lensing = nullptr;            // 25: LensingUniforms (Task 25)
+};
+
+// The path tracer every 2026 scene shares (step 5, Task 1): the ray tracing pipeline and its SBT (4 hit
+// groups = MaterialClass; misses: sky, shadow), the TLAS and its scratch, the per-slot uniform, instance,
+// light and material buffers, the dummies of the feature bindings and the G-buffer. A scene's own GPU side is
+// a SceneGpu, which trace() binds. One trace per frame: a frame shows one scene.
 class PathTracer {
 public:
-    static constexpr std::uint32_t kMaxInstances = 1024; // the TLAS capacity
-    static constexpr std::uint32_t kMaxLights = 64;
-
-    // Builds the geometry store, the BLASes, the ray tracing pipeline (4 hit groups = MaterialClass; misses:
-    // sky, shadow) and the material buffer once (setup work). A scene with no material using
-    // kRetroScreenTexture does not sample the retro screen: it binds its own 1x1 black texture and ignores
-    // the image trace() is given. Throws std::invalid_argument for no materials, a materialClass that is no
-    // hit group or an empty size, and what GeometryStore throws.
-    PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, const SceneStatic& scene, std::uint32_t width,
-               std::uint32_t height);
+    // Builds the pipeline once (setup work) and sizes its buffers and TLAS for `capacity`. Throws
+    // std::invalid_argument for an empty size.
+    PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
+               const TracerCapacity& capacity);
     ~PathTracer();
     PathTracer(const PathTracer&) = delete;
     PathTracer& operator=(const PathTracer&) = delete;
 
+    // Grows the TLAS and the per-slot buffers to hold `capacity` (field by field the larger of it and the
+    // current one); waits for the ring's frames first when anything grows. Setup: before a frame, or before
+    // trace() in the frame being recorded (nothing of this frame uses them yet). Never shrinks.
+    void reserve(const TracerCapacity& capacity);
     // Recreates the images (waits for the queue first: a resize path).
     void resize(std::uint32_t width, std::uint32_t height);
 
-    // Records into the frame being recorded on the ring: the TLAS build, this slot's FrameUniforms, instance
-    // records and lights, then ceil(spp / kSppPerDispatch) trace dispatches (lighting, emission and albedo
-    // keep a running mean across them; the other guides come from the first). previousCamera feeds the motion
-    // guide (nullopt: motion invalid). retroScreen (R8G8B8A8_SRGB, mipmapped) is sampled through
-    // sampledView() in GENERAL; trace() records the barrier. Throws, before recording anything,
-    // std::invalid_argument for spp 0, std::length_error for more than kMaxInstances instances or kMaxLights
-    // lights, std::out_of_range for an instance naming a mesh, material or light that does not exist,
-    // std::invalid_argument for a light that disagrees with the instance that is its surface (see
-    // SceneInstance), a light whose kind is no LightKind or whose area is not |edgeU x edgeV|, and
-    // std::logic_error outside ring.begin()/submit() or for a second trace in one frame.
-    void trace(VkCommandBuffer cmd, const SceneFrame& frame, const std::optional<Camera>& previousCamera,
-               const TraceSettings& settings, gfx::Image& retroScreen);
+    // Records into the frame being recorded on the ring: the TLAS build over the scene's BLASes, this slot's
+    // FrameUniforms, instance records, lights and (when the frame has its own table) materials, then
+    // ceil(spp / kSppPerDispatch) trace dispatches (lighting, emission and albedo keep a running mean across
+    // them; the other guides come from the first). previousCamera feeds the motion guide (nullopt: motion
+    // invalid). retroScreen (R8G8B8A8_SRGB, mipmapped) is sampled through sampledView() in GENERAL when the
+    // scene samples the retro screen (else it is ignored and may be null); trace() records the barrier.
+    // Throws, before recording anything, std::invalid_argument for spp 0 or a scene that samples the retro
+    // screen without a retro image, std::length_error for a frame larger than the tracer's capacity, what
+    // checkSceneFrame throws, and std::logic_error outside ring.begin()/submit() or for a second trace in one
+    // frame.
+    void trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFrame& frame,
+               const std::optional<Camera>& previousCamera, const TraceSettings& settings,
+               gfx::Image* retroScreen, const TraceExtras& extras = {});
 
     GBuffer& gbuffer() { return gbuffer_; }
     std::uint32_t width() const { return width_; }
     std::uint32_t height() const { return height_; }
-    bool samplesRetro() const { return samplesRetro_; }
+    const TracerCapacity& capacity() const { return capacity_; }
+    // The bytes of the G-buffer's images at the current size (texel sizes times pixels).
+    VkDeviceSize imageBytes() const;
 
     struct Stats {
         std::uint32_t traceDispatches = 0; // in the last trace()
     };
     Stats lastStats() const { return stats_; }
 
+    // How many ray tracing pipelines PathTracers have created in this process (a test hook: one per tracer,
+    // whatever the number of scenes it traces).
+    static std::uint32_t pipelinesCreated();
+
 private:
     void createImages();
+    void createFrameBuffers();
 
     gfx::Context& ctx_;
     gfx::FrameRing& ring_;
     std::uint32_t width_ = 0, height_ = 0;
-    std::uint32_t meshCount_ = 0;
-    std::vector<rt::Material> sceneMaterials_;
-    bool samplesRetro_ = false;
+    TracerCapacity capacity_;
     Stats stats_{};
     bool tracedThisFrame_ = false;           // reset by the ring's begin()
     gfx::FrameRing::Subscription ringBegin_; // active while ring_ lives
 
-    // Declared before the TLAS so that they outlive it (and the frames that trace it).
-    rt::GeometryStore store_;
-    rt::BlasSet blases_;
-    gfx::Buffer materials_;
     gfx::Image blackScreen_;
     gfx::RayTracingPipeline pipeline_;
-    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_;
+    // The feature bindings' stand-ins: a zeroed buffer, and one-texel images of the right types.
+    gfx::Buffer dummyBuffer_;
+    gfx::Image dummyDensity_, dummyMajorant_, dummyCaustics_;
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_, materials_;
     GBuffer gbuffer_;
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
-    rt::Tlas tlas_;
+    std::optional<rt::Tlas> tlas_;
 };
 
 } // namespace evo::modern

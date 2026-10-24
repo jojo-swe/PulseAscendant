@@ -35,7 +35,8 @@ VkImageAspectFlags viewAspect(VkImageAspectFlags aspect) {
 } // namespace
 
 Image::Image(Context& ctx, const ImageDesc& desc)
-    : ctx_(&ctx), extent_{desc.width, desc.height}, format_(desc.format),
+    : ctx_(&ctx), extent_{desc.width, desc.height}, viewType_(desc.viewType), depth_(desc.depth),
+      layers_(desc.layers), format_(desc.format),
       viewFormat_(desc.viewFormat == VK_FORMAT_UNDEFINED ? desc.format : desc.viewFormat),
       aspect_(formatAspect(desc.format)), usage_(desc.usage), mipLevels_(desc.mipLevels) {
     if (desc.width == 0 || desc.height == 0 || desc.mipLevels == 0 ||
@@ -45,13 +46,24 @@ Image::Image(Context& ctx, const ImageDesc& desc)
                                     " mip levels, got " + std::to_string(desc.width) + "x" +
                                     std::to_string(desc.height) + " with " + std::to_string(desc.mipLevels));
     const bool mutableFormat = viewFormat_ != format_;
+    const bool volume = desc.viewType == VK_IMAGE_VIEW_TYPE_3D,
+               array = desc.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    if ((!volume && !array && desc.viewType != VK_IMAGE_VIEW_TYPE_2D) || desc.depth == 0 ||
+        desc.layers == 0 || (desc.depth > 1 && !volume) || (desc.layers > 1 && !array) ||
+        ((volume || array) && (desc.mipLevels != 1 || mutableFormat)))
+        throw std::invalid_argument("Image '" + std::string(desc.name) + "': view type " +
+                                    std::to_string(static_cast<int>(desc.viewType)) + " with depth " +
+                                    std::to_string(desc.depth) + ", " + std::to_string(desc.layers) +
+                                    " layers and " + std::to_string(desc.mipLevels) +
+                                    " mip levels: a 3D image or an array has one level and one format, and "
+                                    "only a 3D image has depth, only an array layers");
 
     VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.imageType = volume ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
     imageInfo.format = desc.format;
-    imageInfo.extent = {desc.width, desc.height, 1};
+    imageInfo.extent = {desc.width, desc.height, desc.depth};
     imageInfo.mipLevels = desc.mipLevels;
-    imageInfo.arrayLayers = 1;
+    imageInfo.arrayLayers = desc.layers;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = desc.usage;
@@ -102,7 +114,7 @@ Image::Image(Context& ctx, const ImageDesc& desc)
     try {
         VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         viewInfo.image = image_;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.viewType = desc.viewType;
         viewInfo.format = viewFormat_;
         viewInfo.subresourceRange = subresourceRange(viewAspect(aspect_), 0, 1);
         vkCheck(vkCreateImageView(ctx.device(), &viewInfo, nullptr, &view_), "vkCreateImageView");
@@ -149,6 +161,9 @@ Image& Image::operator=(Image&& other) noexcept {
         view_ = std::exchange(other.view_, VK_NULL_HANDLE);
         sampledView_ = std::exchange(other.sampledView_, VK_NULL_HANDLE);
         extent_ = std::exchange(other.extent_, {0, 0});
+        viewType_ = std::exchange(other.viewType_, VK_IMAGE_VIEW_TYPE_2D);
+        depth_ = std::exchange(other.depth_, 1);
+        layers_ = std::exchange(other.layers_, 1);
         format_ = std::exchange(other.format_, VK_FORMAT_UNDEFINED);
         viewFormat_ = std::exchange(other.viewFormat_, VK_FORMAT_UNDEFINED);
         aspect_ = std::exchange(other.aspect_, VK_IMAGE_ASPECT_COLOR_BIT);

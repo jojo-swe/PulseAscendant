@@ -1,7 +1,7 @@
 #ifndef EVO_RT_TYPES_GLSL
 #define EVO_RT_TYPES_GLSL
 
-// The structs the path tracer shares with the CPU: mirrors of src/rt/geometry.hpp (Vertex, MeshRecord) and
+// The structs the path tracer shares with the CPU: mirrors of src/rt/geometry.hpp (Vertex, MeshRecord, Mat34) and
 // src/rt/gpu_types.hpp (the rest, FrameUniforms included), read from buffers declared layout(scalar)
 // (GL_EXT_scalar_block_layout).
 // Field order and types must match the C++ structs, whose sizeof and offsetof are pinned there;
@@ -19,10 +19,23 @@ const uint kPatternBrushedMetal = 2u;
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;
 const uint kNoLight = 0xFFFFFFFFu;
+const uint kNoMedium = 0xFFFFFFFFu;
+
+const uint kMaterialCameraOnlyEmission = 1u; // Material.flags
+const uint kMaterialCausticReceiver = 2u;
+const uint kMaterialThinWalled = 4u;
 
 const uint kLightEmitter = 0u; // LightKind
 const uint kLightRetroScreen = 1u;
 const uint kLightPortal = 2u;
+const uint kLightTree = 3u;
+
+const uint kInstanceSpheres = 1u; // InstanceRecord.flags
+const uint kInstanceDynamicSpheres = 2u;
+
+const uint kGeometryTriangles = 0u; // GeometryKind
+const uint kGeometrySpheres = 1u;
+const uint kHitGroupsPerKind = 4u;
 
 const uint kTraceFlagNee = 1u; // FrameUniforms.flags
 const uint kTraceFlagRussianRoulette = 2u;
@@ -40,7 +53,11 @@ struct MeshRecord { // 16 bytes
     uint indexCount;
 };
 
-struct Material { // 80 bytes
+struct Mat34 { // 48 bytes: rt::Mat34, row-major 3x4 (rows[r][3] is the translation)
+    vec4 rows[3];
+};
+
+struct Material { // 96 bytes
     vec3 baseColor;
     float roughness;
     float metallic;
@@ -55,6 +72,10 @@ struct Material { // 80 bytes
     float patternScale;
     vec3 baseColor2;
     uint materialClass;
+    uint flags; // kMaterial*
+    float abbe;
+    uint medium;
+    float pad;
 };
 
 struct RectLight { // 64 bytes: point = corner + u * edgeU + v * edgeV, emits along normalize(cross(edgeU, edgeV))
@@ -65,18 +86,18 @@ struct RectLight { // 64 bytes: point = corner + u * edgeU + v * edgeV, emits al
     uint kind;
     float selectWeight;
     float area;
-    uint pad;
+    uint gate; // the Portal light this light is seen through, or kNoLight
 };
 
 struct InstanceRecord { // 16 bytes; index = gl_InstanceCustomIndexEXT
-    uint mesh;
+    uint mesh; // the first sphere for a sphere instance
     uint material;
     uint light;
-    uint pad;
+    uint flags; // kInstance*
 };
 
 // The path tracer's per-frame constants (see the C++ mirror for the camera convention).
-struct FrameUniforms { // 176 bytes
+struct FrameUniforms { // 208 bytes
     vec3 cameraPosition;
     float tanHalfFovY;
     vec3 cameraRight;
@@ -103,8 +124,71 @@ struct FrameUniforms { // 176 bytes
     uint instanceCount;
     float clampIndirect;
     float lightWeightSum;
+    float regularizeRoughness;
+    uint treeLightCount;
+    uint mediumFlags;
+    uint causticReceivers;
+    uint lensing;
+    uint pad2;
+    float shutterOffset;
+    float environmentSelect;
+    uint sliceIndex;
+    uint sliceCount;
+};
+
+// The step 5 feature structs (see the C++ mirrors for their meaning).
+struct EnvironmentUniforms { // 112 bytes
+    uint kind;
+    float intensity;
+    float discCosRadius;
+    float discShare;
+    vec3 discDirection;
+    float domeShare;
+    vec3 discRadiance;
+    float starDensity;
+    vec3 zenith;
+    float starBrightness;
+    vec3 horizon;
+    float townDensity;
+    vec3 ground;
+    float haze;
+    vec3 glowDirection;
+    float glowStrength;
+};
+
+struct MediumUniforms { // 128 bytes (Task 11 names the fields)
+    uint words[32];
+};
+
+struct SphereRecord { // 48 bytes
+    vec3 center;
+    float radius;
+    vec3 color;
+    uint material;
+    vec3 prevCenter;
+    float emission;
+};
+
+struct TreeLight { // 48 bytes
+    vec3 center;
+    float radius;
+    vec3 emission;
+    uint sphere;
+    uint trail;
+    uint depth;
     uint pad0;
     uint pad1;
+};
+
+struct LightTreeNode { // 32 bytes
+    vec3 boundsMin;
+    float power;
+    vec3 boundsMax;
+    uint child;
+};
+
+struct LensingUniforms { // 32 bytes (Task 25 names the fields)
+    uint words[8];
 };
 
 #endif

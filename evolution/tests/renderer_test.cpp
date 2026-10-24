@@ -850,7 +850,7 @@ TimelineFrame studioNight(double fraction) {
 void testStudioResize(evo::gfx::Context& ctx) {
     Harness harness(ctx, modeSettings(160, 90, RenderMode::Interactive));
     const auto stats = [&] { return harness.renderer().lastStats(); };
-    harness.renderer().prepare();
+    harness.renderer().prepareAll();
     const TimelineFrame start = studioNight(0.3);
     harness.render(start);
     harness.render(evo::show::sampleTimeline(start.showSeconds + 1.0 / 60));
@@ -873,12 +873,28 @@ void testStudioResize(evo::gfx::Context& ctx) {
 void testPreparedEqualsLazy(evo::gfx::Context& ctx) {
     const TimelineFrame frame = studioNight(0.4);
     Harness prepared(ctx, modeSettings(160, 90, RenderMode::Export));
-    prepared.renderer().prepare();
+    prepared.renderer().prepareAll();
     Harness lazy(ctx, modeSettings(160, 90, RenderMode::Export));
     const Picture a = prepared.render(frame);
     const Picture b = lazy.render(frame);
     CHECK(prepared.renderer().lastStats().modernRendered && lazy.renderer().lastStats().modernRendered);
     CHECK(a.rgb == b.rgb);
+}
+
+// prepare(times) builds the GPU side of exactly the scenes those times show: none for 1993 and placeholder
+// chapters, the Studio (and with it the shared tracer) for a Studio chapter, once.
+void testPrepareTimes(evo::gfx::Context& ctx) {
+    Harness harness(ctx, modeSettings(160, 90, RenderMode::Export));
+    evo::render::ModernStage& stage = harness.renderer().modern();
+    const std::vector<double> plasma{evo::show::chapterStart(3) + 1.0, evo::show::chapterStart(4) - 1.0};
+    harness.renderer().prepare(plasma);
+    CHECK(stage.tracer() == nullptr && stage.gpuBytes() == 0);
+    const std::vector<double> mixed{plasma[0], studioNight(0.2).showSeconds, studioNight(0.9).showSeconds};
+    harness.renderer().prepare(mixed);
+    CHECK(stage.tracer() != nullptr && stage.sceneGpu(evo::modern::SceneId::Studio) != nullptr);
+    const VkDeviceSize bytes = stage.gpuBytes();
+    harness.renderer().prepareAll(); // the Studio is every scene the show has so far
+    CHECK(stage.gpuBytes() == bytes);
 }
 
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
@@ -932,6 +948,7 @@ int main() {
             testSkippedStageStats(ctx);
             testStudioResize(ctx);
             testPreparedEqualsLazy(ctx);
+            testPrepareTimes(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

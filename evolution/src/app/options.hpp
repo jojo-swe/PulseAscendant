@@ -30,6 +30,8 @@ struct Options {
     std::filesystem::path music;      // empty = the show's music beside the executable
     // Samples per pixel per frame (--spp, kMinSpp..kMaxSpp); unset = the mode's default (samplesPerPixel).
     std::optional<int> spp;
+    // The 2026 scenes' detail (--detail, 0 < F <= 1): particle, splat, voxel and photon counts scale with it.
+    float detail = 1.f;
 };
 
 inline constexpr int kMinSpp = 1;

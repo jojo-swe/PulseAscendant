@@ -13,6 +13,7 @@
 #include <volk.h>
 
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace evo::render {
@@ -25,6 +26,10 @@ struct RenderSettings {
     RenderMode mode = RenderMode::Export; // the window renders Interactive, the exports Export
     std::uint32_t spp = 1;                // samples per pixel per frame (at least 1)
     std::uint32_t maxBounces = 0;         // 0 = the mode's default (interactive 4, export 6)
+    modern::SceneDetail detail;           // the 2026 scenes' detail (--detail)
+    // Test hooks: the modern stage's scene factory and effect -> scene map (empty: the show's).
+    modern::SceneFactory sceneFactory;
+    modern::SceneMap sceneMap;
 };
 
 // The HUD scales with the output height in whole steps: unit = max(1, round(height / 360)), so 1 at 640x360,
@@ -68,14 +73,18 @@ public:
     // resets its history (Resize), even after a resize back to the size it last rendered. Not between
     // ring.begin() and ring.submit(). A no-op for the current size.
     void resize(std::uint32_t width, std::uint32_t height);
-    // Builds the path-traced scenes' GPU side now instead of in the first frame that shows them, so that no
-    // chapter hitches (setup: not between ring.begin() and ring.submit()). The window calls it, and the
-    // exports when they show the Studio. An unprepared renderer builds it inside its first Studio frame, with
-    // the same pixels (ModernStage).
-    void prepare() { modern_.prepare(); }
+    // Builds the GPU side of the path-traced scenes that the frames at these show times show, now instead of
+    // in the first frame that shows them, so that no chapter hitches (setup: not between ring.begin() and
+    // ring.submit()). The exports pass the times they will render. An unprepared renderer builds a scene
+    // inside its first frame, with the same pixels (ModernStage).
+    void prepare(std::span<const double> showSeconds);
+    // Every path-traced scene of the show (the window).
+    void prepareAll() { modern_.prepareAll(); }
     // Records all passes; output() is GENERAL afterwards.
     void render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
     gfx::Image& output() { return compositor_.output(); }
+    // The 2026 stage (tests read its tracer and memory).
+    ModernStage& modern() { return modern_; }
     void setCrt(bool crt) { crt_ = crt; }
     bool crt() const { return crt_; }
     // The whole HUD, the title included when the settings asked for it (key H in the window).

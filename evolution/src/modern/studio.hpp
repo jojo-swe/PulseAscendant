@@ -51,8 +51,9 @@ float studioExposureEV(show::Effect effect);
 
 class Studio final : public ModernScene {
 public:
-    // Builds the meshes, materials, the placed instances and the four lights once (CPU only).
-    Studio();
+    // Builds the meshes, materials, the placed instances and the four lights once (CPU only). The Studio has
+    // nothing that scales with the detail: every detail builds the same room.
+    explicit Studio(SceneDetail detail = {});
 
     // The mesh every key cap instances, and how many key caps there are (a 101-key keyboard).
     static constexpr std::uint32_t kKeyCapMesh = 0;
@@ -83,6 +84,8 @@ public:
     const SceneStatic& staticScene() const override { return static_; }
     // The fixed room with the chapter's camera and exposure.
     SceneFrame frame(const show::TimelineFrame& frame) const override;
+    // studioCamera(frame), without building the frame.
+    Camera camera(const show::TimelineFrame& frame) const override { return studioCamera(frame); }
     bool samplesRetro() const override { return true; }
 
 private:

@@ -218,13 +218,14 @@ public:
     // One trace of `scene` with the stage's own path tracer (built by an earlier render), nothing else.
     void trace(const modern::SceneFrame& scene, const modern::TraceSettings& settings, gfx::Image& retro) {
         VkCommandBuffer cmd = ring_.begin();
-        modern_.studioTracer()->trace(cmd, scene, std::nullopt, settings, retro);
+        modern_.tracer()->trace(cmd, *modern_.sceneGpu(modern::SceneId::Studio), scene, std::nullopt,
+                                settings, &retro);
         ring_.wait(ring_.submit());
     }
 
     // The path tracer's lighting image (RGBA32F), raw bytes. Between frames.
     std::vector<std::uint8_t> lightingBytes(gfx::Context& ctx) {
-        gfx::Image& image = modern_.studioTracer()->gbuffer().lighting;
+        gfx::Image& image = modern_.tracer()->gbuffer().lighting;
         const VkExtent2D extent = image.extent();
         gfx::Buffer buffer(ctx, {VkDeviceSize(extent.width) * extent.height * 16,
                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "studio test lighting readback"});
@@ -460,9 +461,8 @@ void testScene() {
         CHECK(determinant(instance.transform) > 0.f);
     }
     CHECK(keys == int(modern::Studio::kKeyCount));
-    CHECK(f.instances.size() <= modern::PathTracer::kMaxInstances);
-    CHECK(f.lights.size() == modern::Studio::kLightCount &&
-          f.lights.size() <= modern::PathTracer::kMaxLights);
+    CHECK(f.instances.size() <= statics.capacity.instances);
+    CHECK(f.lights.size() == modern::Studio::kLightCount && f.lights.size() <= statics.capacity.lights);
     // Each light: its area, its kind, and (but the window) the one instance whose surface it is, with the
     // same emission as its material.
     int portals = 0;

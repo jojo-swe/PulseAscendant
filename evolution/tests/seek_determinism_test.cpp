@@ -78,7 +78,7 @@ public:
     Harness(evo::gfx::Context& ctx, RenderMode mode)
         : readback_(ctx, kWidth, kHeight), ring_(ctx), renderer_(ctx, ring_, settings(mode)) {}
 
-    void prepare() { renderer_.prepare(); } // as the window does before its first frame
+    void prepare() { renderer_.prepareAll(); } // as the window does before its first frame
 
     Frame render(double showSeconds) {
         VkCommandBuffer cmd = ring_.begin();
