@@ -138,8 +138,17 @@ void testScript() {
     CHECK(screen(0.9) == Lines{"C:\\>cd"}); // 0.1 s of typing at 25 characters a second
     CHECK(screen(1.5) == Lines{"C:\\>cd demo"});
     CHECK(screen(1.61) == (Lines{"C:\\>cd demo", "C:\\DEMO>"}));
+    // Mid-typing: 2.4 s is retro frame 84, 7 frames after typing starts at frame 77 (2.2 s); 7 * 25 / 35 = 5
+    // characters.
+    CHECK(screen(2.4) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolu"}));
     CHECK(screen(3.0) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe"}));
     CHECK(screen(3.41) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026"}));
+    // Each output line starts on its time, not before: 3.95, 4.75 and 5.35 s still lack the line due next.
+    CHECK(screen(3.95) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026"}));
+    CHECK(screen(4.01).back() == "Sound Blaster 16: 220h IRQ5 DMA1 ... OK");
+    CHECK(screen(4.75).back() == "Sound Blaster 16: 220h IRQ5 DMA1 ... OK");
+    CHECK(screen(4.81).back() == "Gravis Ultrasound ... not found");
+    CHECK(screen(5.35).back() == "Gravis Ultrasound ... not found");
     CHECK(screen(5.0) ==
           (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026",
                  "Sound Blaster 16: 220h IRQ5 DMA1 ... OK", "Gravis Ultrasound ... not found"}));
@@ -176,6 +185,7 @@ void testFlashFrame() {
                 frame.chapterDuration, frame.accentSeconds, flash, flash / 35.0);
     CHECK(frame.accentSeconds < frame.chapterDuration - 4.0 / 35);
     CHECK(flash == static_cast<std::uint32_t>(std::floor((frame.chapterDuration - 4.0 / 35) * 35)));
+    CHECK(flash == 247); // for the current show data: 7.057 s, chapter end 7.1731 s
     // Two white frames and at least one black one fit before the chapter ends.
     CHECK((flash + 3.0) / 35 < frame.chapterDuration);
 
@@ -194,8 +204,9 @@ void testFlashFrame() {
     CHECK(evo::retro::bootText(frame, flash).empty() && evo::retro::bootText(frame, flash + 2).empty());
 }
 
-// The text is a function of the retro frame: every time inside one gives the same items, and the provider
-// reads nothing of the frame but the chapter's fixed duration and accent.
+// The text, the background and the palette are functions of the retro frame: every time inside one gives
+// the same result, and they read nothing of the frame but the chapter's fixed duration and accent. Covers
+// frames of the script, the two flash frames and the black after them.
 void testTextIsPure() {
     const auto same = [](const std::vector<evo::text::Item>& a, const std::vector<evo::text::Item>& b) {
         if (a.size() != b.size())
@@ -206,13 +217,19 @@ void testTextIsPure() {
                 return false;
         return true;
     };
-    for (std::uint32_t retroFrame : {0u, 17u, 70u, 105u, 175u, 238u}) {
+    for (std::uint32_t retroFrame : {0u, 17u, 70u, 105u, 175u, 238u, 246u, 247u, 248u, 249u, 250u}) {
         TimelineFrame early = boot(retroFrame / 35.0 + 1e-4);
         TimelineFrame late = boot((retroFrame + .99) / 35.0);
         late.kick = 1;
         late.energy = 1;
         late.showSeconds += 100;
         CHECK(same(evo::retro::bootText(early, retroFrame), evo::retro::bootText(late, retroFrame)));
+        CHECK(evo::retro::bootBackground(early, retroFrame) == evo::retro::bootBackground(late, retroFrame));
+        evo::retro::Palette a{}, b{};
+        b.fill(0x12345678u);
+        evo::retro::bootPalette(a, early, retroFrame);
+        evo::retro::bootPalette(b, late, retroFrame);
+        CHECK(a == b);
     }
     // Grey 8x8 text at scale 1, from the 4-pixel margin, and the cursor as an underscore while it is on.
     const auto items = evo::retro::bootText(boot(0.1), 3);
