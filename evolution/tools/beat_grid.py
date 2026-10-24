@@ -1,13 +1,15 @@
 """Measure each track's beat grid (tempo, beat phase and downbeat) from the actual PCM.
 
-Ported from PulseAscendant tools/beat_grid.py (MIT). The algorithm and constants are unchanged; only the
-I/O differs: any number of tracks on the command line, output in the evo::show::generated namespace.
+Ported from PulseAscendant tools/beat_grid.py (MIT). The tracker, smoothing and bar-position code and their
+constants are unchanged; the I/O differs (any number of tracks on the command line, output in the
+evo::show::generated namespace) and the tempo estimate gains a disambiguation step.
 
 Songs drift slowly in tempo (tens of milliseconds over a minute), so a single constant grid would slide
 off the music. Every beat is tracked and then smoothed locally, which keeps cuts on the actual pulse.
 
 Method: 100 Hz log spectral-flux onset envelope -> autocorrelation tempo
-(70-180 BPM, log-normal prior around 120) -> dynamic-programming beat tracking
+(70-180 BPM, log-normal prior around 120) -> disambiguation against 2/3, 3/2, 1/2, 2x and the strongest
+autocorrelation peaks by the bass onsets on each candidate's grid -> dynamic-programming beat tracking
 (Ellis 2007) -> local linear smoothing -> per-region downbeat phase chosen from
 bass onsets and harmonic change at each candidate bar line.
 
@@ -24,7 +26,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 RATE = 100
 METHOD = ('100 Hz log spectral flux; autocorrelation + comb tempo with 120 BPM log-normal prior; '
-          'DP beat tracking; +/-6 beat local linear smoothing (follows tempo drift); '
+          'tempo disambiguated by phase-optimised bass onset mean on 90-180 BPM candidate grids (switch at '
+          '>= 5 % better); DP beat tracking; +/-6 beat local linear smoothing (follows tempo drift); '
           '4/4 bar position from bass onset and harmonic change in +/-24 beat windows')
 
 
@@ -63,14 +66,29 @@ def onset_envelope(mono, sample_rate=48000):
     return normalize(flux), normalize(low), coarse
 
 
+# Tempo range a disambiguated beat may take, the range autocorrelation peaks are drawn from, and the score
+# margin a candidate needs over the comb estimate before it replaces it.
+CANDIDATE_BPM = (90, 180)
+PEAK_BPM = (60, 200)
+SWITCH_MARGIN = 1.05
+
+
+def autocorrelation(onset):
+    x = onset - onset.mean()
+    return np.correlate(x, x, 'full')[len(x) - 1:]
+
+
+def tempo_prior(bpm):
+    """Log-normal prior around 120 BPM (0.9 octave width)."""
+    return np.exp(-.5 * (np.log2(bpm / 120) / .9) ** 2)
+
+
 def estimate_period(onset):
     """Autocorrelation tempo in frames, with octave-error protection via a tempo prior."""
-    x = onset - onset.mean()
-    corr = np.correlate(x, x, 'full')[len(x) - 1:]
+    corr = autocorrelation(onset)
     lags = np.arange(len(corr))
     valid = (lags >= RATE * 60 / 180) & (lags <= RATE * 60 / 70)
-    bpm = 60 * RATE / np.maximum(lags, 1)
-    prior = np.exp(-.5 * (np.log2(bpm / 120) / .9) ** 2)
+    prior = tempo_prior(60 * RATE / np.maximum(lags, 1))
     score = np.where(valid, corr * prior, -np.inf)
     # Comb-sum over multiples sharpens the true beat period.
     comb = np.full(len(corr), -np.inf)
@@ -85,6 +103,62 @@ def estimate_period(onset):
         if denom != 0:
             return best + .5 * (a - c) / denom
     return float(best)
+
+
+def autocorrelation_peaks(corr, count=6):
+    """Lags (frames) of the strongest local maxima of the autocorrelation between PEAK_BPM."""
+    lags = np.arange(int(np.ceil(60 * RATE / PEAK_BPM[1])), int(60 * RATE / PEAK_BPM[0]) + 1)
+    lags = lags[(lags >= 1) & (lags < len(corr) - 1)]
+    peaks = lags[(corr[lags] > corr[lags - 1]) & (corr[lags] >= corr[lags + 1])]
+    return peaks[np.argsort(-corr[peaks], kind='stable')][:count]
+
+
+def bass_grid(low, period, start, phases=32, span=1., step=.01):
+    """Best mean bass onset on a constant beat grid from start to the end: (mean, period).
+
+    The grid phase is optimised over `phases` steps of one period. Over a whole song a constant grid only
+    stays on the beat if its period is right to about 1e-4, far finer than an autocorrelation lag, so the
+    period is refined too, within +/-span frames in `step` frame steps."""
+    n = len(low)
+    best = (-1., period)
+    for p in np.arange(period - span, period + span + step / 2, step):
+        positions = start + np.arange(phases)[:, None] * p / phases + np.arange(int((n - start) / p) + 1) * p
+        index = np.round(positions).astype(int)
+        inside = index < n
+        sums = np.where(inside, low[np.minimum(index, n - 1)], 0).sum(axis=1)
+        means = sums / np.maximum(inside.sum(axis=1), 1)
+        if means.max() > best[0]:
+            best = (float(means.max()), float(p))
+    return best
+
+
+def disambiguate_period(onset, low, period):
+    """Correct the comb estimate when it locked onto a related period instead of the beat.
+
+    Trance delays at 3/16 put strong onsets 1.5 beats apart, so the comb can settle on dotted quarters
+    (2/3 tempo) or other sub-harmonics. Each candidate (the comb period P, P/1.5, P*1.5, P/2, 2P and the six
+    strongest autocorrelation peaks; all but P limited to CANDIDATE_BPM) is scored by its bass-onset grid
+    mean times the tempo prior. The best replaces P only if it scores SWITCH_MARGIN better and is a
+    different tempo (more than 3 % away). Returns (period, {bpm: score}, method)."""
+    start = int(np.argmax(onset >= .3))  # first beat estimate: the first clear onset
+    candidates = [period, period / 1.5, period * 1.5, period / 2, period * 2]
+    candidates += [float(lag) for lag in autocorrelation_peaks(autocorrelation(onset))]
+    seen, scored = [], []
+    for k, candidate in enumerate(candidates):
+        bpm = 60 * RATE / candidate
+        if k and not CANDIDATE_BPM[0] <= bpm <= CANDIDATE_BPM[1]:
+            continue
+        if any(abs(candidate - other) < .5 for other in seen):
+            continue  # an autocorrelation peak at a period already scored
+        seen.append(candidate)
+        mean, refined = bass_grid(low, candidate, start)
+        scored.append((mean * float(tempo_prior(60 * RATE / refined)), refined))
+    report = {f'{60 * RATE / refined:.2f}': round(score, 4)
+              for score, refined in sorted(scored, key=lambda s: s[1])}
+    score, refined = max(scored)
+    if score > 0 and score >= SWITCH_MARGIN * scored[0][0] and abs(np.log(refined / period)) > np.log(1.03):
+        return refined, report, 'bass-grid'
+    return period, report, 'comb'
 
 
 def track_beats(onset, period, tightness=120.):
@@ -155,7 +229,8 @@ def bar_positions(onset, low, coarse, beats, meter=4, radius=24):
 def analyze(path):
     mono, frames = read_mono(path)
     onset, low, coarse = onset_envelope(mono)
-    period = estimate_period(onset)
+    comb = estimate_period(onset)
+    period, candidates, tempo_method = disambiguate_period(onset, low, comb)
     tracked = track_beats(onset, period)
     beats = smooth_beats(tracked)
     position = bar_positions(onset, low, coarse, beats)
@@ -164,6 +239,8 @@ def analyze(path):
     return dict(source=Path(path).name, sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest(),
                 frames=frames, bpm_median=round(60 * RATE / float(np.median(np.diff(beats))), 3),
                 beats=int(len(beats)), downbeats=int((position == 0).sum()),
+                tempo_comb_bpm=round(60 * RATE / comb, 3), tempo_method=tempo_method,
+                tempo_candidates=candidates,
                 tracker_jitter_ms_median=round(float(np.median(jitter)), 2),
                 tracker_jitter_ms_p90=round(float(np.percentile(jitter, 90)), 2),
                 times=[round(float(t), 4) for t in seconds], bar_position=[int(p) for p in position])
