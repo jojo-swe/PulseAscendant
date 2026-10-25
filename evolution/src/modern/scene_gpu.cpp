@@ -146,6 +146,7 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
     }
     checkLights(frame, materials);
     packEnvironment(frame.environment); // throws for an invalid environment
+    checkSplats(frame.splats, capacity.splats, scene.splatShader);
 }
 
 SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)

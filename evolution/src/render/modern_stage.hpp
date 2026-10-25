@@ -20,6 +20,7 @@
 namespace evo::modern {
 class PathTracer;
 class SceneGpu;
+class SplatPass;
 } // namespace evo::modern
 
 namespace evo::post {
@@ -73,8 +74,15 @@ bool validTraceScale(float scale);
 // same trace scale (Review Focus 3), and the upscaler's history resets with the denoiser's. At scale 1 there
 // is no upscaler pass at all: the denoiser writes the HDR image, exactly as before.
 //
-// GPU timers (setTimers): "tlas" and "trace" (the tracer), "denoise", "upscale" (below scale 1), "tonemap";
-// "fill" and "tonemap" for the placeholder.
+// Emissive splats (Task 10 of step 5): a frame with SceneFrame::splats runs the scene's splat shader after
+// the trace and before the denoiser (modern::SplatPass), adding into the G-buffer's emission guide at the
+// trace size, depth-tested against the depth guide; like the CRT's picture they bypass the denoiser's history
+// and filter (and the upscaler's history). One SplatPass serves every scene: it is made when the first scene
+// with a splat shader is prepared, with the accumulators at the trace size, and loads each such scene's
+// shader on its prepare. It keeps nothing between frames.
+//
+// GPU timers (setTimers): "tlas" and "trace" (the tracer), "splats" (a frame with splats), "denoise",
+// "upscale" (below scale 1), "tonemap"; "fill" and "tonemap" for the placeholder.
 //
 // A scene's GPU side is built by prepare(id) (or prepareAll()), which the window and the exports call before
 // their first frame, so that no chapter hitches. A stage that was not prepared builds it on the first frame
@@ -108,7 +116,8 @@ public:
     VkDeviceSize gpuBytes() const;
     // The images path tracing adds, whatever the number of scenes, as allocated: the tracer's G-buffer and
     // the denoiser's images (at the trace size), below scale 1 the denoised trace-size picture and the
-    // upscaler's history, and the stage's HDR and display images (0 before the first prepare).
+    // upscaler's history, the splat accumulators once a scene with splats is prepared, and the stage's HDR
+    // and display images (0 before the first prepare).
     VkDeviceSize imageBytes() const;
     // Recreates the images at the new size. The caller makes sure no submitted frame still uses the old ones.
     void resize(std::uint32_t width, std::uint32_t height);
@@ -174,6 +183,7 @@ private:
     std::unique_ptr<post::Denoiser> denoiser_;
     std::unique_ptr<post::Upscaler> upscaler_;
     gfx::Image traceHdr_; // the denoised picture at the trace size, below scale 1 (else empty)
+    std::unique_ptr<modern::SplatPass> splats_; // once a scene with a splat shader is prepared
     std::unique_ptr<modern::PathTracer> tracer_;
     std::optional<modern::Camera> previousCamera_; // the last frame's, while the history continues
     gfx::GpuTimers* timers_ = nullptr;
