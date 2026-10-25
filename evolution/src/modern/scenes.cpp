@@ -6,6 +6,7 @@
 #include "modern/scenes/particles.hpp"
 #include "modern/scenes/ship.hpp"
 #include "modern/scenes/spheres.hpp"
+#include "modern/scenes/tunnel.hpp"
 #include "modern/studio.hpp"
 
 #include <array>
@@ -30,7 +31,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Ship, "Ship", &make<Ship>},                // Task 16
     {SceneId::Particles, "Particles", &make<Particles>}, // Task 17
     {SceneId::Nebula, "Nebula", nullptr},                // Task 18
-    {SceneId::Tunnel, "Tunnel", nullptr},                // Task 19
+    {SceneId::Tunnel, "Tunnel", &make<Tunnel>},          // Task 19
     {SceneId::Glass, "Glass", &make<Glass>},             // Task 20
     {SceneId::Lens, "Lens", &make<Lens>},                // Task 21
     {SceneId::Spheres, "Spheres", &make<Spheres>},       // Task 22
@@ -47,7 +48,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Flyby, SceneId::Placeholder}, // the Studio's pull-out
     {Effect::Dots, SceneId::Particles},
     {Effect::Plasma, SceneId::Placeholder}, // Nebula
-    {Effect::Tunnel, SceneId::Placeholder}, // Tunnel
+    {Effect::Tunnel, SceneId::Tunnel},
     {Effect::Glenz, SceneId::Glass},
     {Effect::Lens, SceneId::Lens},
     {Effect::Raytrace, SceneId::Spheres}, // Spheres

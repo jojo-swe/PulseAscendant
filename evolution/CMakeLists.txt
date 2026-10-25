@@ -1115,6 +1115,15 @@ add_executable(spheres_scene_test tests/spheres_scene_test.cpp)
 target_link_libraries(spheres_scene_test PRIVATE evo_scene_fixture)
 evo_gpu_test(scene_spheres spheres_scene_test)
 
+# --- Step 5 Task 19: Tunnel (TUNNEL) -----------------------------------------------------------------------------
+
+# The scene (src/modern/scenes/tunnel.cpp) and its beads' particle shader (shaders/modern/particles_tunnel.comp,
+# compiled by the shaders/modern glob). The test adds the 1993 mirror, the beads against the GPU, the camera
+# inside the tube, the ignition and the lit haze to the standard contract; `scene_tunnel_test --look <dir> [spp]
+# [width height] [name]` renders stills instead.
+target_sources(evo_modern PRIVATE src/modern/scenes/tunnel.cpp)
+evo_scene_test(tunnel)
+
 # --- Step 5 Task 11: participating media ---------------------------------------------------------------------
 
 # Height fog and baked density grids: the CPU side (packing, the HG and fog references) and the grid's GPU
