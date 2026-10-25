@@ -316,6 +316,14 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         throw std::invalid_argument(
             "PathTracer::trace(): the frame places its particle field, but no particle "
             "spheres and BLAS come with it (TraceExtras)");
+    // Task 13: caustics need the maps' image, receiver table and photon pass (the maps check the frame in
+    // detail; the receivers' materials are checked here too, since the closest-hits read their table).
+    if (frame.caustics &&
+        (extras.causticMaps == nullptr || extras.causticReceivers == nullptr || !extras.photons))
+        throw std::invalid_argument(
+            "PathTracer::trace(): the frame has caustics, but no caustic maps, receiver "
+            "table and photon pass come with it (TraceExtras)");
+    checkCausticFrame(scene.source(), frame, ~0u);
     const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
     const std::vector<rt::Material>& materials =
         frame.materials.empty() ? scene.source().materials : frame.materials;
@@ -379,8 +387,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     for (const rt::RectLight& light : frame.lights)
         u.lightWeightSum += std::max(light.selectWeight, 0.f);
     // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
-    // regularisation, no tree lights, medium, caustics or lensing.
+    // regularisation, no tree lights, medium or lensing; the caustic receivers (Task 13).
     u.environmentSelect = frame.environment.select;
+    u.causticReceivers = frame.caustics ? static_cast<std::uint32_t>(frame.caustics->receivers.size()) : 0u;
     u.sliceIndex = 0;
     u.sliceCount = 1;
 
@@ -399,6 +408,25 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     tlas_->build(cmd, scene.blases(), instances);
     if (timers_)
         timers_->end(cmd);
+    const gfx::Buffer& staticSpheres = extras.staticSpheres ? *extras.staticSpheres
+                                       : scene.spheres()    ? scene.spheres()->records()
+                                                            : dummyBuffer_;
+    const gfx::Buffer& environmentBuffer = extras.environment ? *extras.environment : environments_[slot];
+    // Task 13: the photon pass, against this frame's TLAS and the buffers the trace binds.
+    if (frame.caustics) {
+        PhotonScene photons;
+        photons.tlas = tlas_->handle();
+        photons.instances = &instanceRecords_[slot];
+        photons.materials = &materialTable;
+        photons.vertices = &scene.geometry().vertices();
+        photons.indices = &scene.geometry().indices();
+        photons.meshRecords = &scene.geometry().meshRecords();
+        photons.staticSpheres = &staticSpheres;
+        photons.particleSpheres = extras.particleSpheres ? extras.particleSpheres : &dummyBuffer_;
+        photons.lights = &lights_[slot];
+        photons.environment = &environmentBuffer;
+        extras.photons(cmd, photons);
+    }
 
     gfx::Image& screen = scene.samplesRetro() ? *retroScreen : blackScreen_;
     // The feature images: the frame's, or the stand-ins (already in GENERAL, sampled).
@@ -438,17 +466,14 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         storageBuffer(EVO_BINDING_INDICES, scene.geometry().indices()),
         storageBuffer(EVO_BINDING_MESH_RECORDS, scene.geometry().meshRecords()),
         sampledImage(EVO_BINDING_RETRO_SCREEN, screen),
-        storageBuffer(EVO_BINDING_ENVIRONMENT,
-                      extras.environment ? *extras.environment : environments_[slot]),
+        storageBuffer(EVO_BINDING_ENVIRONMENT, environmentBuffer),
         extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes),
         extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights),
         extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
         sampledImage(EVO_BINDING_DENSITY, density),
         sampledImage(EVO_BINDING_MAJORANT, majorant),
         extraBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS, extras.previousTransforms),
-        storageBuffer(EVO_BINDING_STATIC_SPHERES, extras.staticSpheres ? *extras.staticSpheres
-                                                  : scene.spheres()    ? scene.spheres()->records()
-                                                                       : dummyBuffer_),
+        storageBuffer(EVO_BINDING_STATIC_SPHERES, staticSpheres),
         extraBuffer(EVO_BINDING_PARTICLE_SPHERES, extras.particleSpheres),
         sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
         extraBuffer(EVO_BINDING_LENSING, extras.lensing),

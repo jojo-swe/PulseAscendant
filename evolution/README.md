@@ -68,7 +68,10 @@ validation.
   guides, batched dispatches), `denoiser` (accumulation, resets, reprojection, edges, the emission bypass,
   NaN/Inf), `tonemap` (the GPU against the CPU reference and golden values) and `spheres` (the sphere
   intersection against a CPU reference, depth and normals, glass against a sphere mesh, 4096 particles over 32
-  frames two in flight against their analytic positions; `spheres_test --look <dir> [spp]` renders a picture).
+  frames two in flight against their analytic positions; `spheres_test --look <dir> [spp]` renders a picture)
+  and `caustics` (photon maps under a glass sphere: their energy against the sphere's cross-section and against
+  the converged path-traced caustic, dispersion, the same map in any photon order, the double-count exclusion;
+  `caustics_test --look <dir> [spp]` renders a glass sphere and a prism's spectrum).
 - The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT lighting the room, the screen following
   the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS prompt) and
   `seek_determinism` (in the window, after any seek, chapter change, camera cut or step back in time, the

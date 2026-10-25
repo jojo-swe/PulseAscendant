@@ -18,6 +18,7 @@
 #include <optional>
 
 namespace evo::modern {
+class CausticMaps;
 class PathTracer;
 class SceneGpu;
 } // namespace evo::modern
@@ -81,6 +82,11 @@ bool validTraceScale(float scale);
 // rt::ParticleField (made on the first prepared scene with a particle shader and grown to the largest
 // capacity.particles prepared), at the frame's chapter-local time (prevCenter at the previous frame's while
 // the history continues, else at the same time), then traces with that slot's spheres and BLAS.
+//
+// A frame with caustics (Task 13) shoots its photons into the stage's one modern::CausticMaps (made on the
+// first prepared scene with capacity.causticResolution > 0, grown to the largest) inside the trace, after
+// the TLAS build: seeded by frameSeedFor(showSeconds, 0) alone, so the map is a pure function of the show
+// time, with kExportPhotonFactor times the frame's photons in an export of kExportPhotonSpp spp or more.
 //
 // GPU timers (setTimers): "particles" (the particle field), "tlas" and "trace" (the tracer), "denoise",
 // "upscale" (below scale 1), "tonemap"; "fill" and "tonemap" for the placeholder.
@@ -155,6 +161,8 @@ public:
     const modern::SceneGpu* sceneGpu(modern::SceneId id) const;
     // The particle field every scene with particles shares; null until one is prepared.
     const rt::ParticleField* particles() const { return particles_.get(); }
+    // The caustic maps every scene with caustics shares (Task 13); null until one is prepared.
+    const modern::CausticMaps* caustics() const { return caustics_.get(); }
 
 private:
     // The scene object of an id, built on first use (CPU only).
@@ -183,7 +191,8 @@ private:
     // tracer's TLAS (destroyed first: it waits for the ring's frames) points at the SceneGpus' BLASes.
     mutable std::array<std::unique_ptr<modern::ModernScene>, modern::kSceneCount> scenes_;
     std::array<std::unique_ptr<modern::SceneGpu>, modern::kSceneCount> gpus_;
-    std::unique_ptr<rt::ParticleField> particles_; // its BLASes outlive the tracer's TLAS
+    std::unique_ptr<rt::ParticleField> particles_;  // its BLASes outlive the tracer's TLAS
+    std::unique_ptr<modern::CausticMaps> caustics_; // Task 13: sized to the largest causticResolution
     std::unique_ptr<post::Denoiser> denoiser_;
     std::unique_ptr<post::Upscaler> upscaler_;
     gfx::Image traceHdr_; // the denoised picture at the trace size, below scale 1 (else empty)
