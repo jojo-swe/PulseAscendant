@@ -1133,8 +1133,11 @@ std::filesystem::path payloadProbeShaders() {
     const std::filesystem::path dir = std::filesystem::path(EVO_TEST_OUT_DIR) / "payload_probe_shaders";
     std::filesystem::create_directories(dir);
     const std::filesystem::path built(EVO_TEST_SHADER_DIR);
-    for (const char* name : {"rt_sky.rmiss.spv", "rt_shadow.rmiss.spv", "rt_pbr.rchit.spv",
-                             "rt_glass.rchit.spv", "rt_emissive.rchit.spv", "rt_checker.rchit.spv"})
+    for (const char* name :
+         {"rt_sky.rmiss.spv", "rt_shadow.rmiss.spv", "rt_pbr.rchit.spv", "rt_glass.rchit.spv",
+          "rt_emissive.rchit.spv", "rt_checker.rchit.spv", "rt_pbr_sphere.rchit.spv",
+          "rt_glass_sphere.rchit.spv", "rt_emissive_sphere.rchit.spv", "rt_checker_sphere.rchit.spv",
+          "rt_sphere.rint.spv"})
         std::filesystem::copy_file(built / name, dir / name,
                                    std::filesystem::copy_options::overwrite_existing);
     std::filesystem::copy_file(std::filesystem::path(EVO_TEST_SPIRV_DIR) / "test_payload_probe.rgen.spv",

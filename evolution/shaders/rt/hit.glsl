@@ -1,13 +1,19 @@
 #ifndef EVO_RT_HIT_GLSL
 #define EVO_RT_HIT_GLSL
 
-// Closest-hit helpers: the hit triangle's interpolated attributes in world space, the procedural patterns
-// and writing the evaluated surface into the payload. Closest-hit shaders never trace (recursion depth 1).
+// Closest-hit helpers: the hit triangle's interpolated attributes in world space (or, compiled with
+// GEOMETRY_SPHERES, the hit analytic sphere's: the rt_<class>_sphere.rchit.spv variants, step 5's Task 8),
+// the procedural patterns and writing the evaluated surface into the payload. Closest-hit shaders never
+// trace (recursion depth 1).
 
 #include "common.glsl"
 #include "random.glsl"
 
+#ifdef GEOMETRY_SPHERES
+#include "sphere.glsl" // sphere.rint reports no attributes: hitPoint() recomputes the point from gl_HitTEXT
+#else
 hitAttributeEXT vec2 hitBarycentrics;
+#endif
 layout(location = 0) rayPayloadInEXT HitPayload payload;
 
 struct HitPoint {
@@ -20,7 +26,51 @@ struct HitPoint {
     Material material;
     float uvPerWorldArea; // the triangle's uv area over its world area, for texture LOD
     vec3 dPdu, dPdv;      // world change per unit of u and of v across the triangle (0 for a degenerate uv map)
+    vec3 emission;        // the object's own emission on top of its material's (a sphere's colour * emission)
+    uint primitive;       // HitPayload.primitive: the triangle of the mesh, or the sphere's index in its buffer
+    vec3 prevPosition;    // HitPayload.prevPosition: the hit point where it was in the previous frame
 };
+
+#ifdef GEOMETRY_SPHERES
+
+// The hit sphere: sphere InstanceRecord.mesh + gl_PrimitiveID of the static spheres, or of the particle field
+// for a kInstanceDynamicSpheres instance. Its material is its own SphereRecord.material (every sphere of an
+// instance has the instance's class: the hit group), baseColor (and the pattern's baseColor2) multiplied by
+// its colour, plus colour * emission emitted. The normal is radial, the uv spherical (sphereUv), and the
+// previous position the same point of the sphere around prevCenter (the instance's transform is Task 9's).
+HitPoint hitPoint() {
+    HitPoint h;
+    h.record = instanceRecords[gl_InstanceCustomIndexEXT];
+    uint index = h.record.mesh + uint(gl_PrimitiveID);
+    SphereRecord s =
+        (h.record.flags & kInstanceDynamicSpheres) != 0u ? particleSpheres[index] : staticSpheres[index];
+    h.material = materials[s.material];
+    h.material.baseColor *= s.color;
+    h.material.baseColor2 *= s.color;
+    h.emission = s.color * s.emission;
+    h.primitive = index;
+
+    vec3 dir = gl_WorldRayDirectionEXT;
+    vec3 local = gl_ObjectRayOriginEXT + gl_HitTEXT * gl_ObjectRayDirectionEXT - s.center;
+    vec3 nLocal = safeNormalize(local, -normalize(gl_ObjectRayDirectionEXT));
+    h.position = gl_ObjectToWorldEXT * vec4(s.center + s.radius * nLocal, 1.0); // on the surface
+    h.prevPosition = gl_ObjectToWorldEXT * vec4(s.prevCenter + s.radius * nLocal, 1.0);
+    h.front = gl_HitKindEXT == kSphereHitOutside;
+    // Normals go to world space through the inverse transpose: n * WorldToObject.
+    h.geometricNormal = safeNormalize((nLocal * gl_WorldToObjectEXT).xyz, h.front ? -dir : dir);
+    h.normal = h.geometricNormal;
+    h.uv = sphereUv(nLocal);
+
+    vec3 du, dv;
+    sphereTangents(nLocal, s.radius, du, dv);
+    h.dPdu = gl_ObjectToWorldEXT * vec4(du, 0.0);
+    h.dPdv = gl_ObjectToWorldEXT * vec4(dv, 0.0);
+    float worldPerUv = length(cross(h.dPdu, h.dPdv));
+    h.uvPerWorldArea = worldPerUv > 0.0 ? 1.0 / worldPerUv : 0.0;
+    return h;
+}
+
+#else
 
 HitPoint hitPoint() {
     HitPoint h;
@@ -63,8 +113,13 @@ HitPoint hitPoint() {
     float uvDet = d1.x * d2.y - d1.y * d2.x;
     h.dPdu = uvDet != 0.0 ? (d2.y * w1 - d1.y * w2) / uvDet : vec3(0.0);
     h.dPdv = uvDet != 0.0 ? (d1.x * w2 - d2.x * w1) / uvDet : vec3(0.0);
+    h.emission = vec3(0.0);
+    h.primitive = uint(gl_PrimitiveID);
+    h.prevPosition = h.position; // Task 9: the hit point under the previous transform
     return h;
 }
+
+#endif
 
 // The mip level of a texture of texSize texels for this hit, from the ray cone (Akenine-Moller et al. 2019);
 // kDiffuseTextureLod once the path has scattered off a rough surface.
@@ -135,8 +190,12 @@ vec3 checkerColor(Material m, vec3 p, vec3 ng) {
 // --- The payload -------------------------------------------------------------------------------------------
 
 // Fills the payload with the hit and the surface (baseColor and roughness after any pattern; emission is
-// the radiance towards the ray's origin: a light's surface emits on its outward side only).
+// the radiance towards the ray's origin: a light's surface emits on its outward side only; the object's own
+// h.emission adds to the material's).
 void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmission, vec3 emission) {
+#ifdef GEOMETRY_SPHERES
+    emission += h.emission; // (triangles have none: their bytes stay step 4's)
+#endif
     payload.position = h.position;
     payload.t = gl_HitTEXT;
     payload.normal = h.normal;
@@ -155,8 +214,8 @@ void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmissio
     payload.materialFlags = h.material.flags;
     payload.abbe = h.material.abbe;
     payload.medium = h.material.medium;
-    payload.primitive = uint(gl_PrimitiveID);
-    payload.prevPosition = h.position; // Task 9: the hit point under the previous transform
+    payload.primitive = h.primitive;
+    payload.prevPosition = h.prevPosition;
 }
 
 vec3 materialEmission(Material m) {

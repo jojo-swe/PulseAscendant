@@ -12,6 +12,7 @@
 #include "modern/splats.hpp"
 #include "rt/geometry.hpp"
 #include "rt/gpu_types.hpp"
+#include "rt/spheres.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -39,13 +40,18 @@ struct SceneCapacity {
 };
 
 // The meshes (BLAS per mesh) and materials of a scene, and what its frames may hold. An instance's hit group
-// is its material's materialClass. `spheres` are its static analytic spheres (Task 8), and the shader paths
-// name its particle, splat and medium compute shaders (empty: the scene has none; Tasks 8, 10 and 11).
+// is its material's materialClass. `spheres` are its static analytic spheres (Task 8, at most
+// capacity.spheres), built into one AABB BLAS per range of `sphereRanges` (empty: one range of them all); a
+// static sphere instance places exactly one of those ranges. A sphere's `material` indexes the material
+// table (the frame's, when it has one) and must have its instance's class. The shader paths name its
+// particle, splat and medium compute shaders (empty: the scene has none; Tasks 8, 10 and 11); a relative
+// path names a file in gfx::shaderDir() (modern_particles_<scene>.comp.spv).
 struct SceneStatic {
     std::vector<rt::Mesh> meshes;
     std::vector<rt::Material> materials;
     SceneCapacity capacity;
     std::vector<rt::SphereRecord> spheres;
+    std::vector<rt::SphereRange> sphereRanges;
     std::filesystem::path particleShader, splatShader, mediumShader;
 };
 
@@ -59,7 +65,10 @@ struct SceneStatic {
 // that rectLightForQuad(transform, w, h, ...) describes (not checked).
 //
 // A sphere instance (kind Spheres, Task 8) places spheres firstSphere .. firstSphere + sphereCount - 1 of the
-// scene's static spheres, or of the frame's particle field when dynamicSpheres is set, instead of a mesh.
+// scene's static spheres (one of SceneStatic's sphere ranges), or the whole particle field (firstSphere 0,
+// sphereCount = ParticleFrame::count, the field's material) when dynamicSpheres is set, instead of a mesh
+// (`mesh` is then ignored). Its transform places the spheres (scale it uniformly: a sphere stays a sphere
+// only then); it is no light (kNoLight).
 struct SceneInstance {
     std::uint32_t mesh, material;
     rt::Mat34 transform;

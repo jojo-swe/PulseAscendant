@@ -31,6 +31,10 @@ namespace evo::gfx {
 class GpuTimers;
 } // namespace evo::gfx
 
+namespace evo::rt {
+class ParticleField;
+} // namespace evo::rt
+
 namespace evo::render {
 
 // The size the 2026 side traces at for an output size and a trace scale (Task 4 of step 5): per axis
@@ -73,8 +77,13 @@ bool validTraceScale(float scale);
 // same trace scale (Review Focus 3), and the upscaler's history resets with the denoiser's. At scale 1 there
 // is no upscaler pass at all: the denoiser writes the HDR image, exactly as before.
 //
-// GPU timers (setTimers): "tlas" and "trace" (the tracer), "denoise", "upscale" (below scale 1), "tonemap";
-// "fill" and "tonemap" for the placeholder.
+// A frame with a particle field (Task 8) first runs its scene's particle shader into the stage's one
+// rt::ParticleField (made on the first prepared scene with a particle shader and grown to the largest
+// capacity.particles prepared), at the frame's chapter-local time (prevCenter at the previous frame's while
+// the history continues, else at the same time), then traces with that slot's spheres and BLAS.
+//
+// GPU timers (setTimers): "particles" (the particle field), "tlas" and "trace" (the tracer), "denoise",
+// "upscale" (below scale 1), "tonemap"; "fill" and "tonemap" for the placeholder.
 //
 // A scene's GPU side is built by prepare(id) (or prepareAll()), which the window and the exports call before
 // their first frame, so that no chapter hitches. A stage that was not prepared builds it on the first frame
@@ -104,7 +113,8 @@ public:
     void prepareAll();
     // The device memory of what the stage holds for path tracing, as allocated (VMA statistics count the
     // same): every prepared scene's SceneGpu::bytes(), plus imageBytes() and the tracer's bufferBytes()
-    // (TLAS, per-slot buffers, SBT, dummies) once one is prepared; 0 before.
+    // (TLAS, per-slot buffers, SBT, dummies) once one is prepared, and the particle field's bytes() once a
+    // scene with particles is; 0 before.
     VkDeviceSize gpuBytes() const;
     // The images path tracing adds, whatever the number of scenes, as allocated: the tracer's G-buffer and
     // the denoiser's images (at the trace size), below scale 1 the denoised trace-size picture and the
@@ -143,6 +153,8 @@ public:
     modern::PathTracer* tracer();
     // A prepared scene's GPU side; null for one not prepared (and the placeholder).
     const modern::SceneGpu* sceneGpu(modern::SceneId id) const;
+    // The particle field every scene with particles shares; null until one is prepared.
+    const rt::ParticleField* particles() const { return particles_.get(); }
 
 private:
     // The scene object of an id, built on first use (CPU only).
@@ -171,11 +183,13 @@ private:
     // tracer's TLAS (destroyed first: it waits for the ring's frames) points at the SceneGpus' BLASes.
     mutable std::array<std::unique_ptr<modern::ModernScene>, modern::kSceneCount> scenes_;
     std::array<std::unique_ptr<modern::SceneGpu>, modern::kSceneCount> gpus_;
+    std::unique_ptr<rt::ParticleField> particles_; // its BLASes outlive the tracer's TLAS
     std::unique_ptr<post::Denoiser> denoiser_;
     std::unique_ptr<post::Upscaler> upscaler_;
     gfx::Image traceHdr_; // the denoised picture at the trace size, below scale 1 (else empty)
     std::unique_ptr<modern::PathTracer> tracer_;
     std::optional<modern::Camera> previousCamera_; // the last frame's, while the history continues
+    double previousSeconds_ = 0;                   // the last traced frame's chapter-local time
     gfx::GpuTimers* timers_ = nullptr;
     std::array<float, 2> lastJitter_{0.f, 0.f};
 };

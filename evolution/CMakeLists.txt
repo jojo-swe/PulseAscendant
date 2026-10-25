@@ -925,3 +925,47 @@ set_tests_properties(bench PROPERTIES TIMEOUT 300 PROCESSORS 2)
 # upscaler's history must reset with everything else (Review Focus 1).
 add_test(NAME seek_determinism_scaled COMMAND seek_determinism_test 0.67)
 set_tests_properties(seek_determinism_scaled PROPERTIES TIMEOUT 300 PROCESSORS 2)
+
+# --- Step 5 Task 8: analytic spheres and the particle field -------------------------------------------------
+
+# Static sphere BLASes (one AABB BLAS per sphere range) and the per-frame particle field (a stateless compute
+# pass and a BLAS rebuilt per ring slot).
+target_sources(evo_rt PRIVATE src/rt/spheres.cpp src/rt/particles.cpp)
+# The sphere intersection shader (rt_sphere.rint.spv) and the four closest-hits built a second time for
+# spheres (rt_<class>_sphere.rchit.spv, -DGEOMETRY_SPHERES): hit groups 4-7.
+_evo_shader_rule(evoSphereIntersection shaders/rt/sphere.rint "" "")
+_evo_shader_target(evo_modern "_intersection" "${evoSphereIntersection}")
+evo_add_shader_variants(evo_modern SUFFIX sphere DEFINES GEOMETRY_SPHERES SHADERS
+    shaders/rt/pbr.rchit
+    shaders/rt/glass.rchit
+    shaders/rt/emissive.rchit
+    shaders/rt/checker.rchit)
+
+# Spheres and particles on lavapipe with synchronization validation: the sphere math against the CPU (a
+# test-only compute probe), static sphere depth and normals, glass against a uvSphere mesh, the particle field
+# over 32 frames two in flight (test-only particle shader), refusals, the material classes on spheres, a camera
+# inside glass, the hit payload (path_tracer_test's payload probe) and the modern stage's one particle field.
+# `spheres_test --look <dir> [spp]` renders a picture to look at.
+set(spheresTestShaders "")
+foreach(fixture sphere_probe particles_grid)
+    set(spirv "${EVO_TEST_SPIRV_DIR}/test_${fixture}.comp.spv")
+    add_custom_command(
+        OUTPUT "${spirv}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+        COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+                "${CMAKE_BINARY_DIR}/shader-deps/test_${fixture}.comp.d" -o "${spirv}"
+                "${CMAKE_SOURCE_DIR}/shaders/test/${fixture}.comp"
+        DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/${fixture}.comp"
+        DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_${fixture}.comp.d"
+        COMMENT "Compiling test shader test_${fixture}.comp"
+        VERBATIM)
+    list(APPEND spheresTestShaders "${spirv}")
+endforeach()
+add_custom_target(spheres_test_shaders DEPENDS ${spheresTestShaders})
+add_executable(spheres_test tests/spheres_test.cpp)
+target_link_libraries(spheres_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(spheres_test PRIVATE tests)
+target_compile_definitions(spheres_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(spheres_test spheres_test_shaders path_tracer_test_shaders evo_modern_sphere_shaders
+                 evo_modern_intersection_shaders)
+evo_gpu_test(spheres spheres_test)

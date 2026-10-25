@@ -98,9 +98,11 @@ TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
 //   15 environment (Task 2), 16/17 the light tree (Task 12), 18 MediumUniforms (Task 11), 21 the previous
 //   transforms (Task 9) and 25 lensing (Task 25).
 // - Resources another object builds and owns come through TraceExtras: 19/20 the density and majorant grids
-//   (Task 11's medium volume, baked once in ModernStage), 22 the static spheres (the SceneGpu's, Task 8),
-//   23 the particle field (ModernStage's, Task 8), 24 the caustic maps and 27 the receiver table (Task 13's
-//   caustic maps object, whose photon pass reads the same table).
+//   (Task 11's medium volume, baked once in ModernStage), 23 the particle field with its BLAS (ModernStage's
+//   rt::ParticleField, Task 8: `particleSpheres` and `particleBlas` of the slot it recorded this frame), 24
+//   the caustic maps and 27 the receiver table (Task 13's caustic maps object, whose photon pass reads the
+//   same table). 22, the static spheres, are the SceneGpu's own, which trace() binds (a non-null
+//   `staticSpheres` replaces them, a hook).
 // Per-frame feature resources (particle fields, medium volumes, splat accumulators, caustic maps) live once
 // in ModernStage, sized to the largest prepared scene, not per scene.
 struct TraceExtras {
@@ -111,17 +113,19 @@ struct TraceExtras {
     gfx::Image* density = nullptr;                   // 19: 3D RGBA16F density + emission (Task 11)
     gfx::Image* majorant = nullptr;                  // 20: 3D R16F majorant per cell (Task 11)
     const gfx::Buffer* previousTransforms = nullptr; // 21: Mat34[] per instance (Task 9)
-    const gfx::Buffer* staticSpheres = nullptr;      // 22: SphereRecord[] (Task 8)
-    const gfx::Buffer* particleSpheres = nullptr;    // 23: SphereRecord[] (Task 8)
+    const gfx::Buffer* staticSpheres = nullptr;      // 22: replaces the scene's SphereRecord[] (a hook)
+    const gfx::Buffer* particleSpheres = nullptr;    // 23: SphereRecord[], the particle field (Task 8)
+    VkDeviceAddress particleBlas = 0;                // the particle field's BLAS (Task 8; no binding)
     gfx::Image* causticMaps = nullptr;               // 24: 2D array RGBA16F irradiance (Task 13)
     const gfx::Buffer* lensing = nullptr;            // 25: LensingUniforms (Task 25)
     const gfx::Buffer* causticReceivers = nullptr;   // 27: CausticReceiver[] (Task 13)
 };
 
-// The path tracer every 2026 scene shares (step 5, Task 1): the ray tracing pipeline and its SBT (4 hit
-// groups = MaterialClass; misses: sky, shadow), the TLAS and its scratch, the per-slot uniform, instance,
-// light and material buffers, the dummies of the feature bindings and the G-buffer. A scene's own GPU side is
-// a SceneGpu, which trace() binds. One trace per frame: a frame shows one scene.
+// The path tracer every 2026 scene shares (step 5, Task 1): the ray tracing pipeline and its SBT (8 hit
+// groups: hitGroupFor(MaterialClass, GeometryKind), triangles then analytic spheres; misses: sky, shadow),
+// the TLAS and its scratch, the per-slot uniform, instance, light and material buffers, the dummies of the
+// feature bindings and the G-buffer. A scene's own GPU side is a SceneGpu, which trace() binds. One trace per
+// frame: a frame shows one scene.
 class PathTracer {
 public:
     // Builds the pipeline once (setup work) and sizes its buffers and TLAS for `capacity`. Throws
@@ -148,9 +152,10 @@ public:
     // invalid). retroScreen (R8G8B8A8_SRGB, mipmapped) is sampled through sampledView() in GENERAL when the
     // scene samples the retro screen (else it is ignored and may be null); trace() records the barrier.
     // Throws, before recording anything, std::invalid_argument for spp 0 or a scene that samples the retro
-    // screen without a retro image, std::length_error for a frame larger than the tracer's capacity, what
+    // screen without a retro image or a frame that places its particle field without extras.particleSpheres
+    // and particleBlas, std::length_error for a frame larger than the tracer's capacity, what
     // checkSceneFrame throws, and std::logic_error outside ring.begin()/submit() or for a second trace in one
-    // frame.
+    // frame. The particle field must have been recorded earlier in this frame (ModernStage does).
     void trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFrame& frame,
                const std::optional<Camera>& previousCamera, const TraceSettings& settings,
                gfx::Image* retroScreen, const TraceExtras& extras = {});
