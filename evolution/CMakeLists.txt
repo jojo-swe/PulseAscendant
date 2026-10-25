@@ -815,3 +815,30 @@ add_test(NAME scene_table COMMAND scene_table_test)
 add_executable(shared_tracer_test tests/shared_tracer_test.cpp)
 target_link_libraries(shared_tracer_test PRIVATE evo_scene_fixture)
 evo_gpu_test(shared_tracer shared_tracer_test)
+
+# Scene environments (Task 2 of step 5): EnvironmentDesc, its defaults per kind and its packing into
+# rt::EnvironmentUniforms (binding EVO_BINDING_ENVIRONMENT, which the path tracer uploads per frame).
+target_sources(evo_modern PRIVATE src/modern/environment.cpp)
+
+# The environments on lavapipe with the validation layer on: shaders/rt/environment.glsl run directly by a
+# test-only compute probe (disc and dome sampling, pdfs, the lighting sky without stars, filtered stars), and
+# the path tracer at 64x64 (a floor under a sun and a dome against the analytic irradiance and a quadrature,
+# NEE against BSDF sampling, star flux across resolutions) plus the Studio's luminance under its NightSky.
+set(environmentProbeSpirv "${EVO_TEST_SPIRV_DIR}/test_environment_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${environmentProbeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_environment_probe.comp.d" -o "${environmentProbeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/environment_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/environment_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_environment_probe.comp.d"
+    COMMENT "Compiling test shader test_environment_probe.comp"
+    VERBATIM)
+add_custom_target(environment_test_shaders DEPENDS "${environmentProbeSpirv}")
+add_executable(environment_test tests/environment_test.cpp)
+target_link_libraries(environment_test PRIVATE evo_render evo_modern)
+target_include_directories(environment_test PRIVATE tests)
+target_compile_definitions(environment_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(environment_test environment_test_shaders)
+evo_gpu_test(environment environment_test)
