@@ -1,0 +1,45 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The caustic maps' resolve (step 5, Task 13; modern::CausticMaps records it after photons.comp): one
+// invocation per texel of one layer (push constants). A receiver's texel within its resolution gets the
+// irradiance its fixed-point flux sums stand for, filtered by a 3x3 tent (1 2 1 / 4 per axis, which keeps
+// the energy), clamped to RGBA16F's largest value; every other texel, and a layer without a receiver, 0.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer AccumulatorBlock { uint accumulator[]; };
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2DArray maps;
+
+layout(push_constant) uniform Push {
+    uint layer;
+    uint resolution;        // the receiver's (0: no receiver on this layer)
+    uint mapSize;           // the accumulator's and the maps' texels per side
+    float irradianceScale;  // irradiance per fixed-point unit: flux per unit / texel area
+} pc;
+
+vec3 sums(ivec2 texel) {
+    if (texel.x < 0 || texel.y < 0 || texel.x >= int(pc.resolution) || texel.y >= int(pc.resolution)) {
+        return vec3(0.0);
+    }
+    uint index = (pc.layer * pc.mapSize * pc.mapSize + uint(texel.y) * pc.mapSize + uint(texel.x)) * 3u;
+    return vec3(float(accumulator[index]), float(accumulator[index + 1u]), float(accumulator[index + 2u]));
+}
+
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (texel.x >= int(pc.mapSize) || texel.y >= int(pc.mapSize)) {
+        return;
+    }
+    vec3 e = vec3(0.0);
+    if (texel.x < int(pc.resolution) && texel.y < int(pc.resolution)) {
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                float w = (dx == 0 ? 2.0 : 1.0) * (dy == 0 ? 2.0 : 1.0);
+                e += w * sums(texel + ivec2(dx, dy));
+            }
+        }
+        e = min(e * (pc.irradianceScale / 16.0), vec3(65504.0));
+    }
+    imageStore(maps, ivec3(texel, int(pc.layer)), vec4(e, 1.0));
+}

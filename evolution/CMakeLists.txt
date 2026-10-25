@@ -1021,6 +1021,107 @@ target_compile_definitions(splat_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPI
 add_dependencies(splat_test splat_test_shaders)
 evo_gpu_test(splat splat_test)
 
+# --- Step 5 Task 6: the integrator v2 -----------------------------------------------------------------------
+
+# Path regularisation, the clamp after a rough vertex, camera-only emitters and hero-wavelength dispersion on
+# lavapipe at 64x64 with the validation layer on (a mirror caustic box, chrome and a glass slab before a
+# bright lamp, an LED over a mirror floor, a flint prism, slab and furnace), and shaders/rt/spectral.glsl
+# against its CPU mirror src/rt/spectral.hpp through a compute probe. Pictures go to build-out/step5.
+set(spectralProbeSpirv "${EVO_TEST_SPIRV_DIR}/test_spectral_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${spectralProbeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_spectral_probe.comp.d" -o "${spectralProbeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/spectral_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/spectral_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_spectral_probe.comp.d"
+    COMMENT "Compiling test shader test_spectral_probe.comp"
+    VERBATIM)
+add_custom_target(integrator_test_shaders DEPENDS "${spectralProbeSpirv}")
+add_executable(integrator_test tests/integrator_test.cpp)
+target_link_libraries(integrator_test PRIVATE evo_modern)
+target_include_directories(integrator_test PRIVATE tests)
+target_compile_definitions(integrator_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(integrator_test integrator_test_shaders)
+evo_gpu_test(integrator integrator_test)
+
+# --- Step 5 Task 13: caustic photon maps ------------------------------------------------------------------
+
+# The caustic maps (photons.comp and caustic_resolve.comp come with the shaders/modern glob above).
+target_sources(evo_modern PRIVATE src/modern/caustics.cpp)
+
+# Caustics on lavapipe with synchronization validation: a glass sphere over a receiver floor under an
+# overhead disc (or a rect light): energy against the cross-section, dispersion, determinism in any photon
+# order, the double-count exclusion, the photon-mapped caustic against the converged path-traced one,
+# byte-identity without caustics, refusals and the modern stage. `caustics_test --look <dir> [spp]` renders
+# a still to look at.
+add_executable(caustics_test tests/caustics_test.cpp)
+target_link_libraries(caustics_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(caustics_test PRIVATE tests)
+add_dependencies(caustics_test evo_modern_sphere_shaders evo_modern_intersection_shaders)
+evo_gpu_test(caustics caustics_test)
+
+# --- Step 5 Task 12: the light tree ---------------------------------------------------------------------------
+
+# Next-event estimation over up to 65,536 emissive sphere lights: the tree is built (or refit) on the CPU per
+# frame and walked in shaders/rt/light_tree.glsl.
+target_sources(evo_rt PRIVATE src/rt/light_tree.cpp)
+
+# The tree's build, refit and walk on the CPU (sums of the pdf, the pick histogram, determinism, 65,536 lights
+# in budget); the walk on the GPU against them (a test-only compute probe); NEE + MIS over sphere lights
+# against the analytic sum, NEE on and off, with and without blinking; the variance against uniform
+# selection; 4096 lights in time; seeks; refusals. `light_tree_test --look <dir> [spp]` renders a small city
+# at night to look at.
+set(lightTreeProbe "${EVO_TEST_SPIRV_DIR}/test_light_tree_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${lightTreeProbe}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_light_tree_probe.comp.d" -o "${lightTreeProbe}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/light_tree_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/light_tree_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_light_tree_probe.comp.d"
+    COMMENT "Compiling test shader test_light_tree_probe.comp"
+    VERBATIM)
+add_custom_target(light_tree_test_shaders DEPENDS "${lightTreeProbe}")
+add_executable(light_tree_test tests/light_tree_test.cpp)
+target_link_libraries(light_tree_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(light_tree_test PRIVATE tests)
+target_compile_definitions(light_tree_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders evo_modern_sphere_shaders
+                 evo_modern_intersection_shaders)
+evo_gpu_test(light_tree light_tree_test)
+
+# --- Step 5 Task 11: participating media ---------------------------------------------------------------------
+
+# Height fog and baked density grids: the CPU side (packing, the HG and fog references) and the grid's GPU
+# side (MediumVolume: the bake into a 3D image and the majorant pass, shaders/modern/medium_majorant.comp).
+target_sources(evo_modern PRIVATE src/modern/medium.cpp src/modern/medium_volume.cpp)
+
+# The media on lavapipe with synchronization validation: Beer-Lambert, delta and ratio tracking, a constant
+# grid against fog, emission, a furnace, NEE through a slab, exponential fog, the bake and its majorant,
+# extremes, no medium, single scattering against a numeric integral, light shafts, the modern stage (seek and
+# memory) and refusals, through a test-only bake shader. `medium_test --look <dir> [spp]` renders stills.
+set(mediumBakeSpirv "${EVO_TEST_SPIRV_DIR}/test_medium_constant.comp.spv")
+add_custom_command(
+    OUTPUT "${mediumBakeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_medium_constant.comp.d" -o "${mediumBakeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/medium_constant.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/medium_constant.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_medium_constant.comp.d"
+    COMMENT "Compiling test shader test_medium_constant.comp"
+    VERBATIM)
+add_custom_target(medium_test_shaders DEPENDS "${mediumBakeSpirv}")
+add_executable(medium_test tests/medium_test.cpp)
+target_link_libraries(medium_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(medium_test PRIVATE tests)
+target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(medium_test medium_test_shaders)
+evo_gpu_test(medium medium_test)
+
 # --- Step 5 Task 16: the Ship (FLYBY) ----------------------------------------------------------------------
 
 # The procedural starship over a planet under a star field of splats (src/modern/scenes/ship.cpp,

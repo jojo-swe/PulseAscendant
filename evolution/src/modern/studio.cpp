@@ -17,9 +17,9 @@ constexpr float kPi = std::numbers::pi_v<float>;
 
 // --- Layout (metres) ---------------------------------------------------------------------------------------
 
-// The room: x from -2 to 2, the back wall's face at z = -0.95, the front wall's at z = 2.9, floor 0, ceiling
+// The room: x from -2 to 2, the back wall's face at z = -0.95, the front wall's at z = 4, floor 0, ceiling
 // 2.7. Walls are 0.1 thick boxes, so the room is closed apart from the window.
-constexpr float kRoomLeft = -2.0f, kRoomRight = 2.0f, kRoomBack = -0.95f, kRoomFront = 2.9f;
+constexpr float kRoomLeft = -2.0f, kRoomRight = 2.0f, kRoomBack = -0.95f, kRoomFront = 4.0f;
 constexpr float kRoomHeight = 2.7f, kWall = 0.1f;
 // The window opening in the back wall, left of the desk; the portal light fills it.
 constexpr float kWindowLeft = -1.85f, kWindowRight = -0.65f, kWindowBottom = 1.0f, kWindowTop = 2.0f;
@@ -50,15 +50,18 @@ constexpr Vec3 kLampBase{-0.6f, kDeskTop, -0.5f};
 constexpr Vec3 kLampElbow{-0.68f, kDeskTop + 0.4f, -0.56f};
 constexpr Vec3 kLampHead{-0.44f, kDeskTop + 0.43f, -0.12f};
 constexpr Vec3 kLampAim{-0.12f, kDeskTop, -0.16f}; // where the shade points
-constexpr float kLampEmitterSize = 0.1f;
+// The diffuser: an 8 cm square recessed 3.5 cm into the shade (from its rim), so that it is hidden from
+// every camera and the shade's painted inside spreads its light (Task 14: no flat white plate).
+constexpr float kLampEmitterSize = 0.08f, kLampRecess = 0.035f;
 
 // The moon (see Studio::kMoonDirection): an 18 cm square 4 m out, about 2.6 degrees across.
-// Indirect contributions above this luminance are clamped: the room's light is about 0.05, so the plan's
-// generic 64 would let caustic fireflies (diffuse -> chrome or glass -> lamp or moon) through untouched.
-constexpr float kClampIndirect = 2.f;
+constexpr float kMoonDistance = 4.f, kMoonSize = 0.18f;
 
-constexpr float kMoonDistance = 4.f, kMoonSize = 0.18f, kMoonIntensity = 300.f;
-constexpr Vec3 kMoonColor{0.72f, 0.84f, 1.f};
+// Contributions after a rough vertex above this luminance are clamped (TraceSettings::clampIndirect; the
+// integrator's own default is 16, the Studio keeps the tighter value its look was tuned with); at the
+// Studio's exposures (EV 0.3 to 2) step 4's 2 left lamp-lit surfaces sparkling at export spp (no a-trous from 16 spp), while 0.5 barely moves their mean (0.143 ->
+// 0.142 in RETURN's close-up).
+constexpr float kClampIndirect = 0.5f;
 
 // --- Small helpers -----------------------------------------------------------------------------------------
 
@@ -144,6 +147,7 @@ enum Mesh : std::uint32_t {
     kMoonMesh,
     kSeat,
     kBackrest,
+    kShadeInner,
     kMeshCount
 };
 
@@ -177,8 +181,14 @@ enum Material : std::uint32_t {
     kMoonGlow,
     kChairFabric,
     kChairPlastic,
+    kShadeInside,
+    kConcreteWall,
+    kBuilding,
+    kCityWindow,
     kMaterialCount
 };
+static_assert(kScreenGlass == Studio::kScreenMaterial && kLampEmitter == Studio::kLampMaterial &&
+              kPowerLed == Studio::kLedMaterial);
 
 std::vector<rt::Mesh> buildMeshes() {
     std::vector<rt::Mesh> meshes(kMeshCount);
@@ -208,6 +218,11 @@ std::vector<rt::Mesh> buildMeshes() {
                                         {0.012f, 0.134f},
                                         {0.f, 0.137f}}};
     meshes[kShade] = lathe(shade, 64);
+    // Its painted inside: the profile from inside the rim up to the dome's top, about 2 mm in.
+    std::array<Vec2, 7> inner{};
+    for (std::size_t i = 0; i < inner.size(); ++i)
+        inner[i] = {0.965f * shade[i + 2].x, 0.985f * shade[i + 2].y};
+    meshes[kShadeInner] = lathe(inner, 64);
     // The mug: the outer wall, the rim, the inner wall down to the floor of the cup.
     const std::array<Vec2, 11> mug = {{{0.f, 0.f},
                                        {0.034f, 0.f},
@@ -246,18 +261,27 @@ std::vector<rt::Mesh> buildMeshes() {
     return meshes;
 }
 
-std::vector<rt::Material> buildMaterials(float screenEmission) {
+// The materials with a chapter's light rig: the screen's emissionScale and the lamp's level.
+std::vector<rt::Material> buildMaterials(StudioRig rig) {
     std::vector<rt::Material> m(kMaterialCount);
-    m[kWallPaint] = plastic({0.7f, 0.66f, 0.6f}, 0.9f);
-    m[kCeilingPaint] = plastic({0.6f, 0.58f, 0.55f}, 0.95f);
-    // Black and off-white linoleum tiles, 0.3 m, slightly polished (a nod to RAYTRACE).
-    m[kFloorTiles] = plastic({0.62f, 0.6f, 0.55f}, 0.32f);
-    setColor(m[kFloorTiles].baseColor2, {0.022f, 0.022f, 0.024f});
-    m[kFloorTiles].patternScale = 0.3f;
-    m[kFloorTiles].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Checker);
+    // Warm white plaster, matte; the ceiling a little darker.
+    m[kWallPaint] = plastic({0.66f, 0.64f, 0.6f}, 0.92f);
+    m[kCeilingPaint] = plastic({0.56f, 0.55f, 0.53f}, 0.95f);
+    // A board-formed concrete wall behind the desk (no joints).
+    m[kConcreteWall] = plastic({0.42f, 0.41f, 0.39f}, 0.85f);
+    setColor(m[kConcreteWall].baseColor2, {0.3f, 0.295f, 0.285f});
+    m[kConcreteWall].pattern = static_cast<std::uint32_t>(rt::Pattern::Concrete);
+    m[kConcreteWall].patternScale = 0.f;
+    // Polished concrete: cloudy grey under a satin sealer, saw-cut into 1.2 m slabs.
+    m[kFloorTiles] = plastic({0.36f, 0.355f, 0.345f}, 0.45f);
+    setColor(m[kFloorTiles].baseColor2, {0.25f, 0.245f, 0.24f});
+    m[kFloorTiles].pattern = static_cast<std::uint32_t>(rt::Pattern::Concrete);
+    m[kFloorTiles].patternScale = 1.2f;
+    m[kFloorTiles].coat = 0.5f;
+    m[kFloorTiles].coatRoughness = 0.12f;
     // Oiled oak planks under a satin coat.
-    m[kDeskWood] = plastic({0.36f, 0.2f, 0.095f}, 0.6f);
-    setColor(m[kDeskWood].baseColor2, {0.16f, 0.075f, 0.03f});
+    m[kDeskWood] = plastic({0.56f, 0.38f, 0.21f}, 0.6f);
+    setColor(m[kDeskWood].baseColor2, {0.37f, 0.22f, 0.1f});
     m[kDeskWood].pattern = static_cast<std::uint32_t>(rt::Pattern::WoodPlanks);
     m[kDeskWood].patternScale = 0.16f;
     m[kDeskWood].coat = 0.6f;
@@ -267,11 +291,12 @@ std::vector<rt::Material> buildMaterials(float screenEmission) {
     // Worn beige ABS: a little yellowed, satin.
     m[kBeige] = plastic({0.7f, 0.64f, 0.52f}, 0.5f);
     m[kBeigeDark] = plastic({0.56f, 0.51f, 0.42f}, 0.55f);
-    // The picture: phosphor behind glass (Emissive with the retro picture; a smooth coat reflects the room).
-    m[kScreenGlass] = plastic({0.035f, 0.038f, 0.036f}, 0.4f);
+    // The picture: phosphor behind grey-green tube glass (Emissive with the retro picture; a smooth coat on
+    // the curved glass reflects the room).
+    m[kScreenGlass] = plastic({0.05f, 0.062f, 0.055f}, 0.4f);
     m[kScreenGlass].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     m[kScreenGlass].texture = rt::kRetroScreenTexture;
-    m[kScreenGlass].emissionScale = screenEmission;
+    m[kScreenGlass].emissionScale = rig.screen;
     m[kScreenGlass].coat = 1.f;
     m[kScreenGlass].coatRoughness = 0.03f;
     m[kRecess] = plastic({0.06f, 0.06f, 0.06f}, 0.6f);
@@ -279,10 +304,13 @@ std::vector<rt::Material> buildMaterials(float screenEmission) {
     m[kKeyLight] = plastic({0.74f, 0.71f, 0.63f}, 0.62f);
     m[kKeyDark] = plastic({0.42f, 0.41f, 0.39f}, 0.62f);
     m[kDriveSlot] = plastic({0.025f, 0.025f, 0.028f}, 0.45f);
+    // The power LEDs: green, seen by the camera only (their glow is the bloom's, step 6): a BSDF ray after a
+    // rough vertex that found them would be a firefly no light sample could ever take.
     m[kPowerLed] = plastic({0.1f, 0.4f, 0.1f}, 0.2f);
     m[kPowerLed].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     setColor(m[kPowerLed].emission, {0.15f, 1.f, 0.25f});
     m[kPowerLed].emissionScale = 6.f;
+    m[kPowerLed].flags = rt::kMaterialCameraOnlyEmission;
     m[kFloppyPlastic] = plastic({0.035f, 0.04f, 0.07f}, 0.35f);
     m[kFloppyShutter] = metal({0.8f, 0.8f, 0.82f}, 0.22f);
     m[kFloppyLabel] = plastic({0.82f, 0.8f, 0.74f}, 0.9f);
@@ -300,23 +328,35 @@ std::vector<rt::Material> buildMaterials(float screenEmission) {
     m[kStandWood].coatRoughness = 0.08f;
     m[kLampAluminium] = metal({0.86f, 0.86f, 0.88f}, 0.22f);
     m[kLampAluminium].pattern = static_cast<std::uint32_t>(rt::Pattern::BrushedMetal);
-    m[kLampPaint] = plastic({0.03f, 0.045f, 0.035f}, 0.35f);
-    m[kLampPaint].coat = 0.7f;
-    m[kLampPaint].coatRoughness = 0.1f;
-    // The lamp's bulb behind a diffuser: warm (1.0, 0.75, 0.5) x 35, also the Emitter light.
+    // The lamp's shade and base: black powder coat; the shade is painted a matte warm grey inside (a diffuse
+    // inside spreads the recessed diffuser's light without the aluminium's caustic speckle; darker than
+    // white, since nothing samples the light it bounces).
+    m[kLampPaint] = plastic({0.022f, 0.022f, 0.024f}, 0.4f);
+    m[kLampPaint].coat = 0.5f;
+    m[kLampPaint].coatRoughness = 0.18f;
+    m[kShadeInside] = plastic({0.55f, 0.52f, 0.47f}, 0.95f);
+    // The lamp's bulb behind a frosted diffuser: warm (1.0, 0.75, 0.5) x 50 at full, also the Emitter light.
     m[kLampEmitter] = plastic({0.8f, 0.8f, 0.8f}, 0.9f);
     m[kLampEmitter].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     setColor(m[kLampEmitter].emission, Studio::kLampColor);
-    m[kLampEmitter].emissionScale = Studio::kLampIntensity;
-    m[kWindowFrame] = plastic({0.62f, 0.6f, 0.56f}, 0.55f);
+    m[kLampEmitter].emissionScale = Studio::kLampIntensity * rig.lamp;
+    // A slim black aluminium window frame.
+    m[kWindowFrame] = metal({0.03f, 0.03f, 0.032f}, 0.45f);
     m[kMousePad] = plastic({0.03f, 0.035f, 0.06f}, 0.95f);
-    m[kSkirting] = plastic({0.3f, 0.28f, 0.26f}, 0.6f);
+    m[kSkirting] = plastic({0.035f, 0.035f, 0.037f}, 0.6f);
     m[kChairFabric] = plastic({0.05f, 0.05f, 0.06f}, 0.95f);
     m[kChairPlastic] = plastic({0.025f, 0.025f, 0.027f}, 0.35f);
     m[kMoonGlow] = plastic({0.f, 0.f, 0.f}, 1.f);
     m[kMoonGlow].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
-    setColor(m[kMoonGlow].emission, kMoonColor);
-    m[kMoonGlow].emissionScale = kMoonIntensity;
+    setColor(m[kMoonGlow].emission, Studio::kMoonColor);
+    m[kMoonGlow].emissionScale = Studio::kMoonIntensity;
+    // The skyline outside: dark towers with lit windows, which only the camera sees (they light nothing).
+    m[kBuilding] = plastic({0.012f, 0.012f, 0.014f}, 0.8f);
+    m[kCityWindow] = plastic({0.f, 0.f, 0.f}, 1.f);
+    m[kCityWindow].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
+    setColor(m[kCityWindow].emission, {1.f, 0.72f, 0.42f});
+    m[kCityWindow].emissionScale = 0.6f;
+    m[kCityWindow].flags = rt::kMaterialCameraOnlyEmission;
     return m;
 }
 
@@ -436,12 +476,18 @@ Camera screenCamera(const Key3& key, float fov, float aperture, std::uint32_t sh
 }
 
 // The pull from the screen out to a wide view of the desk (FINALE, PORTAL), and RETURN's push back in.
+// It ends low and long (eye 1.1 m, a 32 degree lens): the PC on the right third, the window and the chair
+// standing in the moonbeam on the left.
 constexpr std::array<Key3, 4> kPullOut = {{
     {{0.f, kScreenCentreY, kScreenZ + 0.3f}, {0.f, kScreenCentreY, kScreenZ}},
-    {{0.08f, kScreenCentreY + 0.03f, 0.25f}, {0.f, kScreenCentreY - 0.01f, kScreenZ}},
-    {{0.45f, 1.27f, 0.95f}, {-0.05f, 1.02f, kScreenZ - 0.05f}},
-    {{0.9f, 1.42f, 1.55f}, {-0.18f, 0.98f, -0.45f}},
+    {{0.1f, kScreenCentreY + 0.02f, 0.3f}, {0.f, kScreenCentreY - 0.01f, kScreenZ}},
+    {{0.08f, 1.13f, 1.35f}, {-0.2f, 0.9f, kScreenZ - 0.1f}},
+    {{-0.2f, 1.1f, 3.3f}, {-0.56f, 0.63f, -0.6f}},
 }};
+// The lens of the pull-out at s in [0, 1]: from 40 degrees at the screen to 32 in the wide view.
+float pullOutFov(float s) {
+    return 40.f - 8.f * s;
+}
 
 } // namespace
 
@@ -476,16 +522,18 @@ Camera studioCamera(const show::TimelineFrame& frame) {
     switch (frame.effect) {
     case show::Effect::Finale:
     case show::Effect::Portal:
-        return screenCamera(alongKeys(kPullOut, s), 40.f, 0.004f, shot);
+        return screenCamera(alongKeys(kPullOut, s), pullOutFov(s), 0.004f, shot);
     case show::Effect::StudioNight:
         if (shot == 0) {
-            // A wide dolly across the dark room, from the window's side towards the desk.
+            // A slow, low dolly across the dark room towards the desk, past the chair standing in the
+            // moonbeam on the floor (a dark foreground silhouette against it); the PC on the right third,
+            // the window on the left.
             static constexpr std::array<Key3, 3> kDolly = {{
-                {{1.3f, 1.52f, 1.95f}, {-0.45f, 1.08f, -0.65f}},
-                {{0.9f, 1.4f, 1.35f}, {-0.3f, 1.02f, -0.5f}},
-                {{0.52f, 1.3f, 0.88f}, {-0.1f, 0.97f, -0.42f}},
+                {{-0.2f, 1.1f, 3.35f}, {-0.57f, 0.62f, -0.6f}},
+                {{-0.15f, 1.1f, 2.85f}, {-0.5f, 0.66f, -0.6f}},
+                {{-0.1f, 1.1f, 2.35f}, {-0.42f, 0.7f, -0.55f}},
             }};
-            return makeCamera(alongKeys(kDolly, s), 42.f, 0.006f, shot);
+            return makeCamera(alongKeys(kDolly, s), 32.f, 0.006f, shot);
         } else {
             // A close orbit around the monitor, from its right to its left, the screen always in view: aimed
             // at the monitor's body, in focus on the screen.
@@ -498,7 +546,7 @@ Camera studioCamera(const show::TimelineFrame& frame) {
         }
     case show::Effect::Return: {
         static constexpr std::array<Key3, 3> kPushIn = {kPullOut[3], kPullOut[2], kPullOut[1]};
-        return screenCamera(alongKeys(kPushIn, s), 40.f, 0.004f, shot);
+        return screenCamera(alongKeys(kPushIn, s), pullOutFov(1.f - s), 0.004f, shot);
     }
     default: {
         // REBOOT (and anything else): a close-up of the screen, drifting slightly.
@@ -513,17 +561,40 @@ Camera studioCamera(const show::TimelineFrame& frame) {
 float studioExposureEV(show::Effect effect) {
     switch (effect) {
     case show::Effect::StudioNight:
-        return 3.f; // the darkest: the DOS prompt barely lights the room
+        return 2.f; // the screen at 8: a display gain of 28 for the grey DOS text; the moon fills the room
+    case show::Effect::Finale:
+    case show::Effect::Portal:
+        return 0.2f; // the screen at 2.4: a gain of 2.4, so the megamix's colours stay saturated
     case show::Effect::Reboot:
-        return 1.f; // a close-up of the lit monitor
+        return 0.8f; // a close-up of the screen at 1.5: a gain of 2.3
     default:
-        return 2.5f;
+        return 1.f; // RETURN: the screen at 1.5, a gain of 2.6 for the DOS text; the lamp is back on
+    }
+}
+
+EnvironmentDesc studioEnvironment() {
+    EnvironmentDesc sky;
+    sky.discDirection = Studio::kMoonDirection;
+    sky.horizon = {0.09f, 0.13f, 0.29f};
+    sky.haze = 0.15f;
+    return sky;
+}
+
+StudioRig studioRig(show::Effect effect) {
+    switch (effect) {
+    case show::Effect::StudioNight:
+        return {0.f, 8.f};
+    case show::Effect::Finale:
+    case show::Effect::Portal:
+        return {0.2f, 2.4f};
+    default:
+        return {1.f, 1.5f};
     }
 }
 
 Studio::Studio(SceneDetail) {
     static_.meshes = buildMeshes();
-    static_.materials = buildMaterials(kScreenEmission);
+    static_.materials = buildMaterials(studioRig(show::Effect::Return));
     std::array<rt::RectLight, kLightCount> lights{};
 
     auto add = [&](std::uint32_t mesh, std::uint32_t material, const rt::Mat34& transform,
@@ -534,7 +605,8 @@ Studio::Studio(SceneDetail) {
         add(kUnitBox, material, place((min + max) * 0.5f, max - min));
     };
 
-    // --- The room: floor, ceiling, four walls (the back one around the window), skirting.
+    // --- The room: floor, ceiling, four walls (the back one, concrete, around the window), a slim dark
+    // skirting.
     block(kFloorTiles, {kRoomLeft - kWall, -kWall, kRoomBack - kWall},
           {kRoomRight + kWall, 0.f, kRoomFront + kWall});
     block(kCeilingPaint, {kRoomLeft - kWall, kRoomHeight, kRoomBack - kWall},
@@ -543,29 +615,32 @@ Studio::Studio(SceneDetail) {
     block(kWallPaint, {kRoomRight, 0.f, kRoomBack}, {kRoomRight + kWall, kRoomHeight, kRoomFront});
     block(kWallPaint, {kRoomLeft, 0.f, kRoomFront}, {kRoomRight, kRoomHeight, kRoomFront + kWall});
     const float back0 = kRoomBack - kWall, back1 = kRoomBack;
-    block(kWallPaint, {kRoomLeft, 0.f, back0}, {kWindowLeft, kRoomHeight, back1});
-    block(kWallPaint, {kWindowRight, 0.f, back0}, {kRoomRight, kRoomHeight, back1});
-    block(kWallPaint, {kWindowLeft, 0.f, back0}, {kWindowRight, kWindowBottom, back1});
-    block(kWallPaint, {kWindowLeft, kWindowTop, back0}, {kWindowRight, kRoomHeight, back1});
-    const float skirt = 0.08f, skirtDepth = 0.012f;
+    block(kConcreteWall, {kRoomLeft, 0.f, back0}, {kWindowLeft, kRoomHeight, back1});
+    block(kConcreteWall, {kWindowRight, 0.f, back0}, {kRoomRight, kRoomHeight, back1});
+    block(kConcreteWall, {kWindowLeft, 0.f, back0}, {kWindowRight, kWindowBottom, back1});
+    block(kConcreteWall, {kWindowLeft, kWindowTop, back0}, {kWindowRight, kRoomHeight, back1});
+    const float skirt = 0.04f, skirtDepth = 0.008f;
     block(kSkirting, {kRoomLeft, 0.f, back1}, {kRoomRight, skirt, back1 + skirtDepth});
     block(kSkirting, {kRoomLeft, 0.f, back1}, {kRoomLeft + skirtDepth, skirt, kRoomFront});
     block(kSkirting, {kRoomRight - skirtDepth, 0.f, back1}, {kRoomRight, skirt, kRoomFront});
 
-    // --- The window: a frame in the opening with a cross of glazing bars, a sill; the portal fills it.
+    // --- The window: a slim black frame in the opening with a cross of glazing bars, a sill; the portal
+    // fills it.
     {
-        const float f = 0.05f, z0 = back0 + 0.03f, z1 = back0 + 0.08f;
+        const float f = 0.03f, z0 = back0 + 0.03f, z1 = back0 + 0.08f;
         block(kWindowFrame, {kWindowLeft, kWindowBottom, z0}, {kWindowLeft + f, kWindowTop, z1});
         block(kWindowFrame, {kWindowRight - f, kWindowBottom, z0}, {kWindowRight, kWindowTop, z1});
         block(kWindowFrame, {kWindowLeft, kWindowBottom, z0}, {kWindowRight, kWindowBottom + f, z1});
         block(kWindowFrame, {kWindowLeft, kWindowTop - f, z0}, {kWindowRight, kWindowTop, z1});
-        const float mx = 0.5f * (kWindowLeft + kWindowRight),
+        // The mullion 40 % across (the moon's ray through the window's centre passes a pane), the transom
+        // 62 % up.
+        const float mx = kWindowLeft + 0.4f * (kWindowRight - kWindowLeft),
                     my = kWindowBottom + 0.62f * (kWindowTop - kWindowBottom);
-        const float bar = 0.018f;
+        const float bar = 0.012f;
         block(kWindowFrame, {mx - bar, kWindowBottom, z0 + 0.01f}, {mx + bar, kWindowTop, z1 - 0.01f});
         block(kWindowFrame, {kWindowLeft, my - bar, z0 + 0.01f}, {kWindowRight, my + bar, z1 - 0.01f});
-        block(kWindowFrame, {kWindowLeft - 0.06f, kWindowBottom - 0.03f, back0 + 0.02f},
-              {kWindowRight + 0.06f, kWindowBottom, back1 + 0.07f});
+        block(kConcreteWall, {kWindowLeft - 0.04f, kWindowBottom - 0.025f, back0 + 0.02f},
+              {kWindowRight + 0.04f, kWindowBottom, back1 + 0.05f});
         const rt::Mat34 portal =
             translate({0.5f * (kWindowLeft + kWindowRight), 0.5f * (kWindowBottom + kWindowTop), back1});
         lights[kWindowLight] =
@@ -700,22 +775,56 @@ Studio::Studio(SceneDetail) {
 
     // --- The spheres: chrome and glass, each on a small dark wooden stand.
     {
-        const Vec3 chrome{0.53f, kDeskTop, -0.2f};
+        const Vec3 chrome = kChromeAt;
         add(kCylinder, kStandWood, place(chrome + Vec3{0, 0.006f, 0}, {0.028f, 0.012f, 0.028f}));
         add(kSphere, kChrome,
             place(chrome + Vec3{0, 0.012f + kChromeRadius - 0.006f, 0},
                   {kChromeRadius, kChromeRadius, kChromeRadius}));
-        const Vec3 glass{-0.43f, kDeskTop, -0.2f};
+        const Vec3 glass = kGlassAt;
         add(kCylinder, kStandWood, place(glass + Vec3{0, 0.005f, 0}, {0.026f, 0.01f, 0.026f}));
         add(kSphere, kGlass,
             place(glass + Vec3{0, 0.01f + kGlassRadius - 0.007f, 0},
                   {kGlassRadius, kGlassRadius, kGlassRadius}));
     }
 
-    // --- An office chair pushed back from the desk: a five-star base on casters, a gas lift, the seat and
-    // the backrest in dark fabric.
+    // --- The skyline beyond the window: dark towers 300 to 900 m out over the town, across the directions
+    // the cameras see through the window, each turned to face the room, with a few lit windows and floors. A
+    // fixed hash places them (deterministic).
     {
-        const rt::Mat34 chair = compose(translate({0.3f, 0.f, 0.5f}), rotate({0, 1, 0}, 0.45f));
+        std::uint32_t state = 0x5EEDu;
+        const auto next = [&] {
+            state = state * 1664525u + 1013904223u;
+            return static_cast<float>(state >> 8) / 16777216.f;
+        };
+        const Vec3 window{0.5f * (kWindowLeft + kWindowRight), 0.f, kRoomBack};
+        constexpr int kTowers = 56;
+        for (int i = 0; i < kTowers; ++i) {
+            // a: the bearing from straight back (-z), negative to the left (-x).
+            const float a = -1.5f + 2.6f * (static_cast<float>(i) + 0.15f + 0.7f * next()) / kTowers;
+            const float distance = 300.f + 600.f * next();
+            const Vec3 at = window + Vec3{std::sin(a), 0.f, -std::cos(a)} * distance;
+            const float width = 8.f + 16.f * next(), depth = 10.f + 16.f * next();
+            const float top = -25.f + 60.f * next() * next(); // relative to the room's floor
+            constexpr float kBase = -120.f;
+            const rt::Mat34 tower = compose(translate({at.x, 0.f, at.z}), rotate({0, 1, 0}, -a));
+            add(kUnitBox, kBuilding,
+                compose(tower, place({0.f, 0.5f * (kBase + top), 0.f}, {width, top - kBase, depth})));
+            const int lit = 2 + static_cast<int>(5.f * next());
+            for (int k = 0; k < lit; ++k) {
+                const float y = top - 2.f - 40.f * next();
+                const bool strip = next() < 0.4f;
+                const float w = strip ? width * (0.3f + 0.5f * next()) : 1.6f;
+                const float x = (0.5f * width - 0.5f * w - 0.6f) * (2.f * next() - 1.f);
+                add(kUnitBox, kCityWindow,
+                    compose(tower, place({x, y, 0.5f * depth + 0.05f}, {w, 1.3f, 0.1f})));
+            }
+        }
+    }
+
+    // --- An office chair pushed back from the desk into the moonbeam (the wide shots' foreground
+    // silhouette): a five-star base on casters, a gas lift, the seat and the backrest in dark fabric.
+    {
+        const rt::Mat34 chair = compose(translate({-0.95f, 0.f, 0.85f}), rotate({0, 1, 0}, -0.6f));
         const auto part = [&](std::uint32_t mesh, std::uint32_t material, const rt::Mat34& local) {
             add(mesh, material, compose(chair, local));
         };
@@ -744,10 +853,11 @@ Studio::Studio(SceneDetail) {
         const rt::Mat34 head = compose(translate(kLampHead), rotationFromTo({0, -1, 0}, aim));
         // The shade's top sits at the head; its opening points along aim.
         const rt::Mat34 shade = compose(head, translate({0.f, -0.13f, 0.f}));
-        add(kShade, kLampAluminium, shade);
+        add(kShade, kLampPaint, shade);
+        add(kShadeInner, kShadeInside, shade);
         add(kSphere, kLampPaint, compose(head, scale({0.016f, 0.016f, 0.016f})));
         const rt::Mat34 emitter =
-            compose(shade, compose(translate({0.f, 0.008f, 0.f}), rotate({1, 0, 0}, 0.5f * kPi)));
+            compose(shade, compose(translate({0.f, kLampRecess, 0.f}), rotate({1, 0, 0}, 0.5f * kPi)));
         add(kEmitter, kLampEmitter, emitter, kLampLight);
         lights[kLampLight] =
             rectLightForQuad(emitter, kLampEmitterSize, kLampEmitterSize, rt::LightKind::Emitter,
@@ -764,6 +874,13 @@ SceneFrame Studio::frame(const show::TimelineFrame& frame) const {
     f.lights = lights_;
     f.exposureEV = studioExposureEV(frame.effect);
     f.clampIndirect = kClampIndirect;
+    // The chapter's light rig: its material table, and the lights' emissions from it.
+    const StudioRig rig = studioRig(frame.effect);
+    f.materials = buildMaterials(rig);
+    f.lights[kScreenLight].emission[0] = f.lights[kScreenLight].emission[1] =
+        f.lights[kScreenLight].emission[2] = f.materials[kScreenGlass].emissionScale;
+    setColor(f.lights[kLampLight].emission, emitted(f.materials[kLampEmitter]));
+    f.environment = studioEnvironment();
     return f;
 }
 

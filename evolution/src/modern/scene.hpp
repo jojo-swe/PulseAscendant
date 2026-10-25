@@ -14,6 +14,7 @@
 #include "rt/gpu_types.hpp"
 #include "rt/spheres.hpp"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -37,6 +38,12 @@ struct Camera {
 // scene's capacity (std::length_error). Every scene task sweeps its chapters against it (checkSceneSweep).
 struct SceneCapacity {
     std::uint32_t instances = 1024, lights = 64, materials = 256, spheres = 0, particles = 0, splats = 0;
+    // The largest caustic receiver resolution of any frame (Task 13; 0: the scene has no caustics). The
+    // modern stage sizes its one CausticMaps to the largest prepared.
+    std::uint32_t causticResolution = 0;
+    std::uint32_t treeLights = 0; // the light tree's lights (Task 12), at most rt::kMaxTreeLights
+    // The largest grid medium a frame bakes, voxels per axis (Task 11; all 0: the scene has none).
+    std::array<std::uint32_t, 3> mediumGrid{0, 0, 0};
 };
 
 // The meshes (BLAS per mesh) and materials of a scene, and what its frames may hold. An instance's hit group
@@ -68,7 +75,8 @@ struct SceneStatic {
 // scene's static spheres (one of SceneStatic's sphere ranges), or the whole particle field (firstSphere 0,
 // sphereCount = ParticleFrame::count, the field's material) when dynamicSpheres is set, instead of a mesh
 // (`mesh` is then ignored). Its transform places the spheres (scale it uniformly: a sphere stays a sphere
-// only then); it is no light (kNoLight).
+// only then); it is no light (kNoLight), or the light tree's RectLight of kind Tree (Task 12: its spheres
+// are the tree's lights, see TreeLightFrame).
 struct SceneInstance {
     std::uint32_t mesh, material;
     rt::Mat34 transform;
@@ -78,8 +86,26 @@ struct SceneInstance {
     bool dynamicSpheres = false;
 };
 
-// A frame of the light tree's lights (Task 12). Declared empty by Task 1 of step 5; Task 12 fills it in.
-struct TreeLightFrame {};
+// One light of the frame's light tree (Task 12): an emissive sphere, in world space. SceneFrame::treeLights
+// holds the tree's lights in order: light k is sphere firstSphere + k (`sphere`, its index in its buffer) of
+// the one sphere instance whose `light` is the frame's one RectLight of kind Tree, which stands for the whole
+// tree in light selection (its selectWeight scales the tree's importance; its other fields are 0). Static
+// spheres or the first lights of the particle field (whose centres the scene computes from the C++ mirror of
+// its particle function).
+//
+// `emission` is the sphere's radiance, its colour * emission + its material's emission * emissionScale
+// (checked for static spheres); `scale` is this frame's factor on it (blinking): what next-event estimation
+// samples and what a ray that hits the sphere sees is emission * scale. The path tracer builds the tree from
+// centre, radius, emission and sphere (rt::buildLightTree) and keeps it while they stay the same, refitting
+// it for the scales alone (rt::refitLightTree): blinking costs O(n), moving lights a rebuild. Either way the
+// picture is a pure function of the frame.
+struct TreeLightFrame {
+    Vec3 center;
+    float radius = 0;
+    Vec3 emission;
+    float scale = 1;
+    std::uint32_t sphere = 0;
+};
 
 // What one frame shows. Beyond step 4's camera, instances, lights and exposure, step 5's features each have
 // a member that is absent (empty, nullopt) in a frame without the feature; the path tracer then binds that
@@ -94,9 +120,10 @@ struct SceneFrame {
     std::vector<SceneInstance> instances;
     std::vector<rt::RectLight> lights;
     float exposureEV = 0;
-    // The luminance limit of a contribution after the first bounce (TraceSettings::clampIndirect), in the
-    // scene's own units: 64 by default; a scene lit far below that sets its own (the Studio, 2).
-    float clampIndirect = 64.f;
+    // The luminance limit of a contribution after a rough vertex (TraceSettings::clampIndirect), in the
+    // scene's own units: 16 by default (Task 6 of step 5), with path regularisation taking the rest of the
+    // caustic noise.
+    float clampIndirect = 16.f;
     std::vector<rt::Material> materials;
     EnvironmentDesc environment;
     std::optional<ParticleFrame> particles;
@@ -116,6 +143,14 @@ struct SceneFrame {
 // face away from the side the mesh's front faces.
 rt::RectLight rectLightForQuad(const rt::Mat34& transform, float width, float height, rt::LightKind kind,
                                Vec3 emission, float selectWeight);
+
+// The tree lights of a sphere instance that places static spheres: its first `count` spheres in world space
+// (the centre transformed, the radius times the transform's scale), their emission (colour * emission + the
+// material's emission * emissionScale, from `materials`: the frame's table, or the scene's) and scale 1.
+// Throws std::out_of_range for spheres beyond the instance's or the scene's, or a material that does not
+// exist.
+std::vector<TreeLightFrame> treeLightsOf(const SceneStatic& scene, const SceneInstance& instance,
+                                         const std::vector<rt::Material>& materials, std::uint32_t count);
 
 // The determinant of a transform's linear part (negative: it mirrors, turning front faces into back faces).
 float linearDeterminant(const rt::Mat34& transform);

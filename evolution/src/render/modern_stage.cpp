@@ -1,6 +1,8 @@
 #include "render/modern_stage.hpp"
 
 #include "gfx/gpu_timers.hpp"
+#include "modern/caustics.hpp"
+#include "modern/medium_volume.hpp"
 #include "modern/path_tracer.hpp"
 #include "modern/scene_gpu.hpp"
 #include "modern/shutter.hpp"
@@ -8,6 +10,7 @@
 #include "post/denoiser.hpp"
 #include "post/upscale.hpp"
 #include "rt/particles.hpp"
+#include "rt/random.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -126,6 +129,19 @@ void ModernStage::prepare(modern::SceneId id) {
             splats = std::make_unique<modern::SplatPass>(ctx_, ring_, traceWidth_, traceHeight_);
         (splats ? *splats : *splats_).prepare(statics.splatShader);
     }
+    // The one CausticMaps, made for the first scene with caustics (grown below for a later one; Task 13).
+    const std::uint32_t causticResolution = statics.capacity.causticResolution;
+    std::unique_ptr<modern::CausticMaps> caustics;
+    if (causticResolution > 0 && !caustics_)
+        caustics = std::make_unique<modern::CausticMaps>(ctx_, ring_, causticResolution);
+    // The one medium volume (Task 11), made for the first scene with a medium shader, grown for a later one.
+    const bool hasMedium = !statics.mediumShader.empty();
+    std::array<std::uint32_t, 3> mediumCapacity = statics.capacity.mediumGrid;
+    for (std::uint32_t& n : mediumCapacity)
+        n = std::max(n, 1u);
+    std::unique_ptr<modern::MediumVolume> medium;
+    if (hasMedium && !medium_)
+        medium = std::make_unique<modern::MediumVolume>(ctx_, ring_, mediumCapacity, statics.mediumShader);
     if (!tracer_) {
         auto tracer = std::make_unique<modern::PathTracer>(ctx_, ring_, traceWidth_, traceHeight_, capacity);
         tracer->setTimers(timers_);
@@ -149,6 +165,16 @@ void ModernStage::prepare(modern::SceneId id) {
         particles_ = std::move(particles);
     if (splats)
         splats_ = std::move(splats);
+    if (causticResolution > 0 && caustics_)
+        caustics_->reserve(causticResolution); // keeps the old maps if it throws
+    if (caustics)
+        caustics_ = std::move(caustics);
+    if (hasMedium && medium_) {
+        medium_->setShader(statics.mediumShader);
+        medium_->reserve(mediumCapacity); // keeps the old images if it throws
+    }
+    if (medium)
+        medium_ = std::move(medium);
     gpus_[index] = std::move(gpu);
 }
 
@@ -167,7 +193,8 @@ VkDeviceSize ModernStage::imageBytes() const {
 VkDeviceSize ModernStage::gpuBytes() const {
     if (!tracer_)
         return 0;
-    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0);
+    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0) +
+                         (caustics_ ? caustics_->bytes() : 0) + (medium_ ? medium_->bytes() : 0);
     for (const auto& gpu : gpus_)
         if (gpu)
             bytes += gpu->bytes();
@@ -338,6 +365,38 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         if (sliceCount == 1)
             endScope(commands);
     };
+    if (slices[0].caustics) {
+        // Task 13: this frame's photon maps (the first slice's), a pure function of the show time (the seed
+        // does not follow the frames since a reset), with kExportPhotonFactor times the photons in an export
+        // of many samples.
+        if (!caustics_)
+            throw std::invalid_argument("ModernStage: a frame with caustics from a scene whose "
+                                        "capacity.causticResolution is 0");
+        const std::uint32_t photons =
+            slices[0].caustics->photons *
+            (state.mode == RenderMode::Export && state.spp >= modern::kExportPhotonSpp
+                 ? modern::kExportPhotonFactor
+                 : 1u);
+        caustics_->prepare(object.staticScene(), slices[0], photons,
+                           rt::pcgHash(modern::frameSeedFor(frame.showSeconds, 0) ^ 0x43415553u));
+        extras.causticMaps = &caustics_->maps();
+        extras.causticReceivers = &caustics_->receiverTable();
+        extras.photons = [this](VkCommandBuffer c, const modern::PhotonScene& p) { caustics_->record(c, p); };
+    }
+    const modern::SceneFrame& middle = slices[sliceCount / 2];
+    if (middle.medium && middle.medium->grid) {
+        // Task 11: the grid medium's bake, once per frame at the middle slice's time (a pure function of it:
+        // nothing carries over from another frame), checked with the rest of that slice first. Every slice
+        // samples it.
+        const modern::SceneStatic& statics = object.staticScene();
+        modern::checkSceneFrame(statics, middle);
+        medium_->setShader(statics.mediumShader);
+        beginScope(cmd, "medium");
+        medium_->record(cmd, *middle.medium->grid, sliceLocal[sliceCount / 2]);
+        endScope(cmd);
+        extras.density = &medium_->density();
+        extras.majorant = &medium_->majorant();
+    }
     tracer_->trace(cmd, *gpus_[indexOf(id)], slices, continues ? previousCamera_ : std::nullopt, trace,
                    retroImage, extras,
                    particles ? modern::PathTracer::SliceCallback(recordParticles) : nullptr);

@@ -15,12 +15,16 @@ const uint kMaterialChecker = 3u;
 const uint kPatternNone = 0u;
 const uint kPatternWoodPlanks = 1u;
 const uint kPatternBrushedMetal = 2u;
+const uint kPatternConcrete = 3u;
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;
 const uint kNoLight = 0xFFFFFFFFu;
 const uint kNoMedium = 0xFFFFFFFFu;
 const uint kNoReceiver = 0xFFFFFFFFu;
+
+const uint kMediumFog = 1u; // FrameUniforms.mediumFlags (modern::kMediumFog, kMediumGrid)
+const uint kMediumGrid = 2u;
 
 const uint kMaterialCameraOnlyEmission = 1u; // Material.flags
 const uint kMaterialCausticReceiver = 2u;
@@ -158,8 +162,20 @@ struct EnvironmentUniforms { // 112 bytes
     float glowStrength;
 };
 
-struct MediumUniforms { // 128 bytes (Task 11 names the fields)
-    uint words[32];
+struct MediumUniforms { // 128 bytes
+    Mat34 worldToMedium;
+    uvec3 gridSize;
+    float densityScale;
+    vec3 gridAlbedo;
+    float gridPhaseG;
+    uvec3 majorantSize;
+    float emissionScale;
+    vec3 fogAlbedo;
+    float fogPhaseG;
+    float fogDensity;
+    float fogBaseHeight;
+    float fogFalloff;
+    uint pad;
 };
 
 struct SphereRecord { // 48 bytes

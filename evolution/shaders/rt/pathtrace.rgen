@@ -17,13 +17,30 @@
 // weighted against the NEE density of that light (selection evaluated at the vertex the ray left: prevP,
 // prevN, prevTransmissive) or of the escape (escapePdf: every portal the direction crosses, on both sides,
 // plus the environment's share) with the power heuristic; after a delta lobe (no NEE there) it keeps weight 1.
-// Russian roulette from bounce 3; contributions after the first bounce are clamped to a luminance of
-// frame.clampIndirect; a non-finite sample contributes 0.
+// Russian roulette from bounce 3; a non-finite sample contributes 0.
+//
+// Noise at its sources (Task 6 of step 5). The path is `rough` once it has scattered off a non-delta lobe;
+// until then it is a delta chain from the camera (the camera -> mirror -> light paths).
+// - Regularisation: at every vertex after the first rough one each lobe, the coat too, has a roughness of at
+//   least frame.regularizeRoughness. The surface is changed before NEE and BSDF sampling, so bsdfEval (NEE),
+//   bsdfSample and the pdf the next hit weighs against all see the same BSDF: MIS stays consistent. Diffuse ->
+//   mirror -> small light paths become glossy, which NEE reaches (caustics come from Task 13's photons).
+// - The clamp: a contribution made after a rough vertex is clamped to a luminance of frame.clampIndirect. The
+//   primary hit's NEE and camera -> delta chain -> light are never clamped.
+// - Camera-only emission (kMaterialCameraOnlyEmission, an LED): counted at the primary hit and along a delta
+//   chain only, never after a rough vertex; such a surface is never a light (checkSceneFrame).
+// - Dispersion: at the path's first dielectric with abbe > 0 it picks a hero wavelength, uniform in
+//   [380, 780] nm from the bounce's dimension 7, and multiplies its throughput by spectralRgb(lambda)
+//   (spectral.glsl: mean (1, 1, 1), so the estimate stays unbiased per channel); every dispersive surface on
+//   the path then has the IOR dispersiveIor(ior, abbe, lambda). abbe 0 leaves glass as it was.
 //
 // Step 5's hooks, each with a stub that keeps step 4's picture byte for byte until its task fills it:
 // environment.glsl (the sky a miss sees, and environment sampling: Task 2), lights.glsl (per-point light
-// selection: Task 3; the light tree: Task 12), medium.glsl (participating media and the volume layer: Task
-// 11), caustics.glsl (Task 13) and lensing.glsl (bent main rays: Task 25).
+// selection: Task 3; the light tree: Task 12), medium.glsl and medium_path.glsl (participating media and the
+// volume layer: Task 11, behind mediumActive() at the hooks marked "[medium]"), caustics.glsl (Task 13) and
+// lensing.glsl (bent main rays: Task 25). Task 13's caustic photon maps also exclude, in caustic_paths.glsl,
+// the light the maps already hold (a receiver's non-delta bounce, then only delta surfaces, then the photons'
+// light): without caustics in the frame that changes nothing.
 //
 // Every random number is randomFloat(frameSeed, pixel, sampleIndex, dimension) (random.glsl). Only this
 // shader traces rays (recursion depth 1).
@@ -34,6 +51,7 @@
 #include "environment.glsl"
 #include "lights.glsl"
 #include "medium.glsl"
+#include "spectral.glsl"
 
 layout(push_constant) uniform Push {
     uint sampleBase;  // the frame's first sample traced by this dispatch
@@ -47,8 +65,11 @@ layout(location = 0) rayPayloadEXT HitPayload payload;
 layout(location = 1) rayPayloadEXT uint shadowVisible;
 
 const float kRayMax = 1e30;
-// Random dimensions: 0-1 pixel jitter, 2-3 lens, then kDimsPerBounce per bounce.
+// Random dimensions: 0-1 pixel jitter, 2-3 lens, then kDimsPerBounce per bounce (0-2 BSDF sample, 3 the light
+// choice, 4-5 the point on it, 6 Russian roulette, 7 the hero wavelength).
 const uint kDimsPerBounce = 8u;
+// [medium] The dimension that seeds a sample's media stream (medium.glsl), far from the others.
+const uint kMediumSeedDimension = 0x6D656469u;
 
 uvec2 gPixel;
 uint gSample;
@@ -57,8 +78,13 @@ float rand(uint dimension) {
     return randomFloat(frame.frameSeed, gPixel, gSample, dimension);
 }
 
+// [medium] The first bounce whose dimensions bounce 0 draws: 0, except while the path is the primary
+// segment's continuation in a medium (medium_path.glsl's kMediumBounceOffset), which must not reuse the
+// surface path's numbers.
+uint gBounceOffset = 0u;
+
 float bounceRand(uint bounce, uint k) {
-    return rand(4u + bounce * kDimsPerBounce + k);
+    return rand(4u + (bounce + gBounceOffset) * kDimsPerBounce + k);
 }
 
 void traceMain(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
@@ -138,10 +164,9 @@ vec3 selectionNormal(vec3 n, vec3 wo) {
     return dot(n, wo) < 0.0 ? -n : n;
 }
 
-// Adds a contribution produced by the scattering at `bounce` (0: direct light of the primary hit), clamped to
-// frame.clampIndirect in luminance after the first bounce.
-void addContribution(inout vec3 radiance, vec3 c, uint bounce) {
-    if (bounce >= 1u) {
+// Adds a contribution, clamped to frame.clampIndirect in luminance when it comes after a rough vertex.
+void addContribution(inout vec3 radiance, vec3 c, bool rough) {
+    if (rough) {
         float l = luminance(c);
         if (l > frame.clampIndirect) {
             c *= frame.clampIndirect / l;
@@ -180,6 +205,48 @@ vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bo
     return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, kRayMax);
 }
 
+// Next-event estimation towards the light tree (Task 12), chosen with probability selectPdf: one sphere
+// light by the walk (light_tree.glsl; its own random word, dimension 7), one direction in its cone, one
+// shadow ray to the sphere's near surface lifted off it, weighted against the BSDF.
+vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, vec3 facing, bool transmissive,
+                     float selectPdf) {
+    uint k;
+    float treePdf;
+    uint word = randomHash(frame.frameSeed, gPixel, gSample, 4u + bounce * kDimsPerBounce + 7u);
+    if (!pickTreeLight(word, frame.treeLightCount, p, facing, transmissive, treeUniformSelection(), k, treePdf)) {
+        return vec3(0.0);
+    }
+    TreeLight light = treeLights[k];
+    vec3 wi;
+    float dist;
+    float conePdf;
+    if (!sampleSphereCone(p, light.center, light.radius, vec2(bounceRand(bounce, 4u), bounceRand(bounce, 5u)), wi,
+                          dist, conePdf)) {
+        return vec3(0.0);
+    }
+    if (!sidesAgree(n, ng, wo, wi)) {
+        return vec3(0.0);
+    }
+    float bsdfPdf;
+    vec3 f = bsdfEval(s, n, wo, wi, bsdfPdf);
+    if (!(maxComponent(f) > 0.0)) {
+        return vec3(0.0);
+    }
+    float lightPdf = selectPdf * treePdf * conePdf;
+    if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
+        return vec3(0.0);
+    }
+    vec3 origin = offsetOrigin(p, ng, wi);
+    vec3 q = p + dist * wi;
+    vec3 toTarget = offsetOrigin(q, safeNormalize(q - light.center, -wi), -wi) - origin;
+    float tMax = length(toTarget);
+    if (!(tMax > 0.0) || !unoccluded(origin, toTarget / tMax, tMax)) {
+        return vec3(0.0);
+    }
+    return f * light.emission * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+           mediumTransmittance(origin, toTarget / tMax, tMax);
+}
+
 // Next-event estimation at a surface: the environment with probability frame.environmentSelect, else one
 // rect light chosen at this point, one point on it, one shadow ray, weighted against the BSDF.
 vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
@@ -198,6 +265,9 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
     }
     selectPdf *= 1.0 - environmentSelect;
     RectLight l = lights[index];
+    if (l.kind == kLightTree) {
+        return sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf); // Task 12
+    }
     if (!(l.area > 0.0)) {
         return vec3(0.0);
     }
@@ -253,8 +323,14 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         return vec3(0.0);
     }
     vec3 le = lightRadiance(l, uv, wi);
-    return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, tMax);
+    return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+           mediumTransmittance(origin, shadowDirection, tMax);
 }
+
+// Task 13: the caustic photon maps' double-count exclusion (every use below is marked "Task 13").
+#include "caustic_paths.glsl"
+// [medium] The participating-media integrator (Task 11): needs the helpers above.
+#include "medium_path.glsl"
 
 struct SampleResult {
     vec3 lighting;
@@ -290,9 +366,59 @@ SampleResult tracePath() {
     vec3 prevP = origin;
     vec3 prevN = frame.cameraForward;
     bool prevTransmissive = false;
+    bool rough = false;   // the path has scattered off a non-delta lobe (else: a delta chain from the camera)
+    float lambda = -1.0;  // the hero wavelength in nm, once the path has met dispersive glass
+    CausticPath caustic = causticPathStart(); // Task 13
+    // [medium] This sample's media stream and volume layer (Task 11).
+    if (mediumActive()) {
+        mediumSeed(randomHash(frame.frameSeed, gPixel, gSample, kMediumSeedDimension));
+        gMediumVolume = vec4(0.0, 0.0, 0.0, 1.0);
+        gMediumContinue = false;
+    }
 
-    for (uint bounce = 0u;; ++bounce) {
+    // [medium] Two passes of the one bounce loop below (not indented for them): the surface path, then, when
+    // the primary segment's in-scattering continues as a path of its own, that path from bounce 1, its
+    // radiance into the volume layer. One loop, so the ray tracing code is not duplicated.
+    uint firstBounce = 0u;
+    vec3 surfaceLighting = vec3(0.0);
+    for (uint pass = 0u; pass < 2u; ++pass) {
+    if (pass == 1u) {
+        if (!mediumActive() || !gMediumContinue) {
+            break;
+        }
+        surfaceLighting = r.lighting;
+        r.lighting = vec3(0.0);
+        firstBounce = 1u;
+        gBounceOffset = kMediumBounceOffset;
+        origin = gMediumContinueOrigin;
+        direction = gMediumContinueDirection;
+        throughput = gMediumContinueThroughput;
+        coneWidth = 0.0;
+        coneSpread = -1.0;
+        previousDelta = false;
+        previousPdf = gMediumContinuePdf;
+        prevP = origin;
+        prevN = direction;
+        prevTransmissive = true;
+        rough = true; // it starts at a medium vertex
+        lambda = -1.0;
+        caustic = causticPathStart();
+    }
+    for (uint bounce = firstBounce;; ++bounce) {
         traceScene(origin, direction, coneWidth, coneSpread);
+        // [medium] The primary segment goes to the volume layer (the surface path stays unattenuated); every
+        // later segment is delta-tracked and may end in a medium vertex, from which the path goes on.
+        if (mediumActive()) {
+            uint event = mediumStep(bounce, nee, roulette, rough, throughput, r.lighting, origin, direction,
+                                    coneSpread, previousDelta, previousPdf, prevP, prevN, prevTransmissive);
+            if (event == kMediumSegmentEnd) {
+                break;
+            }
+            if (event == kMediumSegmentScattered) {
+                caustic = causticPathStart(); // a medium vertex ends any chain the photon maps hold
+                continue;
+            }
+        }
         if (payload.t < 0.0) {
             vec3 sky = payload.emission;
             if (bounce == 0u) {
@@ -302,39 +428,65 @@ SampleResult tracePath() {
                 if (nee && !previousDelta) {
                     w = powerHeuristic(previousPdf, escapePdf(origin, direction, prevP, prevN, prevTransmissive));
                 }
-                addContribution(r.lighting, throughput * sky * w, bounce - 1u);
+                // Task 13: the photon map's share of the source disc is excluded.
+                addContribution(r.lighting, throughput * causticEscape(caustic, prevP, direction, sky) * w,
+                                rough);
             }
             break;
         }
 
         Surface s = payloadSurface();
+        if (payload.light != kNoLight && lights[payload.light].kind == kLightTree) {
+            // Task 12: a sphere of the light tree shows its tree light's radiance (this frame's scale).
+            s.emission = treeHitEmission(payload.primitive, payload.frontFace != 0u, s.emission);
+        }
         vec3 p = payload.position;
         vec3 n = payload.normal;
         vec3 ng = payload.geometricNormal;
         vec3 wo = -direction;
+        causticPathHit(caustic, payloadSurface(), payload.materialFlags); // Task 13
         if (bounce == 0u) {
             r.emission = s.emission;
             r.albedo = demodulationAlbedo(s);
-        } else if (maxComponent(s.emission) > 0.0) {
+        } else if (maxComponent(s.emission) > 0.0 &&
+                   (!rough || (payload.materialFlags & kMaterialCameraOnlyEmission) == 0u)) {
             float w = 1.0;
             if (nee && !previousDelta && payload.light != kNoLight) {
                 RectLight l = lights[payload.light];
                 float cosLight = abs(dot(direction, lightNormal(l)));
                 float lightPdf = 0.0;
-                if (l.area > 0.0 && cosLight > 0.0) {
+                if (l.kind == kLightTree) { // Task 12: the tree's density of this sphere, from prevP
+                    lightPdf = treeHitPdf(payload.light, payload.primitive, prevP, prevN, prevTransmissive);
+                } else if (l.area > 0.0 && cosLight > 0.0) {
                     lightPdf = lightChoicePdf(payload.light, prevP, prevN, prevTransmissive) *
                                rectSolidAnglePdf(l, payload.t, cosLight);
                 }
                 w = powerHeuristic(previousPdf, lightPdf);
             }
-            addContribution(r.lighting, throughput * s.emission * w, bounce - 1u);
+            // Task 13: the photon map's share of the source light is excluded.
+            vec3 keep = causticEmissionKeep(caustic, payload.light, prevP, p);
+            addContribution(r.lighting, throughput * s.emission * w * keep, rough);
         }
         if (bounce >= frame.maxBounces) {
             break;
         }
 
+        if (rough) {
+            s = regularizedSurface(s, frame.regularizeRoughness);
+        }
+        if (isDielectric(s) && payload.abbe > 0.0) {
+            if (lambda < 0.0) {
+                lambda = kSpectralMinNm + kSpectralRangeNm * bounceRand(bounce, 7u);
+                throughput *= spectralRgb(lambda);
+            }
+            s.ior = dispersiveIor(s.ior, payload.abbe, lambda);
+        }
+
         if (nee && (frame.lightCount > 0u || frame.environmentSelect > 0.0) && bsdfHasNonDeltaLobe(s)) {
-            addContribution(r.lighting, throughput * sampleLight(s, p, n, ng, wo, bounce), bounce);
+            addContribution(r.lighting,
+                            throughput * sampleLight(s, p, n, ng, wo, bounce) *
+                                causticNeeKeep(caustic, s, p, n, wo, bounce), // Task 13
+                            rough);
         }
 
         vec3 u = vec3(bounceRand(bounce, 0u), bounceRand(bounce, 1u), bounceRand(bounce, 2u));
@@ -345,7 +497,9 @@ SampleResult tracePath() {
         if (!bsdfSample(s, n, wo, u, wi, weight, pdf, delta) || !sidesAgree(n, ng, wo, wi)) {
             break;
         }
+        causticPathScatter(caustic, s, n, wo, wi, delta); // Task 13
         throughput *= weight;
+        rough = rough || !delta;
         if (roulette && bounce >= 3u) {
             float survive = clamp(maxComponent(throughput), 0.05, 0.95);
             if (bounceRand(bounce, 6u) >= survive) {
@@ -372,6 +526,12 @@ SampleResult tracePath() {
         origin = offsetOrigin(p, ng, wi);
         direction = wi;
     }
+    if (pass == 1u) { // [medium] the continuation's radiance belongs to the volume layer
+        gMediumVolume.rgb += r.lighting;
+        r.lighting = surfaceLighting;
+        gBounceOffset = 0u;
+    }
+    } // [medium] the passes
     return r;
 }
 
@@ -425,6 +585,7 @@ void main() {
     vec3 lighting = vec3(0.0);
     vec3 emission = vec3(0.0);
     vec3 albedo = vec3(0.0);
+    vec4 volume = vec4(0.0); // [medium]
     for (uint i = 0u; i < pc.sampleCount; ++i) {
         gSample = pc.sampleBase + i;
         SampleResult r = tracePath();
@@ -432,6 +593,9 @@ void main() {
         lighting += allFinite(r.lighting) ? r.lighting : vec3(0.0);
         emission += allFinite(r.emission) ? r.emission : vec3(0.0);
         albedo += allFinite(r.albedo) ? r.albedo : vec3(1.0);
+        if (mediumActive()) {
+            volume += mediumSafeVolume(gMediumVolume);
+        }
     }
 
     // The running mean over the frame's samples so far.
@@ -446,11 +610,19 @@ void main() {
     // The emission image is half precision: its largest finite value bounds an emitter's radiance.
     imageStore(emissionImage, pixel, vec4(min(emission / after, vec3(65504.0)), 1.0));
     imageStore(albedoImage, pixel, vec4(albedo / after, 1.0));
+    // [medium] The volume layer (L_v, T): a running mean over the frame's samples, like the lighting.
+    if (mediumActive()) {
+        if (pc.sampleBase > 0u) {
+            volume += imageLoad(volumeImage, pixel) * before;
+        }
+        imageStore(volumeImage, pixel, min(volume / after, vec4(65504.0)));
+    }
 
     if (pc.guides != 0u) {
-        // The volume layer: no medium in the frame (Task 11 integrates the primary segment's in-scattered
-        // radiance and transmittance here while mediumActive()).
-        imageStore(volumeImage, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+        // The volume layer without a medium in the frame: (0, 0, 0, 1).
+        if (!mediumActive()) {
+            imageStore(volumeImage, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+        }
         writeGuides(pixel);
     }
 }

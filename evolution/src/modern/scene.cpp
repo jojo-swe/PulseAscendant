@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 namespace evo::modern {
 
@@ -44,6 +45,33 @@ rt::RectLight rectLightForQuad(const rt::Mat34& transform, float width, float he
     light.area = length(cross(edgeU, edgeV));
     light.gate = rt::kNoLight;
     return light;
+}
+
+std::vector<TreeLightFrame> treeLightsOf(const SceneStatic& scene, const SceneInstance& instance,
+                                         const std::vector<rt::Material>& materials, std::uint32_t count) {
+    if (count > instance.sphereCount || std::size_t(instance.firstSphere) + count > scene.spheres.size())
+        throw std::out_of_range("treeLightsOf: " + std::to_string(count) +
+                                " spheres, beyond the instance's or the scene's");
+    const float scale = length(linearPart(instance.transform, {1.f, 0.f, 0.f}));
+    std::vector<TreeLightFrame> lights;
+    lights.reserve(count);
+    for (std::uint32_t k = 0; k < count; ++k) {
+        const std::uint32_t index = instance.firstSphere + k;
+        const rt::SphereRecord& s = scene.spheres[index];
+        if (s.material >= materials.size())
+            throw std::out_of_range("treeLightsOf: sphere " + std::to_string(index) + " names material " +
+                                    std::to_string(s.material) + ", which does not exist");
+        const rt::Material& m = materials[s.material];
+        TreeLightFrame l;
+        l.center = transformPoint(instance.transform, {s.center[0], s.center[1], s.center[2]});
+        l.radius = s.radius * scale;
+        l.emission = {s.color[0] * s.emission + m.emission[0] * m.emissionScale,
+                      s.color[1] * s.emission + m.emission[1] * m.emissionScale,
+                      s.color[2] * s.emission + m.emission[2] * m.emissionScale};
+        l.sphere = index;
+        lights.push_back(l);
+    }
+    return lights;
 }
 
 CameraBasis cameraBasis(const Camera& camera) {

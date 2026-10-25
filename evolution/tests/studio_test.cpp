@@ -1,10 +1,14 @@
-// The Studio (Task 10 of step 4): the path-traced room around a 1993 PC whose CRT shows the retro picture and
-// lights the room. At 320x180 in Export with 4 spp unless a test says otherwise, with the validation layer
-// on; fails on any message it reports. Captures go to <EVO_TEST_OUT_DIR>/step4.
+// The Studio (Task 10 of step 4, polished by Task 14 of step 5): the path-traced room around a 1993 PC whose
+// CRT shows the retro picture and lights the room. At 320x180 in Export with 4 spp unless a test says
+// otherwise, with the validation layer on; fails on any message it reports. Captures go to
+// <EVO_TEST_OUT_DIR>/step4.
 //   (a) STUDIO NIGHT at 30 % and 80 %: lit but not blown out, the screen brighter than the room's mean, each
 //       frame under 30 s;
-//   (b) the CRT lights the room: a white retro picture against a black one brightens the screen and the desk
-//       in front of it, and changes a wall patch the screen cannot see by under 2 % of white;
+//   (b) the CRT is STUDIO NIGHT's key light (Task 14 (a)): a white retro picture against a black one
+//   brightens
+//       the screen, and the desk in front of it by at least 40 % (step 4: 10 % in RETURN), and changes a wall
+//       patch the screen cannot see by under 0.002 in linear display light (the Task 5 review: step 4's bound
+//       of 0.02 was written for encoded values);
 //   (c) Review Focus 5 in the window: a red picture on frame N, a green one on frame N + 1 -> the screen on
 //       frame N + 1 is green (its emission bypasses the temporal history and the filter);
 //   (d) studioCamera: finite, smooth within a shot, cutting exactly at the authored times;
@@ -13,9 +17,23 @@
 //   (g) the DOS idle screen: C:\DEMO> with BOOT's 2 Hz cursor, a pure function of the retro frame;
 //   (h) the CRT stays sharp in the window: every shot that shows the screen up close focuses on its plane
 //       with a small aperture; at 1 spp the same frame shown twice barely changes in the screen, and the
-//       30th window frame's screen matches a 64 spp export of the same time;
-//   (i) the Studio's clampIndirect (2) reaches the path tracer: its lighting equals a trace at 2, not at 64,
-//       the default of every other scene.
+//       30th window frame's screen matches a 32 spp export of the same time (64 until Task 14 of step 5,
+//       which halved it for the time budget: the screen differs from either by 0.003, the bound is 0.025);
+//   (i) the Studio's clampIndirect (0.5; step 4: 2) reaches the path tracer: its lighting equals a trace at
+//       0.5, not at 16, the default of every other scene (since Task 6 of step 5);
+// Task 14 of step 5 (its letters in brackets):
+//   (j) [b] the light rig: the lamp's material emits nothing in STUDIO NIGHT and does in RETURN and REBOOT;
+//       in every chapter the frame's material table carries studioRig's levels and every light's emission is
+//       its material's (the screen's (s, s, s));
+//   (k) [c] speckle: the STUDIO NIGHT wide shot at 160x90 and 32 spp has under 1 % of its pixels more than 10
+//       levels above their 3x3 neighbourhood's median (step 4: 3-5 % at 192 spp);
+//   (l) [d] the chrome sphere reflects the screen: with an all-red picture its projected disc holds at least
+//       20 red-dominant pixels;
+//   (m) [e] the power LEDs are camera-only emitters: the lighting of the desk beside the case's LED is byte
+//       for byte the same with the LEDs on and off;
+//   (n) [g] the moonbeam: in the STUDIO NIGHT wide shot the floor where the moon's ray through the window's
+//       centre lands is at least twice as bright as the floor beside the beam.
+// [f] is (h) and renderer_test's Studio resize case, unchanged.
 // With --look <dir> [spp] [width height] it only renders stills of every shot to look at.
 
 #include "gfx/buffer.hpp"
@@ -25,6 +43,7 @@
 #include "image/png.hpp"
 #include "modern/modern_scene.hpp"
 #include "modern/path_tracer.hpp"
+#include "modern/scene_gpu.hpp"
 #include "modern/studio.hpp"
 #include "render/modern_stage.hpp"
 #include "render/renderer.hpp"
@@ -43,6 +62,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <stdexcept>
@@ -329,16 +349,18 @@ void testCrtLightsTheRoom(gfx::Context& ctx) {
     gfx::Image white = makeRetro(ctx, 255, 255, 255);
     gfx::Image black = makeRetro(ctx, 0, 0, 0);
     Stages stages(ctx, kW, kH);
-    const TimelineFrame frame = chapterAt(kReturn, 0.2);
+    // STUDIO NIGHT's wide dolly: the lamp is off, the CRT is the key light.
+    const TimelineFrame frame = chapterAt(kStudioNight, 0.3);
+    CHECK(modern::studioCamera(frame).shot == 0);
     const modern::Camera camera = modern::studioCamera(frame);
     const Picture lit = stages.render(frame, exportState(frame, 4), &white);
     const Picture dark = stages.render(frame, exportState(frame, 4), &black);
     lit.save(kOutDir / "studio_crt_white.png");
     dark.save(kOutDir / "studio_crt_black.png");
-    // The desk right of the keyboard, in front of the monitor; the back wall right of the window, which
-    // the screen (facing +z, in front of it) cannot see.
+    // The desk between the keyboard and the case, in front of the monitor; the back wall right of the
+    // window, which the screen (facing +z, in front of it) cannot see.
     const Rect screen = screenRect(camera, kW, kH, 0.1);
-    const Rect desk = around(camera, kW, kH, {0.215f, 0.75f, -0.245f}, 4);
+    const Rect desk = around(camera, kW, kH, {0.1f, 0.75f, -0.27f}, 3);
     const Rect wall = around(camera, kW, kH, {-0.45f, 1.75f, -0.95f}, 6);
     // Measured in the display's linear light: PBR Neutral lifts dim coloured surfaces (its toe acts on the
     // smallest channel only), where the encoding is steepest, so encoded values would understate the desk's
@@ -346,14 +368,14 @@ void testCrtLightsTheRoom(gfx::Context& ctx) {
     const double screenLit = linearOver(lit, screen), screenDark = linearOver(dark, screen);
     const double deskLit = linearOver(lit, desk), deskDark = linearOver(dark, desk);
     const double wallLit = linearOver(lit, wall), wallDark = linearOver(dark, wall);
-    std::printf(
-        "(b) white vs black picture (linear): screen %.3f / %.3f, desk %.4f / %.4f, wall %.4f / %.4f\n",
-        screenLit, screenDark, deskLit, deskDark, wallLit, wallDark);
+    std::printf("(b) white vs black picture (linear): screen %.3f / %.3f, desk %.4f / %.4f (x%.2f), wall "
+                "%.4f / %.4f\n",
+                screenLit, screenDark, deskLit, deskDark, deskLit / deskDark, wallLit, wallDark);
     CHECK(screenLit >= 1.1 * screenDark && screenLit > screenDark + 0.1);
-    CHECK(deskLit >= 1.1 * deskDark);
+    CHECK(deskLit >= 1.4 * deskDark);
     // The screen's light reaches the wall only after a bounce: a dark patch, so its change is bounded on the
-    // display scale (2 % of white), not relative to its own dim value.
-    CHECK(std::abs(wallLit - wallDark) < 0.02);
+    // display's linear scale, not relative to its own dim value.
+    CHECK(std::abs(wallLit - wallDark) < 0.002);
     CHECK(deskLit - deskDark > 2 * std::abs(wallLit - wallDark));
 }
 
@@ -476,6 +498,7 @@ void testScene() {
     const TimelineFrame frame = chapterAt(kStudioNight, 0.5);
     const modern::SceneFrame f = studio.frame(frame);
     const modern::SceneStatic& statics = studio.staticScene();
+    CHECK(f.materials.size() == statics.materials.size()); // the chapter's light rig
     int keys = 0;
     for (const modern::SceneInstance& instance : f.instances) {
         keys += instance.mesh == modern::Studio::kKeyCapMesh;
@@ -501,7 +524,7 @@ void testScene() {
             if (instance.light != i)
                 continue;
             ++surfaces;
-            const evo::rt::Material& m = statics.materials[instance.material];
+            const evo::rt::Material& m = f.materials[instance.material];
             CHECK(m.materialClass == std::uint32_t(evo::rt::MaterialClass::Emissive));
             for (int c = 0; c < 3; ++c)
                 CHECK(std::abs(l.emission[c] - (l.kind == std::uint32_t(evo::rt::LightKind::RetroScreen)
@@ -643,14 +666,14 @@ void testWindowScreenSharp(gfx::Context& ctx) {
     // retro frame are unchanged, so only sampling noise can change the screen.
     const Picture frame31 = window.render(still, interactiveState(still, render::HistoryReset::None, 30));
     Stages exporter(ctx, kW, kH);
-    const Picture reference = exporter.render(still, exportState(still, 64));
+    const Picture reference = exporter.render(still, exportState(still, 32));
     frame30.save(kOutDir / "studio_window_orbit_30.png");
     reference.save(kOutDir / "studio_window_orbit_export.png");
     const Rect screen = screenRect(camera, kW, kH, 0.1);
     const double flicker = meanAbsDifference(frame30, frame31, screen);
     const double error = meanAbsDifference(frame30, reference, screen);
     std::printf(
-        "(h) window orbit screen: frame to frame %.4f, from a 64 spp export %.4f, local contrast %.3f "
+        "(h) window orbit screen: frame to frame %.4f, from a 32 spp export %.4f, local contrast %.3f "
         "(export %.3f)\n",
         flicker, error, localContrast(frame30, screen), localContrast(reference, screen));
     // Mean absolute differences over the screen on the display scale (1 = 255 levels). A jittered single
@@ -663,27 +686,222 @@ void testWindowScreenSharp(gfx::Context& ctx) {
 // -----------------------------------------------------------------------------------------------------
 
 void testClampIndirect(gfx::Context& ctx) {
-    CHECK(modern::SceneFrame{}.clampIndirect == 64.f && modern::TraceSettings{}.clampIndirect == 64.f);
+    CHECK(modern::SceneFrame{}.clampIndirect == 16.f && modern::TraceSettings{}.clampIndirect == 16.f);
     const modern::Studio studio;
-    // FINALE's pull-out passes the chrome and glass spheres and the lamp: plenty of caustic paths above 2.
+    // FINALE's pull-out passes the chrome and glass spheres and the lamp: plenty of caustic paths above 0.5.
     const TimelineFrame frame = chapterAt(kFinale, 0.5);
     const modern::SceneFrame scene = studio.frame(frame);
-    CHECK(scene.clampIndirect == 2.f);
+    CHECK(scene.clampIndirect == 0.5f);
     gfx::Image white = makeRetro(ctx, 255, 255, 255);
     Stages stages(ctx, 160, 90);
     const render::HistoryState state = exportState(frame, 4);
     stages.render(frame, state, &white);
     const std::vector<std::uint8_t> staged = stages.lightingBytes(ctx);
     modern::TraceSettings settings{state.spp, state.maxBounces, state.frameSeed};
-    settings.clampIndirect = 2.f;
+    settings.clampIndirect = 0.5f;
     stages.trace(scene, settings, white);
     const std::vector<std::uint8_t> clamped = stages.lightingBytes(ctx);
-    settings.clampIndirect = 64.f;
+    settings.clampIndirect = 16.f;
     stages.trace(scene, settings, white);
     const std::vector<std::uint8_t> loose = stages.lightingBytes(ctx);
     CHECK(staged == clamped);
     CHECK(clamped != loose);
-    std::printf("(i) the Studio traces with clampIndirect 2 (64 changes its lighting)\n");
+    std::printf("(i) the Studio traces with clampIndirect 0.5 (16 changes its lighting)\n");
+}
+
+// --- (j) - (n): Task 14 of step 5
+// ----------------------------------------------------------------------------------
+
+void testRig() {
+    const modern::Studio studio;
+    const modern::SceneStatic& statics = studio.staticScene();
+    namespace rt = evo::rt;
+    for (const int chapter : {kFinale, kPortal, kStudioNight, kReturn, kReboot})
+        for (const double fraction : {0.1, 0.5, 0.9}) {
+            const TimelineFrame t = chapterAt(chapter, fraction);
+            const modern::SceneFrame f = studio.frame(t);
+            const modern::StudioRig rig = modern::studioRig(t.effect);
+            modern::checkSceneFrame(statics, f);
+            CHECK(f.materials.size() == statics.materials.size());
+            const rt::Material& lamp = f.materials[modern::Studio::kLampMaterial];
+            const rt::Material& screen = f.materials[modern::Studio::kScreenMaterial];
+            CHECK(screen.emissionScale == rig.screen);
+            CHECK(lamp.emissionScale == modern::Studio::kLampIntensity * rig.lamp);
+            const rt::RectLight& lampLight = f.lights[modern::Studio::kLampLight];
+            const rt::RectLight& screenLight = f.lights[modern::Studio::kScreenLight];
+            double lampEmission = 0;
+            for (int c = 0; c < 3; ++c) {
+                CHECK(std::abs(lampLight.emission[c] - lamp.emission[c] * lamp.emissionScale) < 1e-4f);
+                CHECK(screenLight.emission[c] == rig.screen);
+                lampEmission += lampLight.emission[c];
+            }
+            if (t.effect == Effect::StudioNight)
+                CHECK(lampEmission == 0 && lamp.emissionScale == 0.f);
+            if (t.effect == Effect::Return || t.effect == Effect::Reboot)
+                CHECK(lampEmission > 0);
+            // The rig changes the lamp and the screen only; the LEDs are camera-only emitters.
+            for (std::size_t i = 0; i < f.materials.size(); ++i)
+                if (i != modern::Studio::kLampMaterial && i != modern::Studio::kScreenMaterial)
+                    CHECK(std::memcmp(&f.materials[i], &statics.materials[i], sizeof(rt::Material)) == 0);
+            CHECK((f.materials[modern::Studio::kLedMaterial].flags & rt::kMaterialCameraOnlyEmission) != 0);
+        }
+    std::printf("(j) the light rig: NIGHT lamp %.1f screen %.1f, FINALE %.1f / %.1f, RETURN %.1f / %.1f\n",
+                modern::studioRig(Effect::StudioNight).lamp, modern::studioRig(Effect::StudioNight).screen,
+                modern::studioRig(Effect::Finale).lamp, modern::studioRig(Effect::Finale).screen,
+                modern::studioRig(Effect::Return).lamp, modern::studioRig(Effect::Return).screen);
+}
+
+// Whether each pixel lies more than `levels` (of 255, on the luminance of the bytes) above the median of its
+// 3x3 neighbourhood (the border never does).
+std::vector<bool> speckles(const Picture& p, double levels) {
+    std::vector<bool> out(std::size_t{p.width} * p.height, false);
+    for (std::uint32_t y = 1; y + 1 < p.height; ++y)
+        for (std::uint32_t x = 1; x + 1 < p.width; ++x) {
+            std::array<double, 9> n{};
+            int k = 0;
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx)
+                    n[k++] = p.luminance(x + dx, y + dy) * 255.0;
+            std::nth_element(n.begin(), n.begin() + 4, n.end());
+            out[std::size_t{y} * p.width + x] = p.luminance(x, y) * 255.0 > n[4] + levels;
+        }
+    return out;
+}
+
+void testSpeckle(gfx::Context& ctx) {
+    const auto start = std::chrono::steady_clock::now();
+    Stages stages(ctx, 160, 90);
+    const TimelineFrame frame = chapterAt(kStudioNight, 0.08);
+    CHECK(modern::studioCamera(frame).shot == 0);
+    // Two renders with different seeds: a pixel above its neighbours in both is a detail of the picture (an
+    // edge, a star, the screen's text: about 1.1 % of this frame at 256 spp), one above them in a single
+    // render is noise.
+    render::HistoryState state = exportState(frame, 32);
+    const Picture a = stages.render(frame, state);
+    state.frameSeed = modern::frameSeedFor(frame.showSeconds, 1);
+    const Picture b = stages.render(frame, state);
+    a.save(kOutDir / "studio_night_speckle.png");
+    const std::vector<bool> inA = speckles(a, 10), inB = speckles(b, 10);
+    std::size_t both = 0, noise = 0;
+    for (std::size_t i = 0; i < inA.size(); ++i) {
+        both += inA[i] && inB[i];
+        noise += inA[i] && !inB[i];
+    }
+    const double share = double(noise) / double(inA.size());
+    std::printf("(k) STUDIO NIGHT wide at 32 spp: %.3f %% of the pixels speckle, %.3f %% are details in both "
+                "seeds (%.1f s)\n",
+                100 * share, 100 * double(both) / double(inA.size()), secondsSince(start));
+    CHECK(share < 0.01);
+}
+
+// Where the chrome sphere's centre lands, and its radius, in pixels.
+struct Disc {
+    double x, y, radius;
+};
+Disc chromeDisc(const modern::Camera& camera, std::uint32_t width, std::uint32_t height) {
+    const float r = modern::Studio::kChromeRadius;
+    const Vec3 centre = modern::Studio::kChromeAt + Vec3{0.f, 0.012f + r - 0.006f, 0.f}; // studio.cpp's stand
+    const Pixel c = project(camera, width, height, centre);
+    const double z = modern::dot(centre - camera.eye, modern::cameraBasis(camera).forward);
+    const double focal = 0.5 * height / std::tan(camera.fovYDegrees * 3.14159265358979 / 360.0);
+    return {c.x, c.y, r * focal / z};
+}
+
+void testChromeReflectsScreen(gfx::Context& ctx) {
+    gfx::Image red = makeRetro(ctx, 255, 0, 0);
+    gfx::Image black = makeRetro(ctx, 0, 0, 0);
+    Stages stages(ctx, kW, kH);
+    // FINALE's pull-out passes the sphere in front of the monitor's right.
+    const TimelineFrame frame = chapterAt(kFinale, 0.55);
+    const Disc disc = chromeDisc(modern::studioCamera(frame), kW, kH);
+    CHECK(disc.x - disc.radius > 0 && disc.x + disc.radius < kW && disc.y - disc.radius > 0 &&
+          disc.y + disc.radius < kH);
+    const auto redPixels = [&](const Picture& p) {
+        int count = 0;
+        for (std::uint32_t y = 0; y < kH; ++y)
+            for (std::uint32_t x = 0; x < kW; ++x) {
+                const double dx = x + 0.5 - disc.x, dy = y + 0.5 - disc.y;
+                const std::uint8_t* px = p.at(x, y);
+                if (dx * dx + dy * dy < 0.81 * disc.radius * disc.radius && px[0] >= 40 &&
+                    px[0] >= 2 * px[1] && px[0] >= 2 * px[2])
+                    ++count;
+            }
+        return count;
+    };
+    const Picture withRed = stages.render(frame, exportState(frame, 2), &red);
+    const Picture withBlack = stages.render(frame, exportState(frame, 2), &black);
+    withRed.save(kOutDir / "studio_chrome_red.png");
+    const int lit = redPixels(withRed), unlit = redPixels(withBlack);
+    std::printf(
+        "(l) the chrome sphere (radius %.1f px at %.0f,%.0f): %d red-dominant pixels with a red picture, "
+        "%d with a black one\n",
+        disc.radius, disc.x, disc.y, lit, unlit);
+    CHECK(lit >= 20 && unlit < lit / 4);
+}
+
+void testLedCameraOnly(gfx::Context& ctx) {
+    gfx::Image white = makeRetro(ctx, 255, 255, 255);
+    const modern::Studio studio;
+    const TimelineFrame frame = chapterAt(kFinale, 0.5);
+    constexpr std::uint32_t w = kW / 2, h = kH / 2;
+    Stages stages(ctx, w, h);
+    const render::HistoryState state = exportState(frame, 4);
+    stages.render(frame, state, &white); // builds the Studio
+    modern::TraceSettings settings{state.spp, state.maxBounces, state.frameSeed};
+    modern::SceneFrame on = studio.frame(frame);
+    settings.clampIndirect = on.clampIndirect;
+    modern::SceneFrame off = on;
+    off.materials[modern::Studio::kLedMaterial].emissionScale = 0.f;
+    stages.trace(on, settings, white);
+    const std::vector<std::uint8_t> lightingOn = stages.lightingBytes(ctx);
+    stages.trace(off, settings, white);
+    const std::vector<std::uint8_t> lightingOff = stages.lightingBytes(ctx);
+    // Without the flag the LEDs would light the room (BSDF rays after a rough vertex find them).
+    modern::SceneFrame lighting = on;
+    lighting.materials[modern::Studio::kLedMaterial].flags = 0;
+    stages.trace(lighting, settings, white);
+    const bool lightsWithoutFlag = stages.lightingBytes(ctx) != lightingOn;
+    // The desk right in front of the case's power LED.
+    const modern::Camera& camera = on.camera;
+    const Rect desk = around(camera, w, h, {-0.106f, 0.751f, -0.3f}, 2);
+    CHECK(desk.left >= 0 && desk.top >= 0 && desk.right <= int(w) && desk.bottom <= int(h));
+    std::size_t deskDiffers = 0, differs = 0;
+    for (std::uint32_t y = 0; y < h; ++y)
+        for (std::uint32_t x = 0; x < w; ++x) {
+            const std::size_t i = (std::size_t{y} * w + x) * 16;
+            const bool same =
+                std::equal(lightingOn.begin() + i, lightingOn.begin() + i + 16, lightingOff.begin() + i);
+            differs += !same;
+            deskDiffers += !same && int(x) >= desk.left && int(x) < desk.right && int(y) >= desk.top &&
+                           int(y) < desk.bottom;
+        }
+    std::printf(
+        "(m) LEDs on vs off: the desk beside the case's LED is identical; %zu pixels differ in all (the "
+        "LEDs seen through delta chains); without the flag they would light the room: %s\n",
+        differs, lightsWithoutFlag ? "yes" : "no");
+    CHECK(deskDiffers == 0);
+    CHECK(lightsWithoutFlag);
+}
+
+void testMoonbeam(gfx::Context& ctx) {
+    constexpr std::uint32_t w = kW / 2, h = kH / 2;
+    Stages stages(ctx, w, h);
+    const TimelineFrame frame = chapterAt(kStudioNight, 0.08);
+    const modern::Camera camera = modern::studioCamera(frame);
+    CHECK(camera.shot == 0);
+    // The moon's ray through the window's centre, down to the floor; the floor 1 m to its right is outside
+    // the beam.
+    const Vec3 window{-1.25f, 1.5f, -0.95f};
+    const Vec3 down = modern::Studio::kMoonDirection * -1.f;
+    const Vec3 beam = window + down * (window.y / -down.y);
+    const Vec3 beside = beam + Vec3{1.f, 0.f, 0.f};
+    const Picture p = stages.render(frame, exportState(frame, 4));
+    p.save(kOutDir / "studio_moonbeam.png");
+    const double lit = linearOver(p, around(camera, w, h, beam, 2));
+    const double unlit = linearOver(p, around(camera, w, h, beside, 2));
+    std::printf("(n) the moonbeam on the floor at (%.2f, %.2f): %.4f against %.4f beside it (linear)\n",
+                beam.x, beam.z, lit, unlit);
+    CHECK(lit >= 2 * unlit && lit > 0.01);
 }
 
 // --- --look ------------------------------------------------------------------------------------------------
@@ -695,15 +913,16 @@ void renderLook(gfx::Context& ctx, const std::filesystem::path& dir, std::uint32
         int chapter;
         double fraction;
     };
-    const std::array<Still, 9> stills = {{{"finale_start", kFinale, 0.05},
-                                          {"finale_end", kFinale, 0.92},
-                                          {"portal_mid", kPortal, 0.5},
-                                          {"night_wide", kStudioNight, 0.08},
-                                          {"night_dolly", kStudioNight, 0.3},
-                                          {"night_orbit", kStudioNight, 0.8},
-                                          {"return_mid", kReturn, 0.5},
-                                          {"return_end", kReturn, 0.95},
-                                          {"reboot", kReboot, 0.5}}};
+    const std::array<Still, 10> stills = {{{"finale_start", kFinale, 0.05},
+                                           {"finale_mid", kFinale, 0.5},
+                                           {"finale_end", kFinale, 0.92},
+                                           {"portal_mid", kPortal, 0.5},
+                                           {"night_wide", kStudioNight, 0.08},
+                                           {"night_dolly", kStudioNight, 0.3},
+                                           {"night_orbit", kStudioNight, 0.8},
+                                           {"return_mid", kReturn, 0.5},
+                                           {"return_end", kReturn, 0.95},
+                                           {"reboot", kReboot, 0.5}}};
     Stages stages(ctx, width, height);
     for (const Still& still : stills) {
         if (!only.empty() && std::string(still.name).find(only) == std::string::npos)
@@ -760,6 +979,11 @@ int main(int argc, char** argv) {
         testScreenFollowsPicture(ctx);
         testWindowScreenSharp(ctx);
         testClampIndirect(ctx);
+        testRig();
+        testSpeckle(ctx);
+        testChromeReflectsScreen(ctx);
+        testLedCameraOnly(ctx);
+        testMoonbeam(ctx);
         CHECK(ctx.validationMessageCount() == 0);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());
