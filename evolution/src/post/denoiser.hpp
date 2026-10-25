@@ -51,10 +51,12 @@ struct GBufferView {
 //               one (the smaller of the least 3x3-quadrant variance and the least directional
 //               neighbour-difference variance in the 5x5 neighbourhood, depth and normal weighted; see
 //               accumulate.comp) times 4 / len. Sparse first frames: below len 4, where at least 40 % of the
-//               5x5 neighbourhood's weight has zero luminance, it is the plain 5x5 variance instead, stored
-//               negative so the first a-trous pass filters that pixel by depth and normal only (a luminance
-//               stop on raw sparse samples weights the rare bright ones down and darkens the frame; the
-//               minimum estimator keeps holes). At len 2 and 3 the variance is at least the largest temporal
+//               5x5 neighbourhood's weight has zero luminance, or where its samples above twice the mean are
+//               mostly isolated (a third of their weight, and at least 1.5, with no 4-neighbour above twice
+//               the mean too: dim surfaces lit by few bright paths, 20 % dark before), it is the plain 5x5
+//               variance instead, stored negative so the first a-trous pass filters that pixel by depth and
+//               normal only (a luminance stop on raw sparse samples weights the rare bright ones down and
+//               darkens the frame; the minimum estimator keeps holes). At len 2 and 3 the variance is at least the largest temporal
 //               variance in the 5x5 neighbourhood (each neighbour against the history moments at its
 //               reprojected position): the spatial estimate sees this frame only, and an earlier frame's
 //               bright sample, still in the history, would otherwise stay a speck (the window's frames 2 and

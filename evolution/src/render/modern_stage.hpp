@@ -113,8 +113,9 @@ bool validTraceScale(float scale);
 // its density and majorant; the denoiser filters the volume layer only for a frame with a medium.
 //
 // GPU timers (setTimers): "particles" (the particle field), "medium" (the grid's bake), "tlas" and "trace"
-// (the tracer), "splats" (a frame with splats), "denoise", "upscale" (below scale 1), "tonemap"; "fill" and
-// "tonemap" for the placeholder.
+// (the tracer), "splats" (a frame with splats), "denoise", "upscale" (below scale 1), "bloom" (when the frame's
+// post::Look has bloom), "tonemap" (with the look's grade, exposure offset and palette); "fill" and "tonemap"
+// for the placeholder (no look).
 //
 // A scene's GPU side is built by prepare(id) (or prepareAll()), which the window and the exports call before
 // their first frame, so that no chapter hitches. A stage that was not prepared builds it on the first frame
@@ -149,8 +150,9 @@ public:
     VkDeviceSize gpuBytes() const;
     // The images path tracing adds, whatever the number of scenes, as allocated: the tracer's G-buffer and
     // the denoiser's images (at the trace size), below scale 1 the denoised trace-size picture and the
-    // upscaler's history, the splat accumulators once a scene with splats is prepared, and the stage's HDR
-    // and display images (0 before the first prepare).
+    // upscaler's history, the splat accumulators once a scene with splats is prepared, the stage's HDR
+    // and display images (0 before the first prepare), and the tonemap's bloom images once a frame with
+    // bloom has been drawn.
     VkDeviceSize imageBytes() const;
     // Recreates the images at the new size. The caller makes sure no submitted frame still uses the old ones.
     void resize(std::uint32_t width, std::uint32_t height);

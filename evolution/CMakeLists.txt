@@ -1272,7 +1272,7 @@ set_tests_properties(render_video PROPERTIES TIMEOUT 300 PROCESSORS 2)
 add_test(NAME nfo
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/nfo_test.py ${CMAKE_SOURCE_DIR})
 
-# --- Step 6: the 2026 picture's post (bloom and glare, the per-act look) -----------------------------------
+# --- The 2026 picture's post (bloom and glare, the per-act look) -------------------------------------------
 
 # post::Bloom, the lens PSF the tonemap mixes in (energy-conserving, threshold-free), in a library of its own
 # that evo_post's tonemap links. post::Look (the act grade, grain, the authored exposure, the palette grade
@@ -1330,7 +1330,7 @@ add_executable(epoch_cards_test tests/epoch_cards_test.cpp)
 target_link_libraries(epoch_cards_test PRIVATE evo_render evo_core)
 evo_gpu_test(epoch_cards epoch_cards_test TIMEOUT 300 PROCESSORS 2)
 
-# --- The director (scene cuts, the FINALE megamix, REBOOT's look ahead, the wipe edge) ------------
+# --- The director (scene cuts, the FINALE megamix, REBOOT's look ahead, the wipe edge) ---------------------
 
 # The cut list on the CPU: the megamix rows on the beat grid ending on D, their sources inside their shots, the
 # room after D, REBOOT's GALAXY frames, the cards' era and the compositor's flash policy.

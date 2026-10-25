@@ -188,7 +188,7 @@ VkDeviceSize ModernStage::imageBytes() const {
     if (!tracer_)
         return 0;
     return tracer_->imageBytes() + denoiser_->imageBytes() + traceHdr_.bytes() + upscaler_->imageBytes() +
-           (splats_ ? splats_->imageBytes() : 0) + hdr_.bytes() + image_.bytes();
+           (splats_ ? splats_->imageBytes() : 0) + hdr_.bytes() + image_.bytes() + tonemap_.bloomBytes();
 }
 
 VkDeviceSize ModernStage::gpuBytes() const {
