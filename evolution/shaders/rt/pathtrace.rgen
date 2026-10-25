@@ -105,15 +105,12 @@ void traceMain(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
     traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, kMissIndexSky, origin, 0.0, direction, kRayMax, 0);
 }
 
-#include "lensing.glsl" // after traceMain, which its traceLensed() calls
+#include "lensing.glsl" // after the payload and rand(), which its traceLensed() uses
 
-// Every main ray: bent around a black hole while the frame has lensing (Task 25), else straight.
+// Every main ray: bent around a black hole while the frame has lensing (Task 25), else straight (traceLensed
+// is then traceMain's very trace; one call site keeps lavapipe's inlined pipeline small).
 void traceScene(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
-    if (lensingActive()) {
-        traceLensed(origin, direction, coneWidth, coneSpread);
-    } else {
-        traceMain(origin, direction, coneWidth, coneSpread);
-    }
+    traceLensed(origin, direction, coneWidth, coneSpread);
 }
 
 bool unoccluded(vec3 origin, vec3 direction, float tMax) {

@@ -57,8 +57,9 @@ SceneId plannedScene(Effect e) {
         return SceneId::Particles;
     case Effect::Plasma:
     case Effect::Nebula:
-    case Effect::PlasmaPlanet:
         return SceneId::Nebula;
+    case Effect::PlasmaPlanet: // its shell of cloud is not built yet: it stays on the placeholder
+        return SceneId::Placeholder;
     case Effect::Tunnel:
         return SceneId::Tunnel;
     case Effect::Glenz:

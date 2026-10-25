@@ -22,7 +22,8 @@ struct SplatPush {
     float aspect;
     float cameraRight[3];
     float seconds;
-    std::uint32_t count, width, height;
+    std::uint32_t count, width;
+    std::uint32_t heightAndTaps; // the height, and the footprint's half-width above bit 16 (0: 5x5)
     float fixedPointScale;
     float params[16];
 };
@@ -93,6 +94,9 @@ void checkSplats(const std::optional<SplatFrame>& splats, std::uint32_t capacity
     if (!validScale(splats->fixedPointScale))
         throw std::invalid_argument("the splats' fixedPointScale must be finite and > 0, got " +
                                     std::to_string(splats->fixedPointScale));
+    if (splats->windowFootprint != 3 && splats->windowFootprint != 5)
+        throw std::invalid_argument("the splats' windowFootprint must be 3 or 5, got " +
+                                    std::to_string(splats->windowFootprint));
     for (std::size_t i = 0; i < splats->params.size(); ++i)
         if (!std::isfinite(splats->params[i]))
             throw std::invalid_argument("the splats' params[" + std::to_string(i) + "] is not finite");
@@ -144,7 +148,13 @@ void SplatPass::prepare(const std::filesystem::path& shader) {
 }
 
 void SplatPass::record(VkCommandBuffer cmd, const std::filesystem::path& shader, const SplatFrame& splats,
-                       const Camera& camera, gfx::Image& depth, gfx::Image& emission, double seconds) {
+                       const Camera& camera, gfx::Image& depth, gfx::Image& emission, double seconds,
+                       std::uint32_t footprint) {
+    if (footprint != 3 && footprint != 5)
+        throw std::invalid_argument("SplatPass: a footprint of " + std::to_string(footprint) +
+                                    " pixels, not 3 or 5");
+    if (height_ > 0xFFFFu)
+        throw std::invalid_argument("SplatPass: a height over 65535");
     if (splats.count > kMaxSplats)
         throw std::length_error("SplatPass: " + std::to_string(splats.count) + " splats, more than " +
                                 std::to_string(kMaxSplats) + " in one dispatch");
@@ -188,7 +198,7 @@ void SplatPass::record(VkCommandBuffer cmd, const std::filesystem::path& shader,
     push.seconds = static_cast<float>(seconds);
     push.count = splats.count;
     push.width = width_;
-    push.height = height_;
+    push.heightAndTaps = height_ | (footprint == 3 ? 1u << 16 : 0u);
     push.fixedPointScale = splats.fixedPointScale;
     std::copy(splats.params.begin(), splats.params.end(), push.params);
     splat.push(cmd, &push, sizeof push);

@@ -232,6 +232,7 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
         uniforms_[slot] = slotBuffer(ctx, sizeof(rt::FrameUniforms), 1, "frame uniforms");
         environments_[slot] = slotBuffer(ctx, sizeof(rt::EnvironmentUniforms), 1, "environment uniforms");
         media_[slot] = slotBuffer(ctx, sizeof(rt::MediumUniforms), 1, "medium uniforms");
+        lenses_[slot] = slotBuffer(ctx, sizeof(rt::LensingUniforms), 1, "lensing uniforms");
     }
     FrameBuffers buffers = createFrameBuffers(capacity_);
     instanceRecords_ = std::move(buffers.instanceRecords);
@@ -315,7 +316,7 @@ VkDeviceSize PathTracer::bufferBytes() const {
                          dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
     for (const SlotBuffers* buffers :
          {&uniforms_, &instanceRecords_, &lights_, &materials_, &previousTransforms_, &environments_,
-          &treeNodes_, &treeLights_, &media_})
+          &treeNodes_, &treeLights_, &media_, &lenses_})
         for (const gfx::Buffer& buffer : *buffers)
             bytes += buffer.bytes();
     return bytes;
@@ -440,6 +441,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
     const VkDeviceSize uniformStride = regionStride(sizeof(rt::FrameUniforms), 1);
     const VkDeviceSize environmentStride = regionStride(sizeof(rt::EnvironmentUniforms), 1);
     const VkDeviceSize mediumStride = regionStride(sizeof(rt::MediumUniforms), 1);
+    const VkDeviceSize lensStride = regionStride(sizeof(rt::LensingUniforms), 1);
     const VkDeviceSize instanceStride = regionStride(sizeof(rt::InstanceRecord), capacity_.instances);
     const VkDeviceSize previousStride = regionStride(sizeof(rt::Mat34), capacity_.instances);
     const VkDeviceSize lightStride = regionStride(sizeof(rt::RectLight), capacity_.lights);
@@ -452,6 +454,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         const SceneFrame& frame = slices[k];
         const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
         const rt::MediumUniforms medium = frame.medium ? packMedium(*frame.medium) : rt::MediumUniforms{};
+        const rt::LensingUniforms lens = frame.lensing ? packLensing(*frame.lensing) : rt::LensingUniforms{};
         const std::vector<rt::Material>& materials =
             frame.materials.empty() ? scene.source().materials : frame.materials;
         std::vector<rt::Instance>& instances = sliceInstances[k];
@@ -531,6 +534,11 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         u.environmentSelect = frame.environment.select;
         u.treeLightCount = static_cast<std::uint32_t>(frame.treeLights.size()); // Task 12
         u.mediumFlags = frame.medium ? mediumFlags(*frame.medium) : 0u;         // Task 11
+        // Task 25: the lens bends main rays; when its disc is the frame's grid medium, the lens marches that
+        // grid along the bent segments itself and the medium integrator leaves it alone.
+        u.lensing = frame.lensing ? 1u : 0u;
+        if (frame.lensing && frame.lensing->disc)
+            u.mediumFlags &= ~kMediumGrid;
         u.causticReceivers =
             frame.caustics ? static_cast<std::uint32_t>(frame.caustics->receivers.size()) : 0u;
         u.shutterOffset = settings.sliceOffsets[k];
@@ -540,6 +548,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         writeRegion(uniforms_[slot], uniformStride, k, &u, sizeof u);
         writeRegion(environments_[slot], environmentStride, k, &environment, sizeof environment);
         writeRegion(media_[slot], mediumStride, k, &medium, sizeof medium);
+        writeRegion(lenses_[slot], lensStride, k, &lens, sizeof lens);
         writeRegion(instanceRecords_[slot], instanceStride, k, records.data(),
                     records.size() * sizeof(rt::InstanceRecord));
         writeRegion(previousTransforms_[slot], previousStride, k, previousTransforms.data(),
@@ -561,7 +570,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
     }
     for (const gfx::Buffer* buffer :
          {&uniforms_[slot], &environments_[slot], &instanceRecords_[slot], &previousTransforms_[slot],
-          &lights_[slot], &materials_[slot], &treeNodes_[slot], &treeLights_[slot], &media_[slot]})
+          &lights_[slot], &materials_[slot], &treeNodes_[slot], &treeLights_[slot], &media_[slot],
+          &lenses_[slot]})
         buffer->flush();
     tracedThisFrame_ = true; // nothing is refused from here on
 
@@ -649,7 +659,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             storageBuffer(EVO_BINDING_STATIC_SPHERES, staticSpheres),
             extraBuffer(EVO_BINDING_PARTICLE_SPHERES, extras.particleSpheres),
             sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
-            extraBuffer(EVO_BINDING_LENSING, extras.lensing),
+            extras.lensing ? storageBuffer(EVO_BINDING_LENSING, *extras.lensing)
+                           : regionBuffer(EVO_BINDING_LENSING, regionInfo(lenses_[slot], lensStride, k,
+                                                                          sizeof(rt::LensingUniforms), 1)),
             storageImage(EVO_BINDING_VOLUME, gbuffer_.volume),
             extraBuffer(EVO_BINDING_CAUSTIC_RECEIVERS, extras.causticReceivers),
         };

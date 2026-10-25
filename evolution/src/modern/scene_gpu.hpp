@@ -30,7 +30,8 @@ namespace evo::modern {
 // (std::out_of_range), a light of no LightKind, whose area is not |edgeU x edgeV| or whose gate is no Portal
 // light, a light that disagrees with the instance that is its surface (see SceneInstance), and a light tree
 // (Task 12) whose tree lights are not its instance's spheres (see TreeLightFrame; more than
-// capacity.treeLights: std::length_error). CPU only: PathTracer::trace() runs it before recording anything,
+// capacity.treeLights: std::length_error), and an invalid lens or a lens disc without a grid medium (Task
+// 25: std::invalid_argument). CPU only: PathTracer::trace() runs it before recording anything,
 // and every scene task's sweep (checkSceneSweep) runs it over every frame of its chapters.
 void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame);
 

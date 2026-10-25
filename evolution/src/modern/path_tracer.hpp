@@ -276,6 +276,8 @@ private:
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
     // The frame's media (SceneFrame::medium packed, binding EVO_BINDING_MEDIUM; Task 11), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> media_;
+    // The frame's lens (SceneFrame::lensing packed, binding EVO_BINDING_LENSING; Task 25), per slot.
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> lenses_;
     GBuffer gbuffer_;
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
     std::unique_ptr<rt::Tlas> tlas_;

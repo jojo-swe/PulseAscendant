@@ -1,0 +1,64 @@
+#version 460
+
+// SINGULARITY's background galaxy (src/modern/scenes/singularity.cpp), lensed by the hole: every star gives
+// two splats, its primary image (id even) and its secondary image on the far side of the hole (id odd), from
+// the point-lens equation for a source at infinity seen from the camera at distance D: theta_E^2 = 2 r_s / D,
+// theta = (beta +- sqrt(beta^2 + 4 theta_E^2)) / 2, magnified by |(u^2 + 2) / (2 u sqrt(u^2 + 4)) +- 1/2|
+// (u = beta / theta_E, at most kMaxMagnification); images inside the hole's shadow are dropped. The traced
+// sky (environment stars, the ring star) is bent exactly by lensing.glsl; this is its weak-field twin.
+//   params[0] = (the galaxy's centre, its radius)
+//   params[1] = (tilt, yaw, turn, total flux)
+//   params[2] = (star count, 0, 0, 0)
+//   params[3] = (the hole's centre, r_s)
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "splat_common.glsl"
+#include "galaxy.glsl"
+
+const float kStarDistance = 5.0e5; // beyond anything traced
+const float kMaxMagnification = 30.0;
+const float kCaptureImpact = 2.5980762; // 3 sqrt(3) / 2: the shadow's impact parameter in r_s
+
+SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
+    uint star = id >> 1u;
+    bool secondary = (id & 1u) != 0u;
+    vec3 p;
+    float kelvin, weight;
+    bool bulge;
+    galaxyStar(star, p, kelvin, weight, bulge);
+    p = galaxyTurn(p, params[1].z);
+    vec3 world = galaxyToWorld(p, params[0].xyz, params[0].w, params[1].x, params[1].y);
+    vec3 s = normalize(world - pc.cameraPosition);
+    SplatPoint out_;
+    out_.radius = 0.0;
+    out_.flux = params[1].w / params[2].x * weight * blackbodyColour(kelvin);
+    float rs = params[3].w;
+    vec3 toHole = params[3].xyz - pc.cameraPosition;
+    float distance = length(toHole);
+    if (!(rs > 0.0) || !(distance > 1.5 * rs)) {
+        out_.position = pc.cameraPosition + s * kStarDistance;
+        if (secondary) {
+            out_.flux = vec3(0.0);
+        }
+        return out_;
+    }
+    vec3 a = toHole / distance;
+    float beta = acos(clamp(dot(s, a), -1.0, 1.0));
+    vec3 side = s - dot(s, a) * a;
+    side = length(side) > 1e-7 ? normalize(side) : normalize(cross(a, vec3(0.31, 0.95, 0.07)));
+    float thetaE = sqrt(2.0 * rs / distance);
+    float root = sqrt(beta * beta + 4.0 * thetaE * thetaE);
+    float theta = secondary ? 0.5 * (beta - root) : 0.5 * (beta + root);
+    float u = max(beta / thetaE, 1e-4);
+    float base = (u * u + 2.0) / (2.0 * u * sqrt(u * u + 4.0));
+    float magnification = min(abs(base + (secondary ? -0.5 : 0.5)), kMaxMagnification);
+    float shadow = asin(clamp(kCaptureImpact * rs * sqrt(max(1.0 - rs / distance, 0.0)) / distance, 0.0, 1.0));
+    if (abs(theta) < 1.03 * shadow) {
+        magnification = 0.0;
+    }
+    vec3 d = cos(theta) * a + sin(theta) * side;
+    out_.position = pc.cameraPosition + d * kStarDistance;
+    out_.flux *= magnification;
+    return out_;
+}

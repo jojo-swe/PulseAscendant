@@ -69,6 +69,9 @@ struct SplatFrame {
     std::uint32_t count = 0;        // ids 0 .. count - 1; at most the scene's SceneCapacity::splats
     std::array<float, 16> params{}; // the shader's vec4 params[4]
     float fixedPointScale = 4096.f; // fixed-point steps per reference unit (see above); finite, > 0
+    // The footprint in the window (Interactive): 5 (5x5, as above) or 3 (3x3 taps, renormalised the same way;
+    // cheaper for tens of millions of points). Exports always splat 5x5.
+    std::uint32_t windowFootprint = 5;
 };
 
 // The dispatch runs rows of kSplatRowWidth ids; at most 65535 rows.
@@ -115,8 +118,10 @@ public:
     // fixedPointScale that is not finite and > 0, another image size or format, and what prepare() throws.
     // The scene's capacity is checked by checkSplats (through checkSceneFrame, which the tracer runs on the
     // same frame first). Between ring.begin() and ring.submit() only.
+    // `footprint` is 5 (5x5 taps) or 3 (3x3; ModernStage passes SplatFrame::windowFootprint in the window).
     void record(VkCommandBuffer cmd, const std::filesystem::path& shader, const SplatFrame& splats,
-                const Camera& camera, gfx::Image& depth, gfx::Image& emission, double seconds);
+                const Camera& camera, gfx::Image& depth, gfx::Image& emission, double seconds,
+                std::uint32_t footprint = 5);
 
     std::uint32_t width() const { return width_; }
     std::uint32_t height() const { return height_; }

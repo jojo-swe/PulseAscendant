@@ -418,7 +418,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         beginScope(cmd, "splats");
         // At the guide slice's time, with its camera and depth: with a shutter the splats are not blurred.
         splats_->record(cmd, object.staticScene().splatShader, *scene.splats, scene.camera, g.depth,
-                        g.emission, sliceLocal[guideSlice]);
+                        g.emission, sliceLocal[guideSlice], interactive ? scene.splats->windowFootprint : 5u);
         endScope(cmd);
     }
     beginScope(cmd, "denoise");

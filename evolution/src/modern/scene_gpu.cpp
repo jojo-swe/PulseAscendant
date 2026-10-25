@@ -355,6 +355,12 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
                                             std::to_string(capacity.mediumGrid[2]));
         }
     }
+    if (frame.lensing) {
+        // Task 25: a valid lens; its disc is the frame's grid medium.
+        packLensing(*frame.lensing); // throws for an invalid lens
+        if (frame.lensing->disc && !(frame.medium && frame.medium->grid))
+            throw std::invalid_argument("the lens has a disc, but the frame no grid medium");
+    }
 }
 
 SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)

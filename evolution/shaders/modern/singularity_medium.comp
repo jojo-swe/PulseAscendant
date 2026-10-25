@@ -1,0 +1,37 @@
+#version 460
+
+// SINGULARITY's accretion disc (src/modern/scenes/singularity.cpp), baked into the grid medium that the lens
+// marches along its bent rays (shaders/rt/lensing.glsl): r the gas's density, g its temperature in 10^4 K, b
+// its brightness. A thin disc that flares outwards, from the innermost stable orbit (3 r_s) to the outer edge,
+// its temperature the thin-disc profile T(r) ~ r^-3/4 (1 - sqrt(r_in / r))^1/4, its gas in spiral streaks that
+// shear with the Keplerian rotation (each radius turns at its own rate), its turbulence following the bass.
+//   params[0] = (the box's half-width in r_s, its half-height, the turn clock (seconds), turbulence)
+//   params[1] = (the inner edge, the outer edge, the peak temperature in 10^4 K, density)
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "medium_common.glsl"
+#include "galaxy.glsl"
+
+vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
+    float halfWidth = params[0].x, halfHeight = params[0].y, clock = params[0].z, turbulence = params[0].w;
+    float inner = params[1].x, outer = params[1].y, peak = params[1].z, density = params[1].w;
+    vec3 p = vec3((2.0 * uvw.x - 1.0) * halfWidth, (2.0 * uvw.y - 1.0) * halfHeight, (2.0 * uvw.z - 1.0) * halfWidth);
+    float r = length(p.xz);
+    float edge = smoothstep(inner * 0.92, inner * 1.08, r) * (1.0 - smoothstep(0.75 * outer, outer, r));
+    if (!(edge > 0.0)) {
+        return vec4(0.0);
+    }
+    float height = 0.035 * r + 0.04;
+    float vertical = exp(-(p.y * p.y) / (height * height));
+    // Keplerian shear: azimuth turned back by the angle each radius has turned.
+    float omega = sqrt(0.5 / (r * r * r));
+    float azimuth = atan(p.z, p.x) - omega * clock;
+    vec2 q = vec2(log(r) * 7.0, azimuth * 6.0 / kGalaxyPi);
+    float streak = galaxyNoise(vec3(q.x + 2.0 * q.y, q.y * 0.5, p.y * 3.0)) * 0.65 +
+                   galaxyNoise(vec3(q * 3.1, p.y * 7.0 + 11.0)) * 0.35;
+    float gas = mix(1.0, smoothstep(0.2, 0.85, streak) * 1.6, turbulence);
+    float x = inner / r;
+    float profile = pow(x, 0.75) * pow(max(1.0 - sqrt(x), 0.0), 0.25) / 0.4884; // 1 at its peak (r = 49/36 r_in)
+    return vec4(density * edge * vertical * gas, peak * profile, edge * vertical * gas * pow(profile, 2.0), 0.0);
+}
