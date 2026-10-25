@@ -83,7 +83,7 @@ const DVec3 kPlanetCentre{0.0, -double(kShipPlanetRadius) - kPlanetAltitude, 900
 // The planet's own frame turned so its pole lies far off the flight (no pole under the camera).
 constexpr double kPlanetVisible = 9500.0; // drawn while its centre is nearer than this
 
-// The sun: 0.6 degrees across, a 5800 K white.
+// The sun: 0.6 degrees across, a 5800 K white (at full radiance; see frame()).
 constexpr float kSunAngularRadius = 0.3f * std::numbers::pi_v<float> / 180.f;
 constexpr float kSunRadiance = 48000.f;
 
@@ -147,30 +147,60 @@ rt::Mesh ringMesh() {
     return m;
 }
 
-// The ring's light: a band round its inside, facing the axis, kBandWidth wide along z.
-constexpr float kBandRadius = kWormholeRingRadius - kWormholeRingTube - 0.5f, kBandWidth = 7.f;
+// The wormhole's wall: a tube round the flight path facing its axis, from the gate's mouth (z from
+// -kWormholeMouthLength, where it opens as a horn kWormholeMouthRadius wide, narrowing to kWormholeWallRadius at
+// the gate) on to kWormholeLength. uv in metres: u round the tube (at the wall's radius), v along it from the
+// gate.
+float wallRadius(float z) {
+    if (z >= 0.f)
+        return kWormholeWallRadius;
+    const float s = std::clamp(-z / kWormholeMouthLength, 0.f, 1.f);
+    return kWormholeWallRadius + (kWormholeMouthRadius - kWormholeWallRadius) * s * s;
+}
 
-rt::Mesh bandMesh() {
-    constexpr int kAround = 192;
+rt::Mesh wallMesh() {
+    constexpr int kAround = 160;
+    std::vector<float> rows;
+    for (float z = -kWormholeMouthLength; z < 0.f; z += 30.f)
+        rows.push_back(z);
+    for (float z = 0.f; z < kWormholeLength; z += z < 4000.f ? 100.f : 400.f)
+        rows.push_back(z);
+    rows.push_back(kWormholeLength);
     rt::Mesh m;
-    for (int i = 0; i <= kAround; ++i) {
-        const float a = 2.f * std::numbers::pi_v<float> * float(i) / float(kAround);
-        const Vec3 radial{std::cos(a), std::sin(a), 0.f};
-        for (const float z : {-0.5f * kBandWidth, 0.5f * kBandWidth}) {
-            const Vec3 p = radial * kBandRadius + Vec3{0.f, 0.f, z};
-            const Vec3 n = radial * -1.f;
-            m.vertices.push_back({{p.x, p.y, p.z}, {n.x, n.y, n.z}, {kBandRadius * a, z}});
+    for (const float z : rows) {
+        const float r = wallRadius(z);
+        const float dr = (wallRadius(z + 1.f) - wallRadius(z - 1.f)) * 0.5f; // the horn's slope
+        for (int i = 0; i <= kAround; ++i) {
+            const float a = 2.f * std::numbers::pi_v<float> * float(i) / float(kAround);
+            const Vec3 radial{std::cos(a), std::sin(a), 0.f};
+            const Vec3 n = normalize(radial * -1.f + Vec3{0.f, 0.f, dr}); // towards the axis
+            const Vec3 p = radial * r + Vec3{0.f, 0.f, z};
+            m.vertices.push_back({{p.x, p.y, p.z}, {n.x, n.y, n.z}, {kWormholeWallRadius * a, z}});
         }
     }
-    for (int i = 0; i < kAround; ++i) {
-        const std::uint32_t a = std::uint32_t(2 * i), b = a + 2, c = a + 3, d = a + 1;
-        m.indices.insert(m.indices.end(), {a, b, c, a, c, d}); // facing the axis
-    }
+    const auto at = [](std::size_t row, int i) { return std::uint32_t(row * (kAround + 1) + std::size_t(i)); };
+    for (std::size_t row = 0; row + 1 < rows.size(); ++row)
+        for (int i = 0; i < kAround; ++i) {
+            const std::uint32_t a = at(row, i), b = at(row, i + 1), c = at(row + 1, i + 1), d = at(row + 1, i);
+            m.indices.insert(m.indices.end(), {a, b, c, a, c, d}); // facing the axis
+        }
     return m;
 }
 
-enum SceneMaterial : std::uint32_t { kRing, kPlanet, kBand, kSceneMaterials };
-enum SceneMesh : std::uint32_t { kRingMesh, kBandMesh, kSceneMeshes };
+enum SceneMaterial : std::uint32_t { kRing, kPlanet, kWall, kLamp, kSceneMaterials };
+enum SceneMesh : std::uint32_t { kRingMesh, kWallMesh, kSceneMeshes };
+
+// A ring's lamps: spheres round its inner face, in the ring's own frame (lights of the light tree).
+constexpr float kLampRadius = 1.4f;
+constexpr float kLampAt = kWormholeRingRadius - kWormholeRingTube - 0.5f;
+constexpr Vec3 kLampColor{1.f, 0.72f, 0.38f};
+constexpr float kLampEmission = 90.f;
+// How far ahead rings are drawn.
+constexpr double kRingReach = 9500.0;
+// The lamps' spheres are laid out in kilometres.
+constexpr float kLampUnit = 1000.f;
+// The wall's glow (its emission scale) before the white-out.
+constexpr float kWallGlow = 0.12f;
 
 std::uint32_t scaled(std::uint32_t count, SceneDetail detail) {
     const double n = std::round(double(count) * std::clamp(double(detail.scale), 0.0, 1.0));
@@ -179,6 +209,10 @@ std::uint32_t scaled(std::uint32_t count, SceneDetail detail) {
 
 // --- The cameras
 // ----------------------------------------------------------------------------------------------
+
+// The white-out's flood, 0 to 1 over the last bars (cubic: it lands on the chapter's end).
+float shipFlood(const show::TimelineFrame& f);
+double wallShift(const show::TimelineFrame& f);
 
 struct WorldCamera {
     DVec3 eye, target; // relative to the ship's position, world axes
@@ -208,15 +242,18 @@ WorldCamera worldCamera(const show::TimelineFrame& f) {
     WorldCamera c;
     const double v0 = kShipCruise;
     if (local < t.crossing) {
-        // The gate: looking down the flight path at the first ring, the planet's limb across the lower third
-        // and the sun high on the right; a slow push.
+        // The gate (a reveal): a crane up from the planet's limb and in towards the gate, the wormhole's
+        // mouth glowing behind it and the sun at its far end; the limb sinks to the lower third as the
+        // camera rises, and the gate slides across the mouth.
         const double u = smoothD(local / std::max(t.crossing, 1e-3));
-        const double eyeZ = v0 * t.pass - 160.0 + 40.0 * u;
-        c.eye = DVec3{9.0, 3.4, eyeZ - ship};
-        const DVec3 gate = DVec3{0.0, -60.0, 1000.0 + v0 * t.pass - ship} - c.eye;
-        const double yaw = std::atan2(gate.x, gate.z), pitch = std::atan2(gate.y, std::hypot(gate.x, gate.z));
-        c.target = c.eye + heading(yaw, pitch - 0.1) * 20.0;
-        c.fov = kLens24;
+        const double gate = shipGateZ(f);
+        const DVec3 eye{mix(DVec3{150.0, -95.0, gate - 2300.0}, DVec3{70.0, 25.0, gate - 1500.0}, u)};
+        // Aimed 8 degrees under the gate: the limb (18 to 24 degrees under the eye's level) in the lower
+        // third, the gate and the mouth above the centre.
+        const DVec3 aim = mix(DVec3{-40.0, -420.0, gate}, DVec3{0.0, -185.0, gate}, u);
+        c.eye = eye - DVec3{0.0, 0.0, ship};
+        c.target = aim - DVec3{0.0, 0.0, ship};
+        c.fov = kLens35;
         c.shot = 0;
         return c;
     }
@@ -271,7 +308,7 @@ WorldCamera worldCamera(const show::TimelineFrame& f) {
     }
     // Into the light: the camera lets the ship go; it pulls away into the sun.
     const double u = smoothD((local - t.release) / std::max(t.duration - t.release, 1e-3));
-    c.eye = DVec3{-2.5 * (1 - u), 3.0 - 1.0 * u, -14.0 - 80.0 * u * u};
+    c.eye = DVec3{-6.0 + 3.0 * u, 4.5 - 1.5 * u, -26.0 - 90.0 * u * u};
     c.target = c.eye + DVec3{0.0, -0.08, 1.0} * 60.0;
     c.fov = kLens35;
     c.shot = 4;
@@ -393,15 +430,48 @@ float shipThrottle(const show::TimelineFrame& f) {
 float shipExposureEV(const show::TimelineFrame& f) {
     const ShipTimes t = shipTimes(f);
     const double local = f.localSeconds;
+    if (local < t.crossing)
+        return 0.2f;
     if (local < t.tunnel)
         return 0.2f;
     if (local < t.drop)
         return 0.f;
-    if (local < t.whiteout)
-        return 0.5f;
-    const double w = smoothD((local - t.whiteout) / std::max(t.duration - t.whiteout, 1e-3));
-    return static_cast<float>(7.0 * w * w);
+    return 0.5f;
 }
+
+float shipAnamorphic(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    if (f.localSeconds < t.release)
+        return 0.f;
+    return static_cast<float>(smoothD((f.localSeconds - t.release) / std::max(t.whiteout - t.release, 1e-3)));
+}
+
+double shipGateZ(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    show::TimelineFrame atTunnel = f;
+    atTunnel.trackSeconds = f.trackSeconds - f.localSeconds + t.tunnel;
+    atTunnel.localSeconds = t.tunnel;
+    const double ring0 = shipRingZ(f, 0);
+    const double gate = std::ceil((shipDistance(atTunnel) + 400.0 - ring0) / kWormholeRingSpacing);
+    return ring0 + gate * kWormholeRingSpacing;
+}
+
+namespace {
+
+// How far the wall's mesh is moved on from the gate: whole kilometres, so that it starts at least 2 km behind
+// the ship (its instance stays near the render frame's origin, and its far end at least 18 km ahead).
+double wallShift(const show::TimelineFrame& f) {
+    const double behind = shipDistance(f) - shipGateZ(f) - 2000.0;
+    return behind > 0.0 ? std::floor(behind / 1000.0) * 1000.0 : 0.0;
+}
+
+float shipFlood(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    const double w = smoothD((f.localSeconds - t.whiteout) / std::max(t.duration - t.whiteout, 1e-3));
+    return static_cast<float>(w * w * w);
+}
+
+} // namespace
 
 ShipStats shipStats(SceneDetail detail) {
     return Ship(detail).stats();
@@ -411,28 +481,35 @@ ShipStats shipStats(SceneDetail detail) {
 // ------------------------------------------------------------------------------------------------
 
 Ship::Ship(SceneDetail detail) {
-    static_.meshes = {ringMesh(), bandMesh()};
+    static_.meshes = {ringMesh(), wallMesh()};
     static_.materials.resize(kSceneMaterials);
-    // The rings: basalt-black ceramic, its seams glowing gold.
+    // The rings: basalt blocks, gold inlays glowing round their inner faces (seen, not sampled: the lamps
+    // between them are the rings' lights).
     rt::Material& ring = static_.materials[kRing];
-    ring.baseColor[0] = 0.035f, ring.baseColor[1] = 0.034f, ring.baseColor[2] = 0.033f;
-    ring.roughness = 0.5f;
+    ring.baseColor[0] = 0.05f, ring.baseColor[1] = 0.047f, ring.baseColor[2] = 0.044f;
+    ring.roughness = 0.45f;
     ring.coat = 0.4f;
     ring.coatRoughness = 0.15f;
-    ring.pattern = static_cast<std::uint32_t>(rt::Pattern::Hull);
-    ring.patternScale = 8.f;
-    ring.baseColor2[0] = 0.08f, ring.baseColor2[1] = 0.075f, ring.baseColor2[2] = 0.07f;
+    ring.pattern = static_cast<std::uint32_t>(rt::Pattern::WormholeRing);
+    ring.patternScale = 23.f;
     ring.emission[0] = 1.f, ring.emission[1] = 0.72f, ring.emission[2] = 0.3f;
     ring.emissionScale = 5.f;
     ring.flags = rt::kMaterialCameraOnlyEmission;
-    // The band of gold light inside each ring (seen, not sampled: as an unsampled emitter it would sparkle
-    // on the hull).
-    rt::Material& band = static_.materials[kBand];
-    band.baseColor[0] = band.baseColor[1] = band.baseColor[2] = 0.02f;
-    band.emission[0] = 1.f, band.emission[1] = 0.74f, band.emission[2] = 0.38f;
-    band.emissionScale = 2.5f;
-    band.materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
-    band.flags = rt::kMaterialCameraOnlyEmission;
+    // The wall: basalt dust under a glacial-blue glow with gold filaments. Its light is not sampled, but it is
+    // large and smooth, so the hull's reflections find it (the ship is lit by the tunnel round it).
+    rt::Material& wall = static_.materials[kWall];
+    wall.baseColor[0] = 0.02f, wall.baseColor[1] = 0.021f, wall.baseColor[2] = 0.024f;
+    wall.roughness = 0.65f;
+    wall.pattern = static_cast<std::uint32_t>(rt::Pattern::WormholeWall);
+    wall.patternScale = kWormholeWallRadius;
+    wall.emission[0] = 0.32f, wall.emission[1] = 0.55f, wall.emission[2] = 1.f;
+    wall.emissionScale = kWallGlow;
+    wall.baseColor2[0] = 1.f, wall.baseColor2[1] = 0.66f, wall.baseColor2[2] = 0.3f;
+    // The rings' lamps: their radiance is each sphere's colour times its emission.
+    rt::Material& lamp = static_.materials[kLamp];
+    lamp.baseColor[0] = lamp.baseColor[1] = lamp.baseColor[2] = 0.05f;
+    lamp.materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
+    lamp.emissionScale = 1.f;
     // The planet: ocean under clouds, the air thickening to the limb.
     rt::Material& planet = static_.materials[kPlanet];
     planet.baseColor[0] = 0.012f, planet.baseColor[1] = 0.034f, planet.baseColor[2] = 0.07f;
@@ -448,13 +525,30 @@ Ship::Ship(SceneDetail detail) {
     sphere.color[0] = sphere.color[1] = sphere.color[2] = 1.f;
     sphere.material = kPlanet;
     static_.spheres = {sphere};
-    static_.capacity.spheres = 1;
+    // The lamps of kWormholeRingSlots rings, slot j at z = j km in the first slot's frame.
+    for (std::uint32_t j = 0; j < kWormholeRingSlots; ++j)
+        for (std::uint32_t k = 0; k < kWormholeRingLights; ++k) {
+            const float a = 2.f * std::numbers::pi_v<float> * (float(k) + 0.5f) / float(kWormholeRingLights);
+            rt::SphereRecord l{};
+            l.center[0] = l.prevCenter[0] = kLampAt * std::cos(a) / kLampUnit;
+            l.center[1] = l.prevCenter[1] = kLampAt * std::sin(a) / kLampUnit;
+            l.center[2] = l.prevCenter[2] = float(j) * kWormholeRingSpacing / kLampUnit;
+            l.radius = kLampRadius / kLampUnit;
+            l.color[0] = kLampColor.x, l.color[1] = kLampColor.y, l.color[2] = kLampColor.z;
+            l.emission = kLampEmission;
+            l.material = kLamp;
+            static_.spheres.push_back(l);
+        }
+    lamps_ = kWormholeRingSlots * kWormholeRingLights;
+    static_.sphereRanges = {{0, 1}, {1, lamps_}}; // the planet, the lamps
+    static_.capacity.spheres = 1 + lamps_;
+    static_.capacity.treeLights = lamps_;
 
     stars_ = scaled(kShipStars, detail);
     air_ = scaled(kShipAirSplats, detail);
     asset_ = std::make_unique<ShipAsset>(static_, detail, stars_ + air_ + 1);
     static_.capacity.instances = asset_->counts().instances + 40;
-    static_.capacity.lights = 1;
+    static_.capacity.lights = 2; // the dash light and the tree
 
     stats_.stars = stars_;
     stats_.airSplats = air_;
@@ -462,6 +556,7 @@ Ship::Ship(SceneDetail detail) {
     stats_.plumeGrid = asset_->plumeGrid();
     stats_.plumeVoxels = stats_.plumeGrid[0] * stats_.plumeGrid[1] * stats_.plumeGrid[2];
     stats_.triangles = asset_->counts().triangles;
+    stats_.lamps = lamps_;
 }
 
 std::uint32_t Ship::ringMaterial() const {
@@ -474,7 +569,13 @@ std::vector<rt::Material> Ship::materials(const show::TimelineFrame& f) const {
     const ShipTimes t = shipTimes(f);
     const float kick = std::clamp(f.kick, 0.f, 1.f);
     m[kRing].emissionScale = 5.f * (1.f + 1.4f * kick) * (f.localSeconds >= t.drop ? 1.6f : 1.f);
-    m[kBand].emissionScale = 2.5f * (1.f + 0.8f * kick);
+    // The wall breathes with the kick, and in the white-out its glow floods to white.
+    const float flood = shipFlood(f);
+    const float glow = kWallGlow * (1.f + 0.35f * kick) * (1.f + 30.f * flood * flood);
+    m[kWall].emissionScale = glow;
+    m[kWall].coatRoughness = static_cast<float>(wallShift(f)); // the pattern's v offset (pbr.rchit)
+    for (int c = 0; c < 3; ++c)
+        m[kWall].emission[c] += (1.f - m[kWall].emission[c]) * flood;
     return m;
 }
 
@@ -485,27 +586,69 @@ SceneFrame Ship::frame(const show::TimelineFrame& f) const {
     out.camera = carry(wc, pose.rows);
     asset_->place(out, identity());
     out.materials = materials(f);
-    out.medium = MediumFrame{std::nullopt, asset_->plumes(shipThrottle(f), identity())};
+    const float flood = shipFlood(f);
+    GridMediumDesc plumes = asset_->plumes(shipThrottle(f), identity());
+    plumes.emissionScale *= 1.f - flood; // the fire fades into the white, not to pink
+    out.medium = MediumFrame{std::nullopt, plumes};
     out.exposureEV = shipExposureEV(f);
+    out.anamorphic = shipAnamorphic(f);
     // The plumes are lights nothing samples: a hull path that happens on their white-hot core would sparkle,
     // so contributions after a rough vertex are held lower than the default.
-    out.clampIndirect = 3.f;
+    out.clampIndirect = 1.5f;
 
-    // The rings from the gate on, from just behind the ship to 9 km ahead.
-    const ShipTimes t = shipTimes(f);
-    show::TimelineFrame atTunnel = f;
-    atTunnel.trackSeconds = f.trackSeconds - f.localSeconds + t.tunnel;
-    atTunnel.localSeconds = t.tunnel;
+    // The wormhole's wall, from the gate's mouth on (moved on in whole kilometres as the ship flies, its
+    // pattern carried with it: wallShift).
+    const double gate = shipGateZ(f);
+    out.instances.push_back({kWallMesh, kWall, inRender(pose.rows, pose.z, {0.0, 0.0, gate + wallShift(f)})});
+
+    // The rings from the gate on, from just behind the ship: kWormholeRingSlots of them, their lamps the
+    // light tree's lights.
     const double ring0 = shipRingZ(f, 0);
-    const int gate = int(std::ceil((shipDistance(atTunnel) + 400.0 - ring0) / kWormholeRingSpacing));
-    const int first = std::max(gate, int(std::floor((pose.z - 600.0 - ring0) / kWormholeRingSpacing)));
-    for (int k = first;; ++k) {
+    const int gateRing = int(std::lround((gate - ring0) / kWormholeRingSpacing));
+    const int first = std::max(gateRing, int(std::floor((pose.z - 600.0 - ring0) / kWormholeRingSpacing)));
+    // (Rings beyond kRingReach are not drawn, nor their lamps lit: too far to tell, and the render frame
+    // stays within 10 km.)
+    for (int k = first; k < first + int(kWormholeRingSlots); ++k) {
         const double z = ring0 + double(k) * kWormholeRingSpacing;
-        if (z - pose.z > 9000.0)
-            break;
-        const rt::Mat34 at = inRender(pose.rows, pose.z, {0.0, 0.0, z});
-        out.instances.push_back({kRingMesh, kRing, at});
-        out.instances.push_back({kBandMesh, kBand, at});
+        if (z - pose.z <= kRingReach)
+            out.instances.push_back({kRingMesh, kRing, inRender(pose.rows, pose.z, {0.0, 0.0, z})});
+    }
+    const auto treeLight = static_cast<std::uint32_t>(out.lights.size());
+    rt::RectLight entry{};
+    entry.kind = static_cast<std::uint32_t>(rt::LightKind::Tree);
+    entry.selectWeight = 1.f;
+    entry.gate = rt::kNoLight;
+    out.lights.push_back(entry);
+    SceneInstance tree{0, kLamp,
+                       inRender(pose.rows, pose.z, {0.0, 0.0, ring0 + double(first) * kWormholeRingSpacing})};
+    // The spheres are laid out in kilometres (a uniform scale of 1000, so that the scale's check is not lost
+    // in the float rounding of a translation kilometres long), in a frame made exactly orthonormal (the 1993
+    // attitude is so only to a few parts in 10^4).
+    {
+        auto column = [&](int j) {
+            return Vec3{tree.transform.m[0][j], tree.transform.m[1][j], tree.transform.m[2][j]};
+        };
+        const Vec3 x = normalize(column(0));
+        const Vec3 y = normalize(column(1) - x * dot(x, column(1)));
+        const Vec3 z = cross(x, y);
+        for (int j = 0; j < 3; ++j) {
+            const Vec3 c = j == 0 ? x : j == 1 ? y : z;
+            tree.transform.m[0][j] = c.x * kLampUnit, tree.transform.m[1][j] = c.y * kLampUnit,
+            tree.transform.m[2][j] = c.z * kLampUnit;
+        }
+    }
+    tree.kind = rt::GeometryKind::Spheres;
+    tree.firstSphere = 1;
+    tree.sphereCount = lamps_;
+    tree.light = treeLight;
+    out.instances.push_back(tree);
+    out.treeLights = treeLightsOf(static_, tree, out.materials, lamps_);
+    const ShipTimes t = shipTimes(f);
+    const float kick = std::clamp(f.kick, 0.f, 1.f);
+    const float lampScale = (1.f + 0.6f * kick) * (f.localSeconds >= t.drop ? 1.3f : 1.f) * (1.f - flood);
+    for (std::uint32_t k = 0; k < lamps_; ++k) {
+        const double z = ring0 + double(first + int(k / kWormholeRingLights)) * kWormholeRingSpacing;
+        out.treeLights[k].scale = z - pose.z <= kRingReach ? lampScale : 0.f;
     }
 
     // The planet while it is near: its own frame turned (local y to world x) so no pole lies under the
@@ -524,22 +667,22 @@ SceneFrame Ship::frame(const show::TimelineFrame& f) const {
         out.instances.push_back(in);
     }
 
-    // The sky: a 5800 K sun disc ahead (the key light), the stars as splats fixed to the world.
+    // The sky: a 5800 K sun disc at the wormhole's far end (the key light), the stars as splats fixed to the
+    // world (the wall hides them inside).
     const Vec3 sun = normalize(
         single(toRender(pose.rows, {kShipSunDirection.x, kShipSunDirection.y, kShipSunDirection.z})));
     EnvironmentDesc env = environmentDefaults(EnvironmentKind::Space);
     env.discDirection = sun;
     env.discAngularRadius = kSunAngularRadius;
     const Vec3 white = shipBlackbody(5800.f);
-    env.discRadiance = white / std::max({white.x, white.y, white.z}) * kSunRadiance;
+    // Seen down the wormhole the sun is a quarter of its full radiance (the tube's light and the rings' are
+    // the picture's); in the last shot, as the ship heads into it, it comes up to full.
+    env.discRadiance = white / std::max({white.x, white.y, white.z}) * kSunRadiance * (0.25f + 0.75f * out.anamorphic);
     env.starDensity = 0.f;
-    // A faint glacial-blue glow all round (the wormhole's light); in the white-out it floods to white.
+    // A faint glacial-blue glow all round; in the white-out it floods to white.
     const Vec3 fill{0.0015f, 0.0024f, 0.0045f};
-    const ShipTimes t0 = shipTimes(f);
-    const double flood = smoothD((f.localSeconds - t0.whiteout) / std::max(t0.duration - t0.whiteout, 1e-3));
-    env.zenith = env.horizon = env.ground =
-        fill + (Vec3{2.4f, 2.3f, 2.15f} - fill) * float(flood * flood * flood);
-    env.select = 0.9f; // the rest samples the cockpit's dash light
+    env.zenith = env.horizon = env.ground = fill + (Vec3{2.4f, 2.3f, 2.15f} - fill) * flood;
+    env.select = 0.9f; // the rest samples the cockpit's dash light and the rings' lamps
     out.environment = env;
 
     ShipSky sky;

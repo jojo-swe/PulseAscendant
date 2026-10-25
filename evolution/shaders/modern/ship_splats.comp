@@ -76,8 +76,9 @@ float nearSun(vec3 d, vec4 params[4]) {
 }
 
 // The planet's limb: points of an air glow over the tangent circle the camera sees, at an altitude drawn from
-// an exponential atmosphere (a few on the planet's side of the limb), pulled towards the camera so that the
-// planet's own surface does not hide them (they still project where they are).
+// an exponential atmosphere (a few on the planet's side of the limb), pulled 3 % towards the camera so that the
+// planet's own surface does not hide them while anything in front of the planet (the wormhole's mouth) still
+// does (they still project where they are).
 const float kScaleHeight = 0.0065; // of the planet's radius
 SplatPoint limbPoint(uint k, uint count, vec4 params[4]) {
     vec3 eye = params[0].xyz;
@@ -119,8 +120,8 @@ SplatPoint limbPoint(uint k, uint count, vec4 params[4]) {
     // Flux per point: the band's radiance over its length in pixels at the reference, shared over the points.
     float pixels = limbLength / (distance * 0.7673) * 1080.0; // tan(21 deg) * 2: a 42 degree reference view
     s.flux = colour * (0.03 + 1.6 * lit) * weight * pixels * 1.6 / float(count);
-    s.position = eye + (point - eye) * 0.4;
-    s.radius = 0.4 * radius * kScaleHeight * 0.35;
+    s.position = eye + (point - eye) * 0.97; // just in front of the planet, still behind the wormhole
+    s.radius = 0.97 * radius * kScaleHeight * 0.35;
     return s;
 }
 
@@ -143,7 +144,7 @@ SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
     }
     // The sun: its spikes and a soft core of glare (the disc itself is the environment's).
     s.position = params[0].xyz + normalize(params[3].xyz) * kStarDistance;
-    s.flux = vec3(1.0, 0.93, 0.84) * 160.0;
+    s.flux = vec3(1.0, 0.93, 0.84) * 40.0; // the bloom carries the rest of the glare
     return s;
 }
 

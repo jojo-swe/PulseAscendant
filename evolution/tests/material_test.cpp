@@ -413,12 +413,14 @@ void testStructLayout(Context& ctx) {
                                                static_cast<std::uint32_t>(rt::Pattern::CityRound),
                                                static_cast<std::uint32_t>(rt::Pattern::CityStreet),
                                                static_cast<std::uint32_t>(rt::Pattern::CityTrail),
-                                               static_cast<std::uint32_t>(rt::Pattern::CitySign)};
+                                               static_cast<std::uint32_t>(rt::Pattern::CitySign),
+                                               static_cast<std::uint32_t>(rt::Pattern::WormholeWall),
+                                               static_cast<std::uint32_t>(rt::Pattern::WormholeRing)};
     expected.insert(expected.end(), constants.begin(), constants.end());
     for (std::uint32_t input : kHashInputs)
         expected.push_back(rt::pcgHash(input));
     CHECK(expected.size() == kElements * (24 + 16 + 4 + 8 + 4 + 52 + 12 + 28 + 32 + 12 + 12 + 8 + 8 + 16) +
-                                 40 + kHashInputs.size());
+                                 42 + kHashInputs.size());
     // The step 5 ABI (Tasks 1 and 1b): sizes and the hit group of each geometry kind.
     static_assert(sizeof(rt::Material) == 96 && sizeof(rt::FrameUniforms) == 208 &&
                   sizeof(rt::EnvironmentUniforms) == 112 && sizeof(rt::MediumUniforms) == 128 &&

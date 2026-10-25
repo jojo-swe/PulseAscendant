@@ -72,6 +72,13 @@ float cityAvenueHeight(float z);
 // CITY NIGHT's street: along z at x = kNightStreetX.
 inline constexpr float kNightStreetX = 252.f;
 
+// ASCENT starts where STUDIO NIGHT ends, just outside the Studio's window: the Studio's room carried to the
+// room in ASCENT's tower (the Studio's window, its centre (-1.25, 1.5) on its back wall's outer face z = -1.05,
+// looking out along -z, is this room's window on the tower's +z face, looking out along +z: a half turn
+// about y). Points and directions.
+Vec3 cityFromStudio(Vec3 studio);
+Vec3 cityFromStudioDirection(Vec3 studio);
+
 // The lots a detail keeps: every lot at detail 1, else the lots within a radius (that shrinks with the
 // detail, at least 260 m) of the chapters' camera paths.
 bool cityLotKept(int i, int m, SceneDetail detail);
@@ -104,14 +111,35 @@ struct CityStats {
     std::uint32_t buildings = 0;
     std::uint64_t windows = 0; // window cells of the facade patterns, every face of every building
     std::uint32_t signLights = 0;
+    std::uint32_t nightLamps = 0; // the lamps CITY NIGHT lights (kCityNightLamps at detail 1)
 };
 
-// The epoch card's numbers: the full city's light-tree lights (every lamp and beacon, each path traced as a
-// light) and at least this many window cells; the test pins them against the City at detail 1.
+// The epoch cards' numbers, the full city's (the test pins each against the City at detail 1): its
+// light-tree lights (every lamp and beacon, each path traced as a light), its street lamps, its window cells
+// (cityWindows over every building) and its static instances.
 inline constexpr std::uint32_t kCityCardLights = 41839;
-inline constexpr std::uint64_t kCityCardWindows = 4000000;
-inline constexpr const char* kCityCardLine =
-    "41,839 LIGHTS \u00B7 4 MILLION WINDOWS \u00B7 PATH TRACED \u00B7 NO BAKING";
+inline constexpr std::uint32_t kCityCardLamps = 41684;
+inline constexpr std::uint64_t kCityCardWindows = 3896219;
+inline constexpr std::uint32_t kCityCardInstances = 57765;
+// CITY NIGHT lights this many of the street lamps, those nearest its street (a soft-edged district; the rest
+// of the city keeps its windows and beacons): sleet over a mostly dark town.
+inline constexpr std::uint32_t kCityNightLamps = 16384;
+// The distance to METROPOLIS's horizon from the avenue's crest (kAvenueCrest plus a driver's eye,
+// kMetropolisEye, over the deck), on an Earth of kEarthRadius: sqrt(2 R h).
+inline constexpr float kMetropolisEye = 5.5f;
+// METROPOLIS's flight over the avenue: kMetropolisSpeed m/s (200 km/h) to D, kMetropolisHeight over the deck
+// and kMetropolisSide to its left, rising kMetropolisRise more over the crest.
+inline constexpr float kMetropolisSpeed = 55.f, kMetropolisHeight = 58.f, kMetropolisSide = 14.f;
+inline constexpr float kMetropolisRise = 30.f;
+// The camera's z along the avenue at chapter second t, D at d.
+float metropolisAvenueZ(float t, float d);
+inline constexpr double kEarthRadius = 6371000.0;
+double cityHorizonKm();
+
+// The window cells of the facade pattern (shaders/rt/city_patterns.glsl's bays and floors, mirrored) on the
+// walls of a building placed by `transform` with material `m`: on each wall, its bays times the floors whose
+// window lies wholly on it, and the shop's bays at street level. 0 for a material that is no facade.
+std::uint64_t cityWindows(const rt::Material& m, const rt::Mat34& transform);
 
 // A camera shot of a City chapter: from start to end in seconds into the chapter.
 struct CityShot {
@@ -182,6 +210,7 @@ private:
     std::vector<float> lampWave_;         // per tree light: its distance along VECTOR CITY's switch-on wave
     std::vector<std::uint32_t> lampHash_; // per tree light: its hash (cityLampScale)
     std::vector<std::uint32_t> signMaterial_; // per sign light (lights 1..): its material
+    std::vector<std::uint8_t> nightLit_;      // per lamp: lit in CITY NIGHT
     std::uint32_t lampCount_ = 0, beaconCount_ = 0;
     std::uint32_t treeInstance_ = 0;
     SceneDetail detail_;

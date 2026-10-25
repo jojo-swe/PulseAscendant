@@ -27,6 +27,8 @@ const uint kPatternCityRound = 19u;
 const uint kPatternCityStreet = 20u;
 const uint kPatternCityTrail = 21u;
 const uint kPatternCitySign = 22u;
+const uint kPatternWormholeWall = 36u; // the Ship's WORMHOLE (pbr.rchit): the tunnel's wall, a ring's basalt
+const uint kPatternWormholeRing = 37u;
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;

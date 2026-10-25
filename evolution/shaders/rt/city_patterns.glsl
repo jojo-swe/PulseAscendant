@@ -263,13 +263,14 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
     float detail = smoothstep(1.0, 3.0, cellPixels);
 
     // The average: wall and glass by their shares, the coat as much as there is glass, and the rooms' light
-    // spread over the cell (the building's lit share at a typical level, its tint), held a little under the
-    // true mean: resolved, the lit windows clip in the tonemap and the walls between them stay dark, which
-    // a uniform average would not.
+    // spread over the cell (the building's lit share at a typical level, its tint), held under the true
+    // mean: resolved, the lit windows clip in the tonemap and the walls between them stay dark, which a
+    // uniform average would not. The wall's share is darkened too (soot, and the sills' and reveals'
+    // shadows a distant wall still has): a far facade at night is a dark mass with a warm glow, never grey.
     float glassShare = glassWall ? 1.0 : windowShare;
-    vec3 avgColor = mix(m.baseColor * 0.7, m.baseColor2, glassShare);
+    vec3 avgColor = mix(m.baseColor * 0.42, m.baseColor2, glassShare);
     float avgRough = mix(m.roughness, 0.3, glassShare);
-    vec3 avgEmission = materialEmission(m) * vec3(1.0, 0.85, 0.7) * (litShare * windowShare * 0.25);
+    vec3 avgEmission = materialEmission(m) * vec3(1.0, 0.82, 0.62) * (litShare * windowShare * 0.5);
     if (detail <= 0.0) {
         baseColor = avgColor;
         roughness = avgRough;
@@ -474,58 +475,133 @@ void cityStreet(inout HitPoint h, out vec3 baseColor, out float roughness) {
 
 // --- Signs -----------------------------------------------------------------------------------------------
 
-// One glyph of a sign's lettering in its cell (x, y in [0, 1]): two to four strokes of a blocky alphabet (bars,
-// stems, diagonals) from the glyph's hash; a few cells are word gaps.
-float cityGlyph(vec2 c, uint h) {
-    if (cityDraw(h, 3u) < 0.14 || any(lessThan(c, vec2(0.0))) || any(greaterThan(c, vec2(1.0)))) {
-        return 0.0;
+// The signs' lettering: words of a Nordic high street (KAFE, APOTEK, HOTELL, BAR, KIOSK, BAGERI, BIO, TAXI, PUB, PIZZA, BAKERI, NATT, HOTEL, BUTIK, ANTIK, FISK, KINO, SPORT) in a 5 x 7 dot font (the
+// show's own glyph grid), letters packed 5 bits each (index + 1, 0 ends the word), the glyphs' 35 dots as
+// 32 low bits and 3 high bits (bit row * 5 + column, row 0 at the top).
+const uint kCitySignLetters = 18u; // ABEFGHIKLNOPRSTUXZ
+const uint kCitySignGlyphLow[18] = uint[18](
+    0x631FC62Eu, 0xE317C62Fu, 0xC217843Fu, 0x4217843Fu, 0xA31E862Eu, 0x631FC631u,
+    0x8842108Eu, 0x52519531u, 0xC2108421u, 0x631CD671u, 0xA318C62Eu, 0x4217C62Fu,
+    0x5257C62Fu, 0xE107043Eu, 0x0842109Fu, 0xA318C631u, 0x62A22A31u, 0xC222221Fu);
+const uint kCitySignGlyphHigh[18] = uint[18](4u, 3u, 7u, 0u, 7u, 4u, 3u, 4u, 7u, 4u, 3u, 0u, 4u, 3u, 1u, 3u, 4u, 7u);
+const uint kCitySignWords = 18u;
+const uint kCitySignWord[18] = uint[18](
+    0x00019028u, 0x1037AD81u, 0x1291BD66u, 0x00003422u, 0x00872CE8u, 0x0ED19422u,
+    0x00002CE2u, 0x0003C42Fu, 0x00000A0Cu, 0x001948ECu, 0x0ED1A022u, 0x0007BC2Au,
+    0x0091BD66u, 0x0083BE02u, 0x0083BD41u, 0x000438E4u, 0x0005A8E8u, 0x00F6AD8Eu);
+
+uint citySignWordLength(uint word) {
+    uint n = 0u;
+    while (n < 6u && ((word >> (5u * n)) & 31u) != 0u) {
+        ++n;
     }
-    uint bits = h >> 4;
-    if (bitCount(bits & 0xFFu) < 2) {
-        bits |= 0x19u;
+    return n;
+}
+
+bool citySignDot(uint letter, int column, int row) {
+    if (column < 0 || column > 4 || row < 0 || row > 6) {
+        return false;
     }
-    float w = 0.17;
-    float ink = 0.0;
-    ink = max(ink, float((bits & 1u) != 0u && c.y > 1.0 - w));
-    ink = max(ink, float((bits & 2u) != 0u && abs(c.y - 0.5) < 0.5 * w));
-    ink = max(ink, float((bits & 4u) != 0u && c.y < w));
-    ink = max(ink, float((bits & 8u) != 0u && c.x < w));
-    ink = max(ink, float((bits & 16u) != 0u && c.x > 1.0 - w));
-    ink = max(ink, float((bits & 32u) != 0u && abs(c.x - 0.5) < 0.5 * w));
-    ink = max(ink, float((bits & 64u) != 0u && abs(c.x - c.y) < 0.6 * w));
-    ink = max(ink, float((bits & 128u) != 0u && abs(c.x - 1.0 + c.y) < 0.6 * w));
-    return ink;
+    uint bit = uint(row * 5 + column);
+    return bit < 32u ? ((kCitySignGlyphLow[letter] >> bit) & 1u) != 0u
+                     : ((kCitySignGlyphHigh[letter] >> (bit - 32u)) & 1u) != 0u;
+}
+
+// The ink of a letter at g, in dot units (x 0..5 right, y 0..7 down, dots centred on the half units): the dots
+// joined into strokes, a capsule between every two neighbouring dots (and the diagonal ones where no
+// right-angle path joins them), `width` dots wide. 1 on a stroke, 0 off, with a soft edge `soft` dots wide.
+float citySignInk(uint letter, vec2 g, float width, float soft) {
+    ivec2 c = ivec2(floor(g));
+    float best = 1e9;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            ivec2 a = c + ivec2(dx, dy);
+            if (!citySignDot(letter, a.x, a.y)) {
+                continue;
+            }
+            vec2 pa = vec2(a) + 0.5;
+            best = min(best, length(g - pa));
+            // Strokes to the right, down, and down the diagonals.
+            for (int k = 0; k < 4; ++k) {
+                ivec2 step = k == 0 ? ivec2(1, 0) : k == 1 ? ivec2(0, 1) : k == 2 ? ivec2(1, 1) : ivec2(-1, 1);
+                ivec2 b = a + step;
+                if (!citySignDot(letter, b.x, b.y)) {
+                    continue;
+                }
+                if (k >= 2 && (citySignDot(letter, a.x + step.x, a.y) || citySignDot(letter, a.x, a.y + 1))) {
+                    continue; // a corner, already joined round the right angle
+                }
+                vec2 pb = vec2(b) + 0.5;
+                vec2 ab = pb - pa;
+                float t = clamp(dot(g - pa, ab) / dot(ab, ab), 0.0, 1.0);
+                best = min(best, length(g - pa - t * ab));
+            }
+        }
+    }
+    return 1.0 - smoothstep(0.5 * width - 0.5 * soft, 0.5 * width + 0.5 * soft, best);
 }
 
 // A sign's face at uv (the quad's, v down) as the camera sees it, relative to its mean radiance (the rect
 // light's uniform emission, which next-event estimation and every ray after a rough bounce see): a lightbox
-// (dark lettering on a bright panel inside a frame) or neon (bright strokes on a dark backing), lettered
-// across a wide sign and down a tall one. Each kind's levels are set so that its mean is about 1.
+// (dark letters on a bright panel inside a frame) or neon (bright tubes on a dark backing), a word set across a
+// wide sign and stacked letter over letter down a tall one, from the sign's hash. Each kind's levels are set
+// so that its mean is about 1.
 float citySign(vec2 uv, vec2 size, uint seed) {
     bool tall = size.y > size.x;
-    vec2 p = tall ? vec2(uv.y * size.y, uv.x * size.x) : vec2(uv.x * size.x, uv.y * size.y);
-    vec2 extent = tall ? size.yx : size;
-    float border = 0.08 * extent.y;
+    vec2 p = vec2(uv.x, 1.0 - uv.y) * size; // metres, y up
+    float border = 0.08 * min(size.x, size.y);
     vec2 inner = p - border;
-    vec2 innerSize = extent - 2.0 * border;
-    float frame = (any(lessThan(inner, vec2(0.0))) || any(greaterThan(inner, innerSize))) ? 1.0 : 0.0;
-    float glyphSize = innerSize.y;
-    float n = max(1.0, floor(innerSize.x / (0.8 * glyphSize)));
-    float cellWidth = innerSize.x / n;
-    float k = floor(inner.x / cellWidth);
-    vec2 c = vec2((inner.x - k * cellWidth) / cellWidth, inner.y / glyphSize);
-    c = (c - vec2(0.14, 0.12)) / vec2(0.72, 0.76);
-    if (tall) {
-        c.y = 1.0 - c.y;
-    } else {
-        c = vec2(c.x, 1.0 - c.y);
-    }
-    float ink = frame > 0.0 ? 0.0 : cityGlyph(c, pcgHash(seed + uint(k) * 0x9E3779B9u));
+    vec2 innerSize = size - 2.0 * border;
+    bool framePart = any(lessThan(inner, vec2(0.0))) || any(greaterThan(inner, innerSize));
     bool neon = cityDraw(seed, 7u) < 0.45;
-    if (neon) {
-        return frame > 0.0 ? 0.25 : (ink > 0.0 ? 9.0 : 0.06);
+    if (framePart) {
+        return neon ? 0.25 : 0.55;
     }
-    return frame > 0.0 ? 0.55 : (ink > 0.0 ? 0.3 : 1.25);
+    // The letters' pitch size: 7 dots high across a wide sign, 5 dots wide down a tall one.
+    float pitch = tall ? innerSize.x * 0.8 / 5.0 : innerSize.y * 0.78 / 7.0;
+    float advance = 6.0 * pitch; // a letter and a pitch's gap
+    float lineAdvance = 8.5 * pitch;
+    uint slots = uint(max(1.0, floor(tall ? innerSize.y / lineAdvance : (innerSize.x + pitch) / advance)));
+    // The longest word that fits, from a few draws of the sign's hash.
+    uint word = 0u, count = 0u;
+    for (uint k = 0u; k < 4u && count == 0u; ++k) {
+        uint w = kCitySignWord[pcgHash(seed + k * 0x9E3779B9u) % kCitySignWords];
+        uint n = citySignWordLength(w);
+        if (n <= slots) {
+            word = w;
+            count = n;
+        }
+    }
+    if (count == 0u) {
+        word = kCitySignWord[3]; // BAR
+        count = min(slots, 3u);
+    }
+    // The letter under p and the position in it, the word centred.
+    vec2 g;
+    uint index;
+    if (tall) {
+        float top = 0.5 * (innerSize.y + float(count) * lineAdvance) - 0.75 * pitch;
+        float k = floor((top - inner.y) / lineAdvance);
+        index = uint(clamp(k, 0.0, float(count) - 1.0));
+        g = vec2((inner.x - 0.5 * (innerSize.x - 5.0 * pitch)) / pitch, (top - inner.y - k * lineAdvance) / pitch);
+        if (k < 0.0 || k >= float(count)) {
+            g = vec2(-9.0);
+        }
+    } else {
+        float left = 0.5 * (innerSize.x - (float(count) * advance - pitch));
+        float k = floor((inner.x - left) / advance);
+        index = uint(clamp(k, 0.0, float(count) - 1.0));
+        g = vec2((inner.x - left - k * advance) / pitch, (0.5 * (innerSize.y + 7.0 * pitch) - inner.y) / pitch);
+        if (k < 0.0 || k >= float(count)) {
+            g = vec2(-9.0);
+        }
+    }
+    uint letter = ((word >> (5u * index)) & 31u) - 1u;
+    float ink = g.x < -1.0 ? 0.0 : citySignInk(letter, g, neon ? 0.62 : 0.9, 0.12);
+    if (neon) {
+        return mix(0.06, 9.0, ink);
+    }
+    return mix(1.25, 0.3, ink);
 }
 
 // --- Trails ----------------------------------------------------------------------------------------------
