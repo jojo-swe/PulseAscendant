@@ -100,16 +100,15 @@ void Tonemap::record(VkCommandBuffer cmd, gfx::Image& hdr, gfx::Image& ldr, cons
     }
 
     if (grade.palette != 0.f) {
-        // The table goes into the command buffer, after every earlier tonemap's reads of it.
+        // The table goes into the command buffer, after every earlier tonemap's reads of it (every
+        // dispatch binds the buffer, so the barrier is needed even when no earlier frame had a palette).
         const GradePaletteTable table = gradePaletteTable(*inputs.palette);
-        if (paletteUsed_)
-            gfx::bufferBarrier2(cmd, palette_.handle(), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
-                                VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        gfx::bufferBarrier2(cmd, palette_.handle(), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                            VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
+                            VK_ACCESS_2_TRANSFER_WRITE_BIT);
         vkCmdUpdateBuffer(cmd, palette_.handle(), 0, sizeof table, &table);
         gfx::bufferBarrier2(cmd, palette_.handle(), VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
-        paletteUsed_ = true;
     }
 
     gfx::Image& bloom = inputs.bloomWeight != 0.f ? *inputs.bloom : dummyBloom_;
