@@ -411,6 +411,22 @@ lamps, lights of the light tree, so a ring sweeps the hull with light on every b
 the tube's far end, and the last shot, where the ship pulls away into it, carries Act III's one anamorphic
 streak. `scene_ship_test --look <dir> [spp] [width height]` renders a still of every shot.
 
+### Glass, lenses and exports
+
+- **Four wavelengths in exports.** A frame of 16 samples per pixel or more (every export) splits a path at
+  its first dispersive glass into four copies a quarter of the spectrum apart, which then draw the same
+  random numbers: where the glass bends the wavelengths little they take nearly the same path, and their
+  colours average to the spectrum's rather than one wavelength's. Through a dispersive cube the chroma noise
+  drops by 87 % against one wavelength at the same sample count (`scene_glass_test heroes`). The window keeps
+  one wavelength and leaves the colour to the temporal history.
+- **A bladed iris.** From the 50 mm lens up, the thin lens's aperture is a hexagon of the disc's area, so the
+  portraits' out-of-focus highlights take the iris's shape; the 24 and 35 mm lenses keep a round aperture.
+- **The glass chapters** (GLENZ, GLASS CATHEDRAL, CRYSTAL CITY, LENS, LENS OF GOD) shoot their caustics, not
+  their glass: a snooted key throws the glenz star's spectra across the cyclorama, gothic piers of faceted
+  flint glass split the sun in the cathedral's haze, LENS's plan view hangs a glass lens exactly where and as
+  large as 1993's lens is drawn, and LENS OF GOD's cone of gathered sunlight glows in the haze under the
+  lens, inside the lens's shadow, through a deck of cumulus.
+
 ### Bloom and the look
 
 Everything after the trace that the direction sets is a pure function of the show time (`post::lookFor`): no
