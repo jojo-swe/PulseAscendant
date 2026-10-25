@@ -8,9 +8,9 @@
 //
 // Light selection is a function of the shading point (p, its shading normal n turned to the side the path
 // arrived from, and whether the surface transmits): pickLight() and lightSelectPdf() use the same weights,
-// lightImportance(), and a BSDF ray that hits a light evaluates lightSelectPdf() at the vertex it left (Review
-// Focus 2 of step 5), so the two MIS strategies always agree on the selection probability. One light of kind
-// Tree stands for the light tree's spheres (Task 12, light_tree.glsl), chosen within it the same way. A light that gets
+// lightImportance(), and a BSDF ray that hits a light evaluates lightSelectPdf() at the vertex it left,
+// so the two MIS strategies always agree on the selection probability. One light of kind
+// Tree stands for the light tree's spheres (light_tree.glsl), chosen within it the same way. A light that gets
 // no weight at a point is simply never sampled there: BSDF rays that find it keep MIS weight 1.
 
 #include "environment.glsl"
@@ -192,7 +192,7 @@ vec3 treeHitEmission(uint sphere, bool front, vec3 fallback) {
 
 // The density with which next-event estimation at the shading point (p, n, transmissive) reaches a direction
 // that hits `sphere` of tree `entry`: the entry's choice, the walk to its light, and the light's cone. The MIS
-// partner of a BSDF ray that hits it, evaluated at the vertex the ray left (Review Focus 2); 0 for a sphere
+// partner of a BSDF ray that hits it, evaluated at the vertex the ray left; 0 for a sphere
 // that is no tree light.
 float treeHitPdf(uint entry, uint sphere, vec3 p, vec3 n, bool transmissive) {
     uint k = treeLightOfSphere(sphere);

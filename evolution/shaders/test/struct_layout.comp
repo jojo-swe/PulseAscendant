@@ -6,7 +6,7 @@
 // tracer shares with the CPU, in declaration order, into a word buffer, then the shared constants and
 // random.glsl's pcgHash of a few inputs (the CPU mirror rt::pcgHash must agree). The CPU
 // filled each field with its own sentinel, so a field whose scalar-layout offset differs from the C++
-// mirror's offsetof comes back with another field's value (Review Focus 10).
+// mirror's offsetof comes back with another field's value.
 
 #include "../rt/random.glsl"
 #include "../rt/types.glsl"
@@ -175,9 +175,29 @@ void main() {
         putF(v.glowStrength);
     }
     for (uint e = 0; e < kElements; ++e) {
-        for (uint k = 0; k < 32; ++k) {
-            putU(media[e].words[k]);
+        MediumUniforms v = media[e];
+        for (uint r = 0; r < 3; ++r) {
+            putF(v.worldToMedium.rows[r].x);
+            putF(v.worldToMedium.rows[r].y);
+            putF(v.worldToMedium.rows[r].z);
+            putF(v.worldToMedium.rows[r].w);
         }
+        putU(v.gridSize.x);
+        putU(v.gridSize.y);
+        putU(v.gridSize.z);
+        putF(v.densityScale);
+        put3(v.gridAlbedo);
+        putF(v.gridPhaseG);
+        putU(v.majorantSize.x);
+        putU(v.majorantSize.y);
+        putU(v.majorantSize.z);
+        putF(v.emissionScale);
+        put3(v.fogAlbedo);
+        putF(v.fogPhaseG);
+        putF(v.fogDensity);
+        putF(v.fogBaseHeight);
+        putF(v.fogFalloff);
+        putU(v.pad);
     }
     for (uint e = 0; e < kElements; ++e) {
         SphereRecord v = spheres[e];
@@ -250,6 +270,8 @@ void main() {
     putU(kGeometrySpheres);
     putU(kHitGroupsPerKind);
     putU(kNoReceiver);
+    putU(kMediumFog);
+    putU(kMediumGrid);
 
     // random.glsl's hash, against the CPU mirror rt::pcgHash (material_test's kHashInputs).
     const uint hashInputs[8] = uint[8](0u, 1u, 2u, 48000u, 0x9E3779B9u, 0x7FFFFFFFu, 0xFFFFFFFFu, 123456789u);

@@ -1,7 +1,7 @@
 #ifndef EVO_RT_SCREEN_GLSL
 #define EVO_RT_SCREEN_GLSL
 
-// The CRT's picture on the Studio's flat screen (Decision 10: the curvature is a UV warp, and the curved
+// The CRT's picture on the Studio's flat screen (the curvature is a UV warp, and the curved
 // glass only bends the coat's shading normal, emissive.rchit): the retro image (linear light through its sRGB
 // view) bulged by 2 % like crt.comp's barrel, but not renormalised, so the picture's corners pull in and the
 // screen is black outside the warped picture; a 10 % vignette towards the corners. Up close it shows how a
@@ -9,7 +9,7 @@
 // - the beam profile: each of the 200 source lines is one pass of the beam, brightest along its centre with
 //   a dark gap to the next, in its own row's colour. The profile is the same for every colour (so the screen
 //   scales every picture alike), its mean over a line is step 4's 87.5 % (its alternate rows 25 % darker),
-//   and it fades into that mean over LOD -0.5 .. 0.5 (review M6: no moire where the lines approach a pixel);
+//   and it fades into that mean over LOD -0.5 .. 0.5 (no moire where the lines approach a pixel);
 // - an aperture-grille phosphor mask, three RGB stripes per source texel, faded in over LOD -2 .. -3 (where
 //   a stripe spans 1.3 to 2.7 pixels: only a 4K close-up resolves it), of mean 1 too.
 // So the picture's energy does not depend on the distance it is seen from. The emissive hit (at the ray

@@ -27,7 +27,7 @@
 // round(flux * w * fixedPointScale), with imageAtomicAdd. The sums are in reference units (radiance at the
 // 1920x1080 reference) and the resolve applies (W * H) / (1920 * 1080), so the step an add rounds to is the
 // same at every resolution (a 160x90 test quantises like a 4K export). Integer addition is associative and
-// commutative, so the sums do not depend on the order the points arrive in (Decision 4 of step 5: integer
+// commutative, so the sums do not depend on the order the points arrive in (integer
 // atomics into fixed-point accumulators; float atomics are forbidden). An add that wraps a channel (the new
 // sum smaller than the old) sets that channel's bit in a fourth R32_UINT image (imageAtomicOr); so does a
 // single add of 2^32 units or more, which is never added. A channel wraps somewhere iff its exact sum
@@ -45,7 +45,7 @@
 // brightest pixel sums must stay below 2^32 / fixedPointScale reference units.
 //
 // Nothing carries over between frames: the accumulators are cleared every frame, so a frame's splats are a
-// pure function of the frame (Review Focus 1: a seek needs nothing reset).
+// pure function of the frame (a seek needs nothing reset).
 
 #include "gfx/compute_pipeline.hpp"
 #include "gfx/context.hpp"
@@ -88,7 +88,7 @@ void checkSplats(const std::optional<SplatFrame>& splats, std::uint32_t capacity
 
 // The splat pass: the accumulators (three R32_UINT images and the overflow image, at the trace size), a
 // compute pipeline per scene shader and the resolve. One in ModernStage, made when the first scene with a
-// splat shader is prepared, whatever the number of such scenes (Task 1b's ruling: per-frame feature resources
+// splat shader is prepared, whatever the number of such scenes (Task 1b's decision: per-frame feature resources
 // live once in ModernStage).
 class SplatPass {
 public:

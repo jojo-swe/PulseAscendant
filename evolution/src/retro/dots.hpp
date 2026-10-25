@@ -1,5 +1,6 @@
 #pragma once
 
+#include "retro/dots_schedule.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
 #include "show/timeline.hpp"
@@ -22,9 +23,7 @@ namespace evo::retro {
 // A + 0.45, 0.65 and 0.85 of (D - A); the cube holds to the end. Each morph takes the last kDotsMorphSeconds
 // before its arrival (less if the interval is shorter) and blends the two shapes' world positions with
 // smoothstep; between morphs a shape holds exactly.
-inline constexpr std::uint32_t kDotsRetroRate = 35;
 inline constexpr std::size_t kDotsPoints = 512;
-inline constexpr double kDotsMorphSeconds = 1.2;
 
 // DOTS' palette: index 0 black, a 32-entry depth ramp from kDotsRamp (far: deep blue, through blue and cyan,
 // to white: near), 255 white; the rest black.
@@ -77,13 +76,7 @@ struct DotsMorph {
 };
 DotsMorph dotsMorph(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
-// The schedule in retro frames: morph m (the m-th of cube -> sphere -> torus -> year -> torus -> sphere ->
-// cube) blends over first < f < arrival; the next morph never starts before this one's arrival (a short
-// chapter gives short or empty morphs).
-struct DotsStep {
-    std::uint32_t first, arrival;
-};
-std::array<DotsStep, 6> dotsSchedule(const show::TimelineFrame& frame);
+// The schedule (DotsStep, dotsSchedule, kDotsRetroRate and kDotsMorphSeconds) is in retro/dots_schedule.hpp.
 
 // The world positions of the 512 points at a retro frame. A morph pairs the two shapes' points by rank under
 // a common key, computed at the morph's first frame (the points sorted by height into 8 bands of 64, each

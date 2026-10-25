@@ -368,6 +368,8 @@ constexpr int kWindowVariants = 4;
 // one per beat from the accent: the sun walks down the nave and reaches pillar after pillar.
 constexpr int kHeroBay = 4;
 constexpr float kShutterTravel = 7.4f, kShutterSeconds = 0.35f;
+// The haze: sigma_t per metre at the floor, halving every 14 m up.
+constexpr float kHazeDensity = 0.018f, kHazeFalloff = 0.05f;
 // Towards the sun: from the east (+x), 28 degrees up, a little towards the door.
 constexpr Vec3 kCathedralSun{0.80f, 0.47f, -0.37f};
 
@@ -1462,6 +1464,13 @@ SceneFrame Glass::cathedralFrame(const show::TimelineFrame& f) const {
     e.glow = 0.6f;
     e.select = 0.5f; // the sun and the sky through the open windows' glass (shadow rays pass the panes)
     out.environment = e;
+    // Incense haze, thinning towards the vault: the sun through the stained glass draws coloured shafts.
+    FogDesc fog;
+    fog.density = kHazeDensity;
+    fog.falloff = kHazeFalloff;
+    fog.albedo = {0.92f, 0.9f, 0.86f};
+    fog.phaseG = 0.55f;
+    out.medium = MediumFrame{fog, std::nullopt};
 
     CausticFrame c;
     CausticReceiver floor = receiverForQuad(

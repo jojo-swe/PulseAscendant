@@ -76,7 +76,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     {98, Effect::Lens, Transition::Wipe, .7f, 0, "LENS",
         "1993 · ROTOZOOM · LENS", "2026 · GLASS SPHERE · RAY TRACED FLOOR"},
     {116, Effect::Raytrace, Transition::BeatSwap, 1.f, 0, "RAYTRACE",
-        "1993 · PRECALCULATED · 10 FPS", "2026 · REAL-TIME PATH TRACING · 60 FPS"},
+        "1993 · PRECALCULATED · 10 FPS", "2026 · REAL-TIME PATH TRACING · 49 SPHERES · 60 FPS"},
     {150, Effect::City, Transition::Wipe, .9f, 0, "VECTOR CITY",
         "1993 · 300 POLYGONS · GOURAUD", "2026 · MILLIONS OF WINDOWS · WET STREETS"},
     {168, Effect::Finale, Transition::BeatSwap, 1.f, 0, "FINALE", "1993 · ALL EFFECTS", "2026 · THE STUDIO"},
@@ -95,7 +95,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     {322, Effect::Ocean, Transition::Cut, .9f, 1, "PARTICLE OCEAN", "",
         "2026 · PARTICLE OCEAN · 2,097,152 PARTICLES"},
     {344, Effect::SphereStorm, Transition::Cut, 1.f, 1, "SPHERE STORM", "",
-        "2026 · SPHERE STORM · PATH TRACED"},
+        "2026 · SPHERE STORM · 32,768 SPHERES · 4,096 GLOWING"},
     {368, Effect::Singularity, Transition::Cut, .9f, 1, "SINGULARITY", "", "2026 · SINGULARITY"},
     {390, Effect::Return, Transition::Cut, .5f, 1, "RETURN", "", "2026 · RETURN · THE STUDIO"},
 
@@ -111,7 +111,7 @@ inline constexpr std::array<Cue, 31> cues = {{
         "2026 · CRYSTAL CITY · REFRACTION"},
     {542.4, Effect::LensOfGod, Transition::Cut, .7f, 1, "LENS OF GOD", "", "2026 · LENS · PLANETARY SCALE"},
     {570.4, Effect::RaytraceInfinity, Transition::Cut, 1.f, 1, "RAYTRACE INFINITY", "",
-        "2026 · RAY TRACED INFINITY"},
+        "2026 · RAY TRACED INFINITY · 32,768 MIRROR SPHERES"},
     {602.4, Effect::Metropolis, Transition::Cut, .9f, 1, "METROPOLIS", "", "2026 · METROPOLIS"},
     {634.4, Effect::Ascendant, Transition::Cut, 1.f, 1, "ASCENDANT", "", "2026 · ASCENDANT"},
     // The credits roll as a 1993 sine scroller, so the chapter holds 1993 and its card is the 1993 one.

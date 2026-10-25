@@ -14,7 +14,7 @@
 // A light's probability is reproducible from the light alone: TreeLight::trail holds the child choices from
 // the root to its leaf (bit l the choice at depth l, 1 = the second child), depth their count, so the pdf of
 // the light a BSDF ray happens to hit is the product of the same choice probabilities pickTreeLight()
-// multiplied, evaluated with the same function at the same shading point (Review Focus 2).
+// multiplied, evaluated with the same function at the same shading point.
 
 #include "rt/gpu_types.hpp"
 

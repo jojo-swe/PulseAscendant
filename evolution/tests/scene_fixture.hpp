@@ -17,7 +17,7 @@ namespace evo::test {
 // The chapters whose effect the show's scene map sends to `scene`, in show order.
 std::vector<int> chaptersOf(modern::SceneId scene);
 
-// The picture checks' settings: the plan's 160x90, spp 2 and detail 1/256 by default.
+// The picture checks' settings: 160x90, spp 2 and detail 1/256 by default.
 struct PictureOptions {
     std::uint32_t width = 160, height = 90, spp = 2;
     modern::SceneDetail detail{1.f / 256};

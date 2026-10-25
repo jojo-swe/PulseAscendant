@@ -81,8 +81,8 @@ std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset);
 // - depth, R32F: the linear view depth of the primary hit (centre ray, unjittered), -1 on a miss;
 // - motion, RGBA16F: xy = previous pixel centre - current pixel centre from the previous camera; z = 1 if
 //   valid;
-// - volume, RGBA16F: rgb the radiance in-scattered on the primary segment, a its transmittance; (0, 0, 0, 1)
-//   without a medium (the tracer writes that until step 5's Task 11).
+// - volume, RGBA16F: rgb the radiance in-scattered on the primary segment, a its transmittance (the mean over
+//   the frame's samples; Task 11, modern/medium.hpp); (0, 0, 0, 1) without a medium.
 // Every image is left in GENERAL after the trace's last write (Image tracks it).
 struct GBuffer {
     gfx::Image lighting, emission, albedo, normal, depth, motion, volume;
@@ -120,12 +120,12 @@ TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
 // Per-frame feature resources (particle fields, medium volumes, splat accumulators, caustic maps) live once
 // in ModernStage, sized to the largest prepared scene, not per scene.
 struct TraceExtras {
-    const gfx::Buffer* environment = nullptr;        // 15: replaces the frame's packed environment (a hook)
-    const gfx::Buffer* treeNodes = nullptr;          // 16: LightTreeNode[] (Task 12)
-    const gfx::Buffer* treeLights = nullptr;         // 17: TreeLight[] (Task 12)
-    const gfx::Buffer* medium = nullptr;             // 18: MediumUniforms (Task 11)
-    gfx::Image* density = nullptr;                   // 19: 3D RGBA16F density + emission (Task 11)
-    gfx::Image* majorant = nullptr;                  // 20: 3D R16F majorant per cell (Task 11)
+    const gfx::Buffer* environment = nullptr; // 15: replaces the frame's packed environment (a hook)
+    const gfx::Buffer* treeNodes = nullptr;   // 16: LightTreeNode[] (Task 12)
+    const gfx::Buffer* treeLights = nullptr;  // 17: TreeLight[] (Task 12)
+    const gfx::Buffer* medium = nullptr;      // 18: replaces the frame's packed MediumUniforms (a hook)
+    gfx::Image* density = nullptr;            // 19: 3D RGBA16F density + emission (Task 11)
+    gfx::Image* majorant = nullptr;           // 20: 3D R16F majorant per cell (Task 11)
     const gfx::Buffer* previousTransforms = nullptr; // 21: replaces the packed Mat34[] (a hook)
     // The previous frame's instances, while the history continues (empty: none): what trace() packs into
     // binding 21. Instance i of the frame moved from previousInstances[i].transform when both frames have the
@@ -191,9 +191,11 @@ public:
     // Throws, before recording anything, std::invalid_argument for spp 0, no slices, more than
     // kMaxShutterSlices slices, more slices than dispatches, or a scene that samples the retro screen
     // without a retro image or a slice that places its particle field without extras.particleSpheres and
-    // particleBlas, std::length_error for a slice larger than the tracer's capacity, what checkSceneFrame
+    // particleBlas or has a grid medium without extras.density and majorant, std::length_error for a slice
+    // larger than the tracer's capacity or a grid medium larger than those images, what checkSceneFrame
     // throws, and std::logic_error outside ring.begin()/submit() or for a second trace in one frame. The
-    // particle field must have been recorded earlier in this frame (ModernStage does, per slice).
+    // particle field must have been recorded earlier in this frame (ModernStage does, per slice), and so must
+    // a grid medium's bake (ModernStage bakes it once per frame, at the frame's time).
     using SliceCallback = std::function<void(VkCommandBuffer, std::uint32_t)>;
     void trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<const SceneFrame> slices,
                const std::optional<Camera>& previousCamera, const TraceSettings& settings,
@@ -272,6 +274,8 @@ private:
     rt::LightTree tree_;
     // The frame's environment (SceneFrame::environment packed, binding EVO_BINDING_ENVIRONMENT), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
+    // The frame's media (SceneFrame::medium packed, binding EVO_BINDING_MEDIUM; Task 11), per slot.
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> media_;
     GBuffer gbuffer_;
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
     std::unique_ptr<rt::Tlas> tlas_;

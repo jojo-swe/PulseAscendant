@@ -48,10 +48,11 @@
 //
 // Step 5's hooks, each with a stub that keeps step 4's picture byte for byte until its task fills it:
 // environment.glsl (the sky a miss sees, and environment sampling: Task 2), lights.glsl (per-point light
-// selection: Task 3; the light tree: Task 12), medium.glsl (participating media and the volume layer: Task
-// 11), caustics.glsl (Task 13) and lensing.glsl (bent main rays: Task 25). Task 13's caustic photon maps
-// also exclude, in caustic_paths.glsl, the light the maps already hold (a receiver's non-delta bounce, then
-// only delta surfaces, then the photons' light): without caustics in the frame that changes nothing.
+// selection: Task 3; the light tree: Task 12), medium.glsl and medium_path.glsl (participating media and the
+// volume layer: Task 11, behind mediumActive() at the hooks marked "[medium]"), caustics.glsl (Task 13) and
+// lensing.glsl (bent main rays: Task 25). Task 13's caustic photon maps also exclude, in caustic_paths.glsl,
+// the light the maps already hold (a receiver's non-delta bounce, then only delta surfaces, then the photons'
+// light): without caustics in the frame that changes nothing.
 //
 // Every random number is randomFloat(frameSeed, pixel, sampleIndex, dimension) (random.glsl). Only this
 // shader traces rays (recursion depth 1).
@@ -79,6 +80,8 @@ const float kRayMax = 1e30;
 // Random dimensions: 0-1 pixel jitter, 2-3 lens, then kDimsPerBounce per bounce (0-2 BSDF sample, 3 the light
 // choice, 4-5 the point on it, 6 Russian roulette, 7 the hero wavelength).
 const uint kDimsPerBounce = 8u;
+// [medium] The dimension that seeds a sample's media stream (medium.glsl), far from the others.
+const uint kMediumSeedDimension = 0x6D656469u;
 
 uvec2 gPixel;
 uint gSample;
@@ -87,8 +90,13 @@ float rand(uint dimension) {
     return randomFloat(frame.frameSeed, gPixel, gSample, dimension);
 }
 
+// [medium] The first bounce whose dimensions bounce 0 draws: 0, except while the path is the primary
+// segment's continuation in a medium (medium_path.glsl's kMediumBounceOffset), which must not reuse the
+// surface path's numbers.
+uint gBounceOffset = 0u;
+
 float bounceRand(uint bounce, uint k) {
-    return rand(4u + bounce * kDimsPerBounce + k);
+    return rand(4u + (bounce + gBounceOffset) * kDimsPerBounce + k);
 }
 
 void traceMain(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
@@ -117,8 +125,8 @@ bool unoccluded(vec3 origin, vec3 direction, float tMax) {
 }
 
 // What a shadow ray lets through: 0 when a solid surface is in the way, else the product of the thin panes'
-// transmission it crosses (each its tint times 1 - R', thinDielectricSample's), at most 8 of them. Uses the
-// main payload: the caller must have read the hit it needs before.
+// transmission it crosses (each its tint times 1 - R', thinDielectricSample's), at most 8 of them. It traces
+// the panes with the main payload, which it restores.
 const uint kMaxShadowPanes = 8u;
 vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
     if (!unoccluded(origin, direction, tMax)) {
@@ -128,23 +136,27 @@ vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
     if ((frame.flags & kTraceFlagThinPanes) == 0u) {
         return through;
     }
+    HitPayload hit = payload;
     float t0 = 0.0;
-    for (uint i = 0u; i < kMaxShadowPanes; ++i) {
+    for (uint i = 0u; i < kMaxShadowPanes && maxComponent(through) > 0.0; ++i) {
         payload.coneWidth = 0.0;
         payload.coneSpread = -1.0;
         traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, kInstanceMaskPane, 0, 0, kMissIndexSky, origin, t0, direction,
                     tMax, 0);
         if (payload.t < 0.0) {
+            payload = hit;
             return through;
         }
         float r = fresnelDielectric(abs(dot(direction, payload.normal)), 1.0 / clamp(payload.ior, 1.0, 4.0));
         through *= clamp(payload.baseColor, 0.0, 1.0) * ((1.0 - r) / (1.0 + r));
         t0 = payload.t + 1e-4 * (1.0 + payload.t);
-        if (!(t0 < tMax) || !(maxComponent(through) > 0.0)) {
+        if (!(t0 < tMax)) {
+            payload = hit;
             return through;
         }
     }
-    return vec3(0.0); // more panes than any window has
+    payload = hit;
+    return maxComponent(through) > 0.0 ? vec3(0.0) : through; // more panes than any window has
 }
 
 // A ray origin off the surface, on the side the new direction leaves to, scaled with the position's size.
@@ -289,7 +301,7 @@ vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, v
         return vec3(0.0);
     }
     return f * light.emission * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
-           mediumTransmittance(origin, wi, tMax);
+           mediumTransmittance(origin, toTarget / tMax, tMax);
 }
 
 // Next-event estimation at a surface: the environment with probability frame.environmentSelect, else one
@@ -369,11 +381,14 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         return vec3(0.0);
     }
     vec3 le = lightRadiance(l, uv, wi);
-    return f * le * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, tMax);
+    return f * le * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+           mediumTransmittance(origin, shadowDirection, tMax);
 }
 
 // Task 13: the caustic photon maps' double-count exclusion (every use below is marked "Task 13").
 #include "caustic_paths.glsl"
+// [medium] The participating-media integrator (Task 11): needs the helpers above.
+#include "medium_path.glsl"
 
 struct SampleResult {
     vec3 lighting;
@@ -413,9 +428,56 @@ SampleResult tracePath() {
     bool rough = false;   // the path has scattered off a non-delta lobe (else: a delta chain from the camera)
     float lambda = -1.0;  // the hero wavelength in nm, once the path has met dispersive glass
     CausticPath caustic = causticPathStart(); // Task 13
+    // [medium] This sample's media stream and volume layer (Task 11).
+    if (mediumActive()) {
+        mediumSeed(randomHash(frame.frameSeed, gPixel, gSample, kMediumSeedDimension));
+        gMediumVolume = vec4(0.0, 0.0, 0.0, 1.0);
+        gMediumContinue = false;
+    }
 
-    for (uint bounce = 0u;; ++bounce) {
+    // [medium] Two passes of the one bounce loop below (not indented for them): the surface path, then, when
+    // the primary segment's in-scattering continues as a path of its own, that path from bounce 1, its
+    // radiance into the volume layer. One loop, so the ray tracing code is not duplicated.
+    uint firstBounce = 0u;
+    vec3 surfaceLighting = vec3(0.0);
+    for (uint pass = 0u; pass < 2u; ++pass) {
+    if (pass == 1u) {
+        if (!mediumActive() || !gMediumContinue) {
+            break;
+        }
+        surfaceLighting = r.lighting;
+        r.lighting = vec3(0.0);
+        firstBounce = 1u;
+        gBounceOffset = kMediumBounceOffset;
+        origin = gMediumContinueOrigin;
+        direction = gMediumContinueDirection;
+        throughput = gMediumContinueThroughput;
+        coneWidth = 0.0;
+        coneSpread = -1.0;
+        previousDelta = false;
+        previousPdf = gMediumContinuePdf;
+        prevP = origin;
+        prevN = direction;
+        prevTransmissive = true;
+        rough = true; // it starts at a medium vertex
+        lambda = -1.0;
+        caustic = causticPathStart();
+    }
+    for (uint bounce = firstBounce;; ++bounce) {
         traceScene(origin, direction, coneWidth, coneSpread);
+        // [medium] The primary segment goes to the volume layer (the surface path stays unattenuated); every
+        // later segment is delta-tracked and may end in a medium vertex, from which the path goes on.
+        if (mediumActive()) {
+            uint event = mediumStep(bounce, nee, roulette, rough, throughput, r.lighting, origin, direction,
+                                    coneSpread, previousDelta, previousPdf, prevP, prevN, prevTransmissive);
+            if (event == kMediumSegmentEnd) {
+                break;
+            }
+            if (event == kMediumSegmentScattered) {
+                caustic = causticPathStart(); // a medium vertex ends any chain the photon maps hold
+                continue;
+            }
+        }
         if (payload.t < 0.0) {
             vec3 sky = payload.emission;
             if (bounce == 0u) {
@@ -546,6 +608,12 @@ SampleResult tracePath() {
         origin = offsetOrigin(p, ng, wi);
         direction = wi;
     }
+    if (pass == 1u) { // [medium] the continuation's radiance belongs to the volume layer
+        gMediumVolume.rgb += r.lighting;
+        r.lighting = surfaceLighting;
+        gBounceOffset = 0u;
+    }
+    } // [medium] the passes
     return r;
 }
 
@@ -599,13 +667,17 @@ void main() {
     vec3 lighting = vec3(0.0);
     vec3 emission = vec3(0.0);
     vec3 albedo = vec3(0.0);
+    vec4 volume = vec4(0.0); // [medium]
     for (uint i = 0u; i < pc.sampleCount; ++i) {
         gSample = pc.sampleBase + i;
         SampleResult r = tracePath();
-        // One bad sample must not poison the picture or the history (Review Focus 8).
+        // One bad sample must not poison the picture or the history.
         lighting += allFinite(r.lighting) ? r.lighting : vec3(0.0);
         emission += allFinite(r.emission) ? r.emission : vec3(0.0);
         albedo += allFinite(r.albedo) ? r.albedo : vec3(1.0);
+        if (mediumActive()) {
+            volume += mediumSafeVolume(gMediumVolume);
+        }
     }
 
     // The running mean over the frame's samples so far.
@@ -620,11 +692,19 @@ void main() {
     // The emission image is half precision: its largest finite value bounds an emitter's radiance.
     imageStore(emissionImage, pixel, vec4(min(emission / after, vec3(65504.0)), 1.0));
     imageStore(albedoImage, pixel, vec4(albedo / after, 1.0));
+    // [medium] The volume layer (L_v, T): a running mean over the frame's samples, like the lighting.
+    if (mediumActive()) {
+        if (pc.sampleBase > 0u) {
+            volume += imageLoad(volumeImage, pixel) * before;
+        }
+        imageStore(volumeImage, pixel, min(volume / after, vec4(65504.0)));
+    }
 
     if (pc.guides != 0u) {
-        // The volume layer: no medium in the frame (Task 11 integrates the primary segment's in-scattered
-        // radiance and transmittance here while mediumActive()).
-        imageStore(volumeImage, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+        // The volume layer without a medium in the frame: (0, 0, 0, 1).
+        if (!mediumActive()) {
+            imageStore(volumeImage, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+        }
         writeGuides(pixel);
     }
 }

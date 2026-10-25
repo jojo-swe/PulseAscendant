@@ -270,7 +270,7 @@ inline TestScene retroScreenScene() {
     return s;
 }
 
-// (e) Review Focus 8: a camera grazing a huge checker floor, mirror and all-delta coated spheres, IOR 1.0001
+// (e) a camera grazing a huge checker floor, mirror and all-delta coated spheres, IOR 1.0001
 // glass (smooth and rough), a light shut inside a box, an emitter of emission 1e4, a light with select weight
 // 0, a portal, a retro screen and a mesh with a zero-area triangle and zero vertex normals.
 inline TestScene stressScene() {

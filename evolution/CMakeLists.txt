@@ -183,6 +183,9 @@ add_library(evo_modern STATIC
 target_include_directories(evo_modern PUBLIC src)
 target_link_libraries(evo_modern PUBLIC evo_rt)
 target_link_libraries(evo_modern PUBLIC evo_show) # the scene interface reads show::TimelineFrame
+# The Glass scene places the 1993 glenz star and city lots (src/retro, built into evo_render, which links
+# evo_modern in turn: a cycle of static libraries, which CMake repeats on the link line).
+target_link_libraries(evo_modern PUBLIC evo_render)
 
 # The path tracer's shaders (rt_<name>.<stage>.spv beside the executable), and the 2026 scenes' compute
 # shaders: every shaders/modern/<scene>_<what>.comp loads as modern_<scene>_<what>.comp.spv (a scene task adds
@@ -335,7 +338,7 @@ set_tests_properties(descriptors PROPERTIES ENVIRONMENT "MALLOC_PERTURB_=165"
                                             SKIP_REGULAR_EXPRESSION "SKIP sync validation")
 
 # The geometry store, compacted BLASes and the per-frame TLAS against a CPU intersection through a ray-query
-# probe (test-only shader), including 64 frames with two in flight and a moving instance (Review Focus 3),
+# probe (test-only shader), including 64 frames with two in flight and a moving instance,
 # with the validation layer and its synchronization validation on; fails on any message.
 add_executable(accel_test tests/accel_test.cpp)
 target_link_libraries(accel_test PRIVATE evo_rt)
@@ -352,7 +355,7 @@ add_dependencies(accel_test accel_test_shaders)
 target_compile_definitions(accel_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_test(NAME accel COMMAND accel_test)
 
-# The shader binding table layout for lavapipe's and RTX's properties (Review Focus 4), and the ray tracing
+# The shader binding table layout for lavapipe's and RTX's properties, and the ray tracing
 # pipeline tracing a probe (test-only shaders: one raygen, two misses and four closest-hits built from one
 # source each with -DMISS_INDEX / -DHIT_GROUP) whose pixels must each name the hit group or miss they reached,
 # with the validation layer on; fails on any message.
@@ -580,9 +583,9 @@ add_executable(mesh_builder_test tests/mesh_builder_test.cpp)
 target_link_libraries(mesh_builder_test PRIVATE evo_modern)
 add_test(NAME mesh_builder COMMAND mesh_builder_test)
 
-# Materials and the shared GPU structs: every field of every struct read back through a test shader (Review
-# Focus 10), and the BSDFs of shaders/rt/bsdf.glsl sampled and evaluated by another (white furnace, pdf
-# consistency, reciprocity, finite outputs; Review Focus 8). Compute only, with the validation layer on;
+# Materials and the shared GPU structs: every field of every struct read back through a test shader,
+# and the BSDFs of shaders/rt/bsdf.glsl sampled and evaluated by another (white furnace, pdf
+# consistency, reciprocity, finite outputs). Compute only, with the validation layer on;
 # fails on any message it reports.
 set(materialTestShaders "")
 foreach(fixture struct_layout bsdf_probe bsdf_quadrature)
@@ -606,15 +609,15 @@ add_dependencies(material_test material_test_shaders)
 add_test(NAME material COMMAND material_test)
 
 # The denoiser on synthetic G-buffers uploaded from the CPU: accumulation, history rejection and reset, motion
-# reprojection, a-trous edges and noise, emission passthrough (Review Focus 5), non-finite input (Review Focus
-# 8), determinism; with the validation layer and its synchronization validation on; fails on any message.
+# reprojection, a-trous edges and noise, emission passthrough, non-finite input,
+# determinism; with the validation layer and its synchronization validation on; fails on any message.
 add_executable(denoiser_test tests/denoiser_test.cpp)
 target_link_libraries(denoiser_test PRIVATE evo_post)
 target_compile_definitions(denoiser_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_test(NAME denoiser COMMAND denoiser_test)
 set_tests_properties(denoiser PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
 
-# The PBR Neutral tonemap against its CPU reference (Review Focus 6), golden anchors, black and white kept, the
+# The PBR Neutral tonemap against its CPU reference, golden anchors, black and white kept, the
 # hue kept, monotonic ramps, exposure, a static dither; the scene registry; the 2026 placeholder through the HDR
 # path against the old direct fill.
 # With the validation layer on; fails on any message.
@@ -667,7 +670,7 @@ add_test(NAME capture
 set_tests_properties(capture PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # Seeking and export agree: in every chapter, a frame streamed after five others equals a fresh capture of the
-# same time, byte for byte (Review Focus 4 of step 3; Review Focus 2 of step 4 in the path-traced Studio
+# same time, byte for byte (also in the path-traced Studio
 # chapters). Two parts, so CTest runs the path-traced chapters beside the others.
 add_test(NAME stream_capture
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/stream_capture_test.py $<TARGET_FILE:Evolution>
@@ -694,7 +697,7 @@ add_test(NAME exit_codes
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/exit_code_test.py $<TARGET_FILE:Evolution>)
 set_tests_properties(exit_codes PROPERTIES TIMEOUT 120)
 
-# The windowed loop and the renderer, text and retro code never stall the GPU per frame (Review Focus 5).
+# The windowed loop and the renderer, text and retro code never stall the GPU per frame.
 add_test(NAME no_wait_idle
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/no_wait_idle_test.py ${CMAKE_SOURCE_DIR})
 
@@ -719,7 +722,7 @@ if(EVO_RUNTIME_TESTS)
     set_tests_properties(windowed_unsupported PROPERTIES TIMEOUT 120)
 
     # With no usable audio driver the windowed run falls back to the monotonic clock, says SILENT MODE on
-    # stderr and still exits 0 (Review Focus 3); on SDL's dummy driver it plays and says AUDIO.
+    # stderr and still exits 0; on SDL's dummy driver it plays and says AUDIO.
     add_test(NAME silent_mode
         COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/silent_mode_test.py $<TARGET_FILE:Evolution>
                 ${CMAKE_BINARY_DIR}/build-out/silent_mode)
@@ -755,7 +758,7 @@ add_test(NAME image COMMAND image_test)
 set_tests_properties(image PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
 
 # Export mode (Task 11 of step 4) at 160x90 in STUDIO NIGHT: the seeds the renderer hands the modern stage,
-# the window's first frame after a reset equal to an export frame at equal spp and bounces (Review Focus 6),
+# the window's first frame after a reset equal to an export frame at equal spp and bounces,
 # and export frames a pure function of the show time. With the validation layer on; fails on any message.
 add_executable(export_mode_test tests/export_mode_test.cpp)
 target_link_libraries(export_mode_test PRIVATE evo_render evo_modern)
@@ -765,8 +768,8 @@ add_test(NAME export_mode COMMAND export_mode_test)
 set_tests_properties(export_mode PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # The Studio (Task 10 of step 4) at 320x180 in Export, 4 spp, with the validation layer on: STUDIO NIGHT lit
-# but not blown out, the CRT lighting the room, the screen following the retro picture on the next window frame
-# (Review Focus 5), the cameras and their cuts, the scene's instances and lights, the scene registry and the
+# but not blown out, the CRT lighting the room, the screen following the retro picture on the next window frame,
+# the cameras and their cuts, the scene's instances and lights, the scene registry and the
 # DOS idle screen. Writes its captures to build-out/step4. `studio_test --look <dir> [spp] [w h] [name]`
 # renders stills of every shot to look at.
 add_executable(studio_test tests/studio_test.cpp)
@@ -778,7 +781,7 @@ add_dependencies(studio_test Evolution_shaders evo_modern_shaders)
 add_test(NAME studio COMMAND studio_test)
 set_tests_properties(studio PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
-# Seeking with temporal accumulation on (Task 12 of step 4, Review Focus 1) at 160x90, 1 spp, Interactive:
+# Seeking with temporal accumulation on (Task 12 of step 4) at 160x90, 1 spp, Interactive:
 # after any reset (a seek forwards or backwards, a chapter change, a camera cut, time running backwards) the
 # window's frames equal a fresh renderer's from the same point byte for byte, in the Studio chapters, a
 # 1993 chapter and across BeatSwap. With the validation layer on; fails on any message.
@@ -922,7 +925,7 @@ add_test(NAME bench
 set_tests_properties(bench PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # The seek determinism suite again at the window's default trace scale 0.67: jittered samples and the temporal
-# upscaler's history must reset with everything else (Review Focus 1).
+# upscaler's history must reset with everything else.
 add_test(NAME seek_determinism_scaled COMMAND seek_determinism_test 0.67)
 set_tests_properties(seek_determinism_scaled PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
@@ -1092,6 +1095,54 @@ target_compile_definitions(light_tree_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TES
 add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders evo_modern_sphere_shaders
                  evo_modern_intersection_shaders)
 evo_gpu_test(light_tree light_tree_test)
+
+# Step 5, Task 17: the Particles scene (DOTS, PARTICLE OCEAN; its particle shader
+# shaders/modern/particles_particles.comp is globbed above) and its test (`scene_particles_test --look <dir>
+# [spp] [detail]` renders 480x270 stills of both chapters; `--memory [detail]` prints the measured bytes).
+target_sources(evo_modern PRIVATE src/modern/scenes/particles.cpp)
+evo_scene_test(particles)
+
+# --- Step 5 Task 22: Spheres (RAYTRACE, SPHERE STORM, RAYTRACE INFINITY) ---------------------------------------
+
+# The scene (src/modern/scenes/spheres.cpp) and its particle shader (shaders/modern/particles_spheres.comp,
+# compiled by the shaders/modern glob as modern_particles_spheres.comp.spv).
+target_sources(evo_modern PRIVATE src/modern/scenes/spheres.cpp)
+
+# The standard scene contract (chapter pictures, the CPU sweep, the cards) plus the 1993 mirror, the storm's
+# particle mirror against the GPU, and the chrome sphere reflecting both checker colours. `spheres_scene_test
+# --look <dir> [spp] [width height]` renders stills of the three chapters instead.
+add_executable(spheres_scene_test tests/spheres_scene_test.cpp)
+target_link_libraries(spheres_scene_test PRIVATE evo_scene_fixture)
+evo_gpu_test(scene_spheres spheres_scene_test)
+
+# --- Step 5 Task 11: participating media ---------------------------------------------------------------------
+
+# Height fog and baked density grids: the CPU side (packing, the HG and fog references) and the grid's GPU
+# side (MediumVolume: the bake into a 3D image and the majorant pass, shaders/modern/medium_majorant.comp).
+target_sources(evo_modern PRIVATE src/modern/medium.cpp src/modern/medium_volume.cpp)
+
+# The media on lavapipe with synchronization validation: Beer-Lambert, delta and ratio tracking, a constant
+# grid against fog, emission, a furnace, NEE through a slab, exponential fog, the bake and its majorant,
+# extremes, no medium, single scattering against a numeric integral, light shafts, the modern stage (seek and
+# memory) and refusals, through a test-only bake shader. `medium_test --look <dir> [spp]` renders stills.
+set(mediumBakeSpirv "${EVO_TEST_SPIRV_DIR}/test_medium_constant.comp.spv")
+add_custom_command(
+    OUTPUT "${mediumBakeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_medium_constant.comp.d" -o "${mediumBakeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/medium_constant.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/medium_constant.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_medium_constant.comp.d"
+    COMMENT "Compiling test shader test_medium_constant.comp"
+    VERBATIM)
+add_custom_target(medium_test_shaders DEPENDS "${mediumBakeSpirv}")
+add_executable(medium_test tests/medium_test.cpp)
+target_link_libraries(medium_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(medium_test PRIVATE tests)
+target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(medium_test medium_test_shaders)
+evo_gpu_test(medium medium_test)
 
 # --- Step 5 Task 20: Glass (GLENZ, GLASS CATHEDRAL, CRYSTAL CITY) -------------------------------------------
 

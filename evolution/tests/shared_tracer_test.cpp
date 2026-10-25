@@ -63,7 +63,7 @@ constexpr std::uint32_t kWidth = 160, kHeight = 90;
 constexpr int kFlyby = 1, kStudioNight = 11;
 
 // Waits for the queue: synchronization validation in layer 1.3.275 credits no host wait on the timeline, so
-// memory reused between subtests would read as a hazard (Decision 13 of step 4).
+// memory reused between subtests would read as a hazard.
 void idle(gfx::Context& ctx) {
     vkQueueWaitIdle(ctx.queue());
 }

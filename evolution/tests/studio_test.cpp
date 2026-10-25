@@ -7,9 +7,9 @@
 //   (b) the CRT is STUDIO NIGHT's key light (Task 14 (a)): a white retro picture against a black one
 //   brightens
 //       the screen, and the desk in front of it by at least 40 % (step 4: 10 % in RETURN), and changes a wall
-//       patch the screen cannot see by under 0.002 in linear display light (the Task 5 review: step 4's bound
+//       patch the screen cannot see by under 0.002 in linear display light (step 4's bound
 //       of 0.02 was written for encoded values);
-//   (c) Review Focus 5 in the window: a red picture on frame N, a green one on frame N + 1 -> the screen on
+//   (c) in the window: a red picture on frame N, a green one on frame N + 1 -> the screen on
 //       frame N + 1 is green (its emission bypasses the temporal history and the filter);
 //   (d) studioCamera: finite, smooth within a shot, cutting exactly at the authored times;
 //   (e) the scene: 101 key caps on one mesh, every transform finite, within the TLAS's capacity, the lights;
@@ -556,8 +556,10 @@ void testRegistry(gfx::Context& ctx) {
         const bool studio = effect == Effect::Finale || effect == Effect::Portal ||
                             effect == Effect::StudioNight || effect == Effect::Return ||
                             effect == Effect::Reboot;
-        CHECK(modern::sceneFor(effect) == (studio ? modern::SceneId::Studio : modern::SceneId::Placeholder));
-        CHECK((modern::makeScene(modern::sceneFor(effect)) != nullptr) == studio);
+        CHECK((modern::sceneFor(effect) == modern::SceneId::Studio) == studio);
+        // Every effect shows the placeholder (no scene object) or a scene that has one.
+        CHECK((modern::makeScene(modern::sceneFor(effect), {1.f / 256}) != nullptr) ==
+              (modern::sceneFor(effect) != modern::SceneId::Placeholder));
     }
     // STUDIO NIGHT is 2026 only, yet the renderer runs the retro stage for the CRT.
     gfx::FrameRing ring(ctx);

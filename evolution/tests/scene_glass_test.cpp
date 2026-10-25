@@ -305,7 +305,7 @@ Plane finishRead(const Pending& p) {
 }
 
 struct Traced {
-    Plane lighting, emission;
+    Plane lighting, emission, volume;
 };
 
 // An export renderer kept across frames (one pipeline to build for many pictures): each render() gives the
@@ -313,8 +313,9 @@ struct Traced {
 class Rig {
 public:
     Rig(gfx::Context& ctx, std::uint32_t w, std::uint32_t h, std::uint32_t spp, modern::SceneDetail detail,
-        modern::SceneFactory factory)
-        : ctx_(ctx), ring_(ctx), renderer_(ctx, ring_, settings(w, h, spp, detail, std::move(factory))) {}
+        modern::SceneFactory factory, modern::SceneMap map = {})
+        : ctx_(ctx), ring_(ctx),
+          renderer_(ctx, ring_, settings(w, h, spp, detail, std::move(factory), std::move(map))) {}
     ~Rig() { idle(ctx_); }
 
     Traced render(const show::TimelineFrame& frame) {
@@ -323,20 +324,23 @@ public:
         modern::GBuffer& g = renderer_.modern().tracer()->gbuffer();
         const Pending lighting = recordRead(ctx_, cmd, g.lighting);
         const Pending emission = recordRead(ctx_, cmd, g.emission);
+        const Pending volume = recordRead(ctx_, cmd, g.volume);
         ring_.wait(ring_.submit());
         idle(ctx_);
-        return {finishRead(lighting), finishRead(emission)};
+        return {finishRead(lighting), finishRead(emission), finishRead(volume)};
     }
 
 private:
     static render::RenderSettings settings(std::uint32_t w, std::uint32_t h, std::uint32_t spp,
-                                           modern::SceneDetail detail, modern::SceneFactory factory) {
+                                           modern::SceneDetail detail, modern::SceneFactory factory,
+                                           modern::SceneMap map) {
         render::RenderSettings s{w, h};
         s.hud = false;
         s.mode = render::RenderMode::Export;
         s.spp = spp;
         s.detail = detail;
         s.sceneFactory = std::move(factory);
+        s.sceneMap = std::move(map);
         return s;
     }
 
@@ -362,6 +366,8 @@ Pixel project(const modern::Camera& c, Vec3 p, std::uint32_t w, std::uint32_t h)
     const float x = (nx + 1.f) * 0.5f * float(w), y = (1.f - ny) * 0.5f * float(h);
     return {x, y, x >= 0 && y >= 0 && x < float(w) && y < float(h)};
 }
+
+constexpr std::uint32_t kW = 320, kH = 180;
 
 // --- The lab: Beer-Lambert and thin panes against closed forms ---------------------------------------------
 
@@ -469,20 +475,14 @@ bool near(float a, float b, float tolerance) {
     return std::abs(a - b) <= tolerance * std::max(std::abs(b), 1e-6f);
 }
 
-void testLab(gfx::Context& ctx) {
-    LabConfig current;
-    Rig rig(ctx, 64, 64, 8, {1.f}, [&current](SceneId id, modern::SceneDetail) -> std::unique_ptr<modern::ModernScene> {
-        return id == SceneId::Glass ? std::make_unique<Lab>(&current) : nullptr;
-    });
-    const show::TimelineFrame at = atLocal(show::Effect::Glenz, 2.0);
-    auto renderLab = [&](gfx::Context&, LabConfig config) {
-        current = config;
-        return rig.render(at);
-    };
+struct Bench;
+Traced renderLab(Bench& bench, LabConfig config);
+
+void testLab(Bench& bench) {
     // The view through glass: a 1 m cube against clear glass, and a tinted pane against a clear pane.
     const Vec3 sigma{1.f, 0.5f, 0.f};
-    const Vec3 clear = renderLab(ctx, {false, false, {0, 0, 0}, {1, 1, 1}}).lighting.mean(32, 32, 6);
-    const Vec3 absorbed = renderLab(ctx, {false, false, sigma, {1, 1, 1}}).lighting.mean(32, 32, 6);
+    const Vec3 clear = renderLab(bench, {false, false, {0, 0, 0}, {1, 1, 1}}).lighting.mean(int(kW / 2), int(kH / 2), 6);
+    const Vec3 absorbed = renderLab(bench, {false, false, sigma, {1, 1, 1}}).lighting.mean(int(kW / 2), int(kH / 2), 6);
     std::printf("lab, view: through 1 m of glass %.4f %.4f %.4f (clear %.4f %.4f %.4f)\n", absorbed.x, absorbed.y,
                 absorbed.z, clear.x, clear.y, clear.z);
     CHECK(clear.x > 0.8f && clear.x < 0.98f); // (1 - R)^2 at normal incidence, R = 0.04: 0.92
@@ -490,8 +490,8 @@ void testLab(gfx::Context& ctx) {
     CHECK(near(absorbed.y / clear.y, std::exp(-0.5f), 0.02f));
     CHECK(near(absorbed.z / clear.z, 1.f, 0.01f));
     const Vec3 tint{0.2f, 0.6f, 1.f};
-    const Vec3 pane = renderLab(ctx, {false, true, {0, 0, 0}, {1, 1, 1}}).lighting.mean(32, 32, 6);
-    const Vec3 stained = renderLab(ctx, {false, true, {0, 0, 0}, tint}).lighting.mean(32, 32, 6);
+    const Vec3 pane = renderLab(bench, {false, true, {0, 0, 0}, {1, 1, 1}}).lighting.mean(int(kW / 2), int(kH / 2), 6);
+    const Vec3 stained = renderLab(bench, {false, true, {0, 0, 0}, tint}).lighting.mean(int(kW / 2), int(kH / 2), 6);
     // A pane passes (1 - R) / (1 + R) of its light (both faces and the bounces between them): 0.923 at IOR 1.5.
     std::printf("lab, view: a clear pane %.4f, a tinted one %.4f %.4f %.4f\n", pane.x, stained.x, stained.y,
                 stained.z);
@@ -502,11 +502,11 @@ void testLab(gfx::Context& ctx) {
     // The photons: the slab's caustic under it, absorbed over the slab's 0.5 m; the pane's, tinted.
     const LabConfig causticView{true};
     const modern::Camera cam = Lab(&causticView).camera(atLocal(show::Effect::Glenz, 2.0));
-    const Pixel under = project(cam, {0, 0, 0}, 64, 64);
+    const Pixel under = project(cam, {0, 0, 0}, kW, kH);
     CHECK(under.visible);
     const int ux = int(under.x), uy = int(under.y);
-    const Vec3 slab = renderLab(ctx, {true, false, {0, 0, 0}, {1, 1, 1}}).emission.mean(ux, uy, 2);
-    const Vec3 slabAbsorbed = renderLab(ctx, {true, false, sigma, {1, 1, 1}}).emission.mean(ux, uy, 2);
+    const Vec3 slab = renderLab(bench, {true, false, {0, 0, 0}, {1, 1, 1}}).emission.mean(ux, uy, 2);
+    const Vec3 slabAbsorbed = renderLab(bench, {true, false, sigma, {1, 1, 1}}).emission.mean(ux, uy, 2);
     std::printf("lab, photons: under the slab %.4f %.4f %.4f, absorbing %.4f %.4f %.4f\n", slab.x, slab.y, slab.z,
                 slabAbsorbed.x, slabAbsorbed.y, slabAbsorbed.z);
     CHECK(slab.x > 0.f);
@@ -516,9 +516,9 @@ void testLab(gfx::Context& ctx) {
     // A pane is a filter, not a caustic: its light reaches the floor through next-event estimation (shadow
     // rays pass panes, tinted), and no photon lands for it. Under the pane, the lamp's light is its
     // transmission (1 - R) / (1 + R) of the light without it, times its tint.
-    const Traced open = renderLab(ctx, {true, true, {0, 0, 0}, {1, 1, 1}, false});
-    const Traced clearPane = renderLab(ctx, {true, true, {0, 0, 0}, {1, 1, 1}});
-    const Traced tinted = renderLab(ctx, {true, true, {0, 0, 0}, tint});
+    const Traced open = renderLab(bench, {true, true, {0, 0, 0}, {1, 1, 1}, false});
+    const Traced clearPane = renderLab(bench, {true, true, {0, 0, 0}, {1, 1, 1}});
+    const Traced tinted = renderLab(bench, {true, true, {0, 0, 0}, tint});
     const Vec3 lit = open.lighting.mean(ux, uy, 1), paneLit = clearPane.lighting.mean(ux, uy, 1),
                tintLit = tinted.lighting.mean(ux, uy, 1);
     std::printf("lab, panes: the floor under no pane %.4f, a clear pane %.4f, a tinted one %.4f %.4f %.4f; "
@@ -533,7 +533,6 @@ void testLab(gfx::Context& ctx) {
 
 // --- GLENZ's rainbows and the cathedral's pools (GPU) --------------------------------------------------------
 
-constexpr std::uint32_t kW = 320, kH = 180;
 
 struct Colours {
     int red = 0, blue = 0, pairs = 0, lit = 0;
@@ -578,7 +577,8 @@ Colours colours(const Plane& e, float threshold, float ratio, int reach,
 // whole material table).
 class Switch final : public modern::ModernScene {
 public:
-    Switch(modern::SceneDetail d, const int* which, const bool* overhead) : which_(which), overhead_(overhead) {
+    Switch(modern::SceneDetail d, const int* which, const bool* overhead, const modern::Camera* const* view)
+        : which_(which), overhead_(overhead), view_(view) {
         for (const float abbe : {modern::kFlintAbbe, 0.f}) {
             modern::GlassOptions o;
             o.abbe = abbe;
@@ -591,6 +591,8 @@ public:
     // With `overhead` set, the camera looks straight down on the cathedral's nave from under its lamps.
     modern::Camera camera(const show::TimelineFrame& f) const override {
         modern::Camera c = variants_[0]->camera(f);
+        if (*view_ != nullptr)
+            return **view_;
         if (*overhead_) {
             c.eye = {0.f, 9.f, 30.f};
             c.target = {0.f, 0.f, 30.f};
@@ -609,16 +611,44 @@ public:
 private:
     const int* which_;
     const bool* overhead_;
+    const modern::Camera* const* view_; // a camera of the test's, when set
     std::vector<std::unique_ptr<modern::Glass>> variants_;
 };
 
-void testRainbowsAndPools(gfx::Context& ctx) {
+// One renderer for every check here (one ray tracing pipeline to build): the Glass scene through Switch, and
+// the lab in the Ship's slot, shown in place of GLENZ while `lab` is set.
+struct Bench {
+    explicit Bench(gfx::Context& ctx)
+        : rig(ctx, kW, kH, 2, {1.f / 8},
+              [this](SceneId id, modern::SceneDetail d) -> std::unique_ptr<modern::ModernScene> {
+                  if (id == SceneId::Glass)
+                      return std::make_unique<Switch>(d, &which, &overhead, &view);
+                  if (id == SceneId::Ship)
+                      return std::make_unique<Lab>(&labConfig);
+                  return nullptr;
+              },
+              [this](show::Effect e) { return lab ? SceneId::Ship : modern::sceneFor(e); }) {}
     int which = 0;
     bool overhead = false;
-    Rig rig(ctx, kW, kH, 2, {1.f / 8},
-            [&which, &overhead](SceneId id, modern::SceneDetail d) -> std::unique_ptr<modern::ModernScene> {
-                return id == SceneId::Glass ? std::make_unique<Switch>(d, &which, &overhead) : nullptr;
-            });
+    const modern::Camera* view = nullptr;
+    bool lab = false;
+    LabConfig labConfig;
+    Rig rig; // last: it holds pointers to the fields above
+};
+
+Traced renderLab(Bench& bench, LabConfig config) {
+    bench.lab = true;
+    bench.labConfig = config;
+    Traced t = bench.rig.render(atLocal(show::Effect::Glenz, 2.0));
+    bench.lab = false;
+    return t;
+}
+
+void testRainbowsAndPools(Bench& bench) {
+    int& which = bench.which;
+    bool& overhead = bench.overhead;
+    const modern::Camera*& view = bench.view;
+    Rig& rig = bench.rig;
 
     // GLENZ just after its accent, on a beat where the key is cool (the warm one is itself red against blue).
     const show::TimelineFrame head = atLocal(show::Effect::Glenz, 0.0);
@@ -677,6 +707,37 @@ void testRainbowsAndPools(gfx::Context& ctx) {
                 before, after, c.lit, c.red, c.blue, c.pairs);
     CHECK(after > 3.0 * before);
     CHECK(c.lit > 100 && c.red > 0 && c.blue > 0);
+
+    // The shafts: in the open middle of the nave, the haze where the hero window's sunbeam (open since the
+    // accent's downbeat) crosses the centre line, against the haze where the shut window beside it would
+    // cross it; seen from between the western pillar rows, so that no pillar ends the camera's rays first.
+    overhead = false;
+    const Vec3 sun = modern::normalize({0.80f, 0.47f, -0.37f});
+    const float bay = 3.4f, firstPillar = 5.f, wall = 10.5f + 0.32f, middle = 6.3f;
+    auto crossing = [&](float windowZ) { // where the beam from the window's middle reaches x = 0
+        const Vec3 w{wall, middle, windowZ};
+        const float t = w.x / sun.x;
+        return w - sun * t + Vec3{0.f, 1.2f, 0.f};
+    };
+    const Vec3 onShaft = crossing(firstPillar + bay * 4.5f), offShaft = crossing(firstPillar + bay * 3.5f);
+    modern::Camera across;
+    across.eye = {-2.5f, onShaft.y, 0.5f * (onShaft.z + offShaft.z)};
+    across.target = {0.f, onShaft.y, across.eye.z};
+    across.up = {0, 1, 0};
+    across.fovYDegrees = 70.f;
+    view = &across;
+    const Traced shafts = rig.render(atLocal(show::Effect::Cathedral, c0.accentSeconds + 1.0));
+    view = nullptr;
+    const Pixel inBeam = project(across, onShaft, kW, kH), beside = project(across, offShaft, kW, kH);
+    CHECK(inBeam.visible && beside.visible);
+    auto volumeLuminance = [&](Pixel p) {
+        const Vec3 v = shafts.volume.mean(int(p.x), int(p.y), 2);
+        return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
+    };
+    const float lit = volumeLuminance(inBeam), dark = volumeLuminance(beside);
+    std::printf("cathedral shafts: volume luminance %.4f in the sunbeam, %.4f beside it (%.1fx)\n", lit, dark,
+                lit / std::max(dark, 1e-9f));
+    CHECK(lit >= 1.5f * dark && lit > 0.f);
 }
 
 // --- A look at the caustic maps (not a check) -------------------------------------------------------------
@@ -763,10 +824,13 @@ int main(int argc, char** argv) {
             std::printf("warning: validation layer unavailable; only the pixels are checked\n");
         else if (!ctx.syncValidationEnabled())
             std::printf("SKIP sync validation: unavailable\n");
-        if (run("lab"))
-            testLab(ctx);
-        if (run("rainbows"))
-            testRainbowsAndPools(ctx);
+        if (run("lab") || run("rainbows")) {
+            Bench bench(ctx);
+            if (run("lab"))
+                testLab(bench);
+            if (run("rainbows"))
+                testRainbowsAndPools(bench);
+        }
         if (run("pictures")) {
             evo::test::checkChapterPictures(ctx, SceneId::Glass);
             idle(ctx);
