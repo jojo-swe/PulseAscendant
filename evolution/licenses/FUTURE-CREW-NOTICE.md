@@ -5,7 +5,8 @@ EVOLUTION's GLENZ chapter (`src/retro/glenz.hpp/.cpp`) uses one piece of Future 
 `GLENZ/MAIN.C` — its `points[]` (100 · ZZZ with ZZZ = 1, divided by 100 here) and its `epolys[]`
 triangle indices, in the original order. Source: https://github.com/mtuomi/SecondReality, commit
 071a82eddb7a7390dbaa491a8a473e0e923a55c2, released under the Unlicense below. It reached EVOLUTION
-through the parent project's `src/scene_math.cpp`.
+through the parent project's `src/scene_math.cpp`. The 2026 side of GLENZ and GLASS CATHEDRAL (`src/modern/scenes/glass.cpp`) builds
+its glass stars from the same mesh.
 
 Nothing else is taken from Second Reality: the code, palette, copper bars, motion and music are
 EVOLUTION's own, and the effect ideas are only credited. This is not an official Future Crew release.

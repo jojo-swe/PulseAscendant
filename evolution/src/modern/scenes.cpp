@@ -1,5 +1,6 @@
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "modern/scenes/glass.hpp"
 #include "modern/studio.hpp"
 
 #include <array>
@@ -25,7 +26,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Particles, "Particles", nullptr},     // Task 17
     {SceneId::Nebula, "Nebula", nullptr},           // Task 18
     {SceneId::Tunnel, "Tunnel", nullptr},           // Task 19
-    {SceneId::Glass, "Glass", nullptr},             // Task 20
+    {SceneId::Glass, "Glass", &make<Glass>},
     {SceneId::Lens, "Lens", nullptr},               // Task 21
     {SceneId::Spheres, "Spheres", nullptr},         // Task 22
     {SceneId::City, "City", nullptr},               // Task 23
@@ -42,7 +43,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Dots, SceneId::Placeholder},     // Particles
     {Effect::Plasma, SceneId::Placeholder},   // Nebula
     {Effect::Tunnel, SceneId::Placeholder},   // Tunnel
-    {Effect::Glenz, SceneId::Placeholder},    // Glass
+    {Effect::Glenz, SceneId::Glass},
     {Effect::Lens, SceneId::Placeholder},     // Lens
     {Effect::Raytrace, SceneId::Placeholder}, // Spheres
     {Effect::City, SceneId::Placeholder},     // City
@@ -52,7 +53,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Ascent, SceneId::Placeholder},      // City
     {Effect::CityNight, SceneId::Placeholder},   // City
     {Effect::Nebula, SceneId::Placeholder},      // Nebula
-    {Effect::Cathedral, SceneId::Placeholder},   // Glass
+    {Effect::Cathedral, SceneId::Glass},
     {Effect::Ocean, SceneId::Placeholder},       // Particles
     {Effect::SphereStorm, SceneId::Placeholder}, // Spheres
     {Effect::Singularity, SceneId::Placeholder}, // Singularity
@@ -61,7 +62,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Galaxy, SceneId::Placeholder},           // Cosmos
     {Effect::PlasmaPlanet, SceneId::Placeholder},     // Nebula
     {Effect::Wormhole, SceneId::Placeholder},         // Tunnel
-    {Effect::CrystalCity, SceneId::Placeholder},      // Glass
+    {Effect::CrystalCity, SceneId::Glass},
     {Effect::LensOfGod, SceneId::Placeholder},        // Lens
     {Effect::RaytraceInfinity, SceneId::Placeholder}, // Spheres
     {Effect::Metropolis, SceneId::Placeholder},       // City

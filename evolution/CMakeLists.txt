@@ -1092,3 +1092,12 @@ target_compile_definitions(light_tree_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TES
 add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders evo_modern_sphere_shaders
                  evo_modern_intersection_shaders)
 evo_gpu_test(light_tree light_tree_test)
+
+# --- Step 5 Task 20: Glass (GLENZ, GLASS CATHEDRAL, CRYSTAL CITY) -------------------------------------------
+
+# The glenz star in flint glass over rainbow caustics, a stained-glass cathedral and a city of quartz towers
+# (src/modern/scenes/glass.cpp), and its scene test: the standard picture and sweep checks, the cards' numbers,
+# the 1993 star's motion, the music, Beer-Lambert and thin panes against closed forms, the glenz's rainbows
+# (and none without dispersion) and the cathedral's pools of coloured sunlight.
+target_sources(evo_modern PRIVATE src/modern/scenes/glass.cpp)
+evo_scene_test(glass)
