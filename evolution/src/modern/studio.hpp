@@ -50,14 +50,15 @@ std::vector<StudioShot> studioShots(const show::TimelineFrame& frame);
 //                 one slow arc to the CRT in profile;
 //   FINALE        35 mm, 1.5 m from the CRT, handheld; closing in over the last bar, into PORTAL;
 //   PORTAL        the palindrome: the dolly into the CRT, through the glass on D into the 1993 starfield,
-//                 a 270 degree turn centred on the accent that sees the room through the back of the glass,
+//                 a turn centred on the accent that sees the room through the back of the glass,
 //                 out through the glass two bars after D, and back into the room to STUDIO NIGHT's first
 //                 frame;
 //   STUDIO NIGHT  the dolly that never stops, on from PORTAL: back to the night wide, round behind the chair
 //                 in the moonbeam to the window by D - 4 bars, tilting up to the sky, through the pane on
 //                 the accent;
 //   RETURN        from outside the window down into the lamp-lit room, then a cut on D to the CRT close-up
-//                 (40 cm, 50 mm), which REBOOT holds and dollies in from D - 4 bars through the glass on D.
+//                 (50 mm, pushing in from 65 to 40 cm by the join), which REBOOT holds and dollies in from
+//                 D - 4 bars through the glass on D.
 // Shots that show the screen focus on its plane with an aperture of at most 4 mm.
 Camera studioCamera(const show::TimelineFrame& frame);
 
@@ -113,10 +114,11 @@ StudioRig studioRig(show::Effect effect);
 // take runs on across a change, eased between them so that nothing pops:
 //   FLYBY         the exposure opens from the picture's own brightness on the glass (D) to the room's by
 //                 A + 0.5 s (and closes down to it over the approach before D, where only crt.comp shows);
-//   PORTAL        behind the glass (D to D + 1 bar) the rig and the exposure ease to STUDIO NIGHT's, which
+//   PORTAL        behind the glass (D to the accent) the rig and the exposure ease to STUDIO NIGHT's, which
 //                 the camera lands in on 194.00: the room brightens beyond the glass as the camera turns to
 //                 it;
-//   RETURN        over its last bar the exposure eases to REBOOT's, across the act's join.
+//   RETURN        0.8 EV more open until its cut on D, coming in from the dawn outside; over its last bar the
+//                 exposure eases to REBOOT's, across the act's join.
 StudioRig studioRigAt(const show::TimelineFrame& frame);
 float studioExposureAt(const show::TimelineFrame& frame);
 

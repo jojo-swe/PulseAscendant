@@ -372,7 +372,7 @@ std::vector<rt::Material> buildMaterials(StudioRig rig) {
     m[kVoid] = plastic({0.f, 0.f, 0.f}, 1.f);
     m[kVoid].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     setColor(m[kVoid].emission, {0.35f, 0.45f, 1.f});
-    m[kVoid].emissionScale = 0.0012f;
+    m[kVoid].emissionScale = 0.0026f;
     m[kVoid].flags = rt::kMaterialCameraOnlyEmission;
     m[kScreenBack] = plastic({0.8f, 0.86f, 0.83f}, 0.f);
     m[kScreenBack].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
@@ -601,19 +601,18 @@ std::vector<PoseKey> flybyKeys() {
 }
 
 // FINALE, PORTAL and the start of STUDIO NIGHT: one take across both joins.
-//   FINALE      35 mm, 1.5 m from the CRT, handheld; it closes in during the last bar, so PORTAL continues
-//   it; PORTAL S0   the dolly into the CRT as the handheld fades: the screen fills the frame by D - 0.5 s and
-//   the
-//               camera crosses the glass on D (shot 1 from D, on a 24 mm lens);
-//   inside      the 1993 flyby's starfield as 2026 stars, in the dark behind the screen. The camera turns
-//               right through 270 degrees, the turn centred on the accent: half way round it faces the back
-//               of the CRT's glass, the room hanging in space beyond it, then drifts back to the glass
-//               sideways and crosses it outward on the bar two bars after D (shot 2, 35 mm);
-//   out         still turning, it pulls back from the screen into the room and lands on STUDIO NIGHT's
-//               opening wide on 194.00, the act's join;
+//   FINALE       35 mm, 1.5 m from the CRT, handheld; it closes in over the last bar, into PORTAL;
+//   PORTAL S0    the dolly into the CRT as the handheld fades: the screen fills the frame by D - 0.5 s and
+//                the camera crosses the glass on D (shot 1 from D, on a 24 mm lens);
+//   inside       the 1993 flyby's starfield as 2026 stars, in the dark behind the screen. The camera turns
+//                right, fastest on the accent: half way round it faces the back of the CRT's glass, the
+//                room hanging in space beyond it, then drifts back to the glass sideways and crosses it
+//                outward on the bar two bars after D (shot 2, 35 mm);
+//   out          still turning, it pulls back from the screen into the room and lands on STUDIO NIGHT's
+//                opening wide on 194.00, the act's join;
 //   STUDIO NIGHT the dolly that never stops: on back to the night wide, round to the left behind the chair
-//               in the moonbeam towards the window (by D - 4 bars), a tilt up to the sky as it nears the
-//               pane, through the pane on the accent, and on out over the town.
+//                in the moonbeam towards the window (by D - 4 bars), a tilt up to the sky as it nears the
+//                pane, through the pane on the accent, and on out over the town.
 std::vector<PoseKey> portalKeys() {
     const Landmarks& l = landmarks();
     const ChapterMarks &finale = l.finale, &portal = l.portal, &night = l.night;
@@ -627,9 +626,9 @@ std::vector<PoseKey> portalKeys() {
         {in - 2 * portal.bar, look(fromScreen(0.03f, 0.02f, 0.62f), c)},
         {in - 0.5, look(fromScreen(0.f, 0.f, 0.21f), c)},
         // The glass on D, already turning a little; the turn's fastest part on the accent.
-        {in, {fromScreen(0.f, 0.f, 0.f), 6.f, 0.f, 0.f}},
-        {in + 0.5, {fromScreen(0.012f, 0.004f, -0.15f), 45.f, 1.f, -2.f}},
-        {portal.accent, {fromScreen(0.05f, 0.01f, -0.29f), 110.f, 2.f, -3.f}},
+        {in, {fromScreen(0.f, 0.f, 0.f), 8.f, 0.f, 0.f}},
+        {in + 0.5, {fromScreen(0.012f, 0.004f, -0.15f), 55.f, 1.f, -2.f}},
+        {portal.accent, {fromScreen(0.05f, 0.01f, -0.29f), 135.f, 2.f, -3.f}},
         // Facing the back of the glass, the room beyond it: the slowest part of the turn.
         {in + portal.bar, {fromScreen(0.075f, 0.012f, -0.37f), 175.f, 1.f, -1.5f}},
         {out - 1.02, {fromScreen(0.06f, 0.006f, -0.3f), 215.f, 0.f, 0.f}},
@@ -658,8 +657,9 @@ std::vector<PoseKey> portalKeys() {
 
 // RETURN and REBOOT: one take from RETURN's D across the act join.
 //   RETURN S0   outside the window at the first grey of dawn, looking in, where ASCENT left;
-//          S1   it descends through the window (the lamp is on, the CRT dark) and glides past the desk's
-//          left; S2   a cut on D to the CRT close-up, 40 cm on the 50 mm lens, handheld, which REBOOT holds;
+//   RETURN S1   it descends through the window (the lamp is on, the CRT dark), past the desk's left;
+//   RETURN S2   a cut on D to the CRT close-up on the 50 mm lens, handheld, pushing in from 65 cm to 40 cm
+//               by the act's join, where REBOOT holds it;
 //   REBOOT S1   the dolly into the screen from D - 4 bars, crossing the glass on D.
 std::vector<PoseKey> returnKeys() {
     const ChapterMarks& m = landmarks().ret;
@@ -678,7 +678,8 @@ std::vector<PoseKey> closeUpKeys() {
     const Vec3 c = screenCentre();
     const double glass = l.reboot.downbeat;
     return {
-        {l.ret.downbeat, look(fromScreen(0.f, 0.f, 0.4f), c), true},
+        {l.ret.downbeat, look(fromScreen(0.f, 0.f, 0.65f), c), true},
+        {l.ret.end, look(fromScreen(0.f, 0.f, 0.4f), c), true},
         {glass - 4 * l.reboot.bar, look(fromScreen(0.f, 0.f, 0.4f), c), true},
         {glass, {fromScreen(0.f, 0.f, 0.f), 0.f, 0.f, 0.f}},
         {glass + 1.5, look(fromScreen(0.f, 0.f, -0.16f), fromScreen(0.f, 0.f, -1.f)), true},
@@ -958,6 +959,8 @@ namespace {
 
 // FLYBY's exposure on its glass: the screen's 2.4 times 2^EV near 1, as crt.comp's picture.
 constexpr float kFlybyGlassEV = -1.25f;
+// RETURN's extra exposure before its cut, while the camera comes in through the window.
+constexpr float kDawnEV = 0.8f;
 
 float smoothBetween(double from, double to, double t) {
     const double s = std::clamp((t - from) / (to - from), 0.0, 1.0);
@@ -971,7 +974,7 @@ StudioRig studioRigAt(const show::TimelineFrame& frame) {
     if (frame.effect == show::Effect::Portal) {
         const ChapterMarks& m = landmarks().portal;
         const StudioRig night = studioRig(show::Effect::StudioNight);
-        const float s = smoothBetween(m.downbeat, m.downbeat + m.bar, frame.showSeconds);
+        const float s = smoothBetween(m.downbeat, m.accent, frame.showSeconds);
         rig = {rig.lamp + (night.lamp - rig.lamp) * s, rig.screen + (night.screen - rig.screen) * s};
     }
     return rig;
@@ -997,9 +1000,13 @@ float studioExposureAt(const show::TimelineFrame& frame) {
     case show::Effect::Portal: {
         // Behind the glass the exposure opens up with the rig to STUDIO NIGHT's, which the camera lands in.
         const float night = studioExposureEV(show::Effect::StudioNight);
-        return own + (night - own) * smoothBetween(l.portal.downbeat, l.portal.downbeat + l.portal.bar, t);
+        return own + (night - own) * smoothBetween(l.portal.downbeat, l.portal.accent, t);
     }
     case show::Effect::Return: {
+        // Before the cut to the close-up the camera comes in from the grey dawn outside: the exposure is
+        // kDawnEV more open, for the dark wall round the window.
+        if (t < l.ret.downbeat)
+            return own + kDawnEV;
         // Over the last bar, to REBOOT's, which the close-up runs on into.
         const float reboot = studioExposureEV(show::Effect::Reboot);
         return own + (reboot - own) * smoothBetween(l.ret.end - l.ret.bar, l.ret.end, t);

@@ -1039,8 +1039,7 @@ void testRig() {
             CHECK(f.materials[modern::Studio::kScreenBackMaterial].emissionScale ==
                   modern::Studio::kScreenBackLevel * rig.screen);
             CHECK(f.exposureEV == modern::studioExposureAt(t));
-            if (t.effect != Effect::Portal && t.effect != Effect::Flyby &&
-                !(t.effect == Effect::Return && fraction > 0.9))
+            if (t.effect != Effect::Portal && t.effect != Effect::Flyby && t.effect != Effect::Return)
                 CHECK(f.exposureEV == modern::studioExposureEV(t.effect) &&
                       rig.screen == modern::studioRig(t.effect).screen);
             for (std::size_t i = 0; i < f.materials.size(); ++i)
