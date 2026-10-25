@@ -185,6 +185,8 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
         environments_[slot] =
             gfx::Buffer(ctx, {sizeof(rt::EnvironmentUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true,
                               "environment uniforms"});
+        media_[slot] = gfx::Buffer(
+            ctx, {sizeof(rt::MediumUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "medium uniforms"});
     }
     FrameBuffers buffers = createFrameBuffers(capacity_);
     instanceRecords_ = std::move(buffers.instanceRecords);
@@ -255,7 +257,8 @@ VkDeviceSize PathTracer::imageBytes() const {
 VkDeviceSize PathTracer::bufferBytes() const {
     VkDeviceSize bytes = tlas_->bytes() + pipeline_.sbtBytes() + dummyBuffer_.bytes() + blackScreen_.bytes() +
                          dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
-    for (const SlotBuffers* buffers : {&uniforms_, &instanceRecords_, &lights_, &materials_, &environments_})
+    for (const SlotBuffers* buffers :
+         {&uniforms_, &instanceRecords_, &lights_, &materials_, &environments_, &media_})
         for (const gfx::Buffer& buffer : *buffers)
             bytes += buffer.bytes();
     return bytes;
@@ -317,6 +320,22 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
             "PathTracer::trace(): the frame places its particle field, but no particle "
             "spheres and BLAS come with it (TraceExtras)");
     const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
+    // The frame's media (Task 11): a grid samples the medium volume's images, which must hold it.
+    const rt::MediumUniforms medium = frame.medium ? packMedium(*frame.medium) : rt::MediumUniforms{};
+    const std::uint32_t mediaFlags = frame.medium ? mediumFlags(*frame.medium) : 0u;
+    if (frame.medium && frame.medium->grid) {
+        if (extras.density == nullptr || extras.majorant == nullptr)
+            throw std::invalid_argument(
+                "PathTracer::trace(): the frame has a grid medium, but no density and "
+                "majorant images come with it (TraceExtras)");
+        const std::array<std::uint32_t, 3>& size = frame.medium->grid->size;
+        const std::array<std::uint32_t, 3> cells = majorantSize(size);
+        const VkExtent2D d = extras.density->extent(), m = extras.majorant->extent();
+        if (size[0] > d.width || size[1] > d.height || size[2] > extras.density->depth() ||
+            cells[0] > m.width || cells[1] > m.height || cells[2] > extras.majorant->depth())
+            throw std::length_error("PathTracer::trace(): the frame's grid medium is larger than its density "
+                                    "and majorant images");
+    }
     const std::vector<rt::Material>& materials =
         frame.materials.empty() ? scene.source().materials : frame.materials;
     std::vector<rt::Instance> instances;
@@ -381,6 +400,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
     // regularisation, no tree lights, medium, caustics or lensing.
     u.environmentSelect = frame.environment.select;
+    u.mediumFlags = mediaFlags;
     u.sliceIndex = 0;
     u.sliceCount = 1;
 
@@ -388,6 +408,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     const std::uint32_t slot = ring_.slot();
     writeBuffer(uniforms_[slot], &u, sizeof u);
     writeBuffer(environments_[slot], &environment, sizeof environment);
+    writeBuffer(media_[slot], &medium, sizeof medium);
     writeBuffer(instanceRecords_[slot], records.data(), records.size() * sizeof(rt::InstanceRecord));
     writeBuffer(lights_[slot], frame.lights.data(), frame.lights.size() * sizeof(rt::RectLight));
     if (!frame.materials.empty())
@@ -442,7 +463,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
                       extras.environment ? *extras.environment : environments_[slot]),
         extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes),
         extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights),
-        extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
+        storageBuffer(EVO_BINDING_MEDIUM, extras.medium ? *extras.medium : media_[slot]),
         sampledImage(EVO_BINDING_DENSITY, density),
         sampledImage(EVO_BINDING_MAJORANT, majorant),
         extraBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS, extras.previousTransforms),
@@ -458,20 +479,21 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     pipeline_.bind(cmd, ring_, writes);
 
     // ceil(spp / kSppPerDispatch) dispatches. lighting, emission and albedo keep a running mean, so each
-    // dispatch reads what the one before wrote; the other guides come from the first dispatch alone. Every
-    // dispatch still gets a barrier on all seven: the raygen writes the guides statically, and
-    // synchronization validation judges a dispatch by the accesses its pipeline could make, not the ones it
-    // makes.
+    // dispatch reads what the one before wrote (the volume layer too, with a medium); the other guides come
+    // from the first dispatch alone. Every dispatch still gets a barrier on all seven: the raygen writes the
+    // guides statically, and synchronization validation judges a dispatch by the accesses its pipeline could
+    // make, not the ones it makes.
     constexpr VkAccessFlags2 kReadWrite =
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
     if (timers_)
         timers_->begin(cmd, "trace");
     for (std::uint32_t d = 0; d < dispatches; ++d) {
-        for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo})
+        // The volume layer keeps a running mean too while the frame has a medium (Task 11).
+        for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo, &gbuffer_.volume})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               kReadWrite);
-        for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion, &gbuffer_.volume})
+        for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         const TracePush push{d * kSppPerDispatch,

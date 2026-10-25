@@ -1,6 +1,7 @@
 #include "render/modern_stage.hpp"
 
 #include "gfx/gpu_timers.hpp"
+#include "modern/medium_volume.hpp"
 #include "modern/path_tracer.hpp"
 #include "modern/scene_gpu.hpp"
 #include "post/denoiser.hpp"
@@ -110,6 +111,14 @@ void ModernStage::prepare(modern::SceneId id) {
     if (hasParticles && !particles_)
         particles =
             std::make_unique<rt::ParticleField>(ctx_, ring_, particleCapacity, statics.particleShader);
+    // The one medium volume (Task 11), made for the first scene with a medium shader, grown for a later one.
+    const bool hasMedium = !statics.mediumShader.empty();
+    std::array<std::uint32_t, 3> mediumCapacity = statics.capacity.mediumGrid;
+    for (std::uint32_t& n : mediumCapacity)
+        n = std::max(n, 1u);
+    std::unique_ptr<modern::MediumVolume> medium;
+    if (hasMedium && !medium_)
+        medium = std::make_unique<modern::MediumVolume>(ctx_, ring_, mediumCapacity, statics.mediumShader);
     if (!tracer_) {
         auto tracer = std::make_unique<modern::PathTracer>(ctx_, ring_, traceWidth_, traceHeight_, capacity);
         tracer->setTimers(timers_);
@@ -131,6 +140,12 @@ void ModernStage::prepare(modern::SceneId id) {
     }
     if (particles)
         particles_ = std::move(particles);
+    if (hasMedium && medium_) {
+        medium_->setShader(statics.mediumShader);
+        medium_->reserve(mediumCapacity); // keeps the old images if it throws
+    }
+    if (medium)
+        medium_ = std::move(medium);
     gpus_[index] = std::move(gpu);
 }
 
@@ -149,7 +164,8 @@ VkDeviceSize ModernStage::imageBytes() const {
 VkDeviceSize ModernStage::gpuBytes() const {
     if (!tracer_)
         return 0;
-    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0);
+    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0) +
+                         (medium_ ? medium_->bytes() : 0);
     for (const auto& gpu : gpus_)
         if (gpu)
             bytes += gpu->bytes();
@@ -281,6 +297,18 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         endScope(cmd);
         extras.particleSpheres = &particles_->records();
         extras.particleBlas = particles_->blasAddress();
+    }
+    if (scene.medium && scene.medium->grid) {
+        // The grid medium's bake at the frame's chapter-local time (a pure function of it: nothing carries
+        // over from another frame), checked with the rest of the frame first.
+        const modern::SceneStatic& statics = object.staticScene();
+        modern::checkSceneFrame(statics, scene);
+        medium_->setShader(statics.mediumShader);
+        beginScope(cmd, "medium");
+        medium_->record(cmd, *scene.medium->grid, frame.localSeconds);
+        endScope(cmd);
+        extras.density = &medium_->density();
+        extras.majorant = &medium_->majorant();
     }
     tracer_->trace(cmd, *gpus_[indexOf(id)], scene, continues ? previousCamera_ : std::nullopt, trace,
                    retroImage, extras);

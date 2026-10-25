@@ -969,3 +969,32 @@ target_compile_definitions(spheres_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_S
 add_dependencies(spheres_test spheres_test_shaders path_tracer_test_shaders evo_modern_sphere_shaders
                  evo_modern_intersection_shaders)
 evo_gpu_test(spheres spheres_test)
+
+# --- Step 5 Task 11: participating media ---------------------------------------------------------------------
+
+# Height fog and baked density grids: the CPU side (packing, the HG and fog references) and the grid's GPU
+# side (MediumVolume: the bake into a 3D image and the majorant pass, shaders/modern/medium_majorant.comp).
+target_sources(evo_modern PRIVATE src/modern/medium.cpp src/modern/medium_volume.cpp)
+
+# The media on lavapipe with synchronization validation: Beer-Lambert, delta and ratio tracking, a constant
+# grid against fog, emission, a furnace, NEE through a slab, exponential fog, the bake and its majorant,
+# extremes, no medium, single scattering against a numeric integral, light shafts, the modern stage (seek and
+# memory) and refusals, through a test-only bake shader. `medium_test --look <dir> [spp]` renders stills.
+set(mediumBakeSpirv "${EVO_TEST_SPIRV_DIR}/test_medium_constant.comp.spv")
+add_custom_command(
+    OUTPUT "${mediumBakeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_medium_constant.comp.d" -o "${mediumBakeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/medium_constant.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/medium_constant.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_medium_constant.comp.d"
+    COMMENT "Compiling test shader test_medium_constant.comp"
+    VERBATIM)
+add_custom_target(medium_test_shaders DEPENDS "${mediumBakeSpirv}")
+add_executable(medium_test tests/medium_test.cpp)
+target_link_libraries(medium_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(medium_test PRIVATE tests)
+target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(medium_test medium_test_shaders)
+evo_gpu_test(medium medium_test)

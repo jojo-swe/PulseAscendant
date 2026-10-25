@@ -10,9 +10,9 @@
 // Material is 96 bytes (flags, abbe, medium, receiver), RectLight's last word is the portal `gate`,
 // InstanceRecord's the sphere `flags`, FrameUniforms is 208 bytes (with the frame's `seconds`), and the
 // feature structs below (EnvironmentUniforms, MediumUniforms, SphereRecord, TreeLight, LightTreeNode,
-// LensingUniforms, CausticReceiver) have their sizes fixed; only Task 11 may grow MediumUniforms, to 256
-// bytes. The closest-hit -> raygen payload (HitPayload, shaders/rt/common.glsl) is frozen the same way. A
-// task that changes a struct updates material_test's layout probe in the same commit.
+// LensingUniforms, CausticReceiver) have their sizes fixed (Task 11 named MediumUniforms' fields within its
+// 128 bytes). The closest-hit -> raygen payload (HitPayload, shaders/rt/common.glsl) is frozen the same way.
+// A task that changes a struct updates material_test's layout probe in the same commit.
 
 #include <cstddef>
 #include <cstdint>
@@ -179,10 +179,25 @@ struct EnvironmentUniforms { // 112 bytes, scalar
     float glowStrength;
 };
 
-// The frame's participating media (binding EVO_BINDING_MEDIUM; Task 11 names the fields within the 128
-// bytes).
+// The frame's participating media (binding EVO_BINDING_MEDIUM; Task 11, modern::packMedium; which of them the
+// frame has is FrameUniforms::mediumFlags). The grid: worldToMedium (row-major 3x4, the box to [0, 1]^3), its
+// voxels per axis, sigma_t = densityScale * the baked density, the single-scattering albedo and HG g, the
+// majorant grid's cells per axis and the emission's scale. The fog: albedo, HG g, and sigma_t(y) =
+// fogDensity * exp(-fogFalloff * (y - fogBaseHeight)).
 struct MediumUniforms { // 128 bytes, scalar
-    std::uint32_t words[32];
+    float worldToMedium[12];
+    std::uint32_t gridSize[3];
+    float densityScale;
+    float gridAlbedo[3];
+    float gridPhaseG;
+    std::uint32_t majorantSize[3];
+    float emissionScale;
+    float fogAlbedo[3];
+    float fogPhaseG;
+    float fogDensity;
+    float fogBaseHeight;
+    float fogFalloff;
+    std::uint32_t pad;
 };
 
 // An analytic sphere (static spheres, binding EVO_BINDING_STATIC_SPHERES, and the particle field,
@@ -291,7 +306,13 @@ static_assert(
     offsetof(EnvironmentUniforms, glowDirection) == 96 && offsetof(EnvironmentUniforms, glowStrength) == 108);
 
 static_assert(kGpuMirror<MediumUniforms> && sizeof(MediumUniforms) == 128);
-static_assert(offsetof(MediumUniforms, words) == 0);
+static_assert(offsetof(MediumUniforms, worldToMedium) == 0 && offsetof(MediumUniforms, gridSize) == 48 &&
+              offsetof(MediumUniforms, densityScale) == 60 && offsetof(MediumUniforms, gridAlbedo) == 64 &&
+              offsetof(MediumUniforms, gridPhaseG) == 76 && offsetof(MediumUniforms, majorantSize) == 80 &&
+              offsetof(MediumUniforms, emissionScale) == 92 && offsetof(MediumUniforms, fogAlbedo) == 96 &&
+              offsetof(MediumUniforms, fogPhaseG) == 108 && offsetof(MediumUniforms, fogDensity) == 112 &&
+              offsetof(MediumUniforms, fogBaseHeight) == 116 && offsetof(MediumUniforms, fogFalloff) == 120 &&
+              offsetof(MediumUniforms, pad) == 124);
 
 static_assert(kGpuMirror<SphereRecord> && sizeof(SphereRecord) == 48);
 static_assert(offsetof(SphereRecord, center) == 0 && offsetof(SphereRecord, radius) == 12 &&

@@ -14,6 +14,7 @@
 #include "rt/gpu_types.hpp"
 #include "rt/spheres.hpp"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -37,6 +38,8 @@ struct Camera {
 // scene's capacity (std::length_error). Every scene task sweeps its chapters against it (checkSceneSweep).
 struct SceneCapacity {
     std::uint32_t instances = 1024, lights = 64, materials = 256, spheres = 0, particles = 0, splats = 0;
+    // The largest grid medium a frame bakes, voxels per axis (Task 11; all 0: the scene has none).
+    std::array<std::uint32_t, 3> mediumGrid{0, 0, 0};
 };
 
 // The meshes (BLAS per mesh) and materials of a scene, and what its frames may hold. An instance's hit group

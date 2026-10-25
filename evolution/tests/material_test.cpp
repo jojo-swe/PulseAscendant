@@ -20,6 +20,7 @@
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/sync.hpp"
+#include "modern/medium.hpp"
 #include "rt/geometry.hpp"
 #include "rt/gpu_types.hpp"
 #include "rt/random.hpp"
@@ -41,6 +42,7 @@ namespace {
 
 using namespace evo::gfx;
 namespace rt = evo::rt;
+namespace modern = evo::modern;
 
 int checksPassed = 0;
 
@@ -290,7 +292,7 @@ template <std::size_t N> constexpr std::array<bool, N> allUints() {
 }
 constexpr std::array<bool, 12> kMat34IsUint{};
 constexpr auto kEnvironmentIsUint = uintsAt<28>({0});
-constexpr auto kMediumIsUint = allUints<32>();
+constexpr auto kMediumIsUint = uintsAt<32>({12, 13, 14, 20, 21, 22, 31}); // gridSize, majorantSize, pad
 constexpr auto kSphereIsUint = uintsAt<12>({7});
 constexpr auto kTreeLightIsUint = uintsAt<12>({7, 8, 9, 10, 11});
 constexpr auto kTreeNodeIsUint = uintsAt<8>({7});
@@ -397,12 +399,14 @@ void testStructLayout(Context& ctx) {
                                                static_cast<std::uint32_t>(rt::GeometryKind::Triangles),
                                                static_cast<std::uint32_t>(rt::GeometryKind::Spheres),
                                                rt::kHitGroupsPerKind,
-                                               rt::kNoReceiver};
+                                               rt::kNoReceiver,
+                                               modern::kMediumFog,
+                                               modern::kMediumGrid};
     expected.insert(expected.end(), constants.begin(), constants.end());
     for (std::uint32_t input : kHashInputs)
         expected.push_back(rt::pcgHash(input));
     CHECK(expected.size() == kElements * (24 + 16 + 4 + 8 + 4 + 52 + 12 + 28 + 32 + 12 + 12 + 8 + 8 + 16) +
-                                 26 + kHashInputs.size());
+                                 28 + kHashInputs.size());
     // The step 5 ABI (Tasks 1 and 1b): sizes and the hit group of each geometry kind.
     static_assert(sizeof(rt::Material) == 96 && sizeof(rt::FrameUniforms) == 208 &&
                   sizeof(rt::EnvironmentUniforms) == 112 && sizeof(rt::MediumUniforms) == 128 &&
