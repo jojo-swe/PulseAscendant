@@ -2,8 +2,8 @@
 
 EVOLUTION is a real-time demo that puts 1993 and 2026 in the same frame: every effect first appears as
 it looked on a 486 and then as modern hardware can render it, with Vulkan 1.3 and hardware ray tracing
-as a hard requirement. It is a standalone project inside PulseAscendant; the architecture, the determinism
-rules and the RTX hardware checklist are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+as a hard requirement. The architecture, the determinism rules and the RTX hardware checklist are in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the licence is in [Licence](#licence) at the end.
 
 > **Status:** steps 0–4 are done. The music drives a timeline of 31 chapters in three acts, and
 > every chapter with a 1993 side (act I, REBOOT, CREDITS and THE END) shows its 1993 effect through its own
@@ -20,9 +20,17 @@ rules and the RTX hardware checklist are in [`docs/ARCHITECTURE.md`](docs/ARCHIT
   and exits with code 2; there is no fallback.
 - Windows 10/11 or Linux.
 
-Dependencies (SDL3, Vulkan-Headers, volk, VulkanMemoryAllocator) are fetched by CMake with git at
-configure time, each pinned to an exact commit, so the first configure needs network access and `git`.
-Shaders are compiled at build time with `glslangValidator`.
+To build:
+
+- CMake 3.25 or newer, a C++20 compiler (GCC 12+, Clang 15+ or Visual Studio 2022/2026), Ninja on Linux.
+- `glslangValidator`, which configure requires: from the [Vulkan SDK](https://vulkan.lunarg.com/) 1.4.304 or
+  newer (glslang 15.1, the version the shaders are built and checked with) on Windows, or the distribution's
+  `glslang-tools` on Linux. The Vulkan runtime itself comes with the GPU driver.
+- Python 3.8 or newer, which configure also requires: the tests and the tools in `tools/` run it
+  (`python_tools` and `storyboard` also need numpy).
+- `git`, and network access on the first configure: the dependencies (SDL3, Vulkan-Headers, volk,
+  VulkanMemoryAllocator) are fetched then, each pinned to an exact commit.
+- ffmpeg and ffprobe on the PATH, only for the video (`tools/render_video.py`).
 
 ## Build on Linux
 
@@ -89,7 +97,9 @@ validation.
   `build-out/storyboard_test`, so it never touches the storyboards below), `exit_codes`, and `python_tools`
   (the music analysis pipeline).
 
-The `linux` test preset runs 8 tests at a time; `ctest --preset linux -j 1` runs them one by one.
+The `linux` test preset runs 8 tests at a time; `ctest --preset linux -j 1` runs them one by one. The test
+presets leave out the tests labelled `slow` (`python_tools`, minutes on its own); `ctest --preset linux-slow`
+runs them.
 
 The three that open a window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default;
 configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
@@ -109,27 +119,38 @@ commits new files (see the script's docstring).
 
 ## Build on Windows
 
-> The Windows preset has not been exercised yet. The steps below are what it is designed for.
+> The Windows presets have not been exercised on a Windows machine yet. The steps below are what they are
+> designed for.
 
 Requirements:
 
-- Visual Studio 2026 with the "Desktop development with C++" workload.
-- CMake 4.2 or newer: the preset uses the `Visual Studio 18 2026` generator, which first shipped in
-  CMake 4.2 (the project itself needs only 3.25).
-- The [Vulkan SDK](https://vulkan.lunarg.com/), for `glslangValidator`; CMake looks for it in
-  `%VULKAN_SDK%\Bin`. The Vulkan runtime itself comes with the GPU driver.
-- Git, and Python 3 (configure looks for it; the tests run it).
+- Visual Studio 2022 or 2026 with the "Desktop development with C++" workload.
+- CMake 3.25 or newer; the `windows` preset (Visual Studio 2026) needs CMake 4.2, the first with its
+  `Visual Studio 18 2026` generator.
+- The [Vulkan SDK](https://vulkan.lunarg.com/) 1.4.304 or newer, for `glslangValidator`; CMake looks for it
+  in `%VULKAN_SDK%\Bin`, which the SDK's installer sets.
+- Python 3.8 or newer ([python.org](https://www.python.org/) or `winget install Python.Python.3.12`; the
+  Microsoft Store's `python` alias alone is not enough), and Git.
+
+Pick the preset for your Visual Studio:
+
+| Preset | Generator | Build folder |
+|---|---|---|
+| `windows` | Visual Studio 2026 (CMake 4.2+) | `build\windows\` |
+| `windows-vs2022` | Visual Studio 2022 | `build\windows-vs2022\` |
+| `windows-ninja` | Ninja with `cl.exe`, Release; run from a Developer PowerShell for VS 2022 or 2026 | `build\windows-ninja\` |
 
 ```bat
 cd evolution
-cmake --preset windows
-cmake --build --preset windows
-ctest --preset windows
+cmake --preset windows-vs2022
+cmake --build --preset windows-vs2022
+ctest --preset windows-vs2022
 ```
 
-The preset builds Release into `build\windows\`; the executable is `build\windows\bin\Evolution.exe`,
-with its shaders in `build\windows\bin\shaders\` (no per-configuration subdirectory, so a Debug build
-replaces the Release one).
+Each builds Release; the executable is `build\<preset>\bin\Evolution.exe`, with its shaders in
+`build\<preset>\bin\shaders\` (no per-configuration subdirectory, so a Debug build replaces the Release one).
+MSVC compiles with `/utf-8`: the sources are UTF-8, and the cards' and the scroller's non-ASCII text would
+otherwise be read in the system's code page.
 
 ## Music
 
@@ -316,11 +337,11 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   into a spectrum. A non-finite sample counts as 0 (checked from the float's bits, so a fast-math compiler
   cannot fold the check away).
   The window traces at most 4 bounces, exports 6, in dispatches of 4 samples per pixel, so no single
-  dispatch traces more than 4 spp. A whole frame is still one GPU submission of ceil(spp / 4) dispatches,
-  though: a 4K export frame at 64 spp is 16 dispatches in one submit, roughly 1–4 s on an RTX 4090 (an
-  estimate, not measured), and whether Windows' GPU timeout (TDR, 2 s by default) tolerates that has not been
-  measured yet (see the RTX checklist in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)). Every random number is an integer hash of (frame seed,
-  pixel, sample, dimension).
+  dispatch traces more than 4 spp. The exports also submit a frame in parts, one per time slice of the
+  shutter (below): what the frame recorded so far goes to the GPU and finishes before the next slice's TLAS
+  build, so a 4K frame at 64 spp (16 dispatches, roughly 1–4 s on an RTX 4090, an estimate) is 8 submits of
+  2 dispatches each instead of one; the same commands run in the same order, so the bytes do not change.
+  Every random number is an integer hash of (frame seed, pixel, sample, dimension).
 - **Denoiser** (`src/post`, `shaders/post`). The tracer writes the lighting without the primary hit's
   emission, plus guides (albedo, normal, depth, motion; the motion of a surface point is where it was in the
   previous frame, carried back by its instance's previous transform or a sphere's `prevCenter`, so a moving
@@ -336,10 +357,12 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   frame (1 on the lit side, 3 on the dark side; energy-neutral, measured in `denoiser_test`), sharp again
   once the history has temporal moments (frame 4). On frames 2 and 3 the noise estimate also counts how
   much the history differs from the frame, so a bright sample of an earlier frame spreads out instead of
-  staying a speck. Exports keep no history and filter only below 16 spp; from 16 spp an export firefly filter
-  (on by default) clamps each pixel to 4× the second-brightest of its 3×3 neighbourhood instead, which keeps
-  anything two pixels wide (CRT text, highlights) and pixels on a geometry edge (a highlight along an edge,
-  such as the window sill's, is one pixel wide) but removes lone fireflies. A separate volume layer
+  staying a speck. Exports keep no history: below 16 spp they filter as a first frame does (5 à-trous
+  iterations); from 16 spp an export firefly filter first clamps each pixel to 4× the second-brightest of its
+  3×3 neighbourhood, which keeps anything two pixels wide (CRT text, highlights) and pixels on a geometry
+  edge (a highlight along an edge, such as the window sill's, is one pixel wide) but removes lone fireflies,
+  then a light à-trous of 2 iterations (steps 1 and 2) smooths the speckle that many small lights and caustics
+  leave at 16–64 spp; its luminance stop follows the local noise, so at more samples it keeps more detail. A separate volume layer
   (in-scattered light and transmittance, from the participating media) has its own history and filter, which
   stops at transmittance and depth steps so silhouettes in fog stay sharp, and is composed as
   `transmittance × surface + volume`; a scene without a medium skips it.
@@ -493,10 +516,11 @@ dark before, 5 % now).
   next 16 frames as the jittered samples accumulate.
 - **Below trace scale 1 the CRT's picture is upsampled** from the trace (never accumulated, so it stays
   current), a little softer than at `--trace-scale 1`.
-- **Exports at 16 spp and more** are not filtered spatially (the firefly filter only), so dark corners keep a
-  fine grain at the 64 spp default; more samples (e.g. `--spp 256`) clean them up.
-- **Long 4K exports on Windows are unmeasured:** a frame's whole trace is one submission (above), seconds
-  long at 4K and 64 spp or more; measure it on the target GPU before a long export.
+- **Exports at 16 spp and more** are filtered lightly (the firefly filter and 2 à-trous iterations), so the
+  darkest corners can keep a little grain at the 64 spp default; more samples (e.g. `--spp 256`) clean them up.
+- **Long 4K exports on Windows are unmeasured:** a frame is submitted per shutter slice (above), each part
+  a fraction of a second on an RTX 4090 by estimate; measure with `--bench` on the target GPU, and see the
+  TDR note under "Release and the 4K video".
 - PBR Neutral still desaturates the brightest colours towards white (a 1993 red at a display gain above
   about 2.4 comes out pink, hue intact), so the Studio keeps its colourful chapters below that. Its moonlit
   wide shots are lit mostly by light bounced off the moonbeam, which keeps a fine grain at export spp; the
@@ -613,8 +637,8 @@ by default; 4 on the first frame after a reset of its temporal history and 2 on 
 clean) and accumulates them over the frames since that reset, which happens on a seek, a chapter change, a
 camera cut, a resize or a change of settings. The exports (`--capture-dir`,
 `--render-stream`) keep no history at all: every frame traces `--spp` samples (64 by default, in dispatches of
-4) at up to 6 bounces (the window: 4), filtered spatially (à-trous) only below 16 spp (from 16, a firefly
-filter clamps lone bright pixels instead; the window never uses it), and is a pure function
+4) at up to 6 bounces (the window: 4), filtered spatially (à-trous; from 16 spp a lighter pass after a firefly
+filter that clamps lone bright pixels, which the window never uses), and is a pure function
 of the options and its show time, so a streamed frame equals a fresh capture of the same time byte for byte.
 **Motion blur** is an export-only 180° shutter (`0.5 / --fps` seconds, centred on the frame's time): a frame of
 more than 4 samples per pixel is traced in one time slice per dispatch of 4 samples, at most 8, each slice with
@@ -696,12 +720,33 @@ resume:
 
 ```sh
 tools/render_4k.sh                       # Linux
-tools\render_4k.ps1                      # Windows (PowerShell)
+tools\render_4k.ps1                      # Windows (PowerShell; picks the newest Visual Studio's preset)
+tools\render_4k.ps1 -Preset windows-vs2022
 tools/render_4k.sh --bench               # estimate first
 ```
 
 At the export budget (2.5 s a frame at 4K and 64 spp on an RTX 4090) the 42,670 frames take about 30 hours. A
 software Vulkan driver (lavapipe) is far too slow for the full video; use it for short ranges and checks.
+
+The parts directory records the render's settings and the build (the executable's size, time and hash, and its
+shaders' hash): after a rebuild the script refuses to resume old chunks, so a video never mixes two builds
+(delete `<out>.parts` or pick another `--out`). A chunk whose run fails (Evolution or ffmpeg exits with an
+error) is rendered once more before the script stops; Ctrl+C stops Evolution as well as ffmpeg.
+
+**Windows and the GPU timeout (TDR).** Windows resets a GPU that runs one piece of work for more than 2 s, and
+EVOLUTION then stops with a lost device. The exports submit each frame per shutter slice, a fraction of a
+second each on an RTX-class GPU, but on a slower GPU, or at `--spp 256` and more, one slice can still take
+longer. If a render stops with `VK_ERROR_DEVICE_LOST` (or the screen flickers black during it), raise the
+limit and reboot: in `HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\GraphicsDrivers` set the
+DWORD `TdrDelay` to `60` (seconds) and `TdrDdiDelay` to `60`, from an administrator prompt:
+
+```bat
+reg add "HKLM\System\CurrentControlSet\Control\GraphicsDrivers" /v TdrDelay /t REG_DWORD /d 60 /f
+reg add "HKLM\System\CurrentControlSet\Control\GraphicsDrivers" /v TdrDdiDelay /t REG_DWORD /d 60 /f
+```
+
+Delete both values (and reboot) after the render to restore the defaults. Run the render with no game or
+other GPU-heavy program open; rerunning the same command resumes from the failed chunk.
 
 **Chapters.** `tools/video_chapters.py --exe build/linux/bin/Evolution` prints one `M:SS TITLE` line per
 chapter, from 0:00, joining a chapter shorter than 10 s to the next (`0:00 BOOT / FLYBY`).
@@ -710,3 +755,12 @@ chapter, from 0:00, joining a chapter shorter than 10 s to the next (`0:00 BOOT 
 windows`) writes `dist/EVOLUTION-v1.0-<os>.zip`: the executable, its shaders, the music in
 `assets/music/show.wav`, `EVOLUTION.NFO` (in `assets/`), the licence and the third-party notices, in one
 `EVOLUTION/` folder, reproducibly (fixed order and dates).
+
+## Licence
+
+EVOLUTION's code is under the MIT licence in [`LICENSE`](LICENSE). The music is not: its rights stay with
+its artist, joyolo ([`licenses/MUSIC-NOTICE.md`](licenses/MUSIC-NOTICE.md)). The glenz geometry comes from
+Future Crew's Second Reality under the Unlicense ([`licenses/FUTURE-CREW-NOTICE.md`](licenses/FUTURE-CREW-NOTICE.md)).
+The libraries built into the executable keep their own licences, in [`licenses/`](licenses): SDL3 (zlib, with
+its HIDAPI and yuv2rgb parts under BSD licences), Vulkan-Headers (Apache 2.0), volk (MIT) and
+VulkanMemoryAllocator (MIT). The release zip carries `LICENSE` and `licenses/`.
