@@ -232,9 +232,21 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         return vec3(0.0);
     }
     // A portal is an opening: the shadow ray goes on into the sky, which must be clear too. Other lights are
-    // surfaces: it stops just short of the sampled point.
-    float tMax = l.kind == kLightPortal ? kRayMax : length(q - origin) * (1.0 - 1e-4);
-    if (!unoccluded(origin, wi, tMax)) {
+    // surfaces: it goes from the offset origin to the sampled point lifted off the light on its emitting side,
+    // so it ends short of the light's plane at any angle. (Along wi, which leaves p, not the offset origin, and
+    // cut short by a fraction of the distance, it ended beside the point and, for an oblique wi from a surface
+    // facing the light, past the light's plane: the light occluded itself and NEE lost light.)
+    vec3 shadowDirection = wi;
+    float tMax = kRayMax;
+    if (l.kind != kLightPortal) {
+        vec3 toTarget = offsetOrigin(q, lightNormal(l), -wi) - origin;
+        tMax = length(toTarget);
+        if (!(tMax > 0.0)) {
+            return vec3(0.0);
+        }
+        shadowDirection = toTarget / tMax;
+    }
+    if (!unoccluded(origin, shadowDirection, tMax)) {
         return vec3(0.0);
     }
     vec3 le = lightRadiance(l, uv, wi);

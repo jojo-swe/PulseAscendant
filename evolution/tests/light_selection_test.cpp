@@ -474,8 +474,8 @@ double pixelVariance(const Lighting& a, const Lighting& b) {
 // third of the samples wherever it is. The tall metal block is lowered to 0.6 m: with its top 0.8 m under a
 // ceiling light, step 4's integrator gives the ceiling above it 10-20 % less two-bounce light with NEE than
 // with BSDF sampling alone (about -1.3 % over test::cornellBox's frame at high spp, with one light, so the
-// same with fixed and per-point selection; root cause open, see the Task 3 report). This test is about
-// selection, so it keeps clear of that.
+// same with fixed and per-point selection: NEE's shadow rays hit the light they aimed at, since fixed, see
+// path_tracer_test's close light). This test is about selection, so it keeps clear of that.
 constexpr std::array<float, 3> kThreeLightEmission = {0.0125f, 0.375f, 11.25f};
 
 TestScene threeLightCornell() {

@@ -5,7 +5,8 @@
 //     dispatch and in two (the running mean across dispatches);
 // (b) MIS is unbiased: a Cornell box with and without next-event estimation has the same mean, and NEE is
 //     less noisy; plus analytic cases: a diffuse floor under one rectangular light, and under two selected
-//     1 : 3, equals Lambert's polygon formula with and without NEE; a rough metal and a smooth-coated floor
+//     1 : 3, and under a light close above it (shadow rays must not hit the light they aim at), equals
+//     Lambert's polygon formula with and without NEE; a rough metal and a smooth-coated floor
 //     agree with and without NEE; a mirror floor (delta: no NEE, no MIS) gives the same bytes either way; a
 //     panel lit through a window portal, and through two stacked portals, equals a quadrature of the sky with
 //     and without NEE; a retro screen of two colours lights the floor the same with and without NEE, channel
@@ -528,6 +529,36 @@ void testAnalyticMis(gfx::Context& ctx) {
                 nee, a.got, a.want, 100 * a.error(), 100 * a.worstBlock);
             CHECK(std::abs(a.error()) < (nee ? 0.01 : 0.02));
             CHECK(a.worstBlock < (nee ? 0.03 : 0.06));
+        }
+    }
+    // The same floor under a light only 0.25 m above it. A shadow ray towards a point on the light leaves
+    // from the offset origin, not from the shading point: aimed along the direction from the shading point
+    // and cut short by a fraction of the distance, it ended beside the sampled point, past the light's plane
+    // for oblique directions (by up to the offset, 1e-4 (1 + |p|), against a margin of 1e-4 d cos), and the
+    // light itself occluded it. NEE then lost the oblique part of every close light: here 35 % of the
+    // floor's light, in the Cornell box the tall block's top under the ceiling light (the ceiling above it
+    // 10-20 % dark, -1.5 % over the frame).
+    {
+        TestScene scene = test::analyticLightScene(test::lambert({0.5f, 0.5f, 0.5f}));
+        const float e = test::kAnalyticEmission;
+        const rt::Mat34 light = test::place({0, 0.25f, 0}, test::kX, 90, {1, 1, 1});
+        scene.frame.instances[2].transform = light;
+        scene.frame.lights = {modern::rectLightForQuad(light, 1, 1, rt::LightKind::Emitter, {e, e, e}, 1.f)};
+        scene.frame.camera.eye = {0, 0.2f, 0};
+        const std::vector<double> expected = analyticDirect(scene, kSize, 0.5);
+        Tracer tracer(ctx, scene, kSize, kSize);
+        for (bool nee : {true, false}) {
+            TraceSettings settings = direct;
+            settings.nee = nee;
+            settings.spp = nee ? 64 : 256;
+            const Frame f = tracer.trace(scene.frame, settings, unused);
+            const Agreement a = compareBlocks(f.lighting, 1, expected);
+            std::printf(
+                "    light close over the floor, NEE %d: mean %.5f, analytic %.5f (%.2f %%), worst 4x4 "
+                "block %.2f %%\n",
+                nee, a.got, a.want, 100 * a.error(), 100 * a.worstBlock);
+            CHECK(std::abs(a.error()) < 0.01);
+            CHECK(a.worstBlock < 0.06); // a close, wide light: NEE is noisier than under the light at 1 m
         }
     }
     // Two lights selected 1 : 3: the floor is the sum of both Lambert terms. Dropping or misplacing the

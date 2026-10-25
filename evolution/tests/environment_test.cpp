@@ -22,7 +22,7 @@
 //     cells are smaller and stars elongated in uv, the quadrature over 16 x 16 cells equals the flux of their
 //     stars from the hash (0.5 %);
 // (e) the Studio's mean display luminance at STUDIO NIGHT 40 % and REBOOT 60 % (160x90, spp 4, Export)
-//     stays within 5 % of the step 4 night sky's (measured before this task).
+//     stays within 5 % of the step 4 night sky's (measured before this task, scaled by the shadow-ray fix).
 // The layout of EnvironmentUniforms is material_test's probe. With --look <dir> [spp] it only renders stills
 // of the skies to look at.
 
@@ -851,8 +851,11 @@ double chapterTime(int chapter, double fraction) {
     return start + fraction * (show::chapterStart(chapter + 1) - start);
 }
 
-// The step 4 night sky's Studio, measured with this test's renderer before Task 2 (c722ab1).
-constexpr double kStudioNightBaseline = 0.10121, kRebootBaseline = 0.15723;
+// The step 4 night sky's Studio, measured with this test's renderer before Task 2 (c722ab1): 0.10121 and
+// 0.15723, times what the fix of NEE's shadow rays (they hit the light they aimed at: the lamp lost its
+// oblique light) changed at d91fb09: 0.12371 / 0.10475 and 0.16775 / 0.15898.
+constexpr double kStudioNightBaseline = 0.10121 * (0.12371 / 0.10475),
+                 kRebootBaseline = 0.15723 * (0.16775 / 0.15898);
 constexpr int kStudioNight = 11, kReboot = 20;
 
 void testStudio(gfx::Context& ctx) {
@@ -877,8 +880,8 @@ void testStudio(gfx::Context& ctx) {
         for (std::size_t i = 0; i < rgb.size(); i += 3)
             mean += (0.2126 * rgb[i] + 0.7152 * rgb[i + 1] + 0.0722 * rgb[i + 2]) / 255.0;
         mean /= double(rgb.size() / 3);
-        std::printf("    %s: mean display luminance %.5f, step 4 sky %.5f (%.2f %%)\n", name, mean, baseline,
-                    100 * (mean / baseline - 1));
+        std::printf("    %s: mean display luminance %.5f, step 4 sky (scaled) %.5f (%.2f %%)\n", name, mean,
+                    baseline, 100 * (mean / baseline - 1));
         CHECK(std::abs(mean / baseline - 1) < 0.05);
     }
     idle(ctx);
