@@ -20,8 +20,7 @@
 //       30th window frame's screen matches a 32 spp export of the same time (64 until Task 14 of step 5,
 //       which halved it for the time budget: the screen differs from either by 0.003, the bound is 0.025);
 //   (i) the Studio's clampIndirect (0.5; step 4: 2) reaches the path tracer: its lighting equals a trace at
-//       0.5, not at 64,
-//       the default of every other scene;
+//       0.5, not at 16, the default of every other scene (since Task 6 of step 5);
 // Task 14 of step 5 (its letters in brackets):
 //   (j) [b] the light rig: the lamp's material emits nothing in STUDIO NIGHT and does in RETURN and REBOOT;
 //       in every chapter the frame's material table carries studioRig's levels and every light's emission is
@@ -29,8 +28,7 @@
 //   (k) [c] speckle: the STUDIO NIGHT wide shot at 160x90 and 32 spp has under 1 % of its pixels more than 10
 //       levels above their 3x3 neighbourhood's median (step 4: 3-5 % at 192 spp);
 //   (l) [d] the chrome sphere reflects the screen: with an all-red picture its projected disc holds at least
-//   20
-//       red-dominant pixels;
+//       20 red-dominant pixels;
 //   (m) [e] the power LEDs are camera-only emitters: the lighting of the desk beside the case's LED is byte
 //       for byte the same with the LEDs on and off;
 //   (n) [g] the moonbeam: in the STUDIO NIGHT wide shot the floor where the moon's ray through the window's
@@ -688,7 +686,7 @@ void testWindowScreenSharp(gfx::Context& ctx) {
 // -----------------------------------------------------------------------------------------------------
 
 void testClampIndirect(gfx::Context& ctx) {
-    CHECK(modern::SceneFrame{}.clampIndirect == 64.f && modern::TraceSettings{}.clampIndirect == 64.f);
+    CHECK(modern::SceneFrame{}.clampIndirect == 16.f && modern::TraceSettings{}.clampIndirect == 16.f);
     const modern::Studio studio;
     // FINALE's pull-out passes the chrome and glass spheres and the lamp: plenty of caustic paths above 0.5.
     const TimelineFrame frame = chapterAt(kFinale, 0.5);
@@ -703,12 +701,12 @@ void testClampIndirect(gfx::Context& ctx) {
     settings.clampIndirect = 0.5f;
     stages.trace(scene, settings, white);
     const std::vector<std::uint8_t> clamped = stages.lightingBytes(ctx);
-    settings.clampIndirect = 64.f;
+    settings.clampIndirect = 16.f;
     stages.trace(scene, settings, white);
     const std::vector<std::uint8_t> loose = stages.lightingBytes(ctx);
     CHECK(staged == clamped);
     CHECK(clamped != loose);
-    std::printf("(i) the Studio traces with clampIndirect 0.5 (64 changes its lighting)\n");
+    std::printf("(i) the Studio traces with clampIndirect 0.5 (16 changes its lighting)\n");
 }
 
 // --- (j) - (n): Task 14 of step 5

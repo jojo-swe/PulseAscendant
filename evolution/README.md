@@ -68,7 +68,14 @@ validation.
   guides, batched dispatches), `denoiser` (accumulation, resets, reprojection, edges, the emission bypass,
   NaN/Inf), `tonemap` (the GPU against the CPU reference and golden values) and `spheres` (the sphere
   intersection against a CPU reference, depth and normals, glass against a sphere mesh, 4096 particles over 32
-  frames two in flight against their analytic positions; `spheres_test --look <dir> [spp]` renders a picture).
+  frames two in flight against their analytic positions; `spheres_test --look <dir> [spp]` renders a picture),
+  `motion` (the per-object motion guide of a moving instance, sphere and particle field against the analytic
+  reprojection; the denoiser keeping its history on a moving object; the export shutter's edge ramp, energy,
+  chapter clamping and purity; the window ignoring it; `motion_test --look <dir> [spp]` renders a motion-blurred
+  picture) and
+  `caustics` (photon maps under a glass sphere: their energy against the sphere's cross-section and against
+  the converged path-traced caustic, dispersion, the same map in any photon order, the double-count exclusion;
+  `caustics_test --look <dir> [spp]` renders a glass sphere and a prism's spectrum).
 - The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT as STUDIO NIGHT's key light, the screen
   following the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS
   prompt, the light rig per chapter, little speckle in the moonlit wide shot, the chrome sphere reflecting the
@@ -281,9 +288,15 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   once per scene, one BLAS per range an instance places. The particle field is up to millions of spheres that
   a scene's compute shader makes every frame as a pure function of (particle, time), into a per-frame BLAS
   rebuilt per frame in flight: nothing carries over from one frame to the next, so seeking needs nothing.
-- **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
-  after the first bounce clamped to a luminance limit (64, the Studio 0.5) against fireflies; a non-finite
-  sample counts as 0 (checked from the float's bits, so a fast-math compiler cannot fold the check away).
+- **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3. Noise is cut at its
+  sources: after the first rough (non-delta) bounce every lobe is at least 0.25 rough (path regularisation:
+  diffuse → mirror → small lamp becomes glossy, which next-event estimation reaches; sampling and MIS see
+  the same BSDF), and only light arriving after a rough bounce is clamped, to a luminance of 16 (the Studio 0.5), so a lamp
+  seen in a mirror or through glass keeps its full brightness. Emitters flagged camera-only (the PC's LEDs)
+  are seen directly and in mirrors but light nothing. Glass with an Abbe number disperses: a path that meets
+  it carries one hero wavelength (380–780 nm, Cauchy's IOR, an RGB weight of mean 1), so white light splits
+  into a spectrum. A non-finite sample counts as 0 (checked from the float's bits, so a fast-math compiler
+  cannot fold the check away).
   The window traces at most 4 bounces, exports 6, in dispatches of 4 samples per pixel, so no single
   dispatch traces more than 4 spp. A whole frame is still one GPU submission of ceil(spp / 4) dispatches,
   though: a 4K export frame at 64 spp is 16 dispatches in one submit, roughly 1–4 s on an RTX 4090 (an
@@ -291,7 +304,10 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   measured yet (see the RTX checklist in HANDOFF). Every random number is an integer hash of (frame seed,
   pixel, sample, dimension).
 - **Denoiser** (`src/post`, `shaders/post`). The tracer writes the lighting without the primary hit's
-  emission, plus guides (albedo, normal, depth, motion). The lighting is divided by the albedo, reprojected
+  emission, plus guides (albedo, normal, depth, motion; the motion of a surface point is where it was in the
+  previous frame, carried back by its instance's previous transform or a sphere's `prevCenter`, so a moving
+  object keeps its history; the window passes the previous frame's instances while its history continues). The
+  lighting is divided by the albedo, reprojected
   into a temporal history (in the window only: rejected where depth or normal disagree, an exponential blend
   that starts as a plain copy after a reset), then filtered by three à-trous passes guided by depth, normal
   and an edge-robust estimate of the noise, and multiplied by the albedo again. The primary hit's emission,
@@ -371,10 +387,10 @@ from the accent, an orbit round the monitor in STUDIO NIGHT, a push back in in R
 - **Long 4K exports on Windows are unmeasured:** a frame's whole trace is one submission (above), seconds
   long at 4K and 64 spp or more; measure it on the target GPU before a long export.
 - PBR Neutral still desaturates the brightest colours towards white (a 1993 red at a display gain above
-  about 2.4 comes out pink, hue intact), so the Studio keeps its colourful chapters below that. The Studio
-  clamps indirect light at 0.5 until the path tracer clamps only after a rough vertex, which still dims the
-  lamp seen through the glass sphere and its caustic. Its moonlit wide shots are lit mostly by light bounced
-  off the moonbeam, which keeps a fine grain at export spp.
+  about 2.4 comes out pink, hue intact), so the Studio keeps its colourful chapters below that. Its moonlit
+  wide shots are lit mostly by light bounced off the moonbeam, which keeps a fine grain at export spp; the
+  lights are picked by fixed weights (no spatial importance); the glass sphere's caustic is subtle:
+  regularisation blurs it (sharp caustics await the photon maps of step 5's Task 13).
 
 ## Storyboard
 
@@ -489,6 +505,13 @@ camera cut, a resize or a change of settings. The exports (`--capture-dir`,
 4) at up to 6 bounces (the window: 4), filtered spatially (à-trous) only below 16 spp (from 16, a firefly
 filter clamps lone bright pixels instead; the window never uses it), and is a pure function
 of the options and its show time, so a streamed frame equals a fresh capture of the same time byte for byte.
+**Motion blur** is an export-only 180° shutter (`0.5 / --fps` seconds, centred on the frame's time): a frame of
+more than 4 samples per pixel is traced in one time slice per dispatch of 4 samples, at most 8, each slice with
+its own scene frame, particle field, TLAS and camera, and the picture is their mean (`src/modern/shutter.*`;
+the slice times are a pure function of the time, fps and spp). A slice never samples another chapter: its time
+is clamped into the frame's own chapter, so the first and last frames of a chapter blur only inwards. With 4
+samples or fewer, and always in the window, there is one slice and no blur. The guides (depth, normal, motion)
+come from the middle slice.
 The random seed of a frame comes from the show time, `pcg(llround(seconds × 48000))` (the audio sample clock);
 the window adds `0x9E3779B9` per frame since its last reset, so its first frame after a reset uses the export
 seed and, at equal bounces, equals the export frame at spp max(`--spp`, 4) byte for byte while that is below

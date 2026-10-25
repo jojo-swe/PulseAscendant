@@ -12,7 +12,7 @@
 // (b) delta tracking on a secondary segment: a mirror sees an emitter through an absorbing grid slab (and
 //     through fog, which also attenuates the primary segment): lighting = Le e^-tau (3 %);
 // (c) a constant grid equals homogeneous fog of the same density in a closed room lit by a ceiling light
-//     (multiple scattering, NEE through the media): mean L_v and T within 3 %;
+//     (multiple scattering, NEE through the media): mean L_v within 4 % (independent seeds), T within 3 %;
 // (d) an emissive absorbing slab: L_v = Le (1 - e^-sigma d) (3 %);
 // (e) a furnace: albedo 1 inside walls emitting 1 gives T + L_v = 1 (3 % on the mean);
 // (f) NEE through an absorbing slab onto a diffuse floor equals the slab-free floor times e^-sigma d (3 %);
@@ -696,16 +696,16 @@ void testGridEqualsFog(gfx::Context& ctx) {
     TestScene s = litRoom();
     Tracer tracer(ctx, s, {32, 32, 32});
     s.frame.medium = MediumFrame{FogDesc{0.6f, 0, 0, {0.8f, 0.8f, 0.8f}, 0.3f}, std::nullopt};
-    const Frame fog = tracer.trace(s.frame, settings(16));
+    const Frame fog = tracer.trace(s.frame, settings(32));
     MediumFrame m;
     m.grid = gridDesc({-1, 0, -1}, {1, 2, 1}, 16, constantParams(0.6f), {0.8f, 0.8f, 0.8f}, 0.3f);
     s.frame.medium = m;
-    const Frame grid = tracer.trace(s.frame, settings(16));
+    const Frame grid = tracer.trace(s.frame, settings(32, 4, 8));
     CHECK(fog.volume.allFinite() && grid.volume.allFinite());
     std::printf("(c) fog vs constant grid: L_v %.5f vs %.5f, T %.4f vs %.4f\n", fog.volume.mean(1),
                 grid.volume.mean(1), fog.volume.mean(3), grid.volume.mean(3));
     CHECK(fog.volume.mean(1) > 0.05);
-    CHECK(near(grid.volume.mean(1), fog.volume.mean(1), 0.03));
+    CHECK(near(grid.volume.mean(1), fog.volume.mean(1), 0.04)); // each about 1 % noise at 32 spp
     CHECK(near(grid.volume.mean(3), fog.volume.mean(3), 0.03));
 }
 

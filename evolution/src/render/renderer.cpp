@@ -23,6 +23,9 @@ const RenderSettings& checked(const RenderSettings& settings) {
     if (!validTraceScale(settings.traceScale))
         throw std::invalid_argument("the trace scale must be in (0, 1], got " +
                                     std::to_string(settings.traceScale));
+    if (!(settings.shutterSeconds >= 0.0) || !std::isfinite(settings.shutterSeconds))
+        throw std::invalid_argument("the shutter must be a finite number of seconds, 0 or more, got " +
+                                    std::to_string(settings.shutterSeconds));
     return settings;
 }
 
@@ -95,7 +98,8 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
 Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings& settings)
     : ring_(ring), timers_(ctx, ring, kMaxGpuScopes), crt_(checked(settings).crt), hud_(settings.hud),
       hudTitle_(settings.hudTitle), mode_(settings.mode), spp_(settings.spp),
-      maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)), text_(ctx, ring),
+      maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)),
+      shutterSeconds_(settings.mode == RenderMode::Export ? settings.shutterSeconds : 0.0), text_(ctx, ring),
       retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height, settings.detail,
                                         settings.sceneFactory, settings.sceneMap, settings.traceScale),
       compositor_(ctx, ring, text_, settings.width, settings.height) {
@@ -172,7 +176,8 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
                                  mode_,
                                  frameSpp(mode_, spp_, history_.framesSinceReset()),
                                  maxBounces_,
-                                 modern::frameSeedFor(frame.showSeconds, seedFrames)};
+                                 modern::frameSeedFor(frame.showSeconds, seedFrames),
+                                 shutterSeconds_};
         modern_.render(cmd, frame, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
         stats_.spp = state.spp;

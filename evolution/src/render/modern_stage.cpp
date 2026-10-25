@@ -1,19 +1,23 @@
 #include "render/modern_stage.hpp"
 
 #include "gfx/gpu_timers.hpp"
+#include "modern/caustics.hpp"
 #include "modern/medium_volume.hpp"
 #include "modern/path_tracer.hpp"
 #include "modern/scene_gpu.hpp"
+#include "modern/shutter.hpp"
 #include "modern/splats.hpp"
 #include "post/denoiser.hpp"
 #include "post/upscale.hpp"
 #include "rt/particles.hpp"
+#include "rt/random.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace evo::render {
 
@@ -125,6 +129,11 @@ void ModernStage::prepare(modern::SceneId id) {
             splats = std::make_unique<modern::SplatPass>(ctx_, ring_, traceWidth_, traceHeight_);
         (splats ? *splats : *splats_).prepare(statics.splatShader);
     }
+    // The one CausticMaps, made for the first scene with caustics (grown below for a later one; Task 13).
+    const std::uint32_t causticResolution = statics.capacity.causticResolution;
+    std::unique_ptr<modern::CausticMaps> caustics;
+    if (causticResolution > 0 && !caustics_)
+        caustics = std::make_unique<modern::CausticMaps>(ctx_, ring_, causticResolution);
     // The one medium volume (Task 11), made for the first scene with a medium shader, grown for a later one.
     const bool hasMedium = !statics.mediumShader.empty();
     std::array<std::uint32_t, 3> mediumCapacity = statics.capacity.mediumGrid;
@@ -156,6 +165,10 @@ void ModernStage::prepare(modern::SceneId id) {
         particles_ = std::move(particles);
     if (splats)
         splats_ = std::move(splats);
+    if (causticResolution > 0 && caustics_)
+        caustics_->reserve(causticResolution); // keeps the old maps if it throws
+    if (caustics)
+        caustics_ = std::move(caustics);
     if (hasMedium && medium_) {
         medium_->setShader(statics.mediumShader);
         medium_->reserve(mediumCapacity); // keeps the old images if it throws
@@ -181,7 +194,7 @@ VkDeviceSize ModernStage::gpuBytes() const {
     if (!tracer_)
         return 0;
     VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0) +
-                         (medium_ ? medium_->bytes() : 0);
+                         (caustics_ ? caustics_->bytes() : 0) + (medium_ ? medium_->bytes() : 0);
     for (const auto& gpu : gpus_)
         if (gpu)
             bytes += gpu->bytes();
@@ -217,6 +230,7 @@ void ModernStage::resizeTraced() {
     if (splats_)
         splats_->resize(traceWidth_, traceHeight_);
     previousCamera_.reset();
+    previousInstances_.clear();
 }
 
 void ModernStage::setTimers(gfx::GpuTimers* timers) {
@@ -286,14 +300,35 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     if (object.samplesRetro() && retroImage == nullptr)
         throw std::invalid_argument("ModernStage: a scene that shows the retro screen needs the retro image");
     prepare(id); // setup on the first frame of an unprepared scene (see the class comment)
-    const modern::SceneFrame scene = object.frame(frame);
     const bool interactive = state.mode == RenderMode::Interactive;
     const bool continues = interactive && state.reset == HistoryReset::None;
+
+    // The export shutter: the scene's frame at each slice's time, clamped into the frame's chapter. The
+    // window (and an export at 4 spp or fewer, or without a shutter) has one slice: the frame itself.
+    const std::uint32_t sliceCount =
+        modern::shutterSlices(state.spp, interactive ? 0.0 : state.shutterSeconds);
+    std::vector<modern::SceneFrame> slices;
+    std::vector<double> sliceLocal; // each slice's chapter-local time
+    slices.reserve(sliceCount);
+    modern::TraceSettings trace;
+    for (std::uint32_t k = 0; k < sliceCount; ++k) {
+        if (sliceCount == 1) {
+            slices.push_back(object.frame(frame));
+            sliceLocal.push_back(frame.localSeconds);
+            continue;
+        }
+        const double local = modern::sliceSeconds(frame.localSeconds, frame.chapterDuration, k, sliceCount,
+                                                  state.shutterSeconds);
+        slices.push_back(object.frame(modern::sliceFrame(frame, local)));
+        sliceLocal.push_back(local);
+        trace.sliceOffsets[k] = static_cast<float>(local - frame.localSeconds);
+    }
+    const std::uint32_t guideSlice = sliceCount / 2; // the slice the guides (and the next motion) come from
+    const modern::SceneFrame& scene = slices[guideSlice];
 
     // The window jitters its samples within each trace pixel below scale 1; a reset frame and exports do not.
     const post::SubpixelWindow window =
         post::subpixelWindow(traceWidth_, traceHeight_, width_, height_, state.framesSinceReset, interactive);
-    modern::TraceSettings trace;
     trace.spp = state.spp;
     trace.maxBounces = state.maxBounces;
     trace.frameSeed = state.frameSeed;
@@ -303,33 +338,68 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     trace.pixelFootprint = window.footprint;
     lastJitter_ = window.jitter;
     modern::TraceExtras extras;
-    if (scene.particles) {
-        // The particle field first (checked with the rest of the frame before anything is recorded).
-        const modern::SceneStatic& statics = object.staticScene();
-        modern::checkSceneFrame(statics, scene);
-        const modern::ParticleFrame& p = *scene.particles;
+    // The previous frame's instances, while the history continues: the previous transforms of the motion
+    // guide.
+    if (continues)
+        extras.previousInstances = previousInstances_;
+    const modern::SceneStatic& statics = object.staticScene();
+    const bool particles = std::any_of(slices.begin(), slices.end(),
+                                       [](const modern::SceneFrame& s) { return s.particles.has_value(); });
+    if (particles) {
+        // The particle field is rebuilt per slice, at the slice's time, just before that slice's TLAS build
+        // (each slice is checked with the rest of its frame before anything is recorded).
+        for (const modern::SceneFrame& s : slices)
+            modern::checkSceneFrame(statics, s);
         particles_->setShader(statics.particleShader);
-        beginScope(cmd, "particles");
-        particles_->record(cmd, p.count, frame.localSeconds,
-                           continues ? previousSeconds_ : frame.localSeconds, p.params, p.material);
-        endScope(cmd);
         extras.particleSpheres = &particles_->records();
         extras.particleBlas = particles_->blasAddress();
     }
-    if (scene.medium && scene.medium->grid) {
-        // The grid medium's bake at the frame's chapter-local time (a pure function of it: nothing carries
-        // over from another frame), checked with the rest of the frame first.
+    const auto recordParticles = [&](VkCommandBuffer commands, std::uint32_t k) {
+        if (!slices[k].particles)
+            return;
+        const modern::ParticleFrame& p = *slices[k].particles;
+        if (sliceCount == 1)
+            beginScope(commands, "particles");
+        particles_->record(commands, p.count, sliceLocal[k], continues ? previousSeconds_ : sliceLocal[k],
+                           p.params, p.material);
+        if (sliceCount == 1)
+            endScope(commands);
+    };
+    if (slices[0].caustics) {
+        // Task 13: this frame's photon maps (the first slice's), a pure function of the show time (the seed
+        // does not follow the frames since a reset), with kExportPhotonFactor times the photons in an export
+        // of many samples.
+        if (!caustics_)
+            throw std::invalid_argument("ModernStage: a frame with caustics from a scene whose "
+                                        "capacity.causticResolution is 0");
+        const std::uint32_t photons =
+            slices[0].caustics->photons *
+            (state.mode == RenderMode::Export && state.spp >= modern::kExportPhotonSpp
+                 ? modern::kExportPhotonFactor
+                 : 1u);
+        caustics_->prepare(object.staticScene(), slices[0], photons,
+                           rt::pcgHash(modern::frameSeedFor(frame.showSeconds, 0) ^ 0x43415553u));
+        extras.causticMaps = &caustics_->maps();
+        extras.causticReceivers = &caustics_->receiverTable();
+        extras.photons = [this](VkCommandBuffer c, const modern::PhotonScene& p) { caustics_->record(c, p); };
+    }
+    const modern::SceneFrame& middle = slices[sliceCount / 2];
+    if (middle.medium && middle.medium->grid) {
+        // Task 11: the grid medium's bake, once per frame at the middle slice's time (a pure function of it:
+        // nothing carries over from another frame), checked with the rest of that slice first. Every slice
+        // samples it.
         const modern::SceneStatic& statics = object.staticScene();
-        modern::checkSceneFrame(statics, scene);
+        modern::checkSceneFrame(statics, middle);
         medium_->setShader(statics.mediumShader);
         beginScope(cmd, "medium");
-        medium_->record(cmd, *scene.medium->grid, frame.localSeconds);
+        medium_->record(cmd, *middle.medium->grid, sliceLocal[sliceCount / 2]);
         endScope(cmd);
         extras.density = &medium_->density();
         extras.majorant = &medium_->majorant();
     }
-    tracer_->trace(cmd, *gpus_[indexOf(id)], scene, continues ? previousCamera_ : std::nullopt, trace,
-                   retroImage, extras);
+    tracer_->trace(cmd, *gpus_[indexOf(id)], slices, continues ? previousCamera_ : std::nullopt, trace,
+                   retroImage, extras,
+                   particles ? modern::PathTracer::SliceCallback(recordParticles) : nullptr);
 
     if (state.reset != HistoryReset::None) {
         denoiser_->resetHistory();
@@ -340,8 +410,9 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     // them against the scene's capacity and shader, so the pass exists).
     if (scene.splats && scene.splats->count > 0) {
         beginScope(cmd, "splats");
+        // At the guide slice's time, with its camera and depth: with a shutter the splats are not blurred.
         splats_->record(cmd, object.staticScene().splatShader, *scene.splats, scene.camera, g.depth,
-                        g.emission, frame.localSeconds);
+                        g.emission, sliceLocal[guideSlice]);
         endScope(cmd);
     }
     beginScope(cmd, "denoise");
@@ -364,7 +435,8 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     tonemap_.record(cmd, hdr_, image_, scene.exposureEV);
     endScope(cmd);
     previousCamera_ = scene.camera;
-    previousSeconds_ = frame.localSeconds;
+    previousInstances_ = scene.instances;
+    previousSeconds_ = sliceLocal[guideSlice];
 }
 
 } // namespace evo::render

@@ -74,7 +74,7 @@ vec3 sampleMediumPhase(MediumPhase ph, vec3 travel, vec3 u) {
 // transmissive point would choose it), with the phase function in place of the BSDF and no surface to offset
 // from. u: the light choice and the point on it. Returns value(phase) * Le * T * w_MIS / pdf_NEE. Both kinds
 // of light end in the one shadow ray (a single ray tracing site).
-vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u) {
+vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWord) {
     const vec3 facing = vec3(0.0, 1.0, 0.0); // light selection ignores it at a transmissive point
     float environmentSelect = frame.environmentSelect;
     vec3 wi;
@@ -97,33 +97,59 @@ vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u) {
             return vec3(0.0);
         }
         RectLight l = lights[index];
-        if (!(l.area > 0.0)) {
-            return vec3(0.0);
-        }
-        vec3 q = l.corner + u.y * l.edgeU + u.z * l.edgeV;
-        vec3 toLight = q - x;
-        float dist = length(toLight);
-        if (!(dist > 0.0)) {
-            return vec3(0.0);
-        }
-        wi = toLight / dist;
-        float cosLight = -dot(wi, lightNormal(l));
-        if (!(cosLight > 0.0)) {
-            return vec3(0.0);
-        }
-        lightPdf = selectPdf * (1.0 - environmentSelect) * rectSolidAnglePdf(l, dist, cosLight);
-        shadowDirection = wi;
-        if (l.kind == kLightPortal) {
-            lightPdf = escapePdf(x, wi, x, facing, true);
-        } else {
-            vec3 toTarget = offsetOrigin(q, lightNormal(l), -wi) - x;
+        if (l.kind == kLightTree) {
+            // The light tree (Task 12), as sampleTreeLight: one sphere light by the walk (treeWord), one
+            // direction in its cone, the shadow ray to its near surface lifted off it.
+            uint k;
+            float treePdf;
+            float dist;
+            float conePdf;
+            if (!pickTreeLight(treeWord, frame.treeLightCount, x, facing, true, treeUniformSelection(), k,
+                               treePdf)) {
+                return vec3(0.0);
+            }
+            TreeLight light = treeLights[k];
+            if (!sampleSphereCone(x, light.center, light.radius, u.yz, wi, dist, conePdf)) {
+                return vec3(0.0);
+            }
+            lightPdf = selectPdf * (1.0 - environmentSelect) * treePdf * conePdf;
+            vec3 q = x + dist * wi;
+            vec3 toTarget = offsetOrigin(q, safeNormalize(q - light.center, -wi), -wi) - x;
             tMax = length(toTarget);
             if (!(tMax > 0.0)) {
                 return vec3(0.0);
             }
             shadowDirection = toTarget / tMax;
+            le = light.emission;
+        } else {
+            if (!(l.area > 0.0)) {
+                return vec3(0.0);
+            }
+            vec3 q = l.corner + u.y * l.edgeU + u.z * l.edgeV;
+            vec3 toLight = q - x;
+            float dist = length(toLight);
+            if (!(dist > 0.0)) {
+                return vec3(0.0);
+            }
+            wi = toLight / dist;
+            float cosLight = -dot(wi, lightNormal(l));
+            if (!(cosLight > 0.0)) {
+                return vec3(0.0);
+            }
+            lightPdf = selectPdf * (1.0 - environmentSelect) * rectSolidAnglePdf(l, dist, cosLight);
+            shadowDirection = wi;
+            if (l.kind == kLightPortal) {
+                lightPdf = escapePdf(x, wi, x, facing, true);
+            } else {
+                vec3 toTarget = offsetOrigin(q, lightNormal(l), -wi) - x;
+                tMax = length(toTarget);
+                if (!(tMax > 0.0)) {
+                    return vec3(0.0);
+                }
+                shadowDirection = toTarget / tMax;
+            }
+            le = lightRadiance(l, u.yz, wi);
         }
-        le = lightRadiance(l, u.yz, wi);
     }
     float c = dot(travel, wi);
     vec3 f = mediumPhaseValue(ph, c);
@@ -143,8 +169,9 @@ vec3 gMediumRequestTravel[kPrimaryScatterSamples];
 MediumPhase gMediumRequestPhase[kPrimaryScatterSamples];
 vec3 gMediumRequestWeight[kPrimaryScatterSamples];
 vec3 gMediumRequestRandom[kPrimaryScatterSamples];
+uint gMediumRequestTreeWord[kPrimaryScatterSamples];
 
-void mediumRequestLight(vec3 x, vec3 travel, MediumPhase ph, vec3 weight, vec3 u) {
+void mediumRequestLight(vec3 x, vec3 travel, MediumPhase ph, vec3 weight, vec3 u, uint treeWord) {
     uint i = gMediumRequestCount;
     if (i < kPrimaryScatterSamples) {
         gMediumRequestPoint[i] = x;
@@ -152,16 +179,17 @@ void mediumRequestLight(vec3 x, vec3 travel, MediumPhase ph, vec3 weight, vec3 u
         gMediumRequestPhase[i] = ph;
         gMediumRequestWeight[i] = weight;
         gMediumRequestRandom[i] = u;
+        gMediumRequestTreeWord[i] = treeWord;
         gMediumRequestCount = i + 1u;
     }
 }
 
 // A later segment of a path (the ray just traced from origin along direction, to payload.t or the sky): delta
-// tracking, the grid's emission into radiance (clamped as the segment's source vertex's contributions), and
+// tracking, the grid's emission into radiance (clamped while the path is rough), and
 // at a real collision the medium vertex: the albedo into the throughput, a request for next-event estimation
 // (MIS against the phase function), a direction sampled from it, Russian roulette as at a surface, and the path's state
 // for what it finds next (the vertex is transmissive for light selection).
-uint mediumSegment(uint bounce, bool nee, bool roulette, inout vec3 throughput,
+uint mediumSegment(uint bounce, bool nee, bool roulette, inout bool rough, inout vec3 throughput,
                    inout vec3 radiance, inout vec3 origin, inout vec3 direction, inout float coneSpread,
                    inout bool previousDelta, inout float previousPdf, inout vec3 prevP, inout vec3 prevN,
                    inout bool prevTransmissive) {
@@ -171,7 +199,7 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout vec3 throughput,
     vec3 emitted;
     bool collided = mediumCollision(origin, direction, tMax, tHit, which, emitted);
     if (maxComponent(emitted) > 0.0) {
-        addContribution(radiance, throughput * emitted, bounce - 1u);
+        addContribution(radiance, throughput * emitted, rough);
     }
     if (!collided) {
         return kMediumSegmentSurface;
@@ -185,7 +213,8 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout vec3 throughput,
     MediumPhase ph = singlePhase(g);
     if (nee && (frame.lightCount > 0u || frame.environmentSelect > 0.0)) {
         vec3 u = vec3(bounceRand(bounce, 3u), bounceRand(bounce, 4u), bounceRand(bounce, 5u));
-        mediumRequestLight(x, direction, ph, throughput, u);
+        uint treeWord = randomHash(frame.frameSeed, gPixel, gSample, 4u + (bounce + gBounceOffset) * kDimsPerBounce + 7u);
+        mediumRequestLight(x, direction, ph, throughput, u, treeWord);
     }
     vec3 wi = hgSample(g, direction, vec2(bounceRand(bounce, 0u), bounceRand(bounce, 1u)));
     if (roulette && bounce >= 3u) {
@@ -199,6 +228,7 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout vec3 throughput,
         return kMediumSegmentEnd;
     }
     coneSpread = -1.0;
+    rough = true; // a medium vertex scatters like a rough surface
     previousDelta = false;
     previousPdf = hgPhase(g, dot(direction, wi));
     prevP = x;
@@ -432,7 +462,8 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
         ph.weight0 = fogScatter;
         ph.weight1 = gridScatter;
         if (lit) {
-            mediumRequestLight(x, d, ph, vec3(weight), vec3(mediumRand(), mediumRand(), mediumRand()));
+            mediumRequestLight(x, d, ph, vec3(weight), vec3(mediumRand(), mediumRand(), mediumRand()),
+                               pcgHash(gMediumSeed ^ pcgHash(gMediumCount++)));
         }
         if (k == chosen && frame.maxBounces >= 1u) {
             vec3 wi = sampleMediumPhase(ph, d, vec3(mediumRand(), mediumRand(), mediumRand()));
@@ -454,24 +485,26 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
 // The hook after every trace of a path while the frame has a medium: the primary segment at bounce 0, a later
 // segment otherwise (mediumSegment's result; kMediumSegmentSurface at bounce 0), then the next-event estimates
 // they requested, into the volume layer at bounce 0, into radiance after.
-uint mediumStep(uint bounce, bool nee, bool roulette, inout vec3 throughput, inout vec3 radiance,
+uint mediumStep(uint bounce, bool nee, bool roulette, inout bool rough, inout vec3 throughput, inout vec3 radiance,
                 inout vec3 origin, inout vec3 direction, inout float coneSpread, inout bool previousDelta,
                 inout float previousPdf, inout vec3 prevP, inout vec3 prevN, inout bool prevTransmissive) {
     gMediumRequestCount = 0u;
     uint event = kMediumSegmentSurface;
+    bool neeRough = rough; // a vertex's next-event estimate is clamped as the path was before it scatters
     if (bounce == 0u) {
         mediumPrimary(origin, direction, payload.t, nee);
     } else {
-        event = mediumSegment(bounce, nee, roulette, throughput, radiance, origin, direction, coneSpread,
+        event = mediumSegment(bounce, nee, roulette, rough, throughput, radiance, origin, direction, coneSpread,
                               previousDelta, previousPdf, prevP, prevN, prevTransmissive);
     }
     for (uint i = 0u; i < gMediumRequestCount; ++i) {
         vec3 c = gMediumRequestWeight[i] * mediumSampleLight(gMediumRequestPoint[i], gMediumRequestTravel[i],
-                                                             gMediumRequestPhase[i], gMediumRequestRandom[i]);
+                                                             gMediumRequestPhase[i], gMediumRequestRandom[i],
+                                                             gMediumRequestTreeWord[i]);
         if (bounce == 0u) {
             gMediumVolume.rgb += c;
         } else {
-            addContribution(radiance, c, bounce);
+            addContribution(radiance, c, neeRough);
         }
     }
     return event;

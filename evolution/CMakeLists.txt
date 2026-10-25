@@ -970,6 +970,18 @@ add_dependencies(spheres_test spheres_test_shaders path_tracer_test_shaders evo_
                  evo_modern_intersection_shaders)
 evo_gpu_test(spheres spheres_test)
 
+# --- Step 5 Task 9: object motion vectors and the export shutter --------------------------------------------
+
+# The shutter's slice counts, offsets and chapter-clamped slice times (CPU), and the per-object motion vectors
+# and shutter on lavapipe with synchronization validation (tests/motion_test.cpp).
+target_sources(evo_modern PRIVATE src/modern/shutter.cpp)
+add_executable(motion_test tests/motion_test.cpp)
+target_link_libraries(motion_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(motion_test PRIVATE tests)
+target_compile_definitions(motion_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(motion_test spheres_test_shaders evo_modern_sphere_shaders evo_modern_intersection_shaders)
+evo_gpu_test(motion motion_test)
+
 # --- Step 5 Task 10: emissive splats -------------------------------------------------------------------------
 
 # SplatPass (src/modern/splats.cpp) and its shaders (shaders/modern/splat_common.glsl, splat_resolve.comp, which
@@ -1008,6 +1020,78 @@ target_include_directories(splat_test PRIVATE tests)
 target_compile_definitions(splat_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(splat_test splat_test_shaders)
 evo_gpu_test(splat splat_test)
+
+# --- Step 5 Task 6: the integrator v2 -----------------------------------------------------------------------
+
+# Path regularisation, the clamp after a rough vertex, camera-only emitters and hero-wavelength dispersion on
+# lavapipe at 64x64 with the validation layer on (a mirror caustic box, chrome and a glass slab before a
+# bright lamp, an LED over a mirror floor, a flint prism, slab and furnace), and shaders/rt/spectral.glsl
+# against its CPU mirror src/rt/spectral.hpp through a compute probe. Pictures go to build-out/step5.
+set(spectralProbeSpirv "${EVO_TEST_SPIRV_DIR}/test_spectral_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${spectralProbeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_spectral_probe.comp.d" -o "${spectralProbeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/spectral_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/spectral_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_spectral_probe.comp.d"
+    COMMENT "Compiling test shader test_spectral_probe.comp"
+    VERBATIM)
+add_custom_target(integrator_test_shaders DEPENDS "${spectralProbeSpirv}")
+add_executable(integrator_test tests/integrator_test.cpp)
+target_link_libraries(integrator_test PRIVATE evo_modern)
+target_include_directories(integrator_test PRIVATE tests)
+target_compile_definitions(integrator_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(integrator_test integrator_test_shaders)
+evo_gpu_test(integrator integrator_test)
+
+# --- Step 5 Task 13: caustic photon maps ------------------------------------------------------------------
+
+# The caustic maps (photons.comp and caustic_resolve.comp come with the shaders/modern glob above).
+target_sources(evo_modern PRIVATE src/modern/caustics.cpp)
+
+# Caustics on lavapipe with synchronization validation: a glass sphere over a receiver floor under an
+# overhead disc (or a rect light): energy against the cross-section, dispersion, determinism in any photon
+# order, the double-count exclusion, the photon-mapped caustic against the converged path-traced one,
+# byte-identity without caustics, refusals and the modern stage. `caustics_test --look <dir> [spp]` renders
+# a still to look at.
+add_executable(caustics_test tests/caustics_test.cpp)
+target_link_libraries(caustics_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(caustics_test PRIVATE tests)
+add_dependencies(caustics_test evo_modern_sphere_shaders evo_modern_intersection_shaders)
+evo_gpu_test(caustics caustics_test)
+
+# --- Step 5 Task 12: the light tree ---------------------------------------------------------------------------
+
+# Next-event estimation over up to 65,536 emissive sphere lights: the tree is built (or refit) on the CPU per
+# frame and walked in shaders/rt/light_tree.glsl.
+target_sources(evo_rt PRIVATE src/rt/light_tree.cpp)
+
+# The tree's build, refit and walk on the CPU (sums of the pdf, the pick histogram, determinism, 65,536 lights
+# in budget); the walk on the GPU against them (a test-only compute probe); NEE + MIS over sphere lights
+# against the analytic sum, NEE on and off, with and without blinking; the variance against uniform
+# selection; 4096 lights in time; seeks; refusals. `light_tree_test --look <dir> [spp]` renders a small city
+# at night to look at.
+set(lightTreeProbe "${EVO_TEST_SPIRV_DIR}/test_light_tree_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${lightTreeProbe}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_light_tree_probe.comp.d" -o "${lightTreeProbe}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/light_tree_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/light_tree_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_light_tree_probe.comp.d"
+    COMMENT "Compiling test shader test_light_tree_probe.comp"
+    VERBATIM)
+add_custom_target(light_tree_test_shaders DEPENDS "${lightTreeProbe}")
+add_executable(light_tree_test tests/light_tree_test.cpp)
+target_link_libraries(light_tree_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(light_tree_test PRIVATE tests)
+target_compile_definitions(light_tree_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders evo_modern_sphere_shaders
+                 evo_modern_intersection_shaders)
+evo_gpu_test(light_tree light_tree_test)
 
 # --- Step 5 Task 11: participating media ---------------------------------------------------------------------
 
