@@ -1,0 +1,27 @@
+#version 460
+
+// The Cosmos scene's stars (src/modern/scenes/cosmos.cpp): GALAXY's and ASCENDANT's galaxy, one splat per star,
+// a pure function of (id, params) (galaxy.glsl has the model):
+//   params[0] = (the galaxy's centre in the world, its radius)
+//   params[1] = (tilt about x, yaw about y, the turn so far in radians, total flux at the reference)
+//   params[2] = (star count, the bulge's gain (it breathes with the music; the arms stay steady), star radius,
+//                0)
+//   params[3] unused.
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "splat_common.glsl"
+#include "galaxy.glsl"
+
+SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
+    vec3 p;
+    float kelvin, weight;
+    bool bulge;
+    galaxyStar(id, p, kelvin, weight, bulge);
+    p = galaxyTurn(p, params[1].z);
+    SplatPoint s;
+    s.position = galaxyToWorld(p, params[0].xyz, params[0].w, params[1].x, params[1].y);
+    s.flux = params[1].w / params[2].x * weight * (bulge ? params[2].y : 1.0) * blackbodyColour(kelvin);
+    s.radius = params[2].z;
+    return s;
+}

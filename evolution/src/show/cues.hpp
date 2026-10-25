@@ -103,7 +103,8 @@ inline constexpr std::array<Cue, 31> cues = {{
     // every effect returns at planetary scale; it ends on the credits scroller and the 1993 end screen.
     {412.4, Effect::Reboot, Transition::Portal, .5f, 0, "REBOOT",
         "1993 · REBOOT", "2026 · THROUGH THE GLASS"},
-    {430.4, Effect::Galaxy, Transition::Cut, .7f, 1, "GALAXY", "", "2026 · GALAXY · 16,777,216 POINTS"},
+    {430.4, Effect::Galaxy, Transition::Cut, .7f, 1, "GALAXY", "",
+        "2026 · 16,777,216 STARS · 256×64×256 DUST · ONE SPLAT PASS"},
     {458.4, Effect::PlasmaPlanet, Transition::Cut, .7f, 1, "PLASMA PLANET", "",
         "2026 · PLASMA PLANET · VOLUMETRIC"},
     {486.4, Effect::Wormhole, Transition::Cut, .9f, 1, "WORMHOLE", "",
@@ -114,7 +115,8 @@ inline constexpr std::array<Cue, 31> cues = {{
     {570.4, Effect::RaytraceInfinity, Transition::Cut, 1.f, 1, "RAYTRACE INFINITY", "",
         "2026 · RAY TRACED INFINITY · 32,768 MIRROR SPHERES"},
     {602.4, Effect::Metropolis, Transition::Cut, .9f, 1, "METROPOLIS", "", "2026 · METROPOLIS"},
-    {634.4, Effect::Ascendant, Transition::Cut, 1.f, 1, "ASCENDANT", "", "2026 · ASCENDANT"},
+    {634.4, Effect::Ascendant, Transition::Cut, 1.f, 1, "ASCENDANT", "",
+        "2026 · 2,097,152 PARTICLES · 16,777,216 STARS · ASCENDANT"},
     // The credits roll as a 1993 sine scroller, so the chapter holds 1993 and its card is the 1993 one.
     {666.4, Effect::Credits, Transition::Cut, .4f, 0, "CREDITS", "1993 → 2026 · CREDITS", ""},
     {696.4, Effect::TheEnd, Transition::Cut, .2f, 0, "THE END", "1993 · THE END", ""},

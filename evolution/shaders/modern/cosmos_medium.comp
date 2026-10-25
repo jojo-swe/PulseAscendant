@@ -1,0 +1,19 @@
+#version 460
+
+// The Cosmos scene's dust (src/modern/scenes/cosmos.cpp): the galaxy's lanes and HII knots baked into the grid
+// medium over the disc's box, a pure function of (uvw, params) (galaxy.glsl has the model; the C++ mirror is
+// cosmos.cpp's galaxyDust):
+//   params[0] = (the turn so far in radians, the dust's density, the HII emission's strength, 0)
+// The box is galaxy space x and z in [-1, 1], y in +-kGalaxyDustHalfHeight; the dust turns with the stars.
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "medium_common.glsl"
+#include "galaxy.glsl"
+
+vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
+    vec3 p = vec3(2.0 * uvw.x - 1.0, (2.0 * uvw.y - 1.0) * kGalaxyDustHalfHeight, 2.0 * uvw.z - 1.0);
+    vec2 dust = galaxyDust(galaxyTurn(p, -params[0].x));
+    // HII: hydrogen alpha's pink (656 nm with a little H-beta blue).
+    return vec4(params[0].y * dust.x, params[0].z * dust.y * vec3(1.0, 0.3, 0.42));
+}

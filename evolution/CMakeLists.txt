@@ -1183,3 +1183,13 @@ evo_scene_test(glass)
 # volume. `scene_ship_test --look <dir> [spp] [width height]` renders stills.
 target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
 evo_scene_test(ship)
+
+# --- Step 5 Task 24: Cosmos (GALAXY, ASCENDANT) ------------------------------------------------------------
+
+# A sixteen-million-star galaxy as splats with its dust as a grid medium, and two million particles rising from
+# its core into the logo (src/modern/scenes/cosmos.cpp; shaders/modern/{galaxy.glsl, cosmos_splats.comp,
+# cosmos_medium.comp, cosmos_particles.comp}), with its test: the standard picture and sweep checks, the cards'
+# numbers, the flight's landing and waypoint on the CPU twin, the particle shader against it, and the dust
+# lanes in the volume layer. `scene_cosmos_test --look <dir> [spp] [detail]` renders one still per chapter.
+target_sources(evo_modern PRIVATE src/modern/scenes/cosmos.cpp)
+evo_scene_test(cosmos)

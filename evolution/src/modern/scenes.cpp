@@ -2,6 +2,7 @@
 #include "modern/scene.hpp"
 #include "modern/scenes/glass.hpp"
 #include "modern/scenes/lens.hpp"
+#include "modern/scenes/cosmos.hpp"
 #include "modern/scenes/particles.hpp"
 #include "modern/scenes/ship.hpp"
 #include "modern/scenes/spheres.hpp"
@@ -34,7 +35,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Lens, "Lens", &make<Lens>},                // Task 21
     {SceneId::Spheres, "Spheres", &make<Spheres>},       // Task 22
     {SceneId::City, "City", nullptr},                    // Task 23
-    {SceneId::Cosmos, "Cosmos", nullptr},                // Task 24
+    {SceneId::Cosmos, "Cosmos", &make<Cosmos>},                // Task 24
     {SceneId::Singularity, "Singularity", nullptr},      // Task 25
 }};
 
@@ -63,14 +64,14 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Singularity, SceneId::Placeholder}, // Singularity
     {Effect::Return, SceneId::Studio},
     {Effect::Reboot, SceneId::Studio},
-    {Effect::Galaxy, SceneId::Placeholder},       // Cosmos
+    {Effect::Galaxy, SceneId::Cosmos},
     {Effect::PlasmaPlanet, SceneId::Placeholder}, // Nebula
     {Effect::Wormhole, SceneId::Ship},            // the ship's crossing; the wormhole is Tunnel's
     {Effect::CrystalCity, SceneId::Glass},
     {Effect::LensOfGod, SceneId::Lens},
     {Effect::RaytraceInfinity, SceneId::Spheres}, // Spheres
     {Effect::Metropolis, SceneId::Placeholder},   // City
-    {Effect::Ascendant, SceneId::Placeholder},    // Cosmos
+    {Effect::Ascendant, SceneId::Cosmos},
     {Effect::Credits, SceneId::Placeholder},
     {Effect::TheEnd, SceneId::Placeholder},
 }};

@@ -1,0 +1,155 @@
+#ifndef EVO_MODERN_GALAXY_GLSL
+#define EVO_MODERN_GALAXY_GLSL
+
+// The galaxy of the Cosmos and Singularity scenes (step 5, Tasks 24 and 25): its stars, a pure function of
+// (id, count), and its dust, a pure function of the position. src/modern/scenes/cosmos.cpp mirrors the dust
+// (galaxyDust) and the colours (blackbodyColour) on the CPU and documents the model.
+//
+// Galaxy space: the disc lies in the xz plane, y is its axis, and lengths are in units of the outer radius
+// (the stars thin out past 1). Two logarithmic arms of pitch kGalaxyPitch trail as the galaxy turns about +y.
+
+const float kGalaxyPi = 3.14159265;
+const float kGalaxyTau = 6.28318531;
+const float kGalaxyPitch = 0.26;      // tan of the arms' pitch angle (about 15 degrees)
+const float kGalaxyArmStart = 0.07;   // where the arms leave the bulge
+const float kGalaxyLaneOffset = 0.3; // the dust lanes trail the arms' spines by this angle (radians)
+const float kGalaxyDustHalfHeight = 0.125; // the dust grid's box: y in +-this (x and z in +-1)
+
+uint galaxyHash(uint x) {
+    x ^= x >> 16;
+    x *= 0x7FEB352Du;
+    x ^= x >> 15;
+    x *= 0x846CA68Bu;
+    x ^= x >> 16;
+    return x;
+}
+
+float galaxyUnit(uint x) {
+    return float(x >> 8) * (1.0 / 16777216.0);
+}
+
+// The angle from the nearest arm's spine at (radius, azimuth), in (-pi/2, pi/2]: 0 on a spine, negative on its
+// inner (trailing, concave) side where the dust lanes lie.
+float galaxyArmPhase(float radius, float azimuth) {
+    float spine = log(max(radius, 1e-4) / kGalaxyArmStart) / kGalaxyPitch;
+    float a = azimuth - spine;
+    return a - kGalaxyPi * floor(a / kGalaxyPi + 0.5);
+}
+
+// A star's colour of temperature `kelvin`: Planck's law at 605, 545 and 460 nm, scaled to luminance 1 (Rec.
+// 709 weights), so a star's flux sets its brightness and the temperature its hue alone.
+vec3 blackbodyColour(float kelvin) {
+    const vec3 lambda = vec3(605.0, 545.0, 460.0);
+    vec3 planck = 1.0 / (pow(lambda / 500.0, vec3(5.0)) * (exp(1.4388e7 / (lambda * max(kelvin, 500.0))) - 1.0));
+    return planck / max(dot(planck, vec3(0.2126, 0.7152, 0.0722)), 1e-30);
+}
+
+// The 3-D value noise of the dust: trilinear between hashed lattice values, smoothstep weights, in [0, 1].
+float galaxyLattice(ivec3 c) {
+    return galaxyUnit(galaxyHash(uint(c.x) * 0x8DA6B343u ^ uint(c.y) * 0xD8163841u ^ uint(c.z) * 0xCB1AB31Fu));
+}
+
+float galaxyNoise(vec3 p) {
+    vec3 f = floor(p);
+    ivec3 c = ivec3(f);
+    vec3 t = p - f;
+    t = t * t * (3.0 - 2.0 * t);
+    float x00 = mix(galaxyLattice(c), galaxyLattice(c + ivec3(1, 0, 0)), t.x);
+    float x10 = mix(galaxyLattice(c + ivec3(0, 1, 0)), galaxyLattice(c + ivec3(1, 1, 0)), t.x);
+    float x01 = mix(galaxyLattice(c + ivec3(0, 0, 1)), galaxyLattice(c + ivec3(1, 0, 1)), t.x);
+    float x11 = mix(galaxyLattice(c + ivec3(0, 1, 1)), galaxyLattice(c + ivec3(1, 1, 1)), t.x);
+    return mix(mix(x00, x10, t.y), mix(x01, x11, t.y), t.z);
+}
+
+// The dust at galaxy-space point p (density, then the HII emission's strength): lanes along the arms' inner
+// edges, a thin diffuse disc that shows edge-on as the lane across the bulge, both broken by two octaves of
+// noise into filaments; pink HII knots sit just ahead of the lanes on the spines.
+vec2 galaxyDust(vec3 p) {
+    float radius = length(p.xz);
+    float azimuth = atan(p.z, p.x);
+    float phase = galaxyArmPhase(radius, azimuth);
+    float vertical = exp(-abs(p.y) / 0.011);
+    float envelope = smoothstep(0.05, 0.16, radius) * (1.0 - smoothstep(0.82, 1.05, radius));
+    float laneWidth = 0.1 + 0.05 * radius;
+    float lane = exp(-pow((phase + kGalaxyLaneOffset) / laneWidth, 2.0));
+    lane += 0.6 * exp(-pow((phase + 0.55) / (1.5 * laneWidth), 2.0)); // a fainter second lane further in
+    float noise = 0.65 * galaxyNoise(p * 22.0) + 0.35 * galaxyNoise(p * 61.0 + 17.0);
+    float filaments = smoothstep(0.25, 0.75, noise);
+    float disc = 0.22 * exp(-radius / 0.4) * smoothstep(0.02, 0.08, radius);
+    float density = vertical * envelope * (2.6 * lane * filaments + disc * (0.5 + filaments));
+    // HII knots: clumps of the noise along the spines, in the disc's mid-plane.
+    float spine = exp(-pow((phase - 0.03) / 0.07, 2.0));
+    float knot = pow(galaxyNoise(p * 48.0 + 5.0), 5.0) * spine * envelope * exp(-abs(p.y) / 0.008);
+    return vec2(density + 2.0 * knot, 14.0 * knot);
+}
+
+// Star `id` of `count` in galaxy space, its colour temperature and its brightness (a weight of the average
+// star's flux, which is 1). Three populations: the bulge (18 %: old, red giants among them), the disc (32 %:
+// exponential, mixed ages) and the arms (50 %: young, thin, blue on the spines, with a few red supergiants).
+void galaxyStar(uint id, out vec3 p, out float kelvin, out float weight, out bool bulge) {
+    uint h = galaxyHash(id * 0x9E3779B1u ^ 0x6A1A3Bu);
+    float u0 = galaxyUnit(h), u1 = galaxyUnit(galaxyHash(h + 1u)), u2 = galaxyUnit(galaxyHash(h + 2u));
+    float u3 = galaxyUnit(galaxyHash(h + 3u)), u4 = galaxyUnit(galaxyHash(h + 4u)),
+          u5 = galaxyUnit(galaxyHash(h + 5u));
+    float g = sqrt(-2.0 * log(max(u3, 1e-7))) * cos(kGalaxyTau * u4); // a Gaussian
+    bulge = u0 < 0.18;
+    if (bulge) {
+        // An oblate ball, dense in the middle (r^-1.6 or so), flattened 0.6 along the axis.
+        float r = 0.16 * pow(u1, 1.7) + 0.004;
+        float z = 2.0 * u2 - 1.0;
+        float a = kGalaxyTau * u5;
+        float s = sqrt(max(1.0 - z * z, 0.0));
+        p = r * vec3(s * cos(a), 0.6 * z, s * sin(a));
+        kelvin = mix(3100.0, 5200.0, u4 * u4);
+        weight = 1.1;
+    } else if (u0 < 0.5) {
+        float r = -0.3 * log(1.0 - 0.95 * u1) + 0.02;
+        float a = kGalaxyTau * u2;
+        p = vec3(r * cos(a), 0.016 * g, r * sin(a));
+        kelvin = mix(3300.0, 7500.0, u5 * u5);
+        weight = 0.7;
+    } else {
+        // Along an arm: the spine at this radius, scattered across it (narrower for the young); a third of
+        // the young stars gather in clusters strung along the spine.
+        float r = kGalaxyArmStart + 1.0 * pow(u1, 0.8);
+        float young = u5;
+        float arm = u0 < 0.75 ? 0.0 : kGalaxyPi;
+        float across = (0.022 + 0.06 * (1.0 - young)) * (0.5 + r) * g;
+        vec2 clusterOffset = vec2(0.0);
+        if (young > 0.55 && galaxyUnit(galaxyHash(h + 7u)) < 0.6) {
+            uint c = galaxyHash(uint(u1 * 2400.0) * 0x2545F491u + (u0 < 0.75 ? 0u : 7u));
+            r = kGalaxyArmStart + pow(galaxyUnit(c), 0.8);
+            float gc = sqrt(-2.0 * log(max(galaxyUnit(galaxyHash(c + 1u)), 1e-7))) *
+                       cos(kGalaxyTau * galaxyUnit(galaxyHash(c + 2u)));
+            across = 0.03 * (0.5 + r) * gc;
+            float g2 = sqrt(-2.0 * log(max(u2, 1e-7)));
+            clusterOffset = 0.007 * g2 * vec2(cos(kGalaxyTau * u3), sin(kGalaxyTau * u3));
+        }
+        float a = log(r / kGalaxyArmStart) / kGalaxyPitch + arm;
+        float rr = max(r + across, 0.01);
+        p = vec3(rr * cos(a) + clusterOffset.x,
+                 0.006 * (2.0 - young) * sqrt(-2.0 * log(max(u2, 1e-7))) * sign(u4 - 0.5),
+                 rr * sin(a) + clusterOffset.y);
+        kelvin = young > 0.97 ? 3400.0 : mix(5000.0, 24000.0, young * young);
+        weight = 0.45 + 0.75 * young;
+    }
+    // A few bright stars among many faint ones (about 1 in 400 is 20x the average).
+    float bright = galaxyUnit(galaxyHash(h + 6u));
+    weight *= 0.55 + 18.0 * pow(bright, 60.0);
+}
+
+// Galaxy space about y by `turn` radians (the galaxy's rotation; the arms trail).
+vec3 galaxyTurn(vec3 p, float turn) {
+    float c = cos(turn), s = sin(turn);
+    return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+}
+
+// Galaxy space to the world: tilt about x, then yaw about y, scaled by the radius, about the centre.
+vec3 galaxyToWorld(vec3 p, vec3 centre, float radius, float tilt, float yaw) {
+    float ct = cos(tilt), st = sin(tilt), cy = cos(yaw), sy = sin(yaw);
+    vec3 q = vec3(p.x, ct * p.y - st * p.z, st * p.y + ct * p.z);
+    q = vec3(cy * q.x + sy * q.z, q.y, -sy * q.x + cy * q.z);
+    return centre + radius * q;
+}
+
+#endif

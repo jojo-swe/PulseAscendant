@@ -51,10 +51,21 @@ layout(push_constant) uniform SplatPushConstants {
     float seconds;
     uint count;
     uint width;
-    uint height;
+    // The trace's height in the low 16 bits; above them the footprint's half-width in pixels (1: 3x3), where
+    // 0 means 2 (5x5, the default and every export's; SplatFrame::windowFootprint).
+    uint heightAndTaps;
     float fixedPointScale;
     vec4 params[4];
 } pc;
+
+uint splatHeight() {
+    return pc.heightAndTaps & 0xFFFFu;
+}
+
+int splatHalfWidth() {
+    uint r = pc.heightAndTaps >> 16u;
+    return r == 0u ? 2 : int(min(r, 2u));
+}
 
 // The largest float below 2^32: an add of more units than this is an overflow on its own.
 const float kSplatMaxUnits = 4294967040.0;
@@ -149,7 +160,7 @@ void splat(SplatPoint s) {
     }
     float ndcX = dot(v, pc.cameraRight) / (z * pc.tanHalfFovY * pc.aspect);
     float ndcY = dot(v, cameraUp) / (z * pc.tanHalfFovY);
-    vec2 size = vec2(float(pc.width), float(pc.height));
+    vec2 size = vec2(float(pc.width), float(splatHeight()));
     vec2 position = vec2((ndcX + 1.0) * 0.5 * size.x, (1.0 - ndcY) * 0.5 * size.y);
     // Off the picture by more than the footprint (and far off, where ivec2 would not hold it).
 #ifdef SPLAT_SPIKES
@@ -164,7 +175,7 @@ void splat(SplatPoint s) {
         return;
     }
     ivec2 centre = ivec2(floor(position));
-    ivec2 last = ivec2(int(pc.width) - 1, int(pc.height) - 1);
+    ivec2 last = ivec2(int(pc.width) - 1, int(splatHeight()) - 1);
     float guide = imageLoad(depthImage, clamp(centre, ivec2(0), last)).r;
     if (guide >= 0.0 && z > guide) { // behind the traced surface; -1 (a miss) is infinitely far
         return;
@@ -176,30 +187,33 @@ void splat(SplatPoint s) {
         flux *= 1.0 - spikeShare;
     }
 #endif
-    // sigma = max(projected radius, 0.5 px); the 5x5 taps around the centre pixel, renormalised to sum 1.
+    // sigma = max(projected radius, 0.5 px); the 5x5 taps around the centre pixel (3x3 in the window when the
+    // frame asks for it), renormalised to sum 1.
     float projected = max(s.radius, 0.0) / (z * pc.tanHalfFovY) * 0.5 * size.y;
     float sigma = max(projected, 0.5);
     float falloff = -0.5 / (sigma * sigma);
+    int r = splatHalfWidth();
+    int side = 2 * r + 1;
     float weights[25];
     float total = 0.0;
-    for (int j = 0; j < 5; ++j) {
-        for (int i = 0; i < 5; ++i) {
-            vec2 d = vec2(centre + ivec2(i - 2, j - 2)) + 0.5 - position;
+    for (int j = 0; j < side; ++j) {
+        for (int i = 0; i < side; ++i) {
+            vec2 d = vec2(centre + ivec2(i - r, j - r)) + 0.5 - position;
             float w = exp(falloff * dot(d, d));
-            weights[j * 5 + i] = w;
+            weights[j * side + i] = w;
             total += w;
         }
     }
     // In reference units: the resolve scales by (W * H) / (1920 * 1080), so the point's energy is the same at
     // every resolution, and so is the fixed-point step an add rounds to.
     vec3 scaled = flux / total;
-    for (int j = 0; j < 5; ++j) {
-        for (int i = 0; i < 5; ++i) {
-            ivec2 pixel = centre + ivec2(i - 2, j - 2);
+    for (int j = 0; j < side; ++j) {
+        for (int i = 0; i < side; ++i) {
+            ivec2 pixel = centre + ivec2(i - r, j - r);
             if (any(lessThan(pixel, ivec2(0))) || any(greaterThan(pixel, last))) {
                 continue;
             }
-            vec3 value = scaled * weights[j * 5 + i];
+            vec3 value = scaled * weights[j * side + i];
             splatAccumulate(0u, pixel, value.r);
             splatAccumulate(1u, pixel, value.g);
             splatAccumulate(2u, pixel, value.b);

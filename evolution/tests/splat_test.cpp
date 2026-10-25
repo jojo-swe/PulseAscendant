@@ -165,7 +165,7 @@ Projected project(const modern::Camera& camera, Vec3 p, std::uint32_t width, std
 
 // What one point adds to every pixel (one channel per flux component), as splat_common.glsl defines it.
 std::vector<double> referenceSplat(const modern::Camera& camera, Vec3 p, float radius, double flux,
-                                   std::uint32_t width, std::uint32_t height) {
+                                   std::uint32_t width, std::uint32_t height, int half = 2) {
     std::vector<double> out(std::size_t{width} * height, 0.0);
     const Projected q = project(camera, p, width, height);
     if (!q.visible)
@@ -173,19 +173,20 @@ std::vector<double> referenceSplat(const modern::Camera& camera, Vec3 p, float r
     const double tanHalf = std::tan(camera.fovYDegrees * 3.14159265358979323846 / 360.0);
     const double sigma = std::max(radius / (q.z * tanHalf) * 0.5 * height, 0.5);
     const int cx = static_cast<int>(std::floor(q.x)), cy = static_cast<int>(std::floor(q.y));
+    const int side = 2 * half + 1;
     double w[25], total = 0;
-    for (int j = 0; j < 5; ++j)
-        for (int i = 0; i < 5; ++i) {
-            const double dx = cx + i - 2 + 0.5 - q.x, dy = cy + j - 2 + 0.5 - q.y;
-            w[j * 5 + i] = std::exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
-            total += w[j * 5 + i];
+    for (int j = 0; j < side; ++j)
+        for (int i = 0; i < side; ++i) {
+            const double dx = cx + i - half + 0.5 - q.x, dy = cy + j - half + 0.5 - q.y;
+            w[j * side + i] = std::exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
+            total += w[j * side + i];
         }
     const double scale = flux * double(width) * height / (1920.0 * 1080.0) / total;
-    for (int j = 0; j < 5; ++j)
-        for (int i = 0; i < 5; ++i) {
-            const int x = cx + i - 2, y = cy + j - 2;
+    for (int j = 0; j < side; ++j)
+        for (int i = 0; i < side; ++i) {
+            const int x = cx + i - half, y = cy + j - half;
             if (x >= 0 && y >= 0 && x < int(width) && y < int(height))
-                out[std::size_t(y) * width + x] = scale * w[j * 5 + i];
+                out[std::size_t(y) * width + x] = scale * w[j * side + i];
         }
     return out;
 }
@@ -245,10 +246,10 @@ public:
 
     Result run(const std::filesystem::path& shader, const modern::SplatFrame& frame, float depth,
                std::array<float, 4> base = {0, 0, 0, 0}, const modern::Camera& camera = testCamera(),
-               double seconds = 0) {
+               double seconds = 0, std::uint32_t footprint = 5) {
         VkCommandBuffer cmd = ring_->begin();
         clear(cmd, depth, base);
-        pass_->record(cmd, shader, frame, camera, depth_, emission_, seconds);
+        pass_->record(cmd, shader, frame, camera, depth_, emission_, seconds, footprint);
         readback(cmd);
         ring_->wait(ring_->submit());
         return collect();
@@ -395,6 +396,26 @@ void testEnergyAcrossResolutions(gfx::Context& ctx) {
     CHECK(std::fabs(faint[0] - 0.05) < 0.02 * 0.05 && std::fabs(faint[1] - 0.05) < 0.02 * 0.05);
     std::printf("(a) a faint point of flux 0.05: energy %.5f at 160x90, %.5f at 320x180\n", faint[0],
                 faint[1]);
+    // The window's 3x3 footprint: the same energy, every pixel as the 3x3 reference, nothing further out.
+    for (const float radius : {0.f, 0.1f}) {
+        Harness harness(ctx, 160, 90);
+        const Result r = harness.run(kGridShader, rowFrame(1, position, radius, flux), -1.f, {0, 0, 0, 0},
+                                     testCamera(), 0.0, 3);
+        const double e = r.energy(0);
+        CHECK(std::fabs(e - flux.x) < 0.01 * flux.x);
+        const std::vector<double> ref = referenceSplat(testCamera(), position, radius, flux.x, 160, 90, 1);
+        std::uint32_t lit = 0;
+        for (std::uint32_t y = 0; y < 90; ++y)
+            for (std::uint32_t x = 0; x < 160; ++x) {
+                const double expected = ref[r.index(x, y)], got = r.emission(x, y, 0);
+                CHECK(std::fabs(got - expected) <= 2e-3 * expected + 2.f / 4096.f);
+                lit += got > 0.f;
+            }
+        CHECK(lit <= 9);
+        std::printf("(a) the 3x3 footprint, radius %.2f: energy %.3f of %.0f over %u pixels\n", radius, e,
+                    flux.x, lit);
+        idle(ctx);
+    }
 }
 
 // --- (b) ---------------------------------------------------------------------------------------------------
@@ -537,6 +558,9 @@ void testRefusals(gfx::Context& ctx) {
     CHECK(throws<std::invalid_argument>([&] { modern::checkSplats(bad, 10, kGridShader); }));
     bad = rowFrame(1, {}, 0, {1, 1, 1});
     bad.params[5] = std::numeric_limits<float>::quiet_NaN();
+    CHECK(throws<std::invalid_argument>([&] { modern::checkSplats(bad, 10, kGridShader); }));
+    bad = rowFrame(1, {}, 0, {1, 1, 1});
+    bad.windowFootprint = 4;
     CHECK(throws<std::invalid_argument>([&] { modern::checkSplats(bad, 10, kGridShader); }));
 
     // checkSceneFrame runs it on the scene's capacity and shader.
