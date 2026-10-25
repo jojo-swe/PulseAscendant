@@ -15,6 +15,7 @@
 #include "modern/scene_gpu.hpp"
 #include "rt/accel.hpp"
 #include "rt/geometry.hpp"
+#include "rt/light_tree.hpp"
 
 #include <volk.h>
 
@@ -79,6 +80,7 @@ struct GBuffer {
 // any frame it traces. The largest over the scenes prepared (ModernStage).
 struct TracerCapacity {
     std::uint32_t instances = 0, lights = 0, materials = 0;
+    std::uint32_t treeLights = 0; // the light tree's lights (Task 12; its nodes: 2 treeLights - 1)
 };
 // The capacity a scene needs.
 TracerCapacity tracerCapacity(const SceneCapacity& scene);
@@ -172,8 +174,9 @@ public:
     VkDeviceSize imageBytes() const;
     // The device memory of everything else the tracer allocates, as allocated (VMA): the TLAS (storage,
     // scratch, instance buffers), the per-slot uniform, environment, instance, light and material buffers,
-    // the shader binding table and the feature dummies. A task that adds a buffer to the tracer adds it here
-    // (shared_tracer_test (b) compares the sum with the allocator's statistics).
+    // the light tree's per-slot buffers, the shader binding table and the feature dummies. A task that adds a
+    // buffer to the tracer adds it here (shared_tracer_test (b) compares the sum with the allocator's
+    // statistics).
     VkDeviceSize bufferBytes() const;
 
     struct Stats {
@@ -188,10 +191,15 @@ public:
 private:
     using SlotBuffers = std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight>;
     void createImages();
-    // The per-slot instance, light and material buffers of a capacity.
+    // The per-slot instance, light and material buffers of a capacity, and the light tree's (Task 12).
     struct FrameBuffers {
-        SlotBuffers instanceRecords, lights, materials;
+        SlotBuffers instanceRecords, lights, materials, treeNodes, treeLights;
     };
+    // The frame's light tree (Task 12): built from the frame's tree lights when their centres, radii,
+    // emissions or spheres change (treeKey_ holds the last ones), else refit for their scales alone. The
+    // tree is a pure function of the frame either way (the build is deterministic), so a seek never sees
+    // another frame's tree.
+    const rt::LightTree& lightTreeFor(const SceneFrame& frame);
     FrameBuffers createFrameBuffers(const TracerCapacity& capacity) const;
 
     gfx::Context& ctx_;
@@ -209,6 +217,11 @@ private:
     gfx::Buffer dummyBuffer_;
     gfx::Image dummyDensity_, dummyMajorant_, dummyCaustics_;
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_, materials_;
+    // The light tree's nodes and lights (bindings EVO_BINDING_TREE_NODES and EVO_BINDING_TREE_LIGHTS), per
+    // slot, and the tree they were last packed from (Task 12).
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> treeNodes_, treeLights_;
+    std::vector<rt::TreeLight> treeKey_;
+    rt::LightTree tree_;
     // The frame's environment (SceneFrame::environment packed, binding EVO_BINDING_ENVIRONMENT), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
     GBuffer gbuffer_;

@@ -154,12 +154,12 @@ std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset) {
 }
 
 TracerCapacity tracerCapacity(const SceneCapacity& scene) {
-    return {scene.instances, scene.lights, scene.materials};
+    return {scene.instances, scene.lights, scene.materials, scene.treeLights};
 }
 
 TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b) {
     return {std::max(a.instances, b.instances), std::max(a.lights, b.lights),
-            std::max(a.materials, b.materials)};
+            std::max(a.materials, b.materials), std::max(a.treeLights, b.treeLights)};
 }
 
 std::uint32_t PathTracer::pipelinesCreated() {
@@ -190,6 +190,8 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
     instanceRecords_ = std::move(buffers.instanceRecords);
     lights_ = std::move(buffers.lights);
     materials_ = std::move(buffers.materials);
+    treeNodes_ = std::move(buffers.treeNodes);
+    treeLights_ = std::move(buffers.treeLights);
     tlas_ = std::make_unique<rt::Tlas>(ctx_, ring_, capacity_.instances);
     createImages();
 }
@@ -203,6 +205,10 @@ PathTracer::FrameBuffers PathTracer::createFrameBuffers(const TracerCapacity& ca
             slotBuffer(ctx_, sizeof(rt::InstanceRecord), capacity.instances, "instance records");
         b.lights[slot] = slotBuffer(ctx_, sizeof(rt::RectLight), capacity.lights, "rect lights");
         b.materials[slot] = slotBuffer(ctx_, sizeof(rt::Material), capacity.materials, "frame materials");
+        b.treeNodes[slot] =
+            slotBuffer(ctx_, sizeof(rt::LightTreeNode),
+                       capacity.treeLights > 0 ? 2 * capacity.treeLights - 1 : 0, "tree nodes");
+        b.treeLights[slot] = slotBuffer(ctx_, sizeof(rt::TreeLight), capacity.treeLights, "tree lights");
     }
     return b;
 }
@@ -210,7 +216,7 @@ PathTracer::FrameBuffers PathTracer::createFrameBuffers(const TracerCapacity& ca
 void PathTracer::reserve(const TracerCapacity& capacity) {
     const TracerCapacity grown = unite(capacity_, capacity);
     if (grown.instances == capacity_.instances && grown.lights == capacity_.lights &&
-        grown.materials == capacity_.materials)
+        grown.materials == capacity_.materials && grown.treeLights == capacity_.treeLights)
         return;
     // The frames in flight may still read the TLAS and the slots' buffers; nothing of the frame being
     // recorded (if any) uses them before trace(). A queue idle, not a timeline wait: synchronization
@@ -224,6 +230,8 @@ void PathTracer::reserve(const TracerCapacity& capacity) {
     instanceRecords_ = std::move(buffers.instanceRecords);
     lights_ = std::move(buffers.lights);
     materials_ = std::move(buffers.materials);
+    treeNodes_ = std::move(buffers.treeNodes);
+    treeLights_ = std::move(buffers.treeLights);
     if (tlas)
         tlas_ = std::move(tlas);
     capacity_ = grown;
@@ -255,7 +263,8 @@ VkDeviceSize PathTracer::imageBytes() const {
 VkDeviceSize PathTracer::bufferBytes() const {
     VkDeviceSize bytes = tlas_->bytes() + pipeline_.sbtBytes() + dummyBuffer_.bytes() + blackScreen_.bytes() +
                          dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
-    for (const SlotBuffers* buffers : {&uniforms_, &instanceRecords_, &lights_, &materials_, &environments_})
+    for (const SlotBuffers* buffers :
+         {&uniforms_, &instanceRecords_, &lights_, &materials_, &environments_, &treeNodes_, &treeLights_})
         for (const gfx::Buffer& buffer : *buffers)
             bytes += buffer.bytes();
     return bytes;
@@ -272,6 +281,27 @@ void PathTracer::resize(std::uint32_t width, std::uint32_t height) {
     width_ = width;
     height_ = height;
     createImages();
+}
+
+const rt::LightTree& PathTracer::lightTreeFor(const SceneFrame& frame) {
+    std::vector<rt::TreeLight> key(frame.treeLights.size());
+    std::vector<float> scale(frame.treeLights.size());
+    for (std::size_t k = 0; k < key.size(); ++k) {
+        const TreeLightFrame& l = frame.treeLights[k];
+        rt::TreeLight& t = key[k];
+        store(t.center, l.center);
+        t.radius = l.radius;
+        store(t.emission, l.emission);
+        t.sphere = l.sphere;
+        scale[k] = l.scale;
+    }
+    if (key.size() != treeKey_.size() ||
+        std::memcmp(key.data(), treeKey_.data(), key.size() * sizeof(rt::TreeLight)) != 0) {
+        tree_ = rt::buildLightTree(key);
+        treeKey_ = std::move(key);
+    }
+    rt::refitLightTree(tree_, scale);
+    return tree_;
 }
 
 void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFrame& frame,
@@ -307,6 +337,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         throw tooMany("lights", frame.lights.size(), capacity_.lights);
     if (frame.materials.size() > capacity_.materials)
         throw tooMany("materials", frame.materials.size(), capacity_.materials);
+    if (frame.treeLights.size() > capacity_.treeLights)
+        throw tooMany("tree lights", frame.treeLights.size(), capacity_.treeLights);
     checkSceneFrame(scene.source(), frame);
     const bool dynamicSpheres =
         std::any_of(frame.instances.begin(), frame.instances.end(), [](const SceneInstance& in) {
@@ -342,6 +374,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
                                     (spheres && in.dynamicSpheres ? rt::kInstanceDynamicSpheres : 0u);
         records.push_back({spheres ? in.firstSphere : in.mesh, in.material, in.light, flags});
     }
+    // The light tree (Task 12; checkSceneFrame checked its lights, so neither the build nor the refit
+    // throws).
+    const rt::LightTree* tree = frame.treeLights.empty() ? nullptr : &lightTreeFor(frame);
     tracedThisFrame_ = true; // nothing is refused from here on
 
     const CameraBasis basis = cameraBasis(frame.camera);
@@ -378,8 +413,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     u.seconds = settings.seconds;
     for (const rt::RectLight& light : frame.lights)
         u.lightWeightSum += std::max(light.selectWeight, 0.f);
+    u.treeLightCount = static_cast<std::uint32_t>(frame.treeLights.size()); // Task 12
     // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
-    // regularisation, no tree lights, medium, caustics or lensing.
+    // regularisation, medium, caustics or lensing.
     u.environmentSelect = frame.environment.select;
     u.sliceIndex = 0;
     u.sliceCount = 1;
@@ -392,6 +428,15 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     writeBuffer(lights_[slot], frame.lights.data(), frame.lights.size() * sizeof(rt::RectLight));
     if (!frame.materials.empty())
         writeBuffer(materials_[slot], frame.materials.data(), frame.materials.size() * sizeof(rt::Material));
+    if (tree) {
+        writeBuffer(treeNodes_[slot], tree->nodes.data(), tree->nodes.size() * sizeof(rt::LightTreeNode));
+        writeBuffer(treeLights_[slot], tree->lights.data(), tree->lights.size() * sizeof(rt::TreeLight));
+    }
+    // The tree's buffers: the frame's (a non-null TraceExtras pointer replaces them, a hook), or the dummy.
+    const gfx::Buffer* treeNodes = extras.treeNodes ? extras.treeNodes : tree ? &treeNodes_[slot] : nullptr;
+    const gfx::Buffer* treeLights = extras.treeLights ? extras.treeLights
+                                    : tree            ? &treeLights_[slot]
+                                                      : nullptr;
     const gfx::Buffer& materialTable = frame.materials.empty() ? scene.staticMaterials() : materials_[slot];
 
     if (timers_)
@@ -440,8 +485,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         sampledImage(EVO_BINDING_RETRO_SCREEN, screen),
         storageBuffer(EVO_BINDING_ENVIRONMENT,
                       extras.environment ? *extras.environment : environments_[slot]),
-        extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes),
-        extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights),
+        extraBuffer(EVO_BINDING_TREE_NODES, treeNodes),
+        extraBuffer(EVO_BINDING_TREE_LIGHTS, treeLights),
         extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
         sampledImage(EVO_BINDING_DENSITY, density),
         sampledImage(EVO_BINDING_MAJORANT, majorant),

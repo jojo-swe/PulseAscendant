@@ -9,10 +9,12 @@
 // Light selection is a function of the shading point (p, its shading normal n turned to the side the path
 // arrived from, and whether the surface transmits): pickLight() and lightSelectPdf() use the same weights,
 // lightImportance(), and a BSDF ray that hits a light evaluates lightSelectPdf() at the vertex it left (Review
-// Focus 2 of step 5), so the two MIS strategies always agree on the selection probability. A light that gets
+// Focus 2 of step 5), so the two MIS strategies always agree on the selection probability. One light of kind
+// Tree stands for the light tree's spheres (Task 12, light_tree.glsl), chosen within it the same way. A light that gets
 // no weight at a point is simply never sampled there: BSDF rays that find it keep MIS weight 1.
 
 #include "environment.glsl"
+#include "light_tree.glsl" // Task 12
 #include "screen.glsl"
 
 vec3 lightNormal(RectLight l) {
@@ -68,11 +70,16 @@ float lightPower(RectLight l) {
 // - a gated light (gate != kNoLight: a moon outside a window) only where the segment from p to its centre
 //   crosses that portal.
 // The flag kTraceFlagFixedLightSelection returns step 4's fixed max(selectWeight, 0) instead (comparisons).
+// A Tree light (Task 12) stands for the whole light tree: selectWeight times the root's importance.
 float lightImportance(uint i, vec3 p, vec3 n, bool transmissive) {
     RectLight l = lights[i];
     float weight = max(l.selectWeight, 0.0);
     if ((frame.flags & kTraceFlagFixedLightSelection) != 0u) {
         return weight;
+    }
+    if (l.kind == kLightTree) {
+        float tw = frame.treeLightCount > 0u ? weight * treeNodeImportance(treeNodes[0], p, n, transmissive) : 0.0;
+        return tw > 0.0 && isFinite(tw) ? tw : 0.0;
     }
     if (!(weight > 0.0) || !(l.area > 0.0)) {
         return 0.0;
@@ -152,6 +159,49 @@ bool pickLight(float u, vec3 p, vec3 n, bool transmissive, out uint index, out f
 // light at all with probability 1 - environmentSelect.
 float lightChoicePdf(uint index, vec3 p, vec3 n, bool transmissive) {
     return (1.0 - frame.environmentSelect) * lightSelectPdf(index, p, n, transmissive);
+}
+
+// --- The light tree (Task 12) ------------------------------------------------------------------------------
+// The tree's lights are emissive spheres: the hit sphere's index in its buffer (HitPayload.primitive) names
+// its tree light, k = sphere - treeLights[0].sphere (light k is sphere firstSphere + k).
+
+// Within the tree, fixed light selection (comparisons) picks uniformly.
+bool treeUniformSelection() {
+    return (frame.flags & kTraceFlagFixedLightSelection) != 0u;
+}
+
+// The tree light that sphere is, or kNoLight (a sphere of the instance beyond the tree's lights).
+uint treeLightOfSphere(uint sphere) {
+    if (frame.treeLightCount == 0u) {
+        return kNoLight;
+    }
+    uint k = sphere - treeLights[0].sphere; // wraps to a large number below the first
+    return k < frame.treeLightCount && treeLights[k].sphere == sphere ? k : kNoLight;
+}
+
+// The radiance a ray sees on a sphere of the light tree's instance: its tree light's emission (this frame's
+// scale applied: blinking) from outside, none from inside; `fallback` (the sphere's own) for a sphere that
+// is no tree light. What next-event estimation samples and what a ray finds are then the same emitter.
+vec3 treeHitEmission(uint sphere, bool front, vec3 fallback) {
+    uint k = treeLightOfSphere(sphere);
+    if (k == kNoLight) {
+        return fallback;
+    }
+    return front ? treeLights[k].emission : vec3(0.0);
+}
+
+// The density with which next-event estimation at the shading point (p, n, transmissive) reaches a direction
+// that hits `sphere` of tree `entry`: the entry's choice, the walk to its light, and the light's cone. The MIS
+// partner of a BSDF ray that hits it, evaluated at the vertex the ray left (Review Focus 2); 0 for a sphere
+// that is no tree light.
+float treeHitPdf(uint entry, uint sphere, vec3 p, vec3 n, bool transmissive) {
+    uint k = treeLightOfSphere(sphere);
+    if (k == kNoLight) {
+        return 0.0;
+    }
+    return lightChoicePdf(entry, p, n, transmissive) *
+           treeLightPdf(k, frame.treeLightCount, p, n, transmissive, treeUniformSelection()) *
+           sphereConeDensity(p, treeLights[k].center, treeLights[k].radius);
 }
 
 // The radiance a light sends along wi (from the shaded point towards the light) from its point (u, v).

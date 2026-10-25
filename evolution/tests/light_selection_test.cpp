@@ -171,8 +171,10 @@ public:
     }
 
 private:
-    static constexpr std::array<gfx::Binding, 6> kBindings = {
+    // The tree's nodes (Task 12: lightImportance reads the root of a Tree light; these frames have none).
+    static constexpr std::array<gfx::Binding, 7> kBindings = {
         gfx::Binding{EVO_BINDING_FRAME, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+        gfx::Binding{EVO_BINDING_TREE_NODES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
         gfx::Binding{EVO_BINDING_LIGHTS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
         gfx::Binding{EVO_BINDING_RETRO_SCREEN, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
         gfx::Binding{EVO_BINDING_ENVIRONMENT, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
@@ -202,6 +204,9 @@ private:
         gfx::Buffer pointBuffer(ctx_, {points.size() * sizeof(ProbePoint), kStorage, true, "probe points"});
         writeBuffer(pointBuffer, points.data(), points.size() * sizeof(ProbePoint));
         gfx::Buffer output(ctx_, {floats * sizeof(float), kStorage, true, "probe results"});
+        const rt::LightTreeNode noTree{};
+        gfx::Buffer treeNodes(ctx_, {sizeof noTree, kStorage, true, "probe tree nodes"});
+        writeBuffer(treeNodes, &noTree, sizeof noTree);
 
         VkCommandBuffer cmd = ring_.begin();
         retro.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -209,8 +214,9 @@ private:
         const auto whole = [](const gfx::Buffer& b) {
             return VkDescriptorBufferInfo{b.handle(), 0, VK_WHOLE_SIZE};
         };
-        const std::array<gfx::DescriptorWrite, 6> writes = {
+        const std::array<gfx::DescriptorWrite, 7> writes = {
             gfx::DescriptorWrite::buffer(EVO_BINDING_FRAME, whole(frame)),
+            gfx::DescriptorWrite::buffer(EVO_BINDING_TREE_NODES, whole(treeNodes)),
             gfx::DescriptorWrite::buffer(EVO_BINDING_LIGHTS, whole(lightBuffer)),
             gfx::DescriptorWrite::image(
                 EVO_BINDING_RETRO_SCREEN,
