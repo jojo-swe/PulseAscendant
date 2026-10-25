@@ -57,9 +57,8 @@ SceneId plannedScene(Effect e) {
         return SceneId::Particles;
     case Effect::Plasma:
     case Effect::Nebula:
+    case Effect::PlasmaPlanet:
         return SceneId::Nebula;
-    case Effect::PlasmaPlanet: // its shell of cloud is not built yet: it stays on the placeholder
-        return SceneId::Placeholder;
     case Effect::Tunnel:
         return SceneId::Tunnel;
     case Effect::Glenz:
@@ -237,9 +236,9 @@ void testStudioSweep() {
     limits.maxCameraStep = 0.05f; // the Studio's cameras move centimetres per frame
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Studio, limits);
     // 480 instances since Task 14 of step 5 (step 4: 195): the inner shade and the skyline's 56 towers with
-    // their lit windows; 487 behind the screen (the monitor's foot, body and housing give way to the dark
+    // their lit windows; 487 behind the screen; 5 lights with the town glow on the right wall (the monitor's foot, body and housing give way to the dark
     // box's nine walls and the stars).
-    CHECK(stats.frames > 5000 && stats.maxInstances == 487 && stats.maxLights == 4);
+    CHECK(stats.frames > 5000 && stats.maxInstances == 487 && stats.maxLights == 5);
 }
 
 } // namespace

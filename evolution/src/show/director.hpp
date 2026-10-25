@@ -59,13 +59,13 @@ struct MegamixShot {
 inline constexpr std::array<MegamixShot, 11> kMegamixShots = {{
     { 0, 8, Effect::Raytrace, 133.0,  false}, // low tracking between the chrome balls
     { 8, 8, Effect::City,     160.5,  false}, // the puddle at street level
-    {16, 8, Effect::Dots,      42.0,  false}, // the logo landed
-    {24, 4, Effect::Lens,     108.0,  false}, // the glass sphere on the stone
-    {28, 2, Effect::Glenz,     97.5,  false}, // the caustic on the floor
+    {16, 8, Effect::Dots,      41.0,  false}, // the logo landed
+    {24, 4, Effect::Lens,     105.45, false}, // the glass sphere on the stone
+    {28, 2, Effect::Glenz,     97.4,  false}, // the caustic on the floor
     {30, 2, Effect::Finale,     0.0,  false}, // the room
     {32, 4, Effect::Finale,     0.0,  false}, // the room, a card on its first frames
     {36, 2, Effect::Tunnel,    78.0,  false}, // the points as lights
-    {38, 1, Effect::Nebula,   282.0,  false}, // the star round the pillar
+    {38, 1, Effect::Nebula,   280.2,  false}, // the star round the pillar
     {39, 1, Effect::Wormhole, 494.15, false}, // the ship crossing
     {40, 4, Effect::Raytrace, 128.10, true},  // the drop, held
 }};

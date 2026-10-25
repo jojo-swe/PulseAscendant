@@ -85,7 +85,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     {116, Effect::Raytrace, Transition::BeatSwap, 1.f, 0, "RAYTRACE",
         "1993 · PRECALCULATED · 10 FPS", "2026 · REAL-TIME PATH TRACING · 49 SPHERES · 60 FPS"},
     {150, Effect::City, Transition::Wipe, .9f, 0, "VECTOR CITY",
-        "1993 · 300 POLYGONS · GOURAUD", "2026 · 4 MILLION WINDOWS · 41,839 LIGHTS · WET STREETS"},
+        "1993 · 300 POLYGONS · GOURAUD", "2026 · 3,896,219 WINDOWS · 41,684 LAMPS · WET STREETS"},
     {168, Effect::Finale, Transition::BeatSwap, 1.f, 0, "FINALE", "1993 · ALL EFFECTS · ONE SCREEN",
         "2026 · EVERY SCENE · ONE PATH TRACER"},
     // The pull-back out of the CRT into the Studio: the era reaches 2026 and Act I ends there.
@@ -94,14 +94,14 @@ inline constexpr std::array<Cue, 31> cues = {{
 
     // Act II: Guitar Trance, 2026 only; from the Studio at night and back to it.
     {194, Effect::StudioNight, Transition::Cut, .4f, 1, "STUDIO NIGHT", "",
-        "2026 · THE STUDIO · 480 INSTANCES · LIT BY ONE SCREEN AND ONE MOON"},
+        "2026 · THE STUDIO · 481 INSTANCES · LIT BY ONE SCREEN AND ONE MOON"},
     {214, Effect::Ascent, Transition::Cut, .7f, 1, "ASCENT", "", "2026 · ASCENT · VOLUMETRIC CLOUDS · MOONLIGHT SHAFTS"},
     {238, Effect::CityNight, Transition::Cut, .8f, 1, "CITY NIGHT", "",
-        "2026 · CITY NIGHT · 41,839 LIGHTS · LIGHT TREE · RAIN"},
+        "2026 · CITY NIGHT · 16,384 LIGHTS · LIGHT TREE · RAIN"},
     {264, Effect::Nebula, Transition::Cut, .6f, 1, "NEBULA", "",
         "2026 · NEBULA · 16,777,216 VOXELS · MULTIPLE SCATTERING · 3 STARS"},
     {292, Effect::Cathedral, Transition::Cut, .8f, 1, "GLASS CATHEDRAL", "",
-        "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS"},
+        "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS · SHAFTS"},
     {322, Effect::Ocean, Transition::Cut, .9f, 1, "PARTICLE OCEAN", "",
         "2026 · 2,097,152 TRACED PARTICLES · ONE SHOT"},
     {344, Effect::SphereStorm, Transition::Cut, 1.f, 1, "SPHERE STORM", "",
@@ -127,7 +127,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     {570.4, Effect::RaytraceInfinity, Transition::Cut, 1.f, 1, "RAYTRACE INFINITY", "",
         "2026 · 32,768 MIRROR SPHERES · INFINITE REFLECTIONS"},
     {602.4, Effect::Metropolis, Transition::Cut, .9f, 1, "METROPOLIS", "",
-        "2026 · METROPOLIS · 41,839 LIGHTS · 4 MILLION WINDOWS · PATH TRACED"},
+        "2026 · METROPOLIS · 57,765 INSTANCES · 41,839 LIGHTS · 44 KM TO THE HORIZON"},
     {634.4, Effect::Ascendant, Transition::Cut, 1.f, 1, "ASCENDANT", "",
         "2026 · 2,097,152 PARTICLES · 16,777,216 STARS · ASCENDANT"},
     // The credits roll as a 1993 sine scroller, so the chapter holds 1993 and its card is the 1993 one.

@@ -101,14 +101,14 @@ const std::array<Lines, 31> kLines = {{
     {"1993 · 24 TRIANGLES · TRANSPARENT VECTORS", "2026 · DISPERSION · 2,097,152 PHOTONS · CAUSTICS"},
     {"1993 · ROTOZOOM · LENS", "2026 · THE PIXELS BECAME STONE · GLASS SPHERE · CAUSTICS"},
     {"1993 · PRECALCULATED · 10 FPS", "2026 · REAL-TIME PATH TRACING · 49 SPHERES · 60 FPS"},
-    {"1993 · 300 POLYGONS · GOURAUD", "2026 · 4 MILLION WINDOWS · 41,839 LIGHTS · WET STREETS"},
+    {"1993 · 300 POLYGONS · GOURAUD", "2026 · 3,896,219 WINDOWS · 41,684 LAMPS · WET STREETS"},
     {"1993 · ALL EFFECTS · ONE SCREEN", "2026 · EVERY SCENE · ONE PATH TRACER"},
     {"1993 · THE SCREEN", "2026 · OUT OF THE SCREEN"},
-    {"", "2026 · THE STUDIO · 480 INSTANCES · LIT BY ONE SCREEN AND ONE MOON"},
+    {"", "2026 · THE STUDIO · 481 INSTANCES · LIT BY ONE SCREEN AND ONE MOON"},
     {"", "2026 · ASCENT · VOLUMETRIC CLOUDS · MOONLIGHT SHAFTS"},
-    {"", "2026 · CITY NIGHT · 41,839 LIGHTS · LIGHT TREE · RAIN"},
+    {"", "2026 · CITY NIGHT · 16,384 LIGHTS · LIGHT TREE · RAIN"},
     {"", "2026 · NEBULA · 16,777,216 VOXELS · MULTIPLE SCATTERING · 3 STARS"},
-    {"", "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS"},
+    {"", "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS · SHAFTS"},
     {"", "2026 · 2,097,152 TRACED PARTICLES · 8 GERSTNER WAVES · ONE SHOT"},
     {"", "2026 · 32,768 SPHERES · 4,096 OF THEM LIGHTS · LIGHT TREE · MOTION BLUR"},
     {"", "2026 · GRAVITATIONAL LENSING · 48-STEP GEODESICS · DOPPLER DISC · PATH TRACED"},
@@ -120,7 +120,7 @@ const std::array<Lines, 31> kLines = {{
     {"", "2026 · CRYSTAL CITY · 400 PRISMS · DISPERSION · CAUSTICS"},
     {"", "2026 · LENS OF GOD · 200 UNIT LENS · SUN FOCUS · PLANETARY SCALE"},
     {"", "2026 · 32,768 MIRROR SPHERES · INFINITE REFLECTIONS · 6 BOUNCES"},
-    {"", "2026 · METROPOLIS · 41,839 LIGHTS · 4 MILLION WINDOWS · PATH TRACED"},
+    {"", "2026 · METROPOLIS · 57,765 INSTANCES · 41,839 LIGHTS · 44 KM TO THE HORIZON"},
     {"", "2026 · 2,097,152 PARTICLES · 16,777,216 STARS · ASCENDANT"},
     {"1993 → 2026 · CREDITS", ""},
     {"", ""},
@@ -184,8 +184,8 @@ void testTexts() {
     has(Effect::RaytraceInfinity, render::kExportMaxBounces, " BOUNCES");
     has(Effect::Nebula, modern::nebulaStats().voxels, " VOXELS");
     has(Effect::Nebula, modern::nebulaStats().stars, " STARS");
-    for (const Effect e : {Effect::City, Effect::CityNight, Effect::Metropolis})
-        has(e, modern::kCityCardLights, " LIGHTS");
+    has(Effect::Metropolis, modern::kCityCardLights, " LIGHTS"); // the whole city; CITY NIGHT and VECTOR CITY
+                                                                  // card their own street's lamps and windows
     has(Effect::Wormhole, static_cast<std::uint64_t>(modern::kWormholeRingSpacing / 1000.f), " KM RINGS");
     const modern::Studio studio;
     has(Effect::StudioNight, studio.frame(at(show::chapterStart(11) + 1.0)).instances.size(), " INSTANCES");
