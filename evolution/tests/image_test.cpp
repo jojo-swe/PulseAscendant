@@ -42,7 +42,7 @@ int checksPassed = 0;
 constexpr std::uint32_t kWidth = 320, kHeight = 200;
 // Every staging and readback buffer the test makes, kept until the end: the synchronization validation of
 // layer 1.3.275 does not credit host waits, so a buffer whose memory VMA reuses after a freed one reads as
-// a hazard (see the step 4 Task 2 report); keeping them alive keeps the layer's reports to real ones.
+// a hazard; keeping them alive keeps the layer's reports to real ones.
 std::deque<Buffer> retained;
 
 constexpr VkImageUsageFlags kMipUsage =

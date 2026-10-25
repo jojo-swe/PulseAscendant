@@ -74,7 +74,7 @@ struct SceneEntry {
 std::span<const SceneEntry> sceneTable();
 
 // The scene an effect shows (kSceneOfEffect in src/modern/scenes.cpp, one row per effect): FINALE, PORTAL,
-// STUDIO NIGHT, RETURN and REBOOT show the Studio (Decision 1 of step 4); each step 5 scene task moves its
+// STUDIO NIGHT, RETURN and REBOOT show the Studio; each step 5 scene task moves its
 // own chapters' rows off the placeholder. Every scene but the placeholder that an effect maps to has a make
 // function.
 SceneId sceneFor(show::Effect effect);

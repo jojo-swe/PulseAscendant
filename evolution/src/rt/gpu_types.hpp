@@ -2,7 +2,7 @@
 
 // The structs the path tracer shares with GLSL. Each is a C++ mirror of a `layout(scalar)` struct in
 // shaders/rt/types.glsl: plain 4-byte float and uint fields in declaration order, with sizeof and every
-// offsetof pinned below, and every field checked on the GPU by material_test (Review Focus 10). Change both
+// offsetof pinned below, and every field checked on the GPU by material_test. Change both
 // sides together. The geometry structs types.glsl also mirrors (Vertex, MeshRecord, Mat34) live in
 // rt/geometry.hpp, and the descriptor bindings in rt/bindings.hpp.
 //
@@ -153,7 +153,7 @@ struct FrameUniforms { // 208 bytes, scalar
     std::uint32_t sliceIndex, sliceCount; // the export shutter's time slices (Task 9)
 };
 
-// --- Step 5 feature structs (Task 1 fixed their sizes; their owners fill them)
+// --- Step 5 feature structs (Task 1 fixed their sizes; the code that owns each fills them)
 // -------------------------------
 
 // The scene's environment (binding EVO_BINDING_ENVIRONMENT; Task 2): kind (EnvironmentKind), an overall

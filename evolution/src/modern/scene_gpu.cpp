@@ -61,7 +61,7 @@ Vec3 vec3(const float v[3]) {
 
 // NEE uses a light's emission, area, kind and facing; a BSDF ray that hits the light's instance uses that
 // instance's material and facing. Multiple importance sampling weighs the two as estimators of one integral,
-// so they must describe the same emitter, or the picture is silently biased (step 4, Task 7 review I1).
+// so they must describe the same emitter, or the picture is silently biased.
 // Expects the instances' mesh, material and light indices checked.
 void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& materials) {
     for (std::size_t i = 0; i < frame.lights.size(); ++i) {

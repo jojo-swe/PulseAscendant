@@ -8,8 +8,8 @@
 //
 // Light selection is a function of the shading point (p, its shading normal n turned to the side the path
 // arrived from, and whether the surface transmits): pickLight() and lightSelectPdf() use the same weights,
-// lightImportance(), and a BSDF ray that hits a light evaluates lightSelectPdf() at the vertex it left (Review
-// Focus 2 of step 5), so the two MIS strategies always agree on the selection probability. A light that gets
+// lightImportance(), and a BSDF ray that hits a light evaluates lightSelectPdf() at the vertex it left,
+// so the two MIS strategies always agree on the selection probability. A light that gets
 // no weight at a point is simply never sampled there: BSDF rays that find it keep MIS weight 1.
 
 #include "environment.glsl"

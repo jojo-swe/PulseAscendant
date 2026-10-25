@@ -1,5 +1,5 @@
 // Export mode (Task 11 of step 4): what the renderer hands the modern stage and what comes out, at 160x90 in
-// STUDIO NIGHT at 40 %. Review Focus 6 (step 5: Review Focus 3): with equal bounces, the window's first
+// STUDIO NIGHT at 40 %. With equal bounces, the window's first
 // frame after a history reset equals an export frame at spp max(--spp, 4) byte for byte (the window traces 4
 // spp on a reset frame and 2 on the next, kResetSpp; one tonemap, display encoding exactly once, the export
 // seed on the first frame after a reset). Export purity: a frame is a pure function of (settings, show time),
@@ -124,7 +124,7 @@ void testSeeds(evo::gfx::Context& ctx) {
     CHECK(!window.stats().modernRendered && window.stats().frameSeed == 0);
 }
 
-// Review Focus 6 (step 5: 3): the window's first frame after a reset equals an export frame at equal bounces
+// the window's first frame after a reset equals an export frame at equal bounces
 // and spp max(--spp, 4), on the very first frame and after a seek. The window reports the samples it traced:
 // 4, 2, then --spp (Task 7 of step 5); an export always --spp.
 void testWindowMatchesExport(evo::gfx::Context& ctx) {

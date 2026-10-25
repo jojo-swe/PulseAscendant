@@ -6,7 +6,7 @@
 //     SphereRecord particle(uint id, float seconds, vec4 params[4]);
 // and includes shaders/modern/particles_common.glsl, whose main() (local_size_x 256) writes each particle's
 // SphereRecord (prevCenter from the same function at the previous time, material from the frame) and AABB.
-// Nothing carries over from one frame to the next, so seeking needs nothing (Review Focus 1).
+// Nothing carries over from one frame to the next, so seeking needs nothing.
 
 #include "gfx/buffer.hpp"
 #include "gfx/compute_pipeline.hpp"

@@ -2,11 +2,10 @@
 
 EVOLUTION is a real-time demo that puts 1993 and 2026 in the same frame: every effect first appears as
 it looked on a 486 and then as modern hardware can render it, with Vulkan 1.3 and hardware ray tracing
-as a hard requirement. It is a standalone project inside PulseAscendant; the design spec and the
-implementation plans live in [`docs/plans/`](docs/plans/), starting with
-[`2026-10-21-evolution-design.md`](docs/plans/2026-10-21-evolution-design.md).
+as a hard requirement. It is a standalone project inside PulseAscendant; the architecture, the determinism
+rules and the RTX hardware checklist are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-> **Status:** steps 0–4 of the plan are done. The music drives a timeline of 31 chapters in three acts, and
+> **Status:** steps 0–4 are done. The music drives a timeline of 31 chapters in three acts, and
 > every chapter with a 1993 side (act I, REBOOT, CREDITS and THE END) shows its 1993 effect through its own
 > pipeline (below). The act II and act III planetary chapters are 2026 only (forced into 1993 they show a grey
 > test pattern; STUDIO NIGHT and RETURN show the DOS prompt the demo exited to). The 2026 side is a path
@@ -127,7 +126,7 @@ replaces the Release one).
 
 ## Music
 
-The soundtrack is three tracks generated with Suno by joyolo, one per act, played back to back without
+The soundtrack is three tracks by joyolo, one per act, played back to back without
 gaps (credits and provenance in [`licenses/MUSIC-NOTICE.md`](licenses/MUSIC-NOTICE.md)):
 
 | Act | Track | Tempo | Starts at | Length |
@@ -288,7 +287,7 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   dispatch traces more than 4 spp. A whole frame is still one GPU submission of ceil(spp / 4) dispatches,
   though: a 4K export frame at 64 spp is 16 dispatches in one submit, roughly 1–4 s on an RTX 4090 (an
   estimate, not measured), and whether Windows' GPU timeout (TDR, 2 s by default) tolerates that has not been
-  measured yet (see the RTX checklist in HANDOFF). Every random number is an integer hash of (frame seed,
+  measured yet (see the RTX checklist in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)). Every random number is an integer hash of (frame seed,
   pixel, sample, dimension).
 - **Denoiser** (`src/post`, `shaders/post`). The tracer writes the lighting without the primary hit's
   emission, plus guides (albedo, normal, depth, motion). The lighting is divided by the albedo, reprojected
@@ -331,7 +330,7 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
 
 ### The Studio
 
-A dark modern room at night (spec §2.1; step 5 Task 14), all procedural, around a 1993 PC that is the only
+A dark modern room at night (the Studio), all procedural, around a 1993 PC that is the only
 1993 object in it: a polished concrete floor saw-cut into slabs and a board-formed concrete wall (the
 `Concrete` pattern), plaster walls, an oak desk on brushed steel legs, a slim black window frame, an office
 chair, a black desk lamp with its diffuser recessed in a matte shade, and beyond the window a skyline of dark
@@ -492,7 +491,7 @@ of the options and its show time, so a streamed frame equals a fresh capture of 
 The random seed of a frame comes from the show time, `pcg(llround(seconds × 48000))` (the audio sample clock);
 the window adds `0x9E3779B9` per frame since its last reset, so its first frame after a reset uses the export
 seed and, at equal bounces, equals the export frame at spp max(`--spp`, 4) byte for byte while that is below
-16 (where both filter the same way; Review Focus 3). The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
+16 (where both filter the same way). The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
 equals a real export frame; only the tests, which set both, see the equality. The window traces below its
 size (`--trace-scale`, 0.67 by default) and the exports at the output size, so the equality holds at
 `--trace-scale 1`; at a lower scale the window's first frame after a reset equals a frame rendered in Export
@@ -531,8 +530,7 @@ them, two frames in flight. Each chapter prints one JSON line on stdout (progres
 0): `tlas` the top-level acceleration structure build, `trace` the path tracing dispatches, `denoise`,
 `upscale` (0 at scale 1), `tonemap`, `compositor` (CRT, era blend and HUD), `retro` the 1993 stage, `fill`
 the placeholder and `total` the whole frame. `fps` counts the timed frames over their wall-clock time. A GPU
-whose queue has no timestamps reports `"timestamps":false` and zero times. The budget in the step 5 plan is
-measured this way:
+whose queue has no timestamps reports `"timestamps":false` and zero times. The per-scene budget (see ARCHITECTURE.md) is measured this way:
 
 ```sh
 # Every chapter at 1440p as the window renders it (trace scale 0.67), then at scale 1

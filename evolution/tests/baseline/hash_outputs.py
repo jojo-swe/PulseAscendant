@@ -29,7 +29,7 @@ How later tasks use it (run from evolution/ after building the linux preset):
 - A task that changes the picture on purpose (Task 2's environments, Task 6's integrator, Task 14's Studio
   polish, ...) checks the luminance instead: --luminance prints each Studio capture's change against the
   committed value (Task 2 (e): within 5 %), and the task commits a new SUMS/LUMINANCE in the same commit,
-  saying so in its report, so the next task compares against the new reference.
+  saying so in its commit message, so the next change compares against the new reference.
 
 Usage: hash_outputs.py <Evolution> <outdir> [--check SUMS] [--luminance LUMINANCE] [--write]
   --write   also writes <outdir>/SUMS and <outdir>/LUMINANCE (copy them here to update the reference).
