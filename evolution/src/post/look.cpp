@@ -195,9 +195,8 @@ GradePalette crossingPalette(const show::TimelineFrame& frame) {
     const show::TimelineFrame atGlass = show::sampleTimeline(show::transitionMarks(frame).downbeat);
     const retro::EffectInfo& info = retro::effectFor(atGlass.effect);
     const auto retroFrame = static_cast<std::uint32_t>(std::floor(atGlass.localSeconds * info.retroRate));
-    const retro::EffectFrame shown = retro::resolveEffect(info, atGlass, retroFrame);
     retro::Palette palette{};
-    retro::effectFor(shown.effect).palette(palette, shown.frame, shown.retroFrame);
+    info.palette(palette, atGlass, retroFrame);
     return palette;
 }
 

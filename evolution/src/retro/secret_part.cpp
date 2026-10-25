@@ -379,16 +379,7 @@ void addGlenz(RetroScene& scene, double t, double lift) {
         }
 }
 
-// A screen-space rectangle of whole pixels [x0, x1) x [y0, y1) in a flat index.
-void addRect(RetroScene& scene, int x0, int y0, int x1, int y1, std::uint8_t index) {
-    if (x1 <= x0 || y1 <= y0)
-        return;
-    const auto fx = [](int x) { return x * kSubpixel; };
-    RetroTriangle a{{fx(x0), fx(x1), fx(x1)}, {fx(y0), fx(y0), fx(y1)}, {index, index, index}, kFlat};
-    RetroTriangle b{{fx(x0), fx(x1), fx(x0)}, {fx(y0), fx(y1), fx(y1)}, {index, index, index}, kFlat};
-    scene.triangles.push_back(a);
-    scene.triangles.push_back(b);
-}
+// Screen-space rectangles come from boot.hpp's addRect.
 
 // --- The effect's providers -------------------------------------------------------------------------------
 
