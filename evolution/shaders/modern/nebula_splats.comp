@@ -1,0 +1,79 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The Nebula scene's background stars (step 5, Task 18): points far behind and around the cloud (2,500 to
+// 4,500 units away, so they barely move against it), dimmed by it through the combine pass's T. Two in five
+// crowd towards a galactic band. Colours follow a stellar population (mostly sun-like, some red giants, a
+// few hot blue stars) through an approximate blackbody; brightness follows a power law, so a few stars are
+// bright and most are faint (the first kBrightStars the brightest of all).
+//
+// params[0] = (stars, flux scale, 0, 0)
+
+#include "splat_common.glsl"
+
+const uint kBrightStars = 48u;
+
+uint skyHash(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+float skyUnit(uint x) {
+    return float(x >> 8) * (1.0 / 16777216.0);
+}
+
+// An approximate blackbody colour (unit luminance-ish) for a temperature in kelvin.
+vec3 blackbody(float kelvin) {
+    float t = kelvin / 100.0;
+    float r = t <= 66.0 ? 1.0 : clamp(1.293 * pow(t - 60.0, -0.1332), 0.0, 1.0);
+    float g = t <= 66.0 ? clamp(0.390 * log(t) - 0.632, 0.0, 1.0) : clamp(1.130 * pow(t - 60.0, -0.0755), 0.0, 1.0);
+    float b = t >= 66.0 ? 1.0 : (t <= 19.0 ? 0.0 : clamp(0.543 * log(t - 10.0) - 1.196, 0.0, 1.0));
+    vec3 c = vec3(r, g, b);
+    // Linear light, normalised to luminance 1.
+    c = c * c;
+    return c / max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-4);
+}
+
+struct Star {
+    vec3 position;
+    vec3 flux;
+};
+
+Star skyStar(uint id, float fluxScale) {
+    uint h = skyHash(id * 0x9E3779B9u + 0x2545F491u);
+    float u1 = skyUnit(h), u2 = skyUnit(skyHash(h ^ 0xA5A5A5A5u)), u3 = skyUnit(skyHash(h + 0x3C6EF372u));
+    float u4 = skyUnit(skyHash(h * 3u + 1u));
+    // A direction: uniform, or (two in five) crowded towards a tilted band.
+    float y = 1.0 - 2.0 * u1;
+    if (u4 < 0.4) {
+        y = 0.22 * (u1 - 0.5) * (1.0 + 2.0 * u1 * u1);
+    }
+    float ring = sqrt(max(1.0 - y * y, 0.0));
+    float phi = 6.2831853 * u2;
+    vec3 d = vec3(ring * cos(phi), y, ring * sin(phi));
+    // The band tilted 28 degrees about z.
+    d = vec3(0.883 * d.x - 0.469 * d.y, 0.469 * d.x + 0.883 * d.y, d.z);
+    Star s;
+    s.position = d * (2500.0 + 2000.0 * u3);
+    // The population: hot blue (8 %), sun-like (70 %), red giants (22 %).
+    float kind = skyUnit(skyHash(h ^ 0x1B873593u));
+    float kelvin = kind < 0.08 ? 9000.0 + 9000.0 * u3 : (kind < 0.78 ? 4800.0 + 1800.0 * u2 : 3000.0 + 900.0 * u1);
+    // A power law: most stars faint, a few bright.
+    float u5 = skyUnit(skyHash(h ^ 0x85EBCA6Bu));
+    float brightness = id < kBrightStars ? 40.0 + 60.0 * u5 : min(0.06 * pow(max(u5, 1e-3), -1.25), 30.0);
+    s.flux = fluxScale * brightness * blackbody(kelvin);
+    return s;
+}
+
+SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
+    Star s = skyStar(id, params[0].y);
+    SplatPoint p;
+    p.position = s.position;
+    p.flux = s.flux;
+    p.radius = 0.0;
+    return p;
+}
