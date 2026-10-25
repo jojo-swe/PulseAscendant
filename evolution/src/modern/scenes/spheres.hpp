@@ -10,7 +10,8 @@
 //   under a Day sky whose sun stands where 1993's point light was, and two large soft rect lights. Until the
 //   accent the camera is 1993's (so the beat swaps show one composition); from the accent it breaks free.
 // - SPHERE STORM: kStormSpheres stateless particle spheres (shaders/modern/particles_spheres.comp, mirrored
-//   by spheresParticle) in a vortex over a black mirror floor at dusk; the first kStormEmissive glow.
+//   by spheresParticle) in a vortex over a black mirror floor at dusk; the first kStormEmissive glow and are
+//   the light tree's lights.
 // - RAYTRACE INFINITY: a lattice of chrome spheres without end, gold ones and glowing lanterns among them:
 //   the kInfinitySpheres lattice points round the falling camera, recycled as it falls (the same particle
 //   shader, mode 1). Until Task 11's fog lands, the spheres shrink away into the sky with distance instead.

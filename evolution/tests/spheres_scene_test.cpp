@@ -20,7 +20,8 @@
 //       higher over the four bars before it, leap together on it and land together on the next bar line; the
 //       storm's funnel lies flat until then and has risen a bar later; the lattice's lanterns are dark before
 //       it and lit after; every cut falls on a bar line;
-//   (h) SPHERE STORM at full detail (32,768 particles, 4,096 glowing): the picture is finite and glows.
+//   (h) SPHERE STORM at full detail (32,768 particles, 4,096 glowing): the glowing ones are the frame's 4,096
+//       tree lights (one light of kind Tree stands for them), each at its particle; the picture glows.
 // `spheres_scene_test --look <dir> [spp] [width height] [name]` renders stills of the three chapters instead
 // (those whose name contains `name`).
 
@@ -574,6 +575,20 @@ void testChromeReflectsBoard(gfx::Context& ctx) {
 
 void testFullStorm(gfx::Context& ctx) {
     const auto start = std::chrono::steady_clock::now();
+    const modern::Spheres scene;
+    const show::TimelineFrame at = show::sampleTimeline(accentTime(kStorm) + 0.5);
+    const modern::SceneFrame frame = scene.frame(at);
+    CHECK(frame.treeLights.size() == modern::kStormEmissive);
+    int trees = 0;
+    for (const rt::RectLight& l : frame.lights)
+        trees += l.kind == std::uint32_t(rt::LightKind::Tree);
+    CHECK(trees == 1);
+    for (std::uint32_t k = 0; k < frame.treeLights.size(); k += 97) {
+        const rt::SphereRecord p =
+            modern::spheresParticle(k, float(at.localSeconds), frame.particles->params);
+        const modern::TreeLightFrame& l = frame.treeLights[k];
+        CHECK(l.sphere == k && l.center.x == p.center[0] && l.radius == p.radius && p.emission > 0.f);
+    }
     constexpr std::uint32_t kW = 160, kH = 90;
     Player player(ctx, kW, kH, 1, {1.f});
     const std::vector<std::uint8_t> rgb = player.render(forced2026(accentTime(kStorm) + 0.5));

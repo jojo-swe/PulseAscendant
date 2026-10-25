@@ -732,6 +732,7 @@ Spheres::Spheres(SceneDetail detail) : detail_(detail) {
     static_.capacity.spheres = std::uint32_t(static_.spheres.size());
     const std::uint32_t side = infinitySide(detail);
     static_.capacity.particles = std::max(stormCount(detail), side * side * side);
+    static_.capacity.treeLights = stormEmissiveCount(detail);
     static_.particleShader = "modern_particles_spheres.comp.spv";
 }
 
@@ -823,7 +824,21 @@ SceneFrame Spheres::stormFrame(const show::TimelineFrame& frame) const {
     f.particles = p;
     SceneInstance field = sphereInstance(0, p.count, kParticleChrome, identity());
     field.dynamicSpheres = true;
+    // The glowing particles (the field's first) are the light tree's lights, from the shader's C++ mirror.
+    rt::RectLight tree{};
+    tree.kind = static_cast<std::uint32_t>(rt::LightKind::Tree);
+    tree.selectWeight = 2.f;
+    tree.gate = rt::kNoLight;
+    field.light = std::uint32_t(f.lights.size());
+    f.lights.push_back(tree);
     f.instances.push_back(field);
+    const std::uint32_t glowing = stormEmissiveCount(detail_);
+    f.treeLights.reserve(glowing);
+    const auto seconds = float(frame.localSeconds);
+    for (std::uint32_t k = 0; k < glowing; ++k) {
+        const rt::SphereRecord s = spheresParticle(k, seconds, p.params);
+        f.treeLights.push_back({colorOf(s.center), s.radius, colorOf(s.color) * s.emission, 1.f, k});
+    }
     return f;
 }
 
