@@ -114,6 +114,7 @@ public:
     SceneFrame frame(const show::TimelineFrame& frame) const override;
     Camera camera(const show::TimelineFrame& frame) const override { return glassCamera(frame); }
     bool samplesRetro() const override { return false; }
+    std::string nowCard(show::Effect effect) const override;
 
     // The crystal towers of CRYSTAL CITY (one per instance), and the stained-glass panes of the cathedral.
     std::uint32_t crystalTowers() const { return static_cast<std::uint32_t>(towers_.size()); }

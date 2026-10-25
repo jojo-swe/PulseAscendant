@@ -884,4 +884,26 @@ SceneFrame Studio::frame(const show::TimelineFrame& frame) const {
     return f;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string Studio::nowCard(show::Effect effect) const {
+    const std::string year = "2026";
+    switch (effect) {
+    case show::Effect::Finale:
+        return year + kCardDot + "EVERY SCENE" + kCardDot + "ONE PATH TRACER";
+    case show::Effect::Portal:
+        return year + kCardDot + "OUT OF THE SCREEN";
+    case show::Effect::StudioNight:
+        return year + kCardDot + "THE STUDIO" + kCardDot + groupThousands(instances_.size()) + " INSTANCES" +
+               kCardDot + "LIT BY ONE SCREEN AND ONE MOON";
+    case show::Effect::Return:
+        return year + kCardDot + "RETURN" + kCardDot + "THE STUDIO AT DAWN";
+    case show::Effect::Reboot:
+        return year + kCardDot + "THROUGH THE GLASS";
+    default:
+        return {};
+    }
+}
+
 } // namespace evo::modern

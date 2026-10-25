@@ -36,6 +36,8 @@ and for studio_night_acc STUDIO NIGHT's +0.7 EV from D, raise the Studio's mean 
 1993-only and placeholder outputs stayed byte for byte.
 Then regenerated for the 1993 screens (phosphor, BOOT, RETURN, REBOOT, the FINALE grid, PORTAL's prompt):
 boot_50, finale_50, portal_50, reboot_10, reboot_60, return_30, stream_finale and stream_studio_cut changed.
+Then regenerated for the epoch cards (the 1993 card through the CRT, the 2026 card in the stroke face in the
+left margin, in place of the 8x8 cards with drop shadows): every output changed in its card's area only.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

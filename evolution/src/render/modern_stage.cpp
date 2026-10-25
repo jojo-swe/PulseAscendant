@@ -264,6 +264,11 @@ bool ModernStage::samplesRetro(const show::TimelineFrame& frame) const {
     return id != modern::SceneId::Placeholder && scene(id).samplesRetro();
 }
 
+std::string ModernStage::nowCard(show::Effect effect) const {
+    const modern::SceneId id = sceneOf(effect);
+    return id == modern::SceneId::Placeholder ? std::string() : scene(id).nowCard(effect);
+}
+
 modern::PathTracer* ModernStage::tracer() {
     return tracer_.get();
 }

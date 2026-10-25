@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace evo::modern {
@@ -175,6 +176,9 @@ public:
     std::uint32_t shotFor(const show::TimelineFrame& frame) const;
     // Whether the frame's 2026 picture shows the retro image (the Studio's CRT).
     bool samplesRetro(const show::TimelineFrame& frame) const;
+    // The 2026 epoch card of an effect from its scene (ModernScene::nowCard; the scene object is built on
+    // first use, as for a frame); "" for the placeholder.
+    std::string nowCard(show::Effect effect) const;
 
     // The display-encoded picture (R8G8B8A8_UNORM): what the compositor shows.
     gfx::Image& image() { return image_; }

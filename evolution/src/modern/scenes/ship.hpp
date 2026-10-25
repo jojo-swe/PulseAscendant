@@ -95,6 +95,7 @@ public:
     SceneFrame frame(const show::TimelineFrame& frame) const override;
     Camera camera(const show::TimelineFrame& frame) const override { return shipCamera(frame); }
     bool samplesRetro() const override { return false; }
+    std::string nowCard(show::Effect effect) const override;
 
     const ShipStats& stats() const { return stats_; }
     const ShipAsset& asset() const { return *asset_; }
