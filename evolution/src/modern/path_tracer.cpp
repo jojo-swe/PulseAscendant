@@ -1,6 +1,7 @@
 #include "modern/path_tracer.hpp"
 
 #include "gfx/descriptors.hpp"
+#include "gfx/gpu_timers.hpp"
 #include "gfx/paths.hpp"
 #include "gfx/sync.hpp"
 #include "rt/bindings.hpp"
@@ -55,10 +56,14 @@ const std::array<gfx::Binding, EVO_BINDING_COUNT> kBindings = {
     gfx::Binding{EVO_BINDING_CAUSTIC_RECEIVERS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
 };
 
-// pathtrace.rgen's push constants: which of the frame's samples this dispatch traces.
+// pathtrace.rgen's push constants: which of the frame's samples this dispatch traces, and the subpixel
+// window they are box-filtered over (its corner relative to the pixel's, and its size; (0, 0) and (1, 1) for
+// the whole pixel).
 struct TracePush {
     std::uint32_t sampleBase, sampleCount;
+    float windowOrigin[2], windowSize[2];
 };
+static_assert(sizeof(TracePush) == 24);
 
 // The largest struct a feature binding may declare (MediumUniforms): the dummy buffer covers any of them.
 constexpr VkDeviceSize kDummyBufferBytes = 256;
@@ -167,9 +172,13 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
                                     "pt dummy caustics")) {
     ++gPipelinesCreated;
     ringBegin_ = ring.onBegin([this](std::uint32_t) { tracedThisFrame_ = false; });
-    for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot)
+    for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
         uniforms_[slot] = gfx::Buffer(
             ctx, {sizeof(rt::FrameUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "frame uniforms"});
+        environments_[slot] =
+            gfx::Buffer(ctx, {sizeof(rt::EnvironmentUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true,
+                              "environment uniforms"});
+    }
     FrameBuffers buffers = createFrameBuffers(capacity_);
     instanceRecords_ = std::move(buffers.instanceRecords);
     lights_ = std::move(buffers.lights);
@@ -239,7 +248,7 @@ VkDeviceSize PathTracer::imageBytes() const {
 VkDeviceSize PathTracer::bufferBytes() const {
     VkDeviceSize bytes = tlas_->bytes() + pipeline_.sbtBytes() + dummyBuffer_.bytes() + blackScreen_.bytes() +
                          dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
-    for (const SlotBuffers* buffers : {&uniforms_, &instanceRecords_, &lights_, &materials_})
+    for (const SlotBuffers* buffers : {&uniforms_, &instanceRecords_, &lights_, &materials_, &environments_})
         for (const gfx::Buffer& buffer : *buffers)
             bytes += buffer.bytes();
     return bytes;
@@ -270,6 +279,13 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
             "uniforms, instances and lights when it runs)");
     if (settings.spp == 0)
         throw std::invalid_argument("PathTracer::trace(): spp 0");
+    for (int a = 0; a < 2; ++a) {
+        const float footprint = settings.pixelFootprint[a], jitter = settings.pixelJitter[a];
+        if (!(footprint > 0.f && footprint <= 1.f) || !(std::fabs(jitter) + 0.5f * footprint <= 0.5f + 1e-6f))
+            throw std::invalid_argument("PathTracer::trace(): the subpixel window (jitter " +
+                                        std::to_string(jitter) + ", footprint " + std::to_string(footprint) +
+                                        ") must lie inside the pixel");
+    }
     if (scene.samplesRetro() && retroScreen == nullptr)
         throw std::invalid_argument(
             "PathTracer::trace(): the scene shows the retro screen, but no retro image");
@@ -285,6 +301,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     if (frame.materials.size() > capacity_.materials)
         throw tooMany("materials", frame.materials.size(), capacity_.materials);
     checkSceneFrame(scene.source(), frame);
+    const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
     const std::vector<rt::Material>& materials =
         frame.materials.empty() ? scene.source().materials : frame.materials;
     std::vector<rt::Instance> instances;
@@ -329,7 +346,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     u.spp = settings.spp; // spp and instanceCount: not read by the shaders (for a debugger's eyes)
     u.maxBounces = settings.maxBounces;
     u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
-              (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u);
+              (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
+              (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u);
     u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
     u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
     u.clampIndirect = settings.clampIndirect;
@@ -337,20 +355,26 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     for (const rt::RectLight& light : frame.lights)
         u.lightWeightSum += std::max(light.selectWeight, 0.f);
     // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
-    // regularisation, no tree lights, medium, caustics or lensing, and NEE never samples the environment.
+    // regularisation, no tree lights, medium, caustics or lensing.
+    u.environmentSelect = frame.environment.select;
     u.sliceIndex = 0;
     u.sliceCount = 1;
 
     // This slot's buffers: the ring's begin() waited for the frame that last read them.
     const std::uint32_t slot = ring_.slot();
     writeBuffer(uniforms_[slot], &u, sizeof u);
+    writeBuffer(environments_[slot], &environment, sizeof environment);
     writeBuffer(instanceRecords_[slot], records.data(), records.size() * sizeof(rt::InstanceRecord));
     writeBuffer(lights_[slot], frame.lights.data(), frame.lights.size() * sizeof(rt::RectLight));
     if (!frame.materials.empty())
         writeBuffer(materials_[slot], frame.materials.data(), frame.materials.size() * sizeof(rt::Material));
     const gfx::Buffer& materialTable = frame.materials.empty() ? scene.staticMaterials() : materials_[slot];
 
+    if (timers_)
+        timers_->begin(cmd, "tlas");
     tlas_->build(cmd, scene.blases(), instances);
+    if (timers_)
+        timers_->end(cmd);
 
     gfx::Image& screen = scene.samplesRetro() ? *retroScreen : blackScreen_;
     // The feature images: the frame's, or the stand-ins (already in GENERAL, sampled).
@@ -390,7 +414,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         storageBuffer(EVO_BINDING_INDICES, scene.geometry().indices()),
         storageBuffer(EVO_BINDING_MESH_RECORDS, scene.geometry().meshRecords()),
         sampledImage(EVO_BINDING_RETRO_SCREEN, screen),
-        extraBuffer(EVO_BINDING_ENVIRONMENT, extras.environment),
+        storageBuffer(EVO_BINDING_ENVIRONMENT,
+                      extras.environment ? *extras.environment : environments_[slot]),
         extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes),
         extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights),
         extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
@@ -414,6 +439,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     constexpr VkAccessFlags2 kReadWrite =
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
+    if (timers_)
+        timers_->begin(cmd, "trace");
     for (std::uint32_t d = 0; d < dispatches; ++d) {
         for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
@@ -422,10 +449,15 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         const TracePush push{d * kSppPerDispatch,
-                             std::min(kSppPerDispatch, settings.spp - d * kSppPerDispatch)};
+                             std::min(kSppPerDispatch, settings.spp - d * kSppPerDispatch),
+                             {0.5f + settings.pixelJitter[0] - 0.5f * settings.pixelFootprint[0],
+                              0.5f + settings.pixelJitter[1] - 0.5f * settings.pixelFootprint[1]},
+                             {settings.pixelFootprint[0], settings.pixelFootprint[1]}};
         pipeline_.push(cmd, &push, sizeof push);
         pipeline_.traceRays(cmd, width_, height_);
     }
+    if (timers_)
+        timers_->end(cmd);
     stats_.traceDispatches = dispatches;
 }
 

@@ -259,8 +259,15 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   picture, sampled through an sRGB view so it is decoded to linear light exactly once, at a mip level from a
   ray cone) and a portal (a window: its radiance is the procedural night sky behind it). Next-event
   estimation picks one light by fixed weights per sample and combines with the BSDF's own sampling by multiple
-  importance sampling (power heuristic), portals included. The night sky is a pure function of the direction:
-  a blue gradient, hashed stars, the moon's glow and a distant town's lights below the horizon.
+  importance sampling (power heuristic), portals included. The sky behind a portal is the scene's
+  environment.
+- **Environments.** Each scene's frame names its sky, a pure function of the direction: `NightSky` (the
+  Studio's: a blue gradient, the moon's glow, stars, a town's lights under the horizon), `Space`, `Dusk` or
+  `Day`, with an optional sun or moon disc. Rays from the camera and through mirrors see the full sky, its
+  stars and town lights drawn as points of fixed flux filtered over the ray's footprint (sharp at 4K, no
+  aliasing at 1 spp); next-event estimation, portals and rays after a rough bounce see a smooth lighting sky
+  (gradient, glow, disc). Outdoor scenes sample the environment directly, the disc uniformly in its cone and
+  the dome by cosine, weighed against the BSDF by multiple importance sampling.
 - **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
   after the first bounce clamped to a luminance limit (64, the Studio 2) against fireflies; a non-finite
   sample counts as 0 (checked from the float's bits, so a fast-math compiler cannot fold the check away).
@@ -283,6 +290,18 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   anything two pixels wide (CRT text, highlights) but removes lone fireflies. A separate volume layer
   (in-scattered light and transmittance, from the participating media) has its own history and filter and is
   composed as `transmittance × surface + volume`.
+- **Trace resolution and the temporal upscaler** (`src/post/upscale.*`, `shaders/post/upscale.comp`). The
+  window path traces at `--trace-scale` × its size (0.67 by default, at least 16 pixels per axis) and the
+  denoised picture is upscaled to the window size in time: from its second frame after a reset the window
+  traces each pixel's samples in a window one output pixel wide, moved over the trace pixel by a 16-frame
+  Halton (2, 3) sequence, and the upscaler accumulates them where they fell (each output pixel weights the
+  samples near its centre), reprojects its history with the motion guide (the nearest depth's motion in
+  3×3), clips it to the current neighbourhood's YCoCg mean ± 1σ and blends by weight (90 % history per
+  frame). The primary hit's emission skips the upscaler's history, as it skips the denoiser's, so the CRT is
+  always the current frame; below scale 1 it is a Catmull-Rom upsample of the trace and a little softer
+  than native. A reset (a seek, a cut, a resize, a trace-scale change) traces whole pixels unjittered and
+  shows the spatial Catmull-Rom upsample. At scale 1 there is no upscaler pass; the exports always trace at
+  the output size.
 - **Tonemap.** Khronos PBR Neutral per frame, then the sRGB encoding and a static per-pixel triangular dither
   into the RGBA8 image the compositor reads; a CPU reference pins it. PBR Neutral keeps the hue: below its
   knee (0.76) it only subtracts a small offset, above it highlights compress and move towards white in the
@@ -309,7 +328,11 @@ in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
   shows each frame's single sample, filtered. The real look needs a ray tracing GPU, which has not been tried yet (nor has
   Windows).
 - **The first frames after a reset** (a seek, a chapter change or a camera cut) trace 4 and then 2 spp in the
-  window and are filtered harder; in sparsely lit areas shadow edges are soft for those two frames.
+  window and are filtered harder; in sparsely lit areas shadow edges are soft for those two frames. Below
+  trace scale 1 the first frame is also the spatial upsample of the smaller trace; detail sharpens over the
+  next 16 frames as the jittered samples accumulate.
+- **Below trace scale 1 the CRT's picture is upsampled** from the trace (never accumulated, so it stays
+  current), a little softer than at `--trace-scale 1`.
 - **Exports at 16 spp and more** are not filtered spatially (the firefly filter only), so dark corners keep a
   fine grain at the 64 spp default; more samples (e.g. `--spp 256`) clean them up.
 - **Long 4K exports on Windows are unmeasured:** a frame's whole trace is one submission (above), seconds
@@ -364,11 +387,22 @@ Options:
   --spp N              Path-traced samples per pixel per frame, 1..4096 (default 1 in
                        the window, which accumulates them over frames; 64 for
                        --capture-dir and --render-stream, where every frame stands alone)
+  --detail F           Detail of the 2026 scenes, 0 < F <= 1 (default 1): particle,
+                       splat, voxel and photon counts scale with it (for quick tests)
+  --trace-scale F      Path trace at F x the window size, 0.25..1 (default 0.67), and
+                       upscale in time; the window and --bench only (the exports always
+                       trace at the output size)
   --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
                        needs a duration greater than 0
   --headless           Render without opening a window
   --render-stream      Write raw RGB frames to stdout (implies --headless)
   --capture-dir PATH   Write one PNG frame, at --time, to PATH (implies --headless)
+  --bench              Benchmark the window's rendering headless: per chapter, render
+                       --bench-frames frames from 20 % into it (after 2 warm-up frames)
+                       and print one JSON line with the GPU time of every pass
+  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)
+  --chapters LIST      Chapters for --bench, comma-separated indices as --show-info
+                       numbers them, e.g. 11,14 (default: all)
   --music PATH         Music WAV to play (default: assets/music/show.wav beside the
                        executable); a WAV of another length than the show is refused
   --no-audio           Run without audio, on the system clock (SILENT MODE)
@@ -424,7 +458,11 @@ The random seed of a frame comes from the show time, `pcg(llround(seconds × 480
 the window adds `0x9E3779B9` per frame since its last reset, so its first frame after a reset uses the export
 seed and, at equal bounces, equals the export frame at spp max(`--spp`, 4) byte for byte while that is below
 16 (where both filter the same way; Review Focus 3). The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
-equals a real export frame; only the tests, which set both, see the equality.
+equals a real export frame; only the tests, which set both, see the equality. The window traces below its
+size (`--trace-scale`, 0.67 by default) and the exports at the output size, so the equality holds at
+`--trace-scale 1`; at a lower scale the window's first frame after a reset equals a frame rendered in Export
+mode at the same scale (the tests pin both), and seeking stays deterministic: the jitter and the upscaler's
+history follow only the frames since the last reset.
 
 In the window the time comes from the music: the clock is the position the listener hears (what SDL still
 has queued and the device's buffer are subtracted), and the show loops at its end. `--audio-offset` shifts
@@ -441,6 +479,33 @@ accumulation never builds up there.
 3 bytes per pixel, with progress on stderr. `--capture-dir` creates missing directories and overwrites
 an existing file of the same name. With `--validation`, validation messages go to stderr, so they never
 mix with streamed frames.
+
+**Benchmark (`--bench`).** Measures the window's rendering without a window: for each chapter (all, or
+`--chapters`), two warm-up frames and then `--bench-frames` frames (120) from 20 % into the chapter,
+Interactive at `--width` × `--height`, `--spp`, `--trace-scale` and `--detail` as the window would render
+them, two frames in flight. Each chapter prints one JSON line on stdout (progress on stderr):
+
+```json
+{"chapter":11,"title":"STUDIO NIGHT","scene":"Studio","frames":120,"spp":1,"traceScale":0.6700,
+ "width":2560,"height":1440,"traceWidth":1715,"traceHeight":965,"device":"NVIDIA GeForce RTX 4090",
+ "timestamps":true,"gpuMs":{"total":…,"retro":…,"fill":…,"tlas":…,"trace":…,"denoise":…,"upscale":…,
+ "tonemap":…,"compositor":…},"fps":…}
+```
+
+`gpuMs` are GPU timestamp times per pass, averaged over the timed frames (a pass a frame did not run counts
+0): `tlas` the top-level acceleration structure build, `trace` the path tracing dispatches, `denoise`,
+`upscale` (0 at scale 1), `tonemap`, `compositor` (CRT, era blend and HUD), `retro` the 1993 stage, `fill`
+the placeholder and `total` the whole frame. `fps` counts the timed frames over their wall-clock time. A GPU
+whose queue has no timestamps reports `"timestamps":false` and zero times. The budget in the step 5 plan is
+measured this way:
+
+```sh
+# Every chapter at 1440p as the window renders it (trace scale 0.67), then at scale 1
+Evolution --bench --width 2560 --height 1440 > bench-1440p.jsonl
+Evolution --bench --width 2560 --height 1440 --trace-scale 1 > bench-1440p-native.jsonl
+# Two chapters, fewer frames
+Evolution --bench --chapters 11,19 --bench-frames 60
+```
 
 Exit codes: 0 on success, 1 for bad usage or a runtime error, 2 when the machine cannot run EVOLUTION
 (no Vulkan loader, no Vulkan 1.3 driver, no GPU, or a missing extension or feature; stderr names what is

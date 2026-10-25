@@ -40,6 +40,7 @@ const uint kHitGroupsPerKind = 4u;
 
 const uint kTraceFlagNee = 1u; // FrameUniforms.flags
 const uint kTraceFlagRussianRoulette = 2u;
+const uint kTraceFlagFixedLightSelection = 4u; // step 4's fixed selectWeights (comparisons)
 
 struct Vertex { // 32 bytes
     vec3 position;
@@ -124,7 +125,7 @@ struct FrameUniforms { // 208 bytes
     uint lightCount;
     uint instanceCount;
     float clampIndirect;
-    float lightWeightSum;
+    float lightWeightSum; // not read: light selection sums its weights per shading point (lights.glsl)
     float regularizeRoughness;
     uint treeLightCount;
     uint mediumFlags;

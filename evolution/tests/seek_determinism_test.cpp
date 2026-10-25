@@ -17,7 +17,10 @@
 //   - BeatSwap in the window: on the 1993 beats of DOTS (placeholder) and FINALE (the Studio) the modern
 //     stage keeps running unseen (Decision 7) and the history never resets, while exports skip it and
 //     report Skipped when it runs again; the window's 1993 beats equal the export's bytes.
-// Runs with the validation layer on and fails on any message it reports.
+// Runs with the validation layer on and fails on any message it reports. With an argument, the trace scale
+// of both modes (Task 4 of step 5: CTest runs it again at the window's 0.67, where the window jitters its
+// samples and the temporal upscaler keeps a history of its own; the exports it compares with then render at
+// that scale too).
 
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
@@ -62,9 +65,12 @@ double chapterTime(int chapter, double fraction) {
     return start + fraction * (evo::show::chapterStart(chapter + 1) - start);
 }
 
+float gTraceScale = 1.f; // main()'s argument
+
 RenderSettings settings(RenderMode mode) {
     RenderSettings s{kWidth, kHeight}; // CRT and HUD on; the window's spp (1) and bounces (0 = the mode's)
     s.mode = mode;
+    s.traceScale = gTraceScale;
     return s;
 }
 
@@ -270,9 +276,12 @@ void testBeatSwap(evo::gfx::Context& ctx) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     try {
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR); // the build's compiled shaders
+        if (argc >= 2)
+            gTraceScale = std::stof(argv[1]);
+        std::printf("trace scale %.2f\n", gTraceScale);
         for (const Effect effect : {Effect::Finale, Effect::StudioNight, Effect::Return, Effect::Reboot})
             CHECK(evo::modern::sceneFor(effect) == evo::modern::SceneId::Studio);
         CHECK(evo::modern::sceneFor(Effect::Plasma) == evo::modern::SceneId::Placeholder);

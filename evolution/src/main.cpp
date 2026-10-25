@@ -1,4 +1,5 @@
 #include "app/app.hpp"
+#include "app/bench.hpp"
 #include "app/capture.hpp"
 #include "app/options.hpp"
 #include "gfx/context.hpp"
@@ -51,6 +52,8 @@ int run(const evo::Options& options) {
             return evo::runRenderStream(options);
         if (!options.captureDir.empty())
             return evo::runCapture(options);
+        if (options.bench)
+            return evo::runBench(options);
         if (options.headless) {
             std::fputs("Evolution: --headless needs an output: --render-stream or --capture-dir.\n", stderr);
             return 1;

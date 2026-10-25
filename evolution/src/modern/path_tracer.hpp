@@ -24,6 +24,10 @@
 #include <optional>
 #include <vector>
 
+namespace evo::gfx {
+class GpuTimers;
+} // namespace evo::gfx
+
 namespace evo::modern {
 
 struct TraceSettings {
@@ -32,6 +36,15 @@ struct TraceSettings {
     bool nee = true;
     bool russianRoulette = true; // from bounce 3
     float clampIndirect = 64.f;  // luminance limit of a contribution after the first bounce
+    // Choose lights by their fixed selectWeight alone, as step 4 did, instead of by their importance at each
+    // shading point (power, distance, orientation, gate); only for comparisons.
+    bool fixedLightSelection = false;
+    // The subpixel window (Task 4 of step 5, post::subpixelWindow): every sample of the frame is box-filtered
+    // over a window pixelFootprint wide (pixels, per axis, in (0, 1]) centred at the pixel centre plus
+    // pixelJitter; it must lie inside the pixel. The default is the whole pixel, step 4's box filter, byte
+    // for byte. The guides (depth, normal, motion) stay at the pixel centre.
+    std::array<float, 2> pixelJitter{0.f, 0.f};
+    std::array<float, 2> pixelFootprint{1.f, 1.f};
     // The frame's chapter-local show time (show::TimelineFrame::localSeconds), FrameUniforms::seconds: what
     // hit-shader patterns animate with (Tasks 18 and 23) and the export shutter offsets from (Task 9).
     float seconds = 0.f;
@@ -80,7 +93,8 @@ TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
 //
 // Who owns each binding (Task 1b's rule, so that the feature tasks route their data one way):
 // - Small per-frame data derived from the SceneFrame alone is packed by trace() into the tracer's own
-//   per-slot buffers (the TraceExtras pointer then stays null, or replaces the packed data in a test):
+//   per-slot buffers (the TraceExtras pointer then stays null, or replaces the packed data in a test; the
+//   environment does so today: trace() packs SceneFrame::environment, a non-null `environment` replaces it):
 //   15 environment (Task 2), 16/17 the light tree (Task 12), 18 MediumUniforms (Task 11), 21 the previous
 //   transforms (Task 9) and 25 lensing (Task 25).
 // - Resources another object builds and owns come through TraceExtras: 19/20 the density and majorant grids
@@ -90,7 +104,7 @@ TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
 // Per-frame feature resources (particle fields, medium volumes, splat accumulators, caustic maps) live once
 // in ModernStage, sized to the largest prepared scene, not per scene.
 struct TraceExtras {
-    const gfx::Buffer* environment = nullptr;        // 15: EnvironmentUniforms (Task 2)
+    const gfx::Buffer* environment = nullptr;        // 15: replaces the frame's packed environment (a hook)
     const gfx::Buffer* treeNodes = nullptr;          // 16: LightTreeNode[] (Task 12)
     const gfx::Buffer* treeLights = nullptr;         // 17: TreeLight[] (Task 12)
     const gfx::Buffer* medium = nullptr;             // 18: MediumUniforms (Task 11)
@@ -141,6 +155,10 @@ public:
                const std::optional<Camera>& previousCamera, const TraceSettings& settings,
                gfx::Image* retroScreen, const TraceExtras& extras = {});
 
+    // GPU timer scopes for the TLAS build ("tlas") and the trace dispatches ("trace") of every later trace()
+    // (null: none). The timers must outlive the tracer's use of them.
+    void setTimers(gfx::GpuTimers* timers) { timers_ = timers; }
+
     GBuffer& gbuffer() { return gbuffer_; }
     std::uint32_t width() const { return width_; }
     std::uint32_t height() const { return height_; }
@@ -148,8 +166,8 @@ public:
     // The device memory of the G-buffer's images at the current size, as allocated (VMA).
     VkDeviceSize imageBytes() const;
     // The device memory of everything else the tracer allocates, as allocated (VMA): the TLAS (storage,
-    // scratch, instance buffers), the per-slot uniform, instance, light and material buffers, the shader
-    // binding table and the feature dummies. A task that adds a buffer to the tracer adds it here
+    // scratch, instance buffers), the per-slot uniform, environment, instance, light and material buffers,
+    // the shader binding table and the feature dummies. A task that adds a buffer to the tracer adds it here
     // (shared_tracer_test (b) compares the sum with the allocator's statistics).
     VkDeviceSize bufferBytes() const;
 
@@ -176,7 +194,8 @@ private:
     std::uint32_t width_ = 0, height_ = 0;
     TracerCapacity capacity_;
     Stats stats_{};
-    bool tracedThisFrame_ = false;           // reset by the ring's begin()
+    bool tracedThisFrame_ = false; // reset by the ring's begin()
+    gfx::GpuTimers* timers_ = nullptr;
     gfx::FrameRing::Subscription ringBegin_; // active while ring_ lives
 
     gfx::Image blackScreen_;
@@ -185,6 +204,8 @@ private:
     gfx::Buffer dummyBuffer_;
     gfx::Image dummyDensity_, dummyMajorant_, dummyCaustics_;
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_, materials_;
+    // The frame's environment (SceneFrame::environment packed, binding EVO_BINDING_ENVIRONMENT), per slot.
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
     GBuffer gbuffer_;
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
     std::unique_ptr<rt::Tlas> tlas_;

@@ -20,6 +20,9 @@ const RenderSettings& checked(const RenderSettings& settings) {
                                     std::to_string(settings.width) + "x" + std::to_string(settings.height));
     if (settings.spp == 0)
         throw std::invalid_argument("the samples per pixel must be positive");
+    if (!validTraceScale(settings.traceScale))
+        throw std::invalid_argument("the trace scale must be in (0, 1], got " +
+                                    std::to_string(settings.traceScale));
     return settings;
 }
 
@@ -28,6 +31,8 @@ constexpr std::uint32_t kCardColor = 0xFFE0E0E0u;
 constexpr std::uint32_t kShadowColor = 0xFF000000u;
 // The gap, in units, between the 1993 card raised above the 2026 card and the 2026 card, shadow included.
 constexpr int kCardLineGapUnits = 3;
+// GPU timer scopes per frame: total, retro, fill or tlas and trace, denoise, upscale, tonemap, compositor.
+constexpr std::uint32_t kMaxGpuScopes = 16;
 
 } // namespace
 
@@ -88,12 +93,14 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
 }
 
 Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings& settings)
-    : ring_(ring), crt_(checked(settings).crt), hud_(settings.hud), hudTitle_(settings.hudTitle),
-      mode_(settings.mode), spp_(settings.spp),
+    : ring_(ring), timers_(ctx, ring, kMaxGpuScopes), crt_(checked(settings).crt), hud_(settings.hud),
+      hudTitle_(settings.hudTitle), mode_(settings.mode), spp_(settings.spp),
       maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)), text_(ctx, ring),
       retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height, settings.detail,
-                                        settings.sceneFactory, settings.sceneMap),
-      compositor_(ctx, ring, text_, settings.width, settings.height) {}
+                                        settings.sceneFactory, settings.sceneMap, settings.traceScale),
+      compositor_(ctx, ring, text_, settings.width, settings.height) {
+    modern_.setTimers(&timers_);
+}
 
 Renderer::~Renderer() {
     // The frames in flight still use the images and pipelines. Best effort, as in ~FrameRing: a wait that
@@ -115,6 +122,16 @@ void Renderer::resize(std::uint32_t width, std::uint32_t height) {
     history_.markResize(); // reported even if the size is back to the last frame's when the stage runs
 }
 
+void Renderer::setTraceScale(float scale) {
+    if (!validTraceScale(scale))
+        throw std::invalid_argument("the trace scale must be in (0, 1], got " + std::to_string(scale));
+    if (scale == modern_.traceScale())
+        return;
+    ring_.waitAll(); // resize: a trace-scale change, the frames in flight may still read the old images
+    modern_.setTraceScale(scale);
+    history_.markResize(); // the next frame of the modern stage resets (Resize)
+}
+
 void Renderer::prepare(std::span<const double> showSeconds) {
     std::array<bool, modern::kSceneCount> done{};
     for (const double seconds : showSeconds) {
@@ -129,14 +146,21 @@ void Renderer::prepare(std::span<const double> showSeconds) {
 void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     const StagePlan plan = planStages(frame, mode_, modern_.samplesRetro(frame));
     const VkExtent2D size = output().extent();
+    stats_.gpuMs = timers_.lastCompleted(); // read by the ring's begin() for this frame's slot
+    timers_.begin(cmd, "total");
 
+    if (plan.retro)
+        timers_.begin(cmd, "retro");
     stats_.retroRendered = plan.retro && retro_.render(cmd, frame);
+    if (plan.retro)
+        timers_.end(cmd);
     stats_.retroFrame = plan.retro ? retro_.retroFrame() : 0u;
 
     stats_.modernRendered = plan.modern;
     stats_.historyReset = HistoryReset::None;
     stats_.frameSeed = 0;
     stats_.spp = 0;
+    stats_.traceJitter = {0.f, 0.f};
     if (plan.modern) {
         const HistoryKey key{
             frame.chapter, modern_.shotFor(frame), frame.showSeconds, size.width, size.height, mode_, spp_};
@@ -152,6 +176,7 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         modern_.render(cmd, frame, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
         stats_.spp = state.spp;
+        stats_.traceJitter = modern_.lastTraceJitter();
     }
     stats_.framesSinceReset = plan.modern ? history_.framesSinceReset() : 0u;
     modernRanLastFrame_ = plan.modern;
@@ -160,7 +185,10 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         (plan.retroVisible ? kRetroVisible : 0u) | (plan.modernVisible ? kModernVisible : 0u);
     const std::vector<text::Item> hud =
         hud_ ? hudItems(frame, size.width, size.height, hudTitle_) : std::vector<text::Item>{};
+    timers_.begin(cmd, "compositor");
     compositor_.render(cmd, retro_.image(), modern_.image(), frame, crt_, visible, hud);
+    timers_.end(cmd);
+    timers_.end(cmd); // total
 }
 
 } // namespace evo::render

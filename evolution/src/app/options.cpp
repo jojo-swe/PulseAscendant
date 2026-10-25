@@ -58,6 +58,42 @@ float parseDetail(const std::string& flag, const std::string& text) {
     return static_cast<float>(value);
 }
 
+// --trace-scale: a fraction in [kMinTraceScale, 1].
+float parseTraceScale(const std::string& flag, const std::string& text) {
+    double value = 0.0;
+    const char* end = text.data() + text.size();
+    auto [ptr, error] = std::from_chars(text.data(), end, value);
+    if (error != std::errc() || ptr != end || !std::isfinite(value)) {
+        throw std::runtime_error(flag + " expects a number, got '" + text + "'");
+    }
+    if (!(value >= kMinTraceScale && value <= 1.0)) {
+        throw std::runtime_error(flag + " must be between 0.25 and 1, got " + text);
+    }
+    return static_cast<float>(value);
+}
+
+// --chapters: comma-separated non-negative chapter indices (the bench checks them against the show).
+std::vector<int> parseChapters(const std::string& flag, const std::string& text) {
+    std::vector<int> chapters;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t comma = text.find(',', start);
+        const std::string item =
+            text.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+        int value = -1;
+        const char* end = item.data() + item.size();
+        auto [ptr, error] = std::from_chars(item.data(), end, value);
+        if (item.empty() || error != std::errc() || ptr != end || value < 0) {
+            throw std::runtime_error(flag + " expects a comma-separated list of chapter indices, got '" +
+                                     text + "'");
+        }
+        chapters.push_back(value);
+        if (comma == std::string::npos)
+            return chapters;
+        start = comma + 1;
+    }
+}
+
 // --audio-offset: a signed number of milliseconds within +-kMaxAudioOffsetMs.
 double parseAudioOffset(const std::string& flag, const std::string& text) {
     double value = 0.0;
@@ -76,6 +112,7 @@ double parseAudioOffset(const std::string& flag, const std::string& text) {
 
 Options parseOptions(const std::vector<std::string>& args) {
     Options options;
+    bool benchOnly = false; // --chapters or --bench-frames given
 
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string& flag = args[i];
@@ -97,6 +134,16 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.spp = parseInt(flag, nextValue(), kMinSpp, kMaxSpp);
         } else if (flag == "--detail") {
             options.detail = parseDetail(flag, nextValue());
+        } else if (flag == "--trace-scale") {
+            options.traceScale = parseTraceScale(flag, nextValue());
+        } else if (flag == "--bench") {
+            options.bench = true;
+        } else if (flag == "--bench-frames") {
+            options.benchFrames = parseInt(flag, nextValue(), 1, kMaxBenchFrames);
+            benchOnly = true;
+        } else if (flag == "--chapters") {
+            options.chapters = parseChapters(flag, nextValue());
+            benchOnly = true;
         } else if (flag == "--time") {
             const std::string& text = nextValue();
             options.time = parseSeconds(flag, text);
@@ -150,12 +197,25 @@ Options parseOptions(const std::vector<std::string>& args) {
     if (options.renderStream && !options.captureDir.empty()) {
         throw std::runtime_error("--render-stream and --capture-dir cannot be combined");
     }
+    const bool exporting = options.renderStream || !options.captureDir.empty();
+    if (options.bench && exporting) {
+        throw std::runtime_error("--bench cannot be combined with an export");
+    }
+    if (benchOnly && !options.bench) {
+        throw std::runtime_error("--chapters and --bench-frames need --bench");
+    }
+    // Exports trace at the output size (Decision 7 of step 5), so a window frame after a reset at scale 1
+    // and an export frame agree.
+    if (options.traceScale && exporting) {
+        throw std::runtime_error(
+            "--trace-scale is for the window and --bench: the exports trace at the output size");
+    }
     // A stream has no Esc to end it, so "run until Esc" would write nothing.
     if (options.renderStream && options.duration <= 0.0) {
         throw std::runtime_error("--render-stream needs --duration greater than 0");
     }
-    // Streaming and capturing never open a window.
-    if (options.renderStream || !options.captureDir.empty()) {
+    // Streaming, capturing and benchmarking never open a window.
+    if (exporting || options.bench) {
         options.headless = true;
     }
 
@@ -165,6 +225,11 @@ Options parseOptions(const std::vector<std::string>& args) {
 int samplesPerPixel(const Options& options) {
     const bool exporting = options.renderStream || !options.captureDir.empty();
     return options.spp.value_or(exporting ? kExportSpp : kWindowSpp);
+}
+
+float traceScaleFor(const Options& options) {
+    const bool exporting = options.renderStream || !options.captureDir.empty();
+    return exporting ? 1.f : options.traceScale.value_or(kWindowTraceScale);
 }
 
 std::string helpText() {
@@ -180,11 +245,20 @@ std::string helpText() {
            "                       --capture-dir and --render-stream, where every frame stands alone)\n"
            "  --detail F           Detail of the 2026 scenes, 0 < F <= 1 (default 1): particle,\n"
            "                       splat, voxel and photon counts scale with it (for quick tests)\n"
+           "  --trace-scale F      Path trace at F x the window size, 0.25..1 (default 0.67), and\n"
+           "                       upscale in time; the window and --bench only (the exports always\n"
+           "                       trace at the output size)\n"
            "  --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream\n"
            "                       needs a duration greater than 0\n"
            "  --headless           Render without opening a window\n"
            "  --render-stream      Write raw RGB frames to stdout (implies --headless)\n"
            "  --capture-dir PATH   Write one PNG frame, at --time, to PATH (implies --headless)\n"
+           "  --bench              Benchmark the window's rendering headless: per chapter, render\n"
+           "                       --bench-frames frames from 20 % into it (after 2 warm-up frames)\n"
+           "                       and print one JSON line with the GPU time of every pass\n"
+           "  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)\n"
+           "  --chapters LIST      Chapters for --bench, comma-separated indices as --show-info\n"
+           "                       numbers them, e.g. 11,14 (default: all)\n"
            "  --music PATH         Music WAV to play (default: assets/music/show.wav beside the\n"
            "                       executable); a WAV of another length than the show is refused\n"
            "  --no-audio           Run without audio, on the system clock (SILENT MODE)\n"

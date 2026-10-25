@@ -465,8 +465,9 @@ Agreement compareBlocks(const Plane& plane, std::uint32_t channel, const std::ve
     return a;
 }
 
-// sky.glsl's skyRadiance below the town's band of lights (the dark ground and half the town's glow), the only
-// part the window scene's panel sees. A port: keep it equal to the shader.
+// environmentLighting (environment.glsl, sky.glsl) of the default NightSky under the town's band (the dark
+// ground and half the town's glow), the only part the window scene's panel sees. A port: keep it equal to
+// the shader.
 Vec3 groundSkyRadiance(Vec3 direction) {
     const Vec3 d = modern::normalize(direction);
     if (!(d.y <= -0.06f)) // kTownDepth: above it the hashed town lights would need porting too

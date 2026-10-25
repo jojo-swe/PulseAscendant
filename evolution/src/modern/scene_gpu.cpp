@@ -145,6 +145,7 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
                                     " names a mesh, material or light that does not exist");
     }
     checkLights(frame, materials);
+    packEnvironment(frame.environment); // throws for an invalid environment
 }
 
 SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)

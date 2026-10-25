@@ -6,59 +6,152 @@
 // BSDF's. A light emits from one side, along normalize(cross(edgeU, edgeV)). Next-event estimation samples
 // the environment with probability frame.environmentSelect and a rect light otherwise. Needs common.glsl.
 //
-// Light selection is a function of the shading point (p, its shading normal n, and whether the surface
-// transmits): pickLight() and lightSelectPdf() must use the same weights, and a BSDF ray that hits a light
-// evaluates lightSelectPdf() at the vertex it left (Review Focus 2 of step 5). Task 3 makes the weights
-// per point (lightImportance); until then they are the fixed selectWeight / lightWeightSum of step 4.
+// Light selection is a function of the shading point (p, its shading normal n turned to the side the path
+// arrived from, and whether the surface transmits): pickLight() and lightSelectPdf() use the same weights,
+// lightImportance(), and a BSDF ray that hits a light evaluates lightSelectPdf() at the vertex it left (Review
+// Focus 2 of step 5), so the two MIS strategies always agree on the selection probability. A light that gets
+// no weight at a point is simply never sampled there: BSDF rays that find it keep MIS weight 1.
 
 #include "environment.glsl"
 #include "screen.glsl"
 
-// The unnormalised weight with which light i is chosen at the shading point.
+vec3 lightNormal(RectLight l) {
+    return safeNormalize(cross(l.edgeU, l.edgeV), vec3(0.0, 1.0, 0.0));
+}
+
+vec3 lightCentre(RectLight l) {
+    return l.corner + 0.5 * (l.edgeU + l.edgeV);
+}
+
+// Where a ray from origin along d leaves through portal l (from its emitting side into the sky beyond): the
+// distance and the cosine on the portal; false if it does not cross it.
+bool crossesPortal(RectLight l, vec3 origin, vec3 d, out float t, out float cosLight) {
+    t = 0.0;
+    cosLight = 0.0;
+    vec3 n = lightNormal(l);
+    float denom = dot(d, n);
+    if (!(denom < 0.0)) {
+        return false;
+    }
+    t = dot(l.corner - origin, n) / denom;
+    if (!(t > 0.0)) {
+        return false;
+    }
+    vec3 q = origin + t * d - l.corner;
+    float u = dot(q, l.edgeU) / dot(l.edgeU, l.edgeU);
+    float v = dot(q, l.edgeV) / dot(l.edgeV, l.edgeV);
+    cosLight = -denom;
+    return u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0;
+}
+
+// The light's power as selection sees it: the luminance of its radiance times its area. A RetroScreen's
+// radiance is the picture's mean, the retro image's 1x1 mip level (already on the GPU: no readback), times
+// emissionScale (its emission is (s, s, s)); a Portal's is the environment's lighting radiance straight out
+// through it.
+float lightPower(RectLight l) {
+    float radiance = luminance(l.emission);
+    if (l.kind == kLightPortal) {
+        radiance = luminance(environmentLighting(-lightNormal(l)));
+    } else if (l.kind == kLightRetroScreen) {
+        float top = float(textureQueryLevels(retroScreen) - 1);
+        radiance *= luminance(textureLod(retroScreen, vec2(0.5), top).rgb);
+    }
+    return radiance * l.area;
+}
+
+// The unnormalised weight with which light i is chosen at the shading point: selectWeight * front * power *
+// cosBound / d^2 (Task 3 of step 5), where
+// - front: p is on the light's emitting side;
+// - cosBound: 1 on a transmissive surface, else the largest cosine between n and the directions to the
+//   light's corners and centre (0: the whole light is below the surface, as cos is linear over the quad);
+// - d^2: the squared distance to the light's centre, at least area / 4;
+// - a gated light (gate != kNoLight: a moon outside a window) only where the segment from p to its centre
+//   crosses that portal.
+// The flag kTraceFlagFixedLightSelection returns step 4's fixed max(selectWeight, 0) instead (comparisons).
 float lightImportance(uint i, vec3 p, vec3 n, bool transmissive) {
-    return max(lights[i].selectWeight, 0.0);
+    RectLight l = lights[i];
+    float weight = max(l.selectWeight, 0.0);
+    if ((frame.flags & kTraceFlagFixedLightSelection) != 0u) {
+        return weight;
+    }
+    if (!(weight > 0.0) || !(l.area > 0.0)) {
+        return 0.0;
+    }
+    vec3 centre = lightCentre(l);
+    vec3 toCentre = centre - p;
+    if (!(dot(toCentre, lightNormal(l)) < 0.0)) {
+        return 0.0; // behind the light, or in its plane
+    }
+    float cosBound = 1.0;
+    if (!transmissive) {
+        cosBound = max(dot(n, safeNormalize(toCentre, vec3(0.0))), 0.0);
+        cosBound = max(cosBound, dot(n, safeNormalize(l.corner - p, vec3(0.0))));
+        cosBound = max(cosBound, dot(n, safeNormalize(l.corner + l.edgeU - p, vec3(0.0))));
+        cosBound = max(cosBound, dot(n, safeNormalize(l.corner + l.edgeV - p, vec3(0.0))));
+        cosBound = max(cosBound, dot(n, safeNormalize(l.corner + l.edgeU + l.edgeV - p, vec3(0.0))));
+        if (!(cosBound > 0.0)) {
+            return 0.0;
+        }
+    }
+    float d2 = dot(toCentre, toCentre);
+    if (l.gate != kNoLight) {
+        float t;
+        float cosPortal;
+        float dist = sqrt(d2);
+        if (!crossesPortal(lights[l.gate], p, toCentre / dist, t, cosPortal) || !(t < dist)) {
+            return 0.0;
+        }
+    }
+    float w = weight * lightPower(l) * cosBound / max(d2, 0.25 * l.area);
+    return w > 0.0 && isFinite(w) ? w : 0.0;
+}
+
+// The sum of every light's weight at the shading point.
+float lightImportanceSum(vec3 p, vec3 n, bool transmissive) {
+    float total = 0.0;
+    for (uint i = 0u; i < frame.lightCount; ++i) {
+        total += lightImportance(i, p, n, transmissive);
+    }
+    return total;
 }
 
 // The probability that pickLight() at the shading point returns light index.
 float lightSelectPdf(uint index, vec3 p, vec3 n, bool transmissive) {
-    return frame.lightWeightSum > 0.0 ? lightImportance(index, p, n, transmissive) / frame.lightWeightSum : 0.0;
+    float total = lightImportanceSum(p, n, transmissive);
+    return total > 0.0 && isFinite(total) ? lightImportance(index, p, n, transmissive) / total : 0.0;
 }
 
-// Picks a light by its weight at the shading point; false when no light has weight.
+// Picks a light by its weight at the shading point, in two passes over the lights (the sum, then the light u
+// falls in); false when no light has weight there. pdf = lightSelectPdf(index, p, n, transmissive).
 bool pickLight(float u, vec3 p, vec3 n, bool transmissive, out uint index, out float pdf) {
     index = 0u;
     pdf = 0.0;
-    if (!(frame.lightWeightSum > 0.0)) {
+    float total = lightImportanceSum(p, n, transmissive);
+    if (!(total > 0.0) || !isFinite(total)) {
         return false;
     }
-    float target = u * frame.lightWeightSum;
+    float target = u * total;
     float accumulated = 0.0;
-    bool found = false;
+    float chosen = 0.0;
     for (uint i = 0u; i < frame.lightCount; ++i) {
         float w = lightImportance(i, p, n, transmissive);
         if (w > 0.0) {
             index = i; // the last light with weight, should rounding leave target past the sum
-            found = true;
+            chosen = w;
             accumulated += w;
             if (target < accumulated) {
                 break;
             }
         }
     }
-    if (found) {
-        pdf = lightSelectPdf(index, p, n, transmissive);
-    }
-    return found && pdf > 0.0;
+    pdf = chosen / total;
+    return pdf > 0.0;
 }
 
 // The probability that next-event estimation at the shading point chooses rect light index: it picks a rect
 // light at all with probability 1 - environmentSelect.
 float lightChoicePdf(uint index, vec3 p, vec3 n, bool transmissive) {
     return (1.0 - frame.environmentSelect) * lightSelectPdf(index, p, n, transmissive);
-}
-
-vec3 lightNormal(RectLight l) {
-    return safeNormalize(cross(l.edgeU, l.edgeV), vec3(0.0, 1.0, 0.0));
 }
 
 // The radiance a light sends along wi (from the shaded point towards the light) from its point (u, v).
@@ -86,27 +179,6 @@ float powerHeuristic(float a, float b) {
     float a2 = a * a;
     float b2 = b * b;
     return a2 + b2 > 0.0 ? a2 / (a2 + b2) : 0.0;
-}
-
-// Where a ray from origin along d leaves through portal l (from its emitting side into the sky beyond): the
-// distance and the cosine on the portal; false if it does not cross it.
-bool crossesPortal(RectLight l, vec3 origin, vec3 d, out float t, out float cosLight) {
-    t = 0.0;
-    cosLight = 0.0;
-    vec3 n = lightNormal(l);
-    float denom = dot(d, n);
-    if (!(denom < 0.0)) {
-        return false;
-    }
-    t = dot(l.corner - origin, n) / denom;
-    if (!(t > 0.0)) {
-        return false;
-    }
-    vec3 q = origin + t * d - l.corner;
-    float u = dot(q, l.edgeU) / dot(l.edgeU, l.edgeU);
-    float v = dot(q, l.edgeV) / dot(l.edgeV, l.edgeV);
-    cosLight = -denom;
-    return u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0;
 }
 
 // The density with which the rect-light part of NEE at the shading point (p, n, transmissive) reaches the
