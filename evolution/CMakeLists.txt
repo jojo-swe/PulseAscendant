@@ -1115,6 +1115,15 @@ add_executable(spheres_scene_test tests/spheres_scene_test.cpp)
 target_link_libraries(spheres_scene_test PRIVATE evo_scene_fixture)
 evo_gpu_test(scene_spheres spheres_scene_test)
 
+# --- Step 5 Task 19: Tunnel (TUNNEL) -----------------------------------------------------------------------------
+
+# The scene (src/modern/scenes/tunnel.cpp) and its beads' particle shader (shaders/modern/particles_tunnel.comp,
+# compiled by the shaders/modern glob). The test adds the 1993 mirror, the beads against the GPU, the camera
+# inside the tube, the ignition and the lit haze to the standard contract; `scene_tunnel_test --look <dir> [spp]
+# [width height] [name]` renders stills instead.
+target_sources(evo_modern PRIVATE src/modern/scenes/tunnel.cpp)
+evo_scene_test(tunnel)
+
 # --- Step 5 Task 11: participating media ---------------------------------------------------------------------
 
 # Height fog and baked density grids: the CPU side (packing, the HG and fog references) and the grid's GPU
@@ -1184,6 +1193,25 @@ evo_scene_test(glass)
 target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
 evo_scene_test(ship)
 
+# --- Step 5 Task 23: the City (VECTOR CITY, ASCENT, CITY NIGHT, METROPOLIS) ----------------------------------
+
+# A night city on the 1993 city's grid: towers under procedural facades with millions of windows, wet
+# streets, tens of thousands of street lamps and beacons in the light tree, signs as rect lights, traffic
+# light trails, and the splats of the lamps' glow in the haze and of the rain (src/modern/scenes/city.cpp,
+# shaders/rt/city_patterns.glsl, shaders/modern/city_splats.comp). Its scene test: the standard picture and
+# sweep checks, the card's numbers, the 1993 flight, the wet street's reflection, the tree lights per chapter
+# and the windows' blinking at one time reached by two seek paths.
+target_sources(evo_modern PRIVATE src/modern/scenes/city.cpp)
+evo_scene_test(city)
+add_dependencies(scene_city_test evo_modern_sphere_shaders evo_modern_intersection_shaders)
+
+# --- Step 5 Task 18: Nebula (PLASMA, NEBULA) ------------------------------------------------------------------
+
+# The scene (src/modern/scenes/nebula.cpp) and its bake, star and splat shaders (shaders/modern/nebula_*.comp,
+# compiled by the shaders/modern glob as modern_nebula_*.comp.spv). `scene_nebula_test --look <dir> [spp]
+# [detail]` renders 480x270 stills of both chapters instead of the tests.
+target_sources(evo_modern PRIVATE src/modern/scenes/nebula.cpp)
+evo_scene_test(nebula)
 # --- Step 5 Task 24: Cosmos (GALAXY, ASCENDANT) ------------------------------------------------------------
 
 # A sixteen-million-star galaxy as splats with its dust as a grid medium, and two million particles rising from

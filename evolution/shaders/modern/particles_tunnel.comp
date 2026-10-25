@@ -1,0 +1,100 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The Tunnel scene's particle field: TUNNEL's beads, every 1993 point a light.
+//
+// 96 rings of `dots` beads stand along 1993's tunnel path (retro/tunnel.hpp) in the world: ring j at depth
+// w = j * 0.25 has its centre at (-P.x(w), P.y(w), w) and stands square to the path's tangent there. Bead
+// `dot` of ring j sits at angle 2 pi dot / dots + twist(seconds, w) (1993's angle and twist) on its ring, at
+// 1993's radius. Particle id = slot * dots + dot; slot k holds the ring j = k (mod 96) whose depth lies in the
+// lit window (travel + kLitNear, travel + kLitNear + 24], the travel 3 units a second: a bead keeps its ring
+// until the ring falls behind the window and comes back at the far end.
+//   params[0] = (count, dots per ring, bead radius, unused)
+// The colour is a warm tungsten white (one in four of 1993's points, every fourth, a phosphor white-blue),
+// a little warmer or cooler per bead, and the emission the bead's rated
+// radiance; the light tree's frame scales what is seen and sampled (the ignition, the pulses, the fades).
+//
+// modern::tunnelLight (src/modern/scenes/tunnel.cpp) mirrors particle() operation for operation; change both
+// together (scene_tunnel_test compares them). Nothing integrates anything, so the field is a pure function
+// of (id, seconds, params).
+
+#include "particles_common.glsl"
+
+const float kTau = 6.28318530718;
+const float kSpacing = 0.25;
+const float kSpeed = 3.0;
+const float kLitNear = -3.5;
+const int kRings = 96;
+const float kRadius = 1.0;
+const float kTwistRate = 0.35;
+const float kTwistPerDepth = 0.08;
+const float kBeadEmission = 140.0;
+
+uint tunnelHash(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+float tunnelUnit(uint x) {
+    return float(x >> 8) * (1.0 / 16777216.0);
+}
+
+// An angle reduced to [-pi, pi) before sin and cos, so they stay accurate on every driver.
+float tunnelPhase(float x) {
+    float turns = x / kTau + 0.5;
+    return kTau * (turns - floor(turns) - 0.5);
+}
+
+// 1993's path at depth w and its slope (retro::tunnelPath, retro::tunnelPathSlope).
+vec2 tunnelPath(float w) {
+    float x = 2.6 * sin(tunnelPhase(0.13 * w)) + 1.0 * sin(tunnelPhase(0.31 * w + 1.1));
+    float y = 1.6 * sin(tunnelPhase(0.17 * w + 0.6)) + 0.6 * sin(tunnelPhase(0.37 * w + 2.3));
+    return vec2(x, y);
+}
+
+vec2 tunnelSlope(float w) {
+    float x = 2.6 * 0.13 * cos(tunnelPhase(0.13 * w)) + 1.0 * 0.31 * cos(tunnelPhase(0.31 * w + 1.1));
+    float y = 1.6 * 0.17 * cos(tunnelPhase(0.17 * w + 0.6)) + 0.6 * 0.37 * cos(tunnelPhase(0.37 * w + 2.3));
+    return vec2(x, y);
+}
+
+SphereRecord particle(uint id, float seconds, vec4 params[4]) {
+    uint dots = uint(params[0].y);
+    float radius = params[0].z;
+    uint slot = id / dots;
+    uint dot = id - slot * dots;
+
+    float travel = kSpeed * seconds;
+    int nearest = int(floor((travel + kLitNear) / kSpacing)) + 1;
+    int ring = nearest + (int(slot) - nearest + kRings * 1024) % kRings;
+    float w = float(ring) * kSpacing;
+
+    vec2 p = tunnelPath(w);
+    vec2 slope = tunnelSlope(w);
+    vec3 centre = vec3(-p.x, p.y, w);
+    vec3 tangent = normalize(vec3(-slope.x, slope.y, 1.0));
+    vec3 up = normalize(vec3(0.0, 1.0, 0.0) - tangent * tangent.y);
+    vec3 right = cross(tangent, up);
+    float angle = tunnelPhase(kTau * float(dot) / float(dots) + kTwistRate * seconds + kTwistPerDepth * w);
+    vec3 position = centre + kRadius * (cos(angle) * right + sin(angle) * up);
+
+    // The bead's identity: its ring and its place among 1993's 64.
+    uint h = tunnelHash(uint(ring) * 0x9E3779B9u + (dot * (64u / dots)) * 0x85EBCA6Bu + 0x5bd1e995u);
+    float warmth = tunnelUnit(h);
+    float rating = tunnelUnit(tunnelHash(h));
+
+    SphereRecord s;
+    s.center = position;
+    s.radius = radius;
+    bool cool = (dot * (64u / dots)) % 4u == 2u;
+    s.color = cool ? mix(vec3(0.56, 0.73, 1.0), vec3(0.68, 0.82, 1.0), warmth)
+                   : mix(vec3(1.0, 0.64, 0.36), vec3(1.0, 0.78, 0.55), warmth);
+    s.emission = kBeadEmission * (0.88 + 0.24 * rating);
+    s.prevCenter = position;
+    s.material = 0u;
+    return s;
+}
