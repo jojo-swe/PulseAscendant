@@ -13,6 +13,7 @@ regenerated after merging main d91fb09 (Tasks 2, 3 and 4), whose environments an
 seven outputs (the lit Studio captures and streams; the merged build equals d91fb09's bytes exactly); then
 regenerated after the NEE shadow-ray fix (150714d), which changed seven outputs again: studio_night_40,
 finale_50, studio_night_acc, return_30 and the streams stream_studio_cut, stream_finale, stream_studio_ascent.
+Then regenerated when DOTS' 2026 half became the Particles scene (step 5, Task 17): only stream_dots changed.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

@@ -1008,3 +1008,9 @@ target_include_directories(splat_test PRIVATE tests)
 target_compile_definitions(splat_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(splat_test splat_test_shaders)
 evo_gpu_test(splat splat_test)
+
+# Step 5, Task 17: the Particles scene (DOTS, PARTICLE OCEAN; its particle shader
+# shaders/modern/particles_particles.comp is globbed above) and its test (`scene_particles_test --look <dir>
+# [spp] [detail]` renders 640x360 stills of both chapters; `--memory [detail]` prints the measured bytes).
+target_sources(evo_modern PRIVATE src/modern/scenes/particles.cpp)
+evo_scene_test(particles)

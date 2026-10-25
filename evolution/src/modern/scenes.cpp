@@ -1,5 +1,6 @@
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "modern/scenes/particles.hpp"
 #include "modern/studio.hpp"
 
 #include <array>
@@ -21,16 +22,16 @@ template <typename Scene> std::unique_ptr<ModernScene> make(SceneDetail detail) 
 constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Placeholder, "Placeholder", nullptr},
     {SceneId::Studio, "Studio", &make<Studio>},
-    {SceneId::Ship, "Ship", nullptr},               // Task 16
-    {SceneId::Particles, "Particles", nullptr},     // Task 17
-    {SceneId::Nebula, "Nebula", nullptr},           // Task 18
-    {SceneId::Tunnel, "Tunnel", nullptr},           // Task 19
-    {SceneId::Glass, "Glass", nullptr},             // Task 20
-    {SceneId::Lens, "Lens", nullptr},               // Task 21
-    {SceneId::Spheres, "Spheres", nullptr},         // Task 22
-    {SceneId::City, "City", nullptr},               // Task 23
-    {SceneId::Cosmos, "Cosmos", nullptr},           // Task 24
-    {SceneId::Singularity, "Singularity", nullptr}, // Task 25
+    {SceneId::Ship, "Ship", nullptr},                    // Task 16
+    {SceneId::Particles, "Particles", &make<Particles>}, // Task 17
+    {SceneId::Nebula, "Nebula", nullptr},                // Task 18
+    {SceneId::Tunnel, "Tunnel", nullptr},                // Task 19
+    {SceneId::Glass, "Glass", nullptr},                  // Task 20
+    {SceneId::Lens, "Lens", nullptr},                    // Task 21
+    {SceneId::Spheres, "Spheres", nullptr},              // Task 22
+    {SceneId::City, "City", nullptr},                    // Task 23
+    {SceneId::Cosmos, "Cosmos", nullptr},                // Task 24
+    {SceneId::Singularity, "Singularity", nullptr},      // Task 25
 }};
 
 // The scene each effect shows, one row per effect in show::Effect's order. The five Studio chapters show the
@@ -38,8 +39,8 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
 // and stay on the placeholder; each scene task moves its own chapters' rows to its scene (the comment).
 constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEffect{{
     {Effect::Boot, SceneId::Placeholder},
-    {Effect::Flyby, SceneId::Placeholder},    // Ship
-    {Effect::Dots, SceneId::Placeholder},     // Particles
+    {Effect::Flyby, SceneId::Placeholder}, // Ship
+    {Effect::Dots, SceneId::Particles},
     {Effect::Plasma, SceneId::Placeholder},   // Nebula
     {Effect::Tunnel, SceneId::Placeholder},   // Tunnel
     {Effect::Glenz, SceneId::Placeholder},    // Glass
@@ -49,11 +50,11 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Finale, SceneId::Studio},
     {Effect::Portal, SceneId::Studio},
     {Effect::StudioNight, SceneId::Studio},
-    {Effect::Ascent, SceneId::Placeholder},      // City
-    {Effect::CityNight, SceneId::Placeholder},   // City
-    {Effect::Nebula, SceneId::Placeholder},      // Nebula
-    {Effect::Cathedral, SceneId::Placeholder},   // Glass
-    {Effect::Ocean, SceneId::Placeholder},       // Particles
+    {Effect::Ascent, SceneId::Placeholder},    // City
+    {Effect::CityNight, SceneId::Placeholder}, // City
+    {Effect::Nebula, SceneId::Placeholder},    // Nebula
+    {Effect::Cathedral, SceneId::Placeholder}, // Glass
+    {Effect::Ocean, SceneId::Particles},
     {Effect::SphereStorm, SceneId::Placeholder}, // Spheres
     {Effect::Singularity, SceneId::Placeholder}, // Singularity
     {Effect::Return, SceneId::Studio},
