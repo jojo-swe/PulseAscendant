@@ -1232,3 +1232,23 @@ evo_scene_test(cosmos)
 # ring still.
 target_sources(evo_modern PRIVATE src/modern/lensing.cpp src/modern/scenes/singularity.cpp)
 evo_scene_test(singularity)
+
+# --- The part after the show and the release tools -------------------------------------------------------
+
+# A 1993 part outside the show's chapters (src/retro/secret_part.cpp) with its own retro stage and compositor
+# (src/render/secret_renderer.cpp); its test checks the text, the keys and the pictures.
+target_sources(evo_render PRIVATE src/retro/secret_part.cpp src/render/secret_renderer.cpp)
+add_executable(secret_part_test tests/secret_part_test.cpp)
+target_link_libraries(secret_part_test PRIVATE evo_app)
+target_compile_definitions(secret_part_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(secret_part_test Evolution_shaders)
+add_test(NAME secret_part COMMAND secret_part_test)
+
+# The video export: chunked, resumable rendering into ffmpeg with the music (tools/render_video.py), on a short
+# stretch at a tiny size.
+add_test(NAME render_video
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_video_test.py $<TARGET_FILE:Evolution>)
+set_tests_properties(render_video PROPERTIES TIMEOUT 300 PROCESSORS 2)
+# The release's NFO: its columns, its notes and its last line; the README stays plain.
+add_test(NAME nfo
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/nfo_test.py ${CMAKE_SOURCE_DIR})
