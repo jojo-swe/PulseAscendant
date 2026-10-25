@@ -28,13 +28,16 @@ enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Che
 // in the pixel's palette colour (marble, basalt or gold leaf), in the world's xz plane (Tesserae) or over a
 // sphere about its instance's origin along great circles from the point above its centre (TesseraeSphere);
 // baseColor2's x and y move the mosaic by that many tesserae (baseColor is unused).
+// Hull and Planet are the Ship's (step 5, Task 16; shaders/rt/pbr.rchit documents what they read).
 enum class Pattern : std::uint32_t {
     None = 0,
     WoodPlanks = 1,
     BrushedMetal = 2,
     Concrete = 3,
     Tesserae = 4,
-    TesseraeSphere = 5
+    TesseraeSphere = 5,
+    Hull = 6,
+    Planet = 7
 };
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;
