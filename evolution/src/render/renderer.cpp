@@ -144,16 +144,13 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         stats_.historyReset = history_.advance(key, !modernRanLastFrame_);
         // Export frames stand alone: the seed depends on the scene time only, not on the frames before.
         const std::uint32_t seedFrames = mode_ == RenderMode::Export ? 0u : history_.framesSinceReset();
-        // The shutter's slices stay inside the scene's chapter, so a scene shown before its chapter starts
-        // (REBOOT's look ahead at GALAXY) is traced at its own time alone.
-        const double shutter = scene.localSeconds < 0.0 ? 0.0 : shutterSeconds_;
         const HistoryState state{stats_.historyReset,
                                  history_.framesSinceReset(),
                                  mode_,
                                  frameSpp(mode_, spp_, history_.framesSinceReset()),
                                  maxBounces_,
                                  modern::frameSeedFor(scene.showSeconds, seedFrames),
-                                 shutter};
+                                 shutterSeconds_};
         modern_.render(cmd, scene, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
         stats_.spp = state.spp;

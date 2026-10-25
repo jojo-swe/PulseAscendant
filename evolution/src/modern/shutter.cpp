@@ -1,5 +1,7 @@
 #include "modern/shutter.hpp"
 
+#include "show/director.hpp"
+
 #include <algorithm>
 #include <stdexcept>
 #include <string>
@@ -36,11 +38,16 @@ double sliceSeconds(double localSeconds, double chapterDuration, std::uint32_t k
                     double shutterSeconds) {
     const double seconds = localSeconds + sliceOffset(k, slices, shutterSeconds);
     const double last = std::max(chapterDuration - kChapterEndMargin, 0.0);
-    return std::clamp(seconds, 0.0, last);
+    return std::clamp(seconds, std::min(localSeconds, 0.0), last);
 }
 
 show::TimelineFrame sliceFrame(const show::TimelineFrame& frame, double localSeconds) {
-    show::TimelineFrame slice = show::sampleTimeline(frame.showSeconds + (localSeconds - frame.localSeconds));
+    const double showSeconds = frame.showSeconds + (localSeconds - frame.localSeconds);
+    // A scene shown before its chapter starts (REBOOT's look ahead at GALAXY): the slice is moved into the
+    // frame's chapter as the director moves the frame itself.
+    if (localSeconds < 0.0)
+        return show::sceneFrame(frame, show::SceneCut{frame.chapter, showSeconds, false});
+    show::TimelineFrame slice = show::sampleTimeline(showSeconds);
     if (slice.chapter != frame.chapter)
         throw std::logic_error("sliceFrame: local time " + std::to_string(localSeconds) +
                                " is outside chapter " + std::to_string(frame.chapter));

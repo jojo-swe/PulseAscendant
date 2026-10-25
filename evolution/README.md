@@ -560,7 +560,8 @@ of the options and its show time, so a streamed frame equals a fresh capture of 
 more than 4 samples per pixel is traced in one time slice per dispatch of 4 samples, at most 8, each slice with
 its own scene frame, particle field, TLAS and camera, and the picture is their mean (`src/modern/shutter.*`;
 the slice times are a pure function of the time, fps and spp). A slice never samples another chapter: its time
-is clamped into the frame's own chapter, so the first and last frames of a chapter blur only inwards. With 4
+is clamped into the frame's own chapter, so the first and last frames of a chapter blur only inwards (and a
+scene shown before its chapter starts, REBOOT's look ahead at GALAXY, blurs forwards from its own time). With 4
 samples or fewer, and always in the window, there is one slice and no blur. The guides (depth, normal, motion)
 come from the middle slice.
 The random seed of a frame comes from the show time, `pcg(llround(seconds × 48000))` (the audio sample clock);
