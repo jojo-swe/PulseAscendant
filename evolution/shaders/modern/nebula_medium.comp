@@ -14,7 +14,10 @@
 // that flux: a thin, hard-edged skin on every surface facing a star (an ionisation front), ice-white where
 // the flux is strong, gold where it is weaker; heated dust a little deeper glows ember with density x flux
 // (it penetrates 3x deeper); the cavity's ionised gas glows ice blue in wisps; knots in the pillar heads
-// pulse with the bass. The voxel stores the emission that gives that emissivity at its density.
+// pulse with the bass. A's fronts burn whiter and stronger than the lesser stars'; B's light dies in the gap's
+// gas past the flank it faces, so the pillars' sides away from A stay dark dust, rimmed by A's fronts and
+// carved into ribs and globules (the first steps of every march go through the full dust, so the ribs
+// shadow each other). The voxel stores the emission that gives that emissivity at its density.
 //
 // 1, PLASMA: the 1993 plasma (shaders/retro/plasma.comp, here at continuous pixel positions and time) in
 // (x, y) over the slab's mid-plane, its pixel grid kPlasmaPixel wide, warped more the further a voxel lies
@@ -129,6 +132,11 @@ const float kStarOutput[3] = float[3](5200.0, 900.0, 160.0);
 // Star A's bubble: the gas it has blown away (inside kBubbleInner) and the shell it has piled up round it.
 const float kBubbleInner = 16.0;
 const float kBubbleShell = 44.0;
+// The gas round star B: clear for kGapClear units, then this much density along the way.
+const float kGapClear = 6.0;
+const float kGapGas = 0.14;
+// How much brighter star A's ionisation fronts burn than the others' at the same flux.
+const float kHeroFront = 2.2;
 
 const vec3 kIce = vec3(0.55, 0.75, 1.0);
 const vec3 kGold = vec3(1.0, 0.66, 0.30);
@@ -201,10 +209,10 @@ float nebulaDust(vec3 p, float t, bool fine) {
     if (d > 5.0) {
         return lanes; // beyond any octave's reach
     }
-    float erosion = fine ? 1.2 * fbm(p * 0.2, 3) + 1.6 * (ridged(vec3(p.x * 0.33, p.y * 0.06, p.z * 0.33), 2) - 0.55) +
-                               0.5 * gradientNoise(p * 0.9)
+    float erosion = fine ? 1.6 * fbm(p * 0.13, 3) + 1.8 * (ridged(vec3(p.x * 0.22, p.y * 0.05, p.z * 0.22), 2) - 0.55) +
+                               0.4 * gradientNoise(p * 0.9)
                          : 0.7 * gradientNoise(p * 0.2);
-    float solid = smoothstep(0.7, -1.3, d + erosion);
+    float solid = smoothstep(0.5, -0.9, d + erosion);
     float body = solid * (fine ? 0.75 + 0.3 * gradientNoise(p * 0.07 + 3.1) + 0.2 * gradientNoise(p * 0.31) : 0.8);
     return max(body, 0.0) + lanes;
 }
@@ -229,6 +237,7 @@ const float kCavityMean = 0.003;
 // The gas's column density from p towards a star along dir, out to `reach` (at most 30 units, in `steps` of
 // growing length): the first step through the full dust (it draws the front's edge), the rest coarse; the
 // cavity at its mean.
+const int kFineSteps = 3; // the steps through the full dust: out to 2.8 units, past a rib's groove
 float nebulaColumn(vec3 p, vec3 dir, float reach, float t, int steps) {
     const float kSteps[8] = float[8](0.6, 1.5, 2.8, 4.8, 7.8, 12.0, 19.0, 30.0);
     float sum = kCavityMean * reach;
@@ -239,7 +248,7 @@ float nebulaColumn(vec3 p, vec3 dir, float reach, float t, int steps) {
             break;
         }
         float mid = 0.5 * (s0 + s1);
-        sum += nebulaDust(p + dir * mid, t, i == 0) * (s1 - s0);
+        sum += nebulaDust(p + dir * mid, t, i < kFineSteps) * (s1 - s0);
         s0 = s1;
     }
     return sum;
@@ -282,7 +291,9 @@ vec4 nebulaVoxel(vec3 p, float t, float bass, float opacity, float densityScale,
     float inBubble = smoothstep(0.6 * kBubbleInner, kBubbleShell, length(p - kStarCentre[0]));
     // The fronts are not lit evenly: photoevaporation carves them into vertical striations and globules, so a
     // front facing the camera reads as relief, bright ribs over darker grooves.
-    float relief = 0.3 + 1.4 * pow(ridged(vec3(p.x * 0.4, p.y * 0.08, p.z * 0.4) + vec3(3.3, 0.0, -1.7), 2), 2.0);
+    float ribs = ridged(vec3(p.x * 0.24, p.y * 0.05, p.z * 0.24) + vec3(3.3, 0.0, -1.7), 2);
+    float globules = smoothstep(-0.15, 0.35, fbm(p * 0.16 + vec3(-2.9, 6.1, 0.4), 2));
+    float relief = 0.08 + 2.4 * ribs * ribs * ribs * (0.35 + 0.65 * globules);
     vec3 j = vec3(0.0); // the emissivity: radiance emitted per unit length
     for (int k = 0; k < 3; ++k) {
         vec3 toStar = kStarCentre[k] - p;
@@ -300,12 +311,20 @@ vec4 nebulaVoxel(vec3 p, float t, float bass, float opacity, float densityScale,
         // only needs the head's own gas.
         float tau = dust > 0.02 ? opacity * nebulaColumn(p, toStar / r, reach, t, k == 2 ? 4 : 8)
                     : opacity * kCavityMean * reach + (k == 0 ? nebulaPillarShadow(p, toStar / r, reach, opacity) : 0.0);
+        // B sits in the gap's denser gas: its light ionises the flank it faces, a few units away, and dies out
+        // before the centre pillar, whose face towards the camera stays dark dust.
+        tau += k == 1 ? opacity * kGapGas * max(reach - kGapClear, 0.0) : 0.0;
         float skin = flux * exp(-tau);
         float heated = flux * exp(-tau / 3.0);
         vec3 tint = mix(kGold, kIce, smoothstep(0.6, 8.0, skin));
+        // A's fronts are the bright ones: its skins burn whiter and stronger than the lesser stars'.
+        float front = k == 0 ? kHeroFront : 1.0;
+        if (k == 0) {
+            tint = mix(kGold, kIce, smoothstep(0.3, 4.0, skin));
+        }
         // Recombination in the dust's ionised skin (~ density^2), heated dust deeper in (~ density), and the
         // cavity's ionised gas, ice blue, in its wisps.
-        j += densityScale * (tint * skin * dust * (dust + 0.1) * relief + kEmber * (0.08 * heated * dust * relief) +
+        j += densityScale * (front * tint * skin * dust * (dust + 0.1) * relief + kEmber * (0.08 * heated * dust * relief) +
                              kIce * (0.02 * skin * wisps * wisps * wisps * wisps * inBubble));
         if (k == 0 && shaft > 0.0) {
             float cosine = dot(-toStar / r, normalize(eye - p));
