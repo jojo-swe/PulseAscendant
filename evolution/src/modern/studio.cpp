@@ -53,9 +53,10 @@ constexpr Vec3 kLampAim{-0.12f, kDeskTop, -0.16f}; // where the shade points
 constexpr float kLampEmitterSize = 0.1f;
 
 // The moon (see Studio::kMoonDirection): an 18 cm square 4 m out, about 2.6 degrees across.
-// Indirect contributions above this luminance are clamped: the room's light is about 0.05, so the plan's
-// generic 64 would let caustic fireflies (diffuse -> chrome or glass -> lamp or moon) through untouched.
-constexpr float kClampIndirect = 2.f;
+// Contributions after a rough vertex above this luminance are clamped (step 5's default, Task 6): path
+// regularisation now smooths the caustic paths (diffuse -> chrome or glass -> lamp or moon) that step 4's
+// clamp of 2 had to cut.
+constexpr float kClampIndirect = 16.f;
 
 constexpr float kMoonDistance = 4.f, kMoonSize = 0.18f, kMoonIntensity = 300.f;
 constexpr Vec3 kMoonColor{0.72f, 0.84f, 1.f};
@@ -283,6 +284,7 @@ std::vector<rt::Material> buildMaterials(float screenEmission) {
     m[kPowerLed].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     setColor(m[kPowerLed].emission, {0.15f, 1.f, 0.25f});
     m[kPowerLed].emissionScale = 6.f;
+    m[kPowerLed].flags = rt::kMaterialCameraOnlyEmission; // seen, never lighting the room (Task 6 of step 5)
     m[kFloppyPlastic] = plastic({0.035f, 0.04f, 0.07f}, 0.35f);
     m[kFloppyShutter] = metal({0.8f, 0.8f, 0.82f}, 0.22f);
     m[kFloppyLabel] = plastic({0.82f, 0.8f, 0.74f}, 0.9f);

@@ -925,3 +925,28 @@ set_tests_properties(bench PROPERTIES TIMEOUT 300 PROCESSORS 2)
 # upscaler's history must reset with everything else (Review Focus 1).
 add_test(NAME seek_determinism_scaled COMMAND seek_determinism_test 0.67)
 set_tests_properties(seek_determinism_scaled PROPERTIES TIMEOUT 300 PROCESSORS 2)
+
+# --- Step 5 Task 6: the integrator v2 -----------------------------------------------------------------------
+
+# Path regularisation, the clamp after a rough vertex, camera-only emitters and hero-wavelength dispersion on
+# lavapipe at 64x64 with the validation layer on (a mirror caustic box, chrome and a glass slab before a
+# bright lamp, an LED over a mirror floor, a flint prism, slab and furnace), and shaders/rt/spectral.glsl
+# against its CPU mirror src/rt/spectral.hpp through a compute probe. Pictures go to build-out/step5.
+set(spectralProbeSpirv "${EVO_TEST_SPIRV_DIR}/test_spectral_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${spectralProbeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_spectral_probe.comp.d" -o "${spectralProbeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/spectral_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/spectral_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_spectral_probe.comp.d"
+    COMMENT "Compiling test shader test_spectral_probe.comp"
+    VERBATIM)
+add_custom_target(integrator_test_shaders DEPENDS "${spectralProbeSpirv}")
+add_executable(integrator_test tests/integrator_test.cpp)
+target_link_libraries(integrator_test PRIVATE evo_modern)
+target_include_directories(integrator_test PRIVATE tests)
+target_compile_definitions(integrator_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(integrator_test integrator_test_shaders)
+evo_gpu_test(integrator integrator_test)

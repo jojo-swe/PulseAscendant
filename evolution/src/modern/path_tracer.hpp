@@ -35,7 +35,12 @@ struct TraceSettings {
     std::uint32_t frameSeed = 0;
     bool nee = true;
     bool russianRoulette = true; // from bounce 3
-    float clampIndirect = 64.f;  // luminance limit of a contribution after the first bounce
+    // Task 6 of step 5: the luminance limit of a contribution after a rough (non-delta) vertex: the primary
+    // hit's NEE and camera -> delta chain -> light paths are never clamped.
+    float clampIndirect = 16.f;
+    // Path regularisation: after the first rough vertex every lobe (and the coat) has at least this
+    // roughness, in sampling and evaluation alike (MIS stays consistent); 0 turns it off.
+    float regularizeRoughness = 0.25f;
     // Choose lights by their fixed selectWeight alone, as step 4 did, instead of by their importance at each
     // shading point (power, distance, orientation, gate); only for comparisons.
     bool fixedLightSelection = false;

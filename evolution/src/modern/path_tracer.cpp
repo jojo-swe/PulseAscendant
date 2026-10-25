@@ -351,11 +351,12 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
     u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
     u.clampIndirect = settings.clampIndirect;
+    u.regularizeRoughness = settings.regularizeRoughness;
     u.seconds = settings.seconds;
     for (const rt::RectLight& light : frame.lights)
         u.lightWeightSum += std::max(light.selectWeight, 0.f);
-    // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
-    // regularisation, no tree lights, medium, caustics or lensing.
+    // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no tree
+    // lights, medium, caustics or lensing.
     u.environmentSelect = frame.environment.select;
     u.sliceIndex = 0;
     u.sliceCount = 1;

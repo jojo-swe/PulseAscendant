@@ -268,9 +268,15 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   aliasing at 1 spp); next-event estimation, portals and rays after a rough bounce see a smooth lighting sky
   (gradient, glow, disc). Outdoor scenes sample the environment directly, the disc uniformly in its cone and
   the dome by cosine, weighed against the BSDF by multiple importance sampling.
-- **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
-  after the first bounce clamped to a luminance limit (64, the Studio 2) against fireflies; a non-finite
-  sample counts as 0 (checked from the float's bits, so a fast-math compiler cannot fold the check away).
+- **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3. Noise is cut at its
+  sources: after the first rough (non-delta) bounce every lobe is at least 0.25 rough (path regularisation:
+  diffuse → mirror → small lamp becomes glossy, which next-event estimation reaches; sampling and MIS see
+  the same BSDF), and only light arriving after a rough bounce is clamped, to a luminance of 16, so a lamp
+  seen in a mirror or through glass keeps its full brightness. Emitters flagged camera-only (the PC's LEDs)
+  are seen directly and in mirrors but light nothing. Glass with an Abbe number disperses: a path that meets
+  it carries one hero wavelength (380–780 nm, Cauchy's IOR, an RGB weight of mean 1), so white light splits
+  into a spectrum. A non-finite sample counts as 0 (checked from the float's bits, so a fast-math compiler
+  cannot fold the check away).
   The window traces at most 4 bounces, exports 6, in dispatches of 4 samples per pixel, so no single
   dispatch traces more than 4 spp. A whole frame is still one GPU submission of ceil(spp / 4) dispatches,
   though: a 4K export frame at 64 spp is 16 dispatches in one submit, roughly 1–4 s on an RTX 4090 (an
@@ -345,7 +351,8 @@ in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
   long at 4K and 64 spp or more; measure it on the target GPU before a long export.
 - PBR Neutral still desaturates the CRT's brightest colours towards white (a 1993 red at the screen's white
   level comes out pink, hue intact); the lights are picked by fixed weights
-  (no spatial importance); the glass sphere's caustic is subtle, dimmed by the Studio's indirect clamp.
+  (no spatial importance); the glass sphere's caustic is subtle: regularisation blurs it (sharp caustics await
+  the photon maps of step 5's Task 13).
 
 ## Storyboard
 

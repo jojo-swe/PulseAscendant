@@ -85,9 +85,10 @@ struct SceneFrame {
     std::vector<SceneInstance> instances;
     std::vector<rt::RectLight> lights;
     float exposureEV = 0;
-    // The luminance limit of a contribution after the first bounce (TraceSettings::clampIndirect), in the
-    // scene's own units: 64 by default; a scene lit far below that sets its own (the Studio, 2).
-    float clampIndirect = 64.f;
+    // The luminance limit of a contribution after a rough vertex (TraceSettings::clampIndirect), in the
+    // scene's own units: 16 by default (Task 6 of step 5), with path regularisation taking the rest of the
+    // caustic noise.
+    float clampIndirect = 16.f;
     std::vector<rt::Material> materials;
     EnvironmentDesc environment;
     std::optional<ParticleFrame> particles;

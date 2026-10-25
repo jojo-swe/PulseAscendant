@@ -53,8 +53,9 @@ Vec3 vec3(const float v[3]) {
 
 // NEE uses a light's emission, area, kind and facing; a BSDF ray that hits the light's instance uses that
 // instance's material and facing. Multiple importance sampling weighs the two as estimators of one integral,
-// so they must describe the same emitter, or the picture is silently biased (step 4, Task 7 review I1).
-// Expects the instances' mesh, material and light indices checked.
+// so they must describe the same emitter, or the picture is silently biased (step 4, Task 7 review I1). A
+// camera-only emitter (Task 6 of step 5) is never a light: the integrator ignores its emission after a rough
+// vertex, where NEE would add it. Expects the instances' mesh, material and light indices checked.
 void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& materials) {
     for (std::size_t i = 0; i < frame.lights.size(); ++i) {
         const rt::RectLight& l = frame.lights[i];
@@ -87,6 +88,8 @@ void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& mater
             throw std::invalid_argument(what + "a portal: an opening, not a surface");
         if (linearDeterminant(in.transform) < 0.f)
             throw std::invalid_argument(what + "but its transform mirrors: it emits from the light's back");
+        if ((m.flags & rt::kMaterialCameraOnlyEmission) != 0u)
+            throw std::invalid_argument(what + "but its material's emission is camera-only (never a light)");
         const bool screen = m.texture == rt::kRetroScreenTexture;
         if (kind == rt::LightKind::Emitter) {
             if (screen)

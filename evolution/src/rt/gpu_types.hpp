@@ -140,7 +140,7 @@ struct FrameUniforms { // 208 bytes, scalar
     std::uint32_t flags; // kTraceFlag*
     std::uint32_t lightCount;
     std::uint32_t instanceCount;
-    float clampIndirect;            // luminance limit of one contribution after the first bounce
+    float clampIndirect;            // luminance limit of one contribution after a rough vertex
     float lightWeightSum;           // the sum of every light's selectWeight (no shader reads it since Task 3)
     float regularizeRoughness;      // the least roughness of every lobe after the first rough vertex (Task 6)
     std::uint32_t treeLightCount;   // the lights of the light tree (Task 12)

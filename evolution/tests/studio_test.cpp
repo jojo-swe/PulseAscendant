@@ -14,8 +14,8 @@
 //   (h) the CRT stays sharp in the window: every shot that shows the screen up close focuses on its plane
 //       with a small aperture; at 1 spp the same frame shown twice barely changes in the screen, and the
 //       30th window frame's screen matches a 64 spp export of the same time;
-//   (i) the Studio's clampIndirect (2) reaches the path tracer: its lighting equals a trace at 2, not at 64,
-//       the default of every other scene.
+//   (i) the Studio's clampIndirect (16, the default of every scene since Task 6 of step 5) reaches the path
+//       tracer: its lighting equals a trace at 16, not at step 4's 2.
 // With --look <dir> [spp] [width height] it only renders stills of every shot to look at.
 
 #include "gfx/buffer.hpp"
@@ -663,27 +663,28 @@ void testWindowScreenSharp(gfx::Context& ctx) {
 // -----------------------------------------------------------------------------------------------------
 
 void testClampIndirect(gfx::Context& ctx) {
-    CHECK(modern::SceneFrame{}.clampIndirect == 64.f && modern::TraceSettings{}.clampIndirect == 64.f);
+    CHECK(modern::SceneFrame{}.clampIndirect == 16.f && modern::TraceSettings{}.clampIndirect == 16.f);
     const modern::Studio studio;
-    // FINALE's pull-out passes the chrome and glass spheres and the lamp: plenty of caustic paths above 2.
+    // FINALE's pull-out passes the chrome and glass spheres and the lamp: plenty of caustic paths above 2
+    // (step 4's clamp; Task 6 of step 5 replaced it with 16 after a rough vertex, plus regularisation).
     const TimelineFrame frame = chapterAt(kFinale, 0.5);
     const modern::SceneFrame scene = studio.frame(frame);
-    CHECK(scene.clampIndirect == 2.f);
+    CHECK(scene.clampIndirect == 16.f);
     gfx::Image white = makeRetro(ctx, 255, 255, 255);
     Stages stages(ctx, 160, 90);
     const render::HistoryState state = exportState(frame, 4);
     stages.render(frame, state, &white);
     const std::vector<std::uint8_t> staged = stages.lightingBytes(ctx);
     modern::TraceSettings settings{state.spp, state.maxBounces, state.frameSeed};
-    settings.clampIndirect = 2.f;
+    settings.clampIndirect = 16.f;
     stages.trace(scene, settings, white);
     const std::vector<std::uint8_t> clamped = stages.lightingBytes(ctx);
-    settings.clampIndirect = 64.f;
+    settings.clampIndirect = 2.f;
     stages.trace(scene, settings, white);
-    const std::vector<std::uint8_t> loose = stages.lightingBytes(ctx);
+    const std::vector<std::uint8_t> tight = stages.lightingBytes(ctx);
     CHECK(staged == clamped);
-    CHECK(clamped != loose);
-    std::printf("(i) the Studio traces with clampIndirect 2 (64 changes its lighting)\n");
+    CHECK(clamped != tight);
+    std::printf("(i) the Studio traces with clampIndirect 16 (step 4's 2 changes its lighting)\n");
 }
 
 // --- --look ------------------------------------------------------------------------------------------------
