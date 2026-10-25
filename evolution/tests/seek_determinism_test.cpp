@@ -144,7 +144,7 @@ void testSeeks(evo::gfx::Context& ctx) {
     const double night = chapterTime(kStudioNight, 0.4); // shot 0, the dolly towards the desk
     const double reboot = chapterTime(kReboot, 0.73);    // the portal: 1993 and the Studio both visible
     const double finale = chapterTime(kFinale, 0.5);     // BeatSwap, the megamix on the CRT
-    const double plasma = chapterTime(kPlasma, 0.45);    // the wipe: 1993 and the placeholder
+    const double plasma = chapterTime(kPlasma, 0.45);    // the wipe: 1993 and the plasma nebula (a medium)
     const double nightStart = evo::show::chapterStart(kStudioNight); // where the window's keys seek to
     const double nightEarly = chapterTime(kStudioNight, 0.1);
 
@@ -285,7 +285,7 @@ int main(int argc, char** argv) {
         std::printf("trace scale %.2f\n", gTraceScale);
         for (const Effect effect : {Effect::Finale, Effect::StudioNight, Effect::Return, Effect::Reboot})
             CHECK(evo::modern::sceneFor(effect) == evo::modern::SceneId::Studio);
-        CHECK(evo::modern::sceneFor(Effect::Plasma) == evo::modern::SceneId::Placeholder);
+        CHECK(evo::modern::sceneFor(Effect::Plasma) == evo::modern::SceneId::Nebula);
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())

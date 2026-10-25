@@ -29,6 +29,9 @@ enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Che
 // sphere about its instance's origin along great circles from the point above its centre (TesseraeSphere);
 // baseColor2's x and y move the mosaic by that many tesserae (baseColor is unused).
 // Hull and Planet are the Ship's (step 5, Task 16; shaders/rt/pbr.rchit documents what they read).
+// The City's patterns (Task 23 of step 5, shaders/rt/city_patterns.glsl) start at 16: the facades of its
+// towers (punched windows, a curtain wall, ribbon bands, a round curtain wall), its streets, and on Emissive
+// materials the light trails of its traffic and the lettering of its signs.
 enum class Pattern : std::uint32_t {
     None = 0,
     WoodPlanks = 1,
@@ -37,7 +40,14 @@ enum class Pattern : std::uint32_t {
     Tesserae = 4,
     TesseraeSphere = 5,
     Hull = 6,
-    Planet = 7
+    Planet = 7,
+    CityPunched = 16,
+    CityCurtain = 17,
+    CityBands = 18,
+    CityRound = 19,
+    CityStreet = 20,
+    CityTrail = 21,
+    CitySign = 22
 };
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;
