@@ -1,6 +1,6 @@
 """Pack a release: dist/EVOLUTION-v<version>-<os>.zip holding, in one EVOLUTION/ folder, the executable, its
 compiled shaders, the show's music where the executable looks for it (assets/music/show.wav), the NFO, the
-licence and the third-party notices.
+licence (LICENSE) and the notices and third-party licences (licenses/), all from this project's own folder.
 
     python3 tools/package_release.py --bin build/linux/bin
     python3 tools/package_release.py --bin build/windows/bin --os windows --version 1.0
@@ -15,8 +15,7 @@ import platform
 import sys
 import zipfile
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # evolution/
-REPO = os.path.dirname(ROOT)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the project root (tools/..)
 STAMP = (2026, 10, 24, 0, 0, 0)
 
 
@@ -40,7 +39,10 @@ def main():
     exe = os.path.join(args.bin, exe_name)
     shaders = os.path.join(args.bin, "shaders")
     music = os.path.join(ROOT, "assets", "music", "show.wav")
-    for path in (exe, shaders, music):
+    licence = os.path.join(ROOT, "LICENSE")
+    notices = os.path.join(ROOT, "licenses")
+    nfo = os.path.join(ROOT, "assets", "EVOLUTION.NFO")
+    for path in (exe, shaders, music, licence, notices, nfo):
         if not os.path.exists(path):
             sys.exit(f"missing: {path}")
 
@@ -48,10 +50,10 @@ def main():
     files += [(os.path.join(shaders, n), f"shaders/{n}", False) for n in sorted(os.listdir(shaders))
               if n.endswith(".spv")]
     files.append((music, "assets/music/show.wav", False))
-    files.append((os.path.join(ROOT, "assets", "EVOLUTION.NFO"), "EVOLUTION.NFO", False))
-    files.append((os.path.join(REPO, "LICENSE"), "LICENSE", False))
-    for folder in (os.path.join(REPO, "licenses"), os.path.join(ROOT, "licenses")):
-        files += [(os.path.join(folder, n), f"licenses/{n}", False) for n in sorted(os.listdir(folder))]
+    files.append((nfo, "EVOLUTION.NFO", False))
+    files.append((licence, "LICENSE", False))
+    files += [(os.path.join(notices, n), f"licenses/{n}", False) for n in sorted(os.listdir(notices))
+              if os.path.isfile(os.path.join(notices, n))]
 
     names = [name for _, name, _ in files]
     if len(set(names)) != len(names):
