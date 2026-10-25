@@ -73,8 +73,8 @@ def main():
                     '-frames:v', str(expected_frames), '-af', f'atrim=duration={args.duration}',
                     '-c:a', 'aac', '-b:a', '320k', '-ar', '48000',
                     '-movflags', '+faststart', '-metadata', f'title={show["title"]}',
-                    '-metadata', 'artist=jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo (Suno)',
-                    '-metadata', 'comment=Three playable acts. Music generated with Suno.',
+                    '-metadata', 'artist=jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo',
+                    '-metadata', 'comment=Three playable acts.',
                     '-progress', 'pipe:1', '-nostats', str(partial)]
     log_dir = output.parent / 'video-logs'
     log_dir.mkdir(exist_ok=True)

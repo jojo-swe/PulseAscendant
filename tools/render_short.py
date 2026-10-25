@@ -104,7 +104,7 @@ def main():
                 '-pix_fmt','yuv420p','-r','60','-colorspace','bt709','-color_primaries','bt709',
                 '-color_trc','bt709','-color_range','tv','-c:a','aac','-b:a','320k','-ar','48000',
                 '-t',str(duration),'-movflags','+faststart','-metadata','title=PULSE ASCENDANT / 16 worlds. One pulse.',
-                '-metadata','artist=jojo-swe; music: Rigid Arpeggios / joyolo (Suno)',str(partial)]
+                '-metadata','artist=jojo-swe; music: Rigid Arpeggios / joyolo',str(partial)]
     with (work/'assembly.log').open('w',encoding='utf-8') as log:
         subprocess.run(command,cwd=work,stdout=log,stderr=subprocess.STDOUT,check=True)
     probe = json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(partial)]))
@@ -113,7 +113,7 @@ def main():
     assert (video['width'],video['height'],int(video['nb_frames']),video['avg_frame_rate']) == (1080,1920,1920,'60/1')
     assert abs(float(audio['duration'])-duration)<.05
     partial.rename(output)
-    manifest = dict(title='PULSE ASCENDANT',trailer_revision=5,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo (Suno)',
+    manifest = dict(title='PULSE ASCENDANT',trailer_revision=5,source_hash=source_hash,duration=duration,fps=60,music='Rigid Arpeggios / joyolo',
                     music_start=music_start,cuts=cuts,source_times=TIMES,probe=probe)
     output.with_suffix('.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
     print(f'SHORT PASS: {output}, 1080x1920, 60 fps, 1920 frames, 32 seconds',flush=True)
