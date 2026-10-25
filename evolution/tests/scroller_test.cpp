@@ -1,6 +1,7 @@
-// The sine scroller: its glyph positions on the CPU, CREDITS (chapter 29) and FLYBY's greeting (chapter 1)
-// in the registry, and their 320x200 palette index images (and colours) from the retro stage on the GPU. Runs
-// with the validation layer on and fails on any message it reports.
+// The sine scroller: its glyph positions on the CPU, CREDITS (chapter 29: the credits on bar lines, THE END?
+// on the accent, the bass-driven wave) and FLYBY's greeting (chapter 1) in the registry, and their 320x200
+// palette index images (and colours) from the retro stage on the GPU. Runs with the validation layer on and
+// fails on any message it reports.
 
 #include "gfx/context.hpp"
 #include "render/renderer.hpp"
@@ -9,6 +10,8 @@
 #include "retro/palette.hpp"
 #include "retro/scroller.hpp"
 #include "retro_stage_fixture.hpp"
+#include "show/cues.hpp"
+#include "show/music_curves.hpp"
 #include "show/timeline.hpp"
 #include "test_env.hpp"
 #include "text/font8x8.hpp"
@@ -103,7 +106,8 @@ void testPositions() {
                 at[1].x, at[1].y, at[2].x, at[2].y);
 
     // Over a long run of a long text: whole pixels, inside the image, on the band of the wave, 8 apart.
-    const std::string_view credits = evo::retro::kCreditsText;
+    const std::string_view credits =
+        "   EVOLUTION  ...  A LONG LINE OF TEXT THAT RUNS FOR SEVERAL SCREENS, AS A SCROLLER DOES  ...";
     float lowest = baseY, highest = baseY;
     for (std::uint32_t retroFrame = 0; retroFrame < 2000; ++retroFrame) {
         const std::vector<Item> glyphs = items(credits, retroFrame);
@@ -169,42 +173,22 @@ void testPositions() {
 // The registry entries and CREDITS' palette, and that the providers depend only on the retro frame.
 void testRegistry() {
     const evo::retro::EffectInfo& credits = evo::retro::effectFor(Effect::Credits);
-    CHECK(credits.shader == nullptr && credits.retroRate == 35);
+    CHECK(credits.shader == nullptr && credits.retroRate == 35 && credits.phosphor);
+    CHECK(credits.phosphorSeconds == evo::retro::kPhosphorFastSeconds);
     CHECK(credits.palette == &evo::retro::creditsPalette);
     CHECK(credits.text == &evo::retro::creditsText);
     CHECK(credits.background == &evo::retro::creditsBackground);
+    CHECK(credits.scene == &evo::retro::creditsScene);
 
     const evo::retro::EffectInfo& flyby = evo::retro::effectFor(Effect::Flyby);
     CHECK(flyby.shader == nullptr && flyby.scene == &evo::retro::flybyScene);
     CHECK(flyby.retroRate == 35 && flyby.palette == &evo::retro::flybyPalette);
     CHECK(flyby.text == &evo::retro::flybyText);
-
-    // The credits, verbatim.
-    CHECK(evo::retro::kCreditsText ==
-          "   EVOLUTION  ...  CODE: JOJO  ...  MUSIC: JOYOLO  ...  CONCEPT: JOHN  ...  GREETINGS TO "
-          "FUTURE CREW AND EVERYONE WHO WAS THERE IN 1993  ...  REALITY IS WHAT YOU RENDER  ...");
     CHECK(evo::retro::kFlybyText == "WE WERE THERE IN 1993 ...");
 
     // CREDITS holds 1993 for the whole chapter, so its scroller is what the chapter shows.
     const TimelineFrame frame = chapterFrame(kCreditsChapter, Effect::Credits, 4);
     CHECK(evo::show::cues[kCreditsChapter].eraFixed == 0 && frame.era == 0.f);
-
-    evo::retro::Palette palette{};
-    palette.fill(0x12345678u);
-    credits.palette(palette, frame, 140);
-    CHECK(palette[0] == evo::retro::rgba(0, 0, 0));
-    CHECK(palette[1] == evo::retro::rgba(0x00, 0x00, 0x40));
-    CHECK(palette[15] == evo::retro::rgba(0xFF, 0xFF, 0xFF));
-    for (std::uint32_t entry : palette)
-        CHECK((entry >> 24) == 0xff);
-    CHECK(credits.background(frame, 140) == 1);
-
-    // CREDITS' text: the EVOLUTION title centred at y = 24, then the scroller at baseY 100.
-    const std::vector<Item> text = evo::retro::creditsText(frame, 140);
-    CHECK(!text.empty() && text[0].text == "EVOLUTION" && text[0].x == 124 && text[0].y == 24);
-    CHECK(text[0].rgba == 0xFF00000Fu && text[0].scale == 1);
-    const std::vector<Item> scroller = scrollerItems(evo::retro::kCreditsText, 140, 60, 24, 40, 100);
-    CHECK(same({text.begin() + 1, text.end()}, scroller));
     // FLYBY's: the greeting low over the ship and the stars, white (255) in FLYBY's palette.
     CHECK(same(evo::retro::flybyText(frame, 140),
                scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 172, 255, true)));
@@ -213,13 +197,112 @@ void testRegistry() {
     TimelineFrame noisy = chapterFrame(kCreditsChapter, Effect::Credits, middleOf(140) + .01);
     noisy.kick = 1;
     noisy.energy = 1;
+    noisy.bass = 1;
     noisy.beatPhase = .7f;
     noisy.showSeconds += 100;
     noisy.localSeconds += 9;
     for (std::uint32_t retroFrame : {0u, 1u, 140u, 900u}) {
         CHECK(same(evo::retro::creditsText(noisy, retroFrame), evo::retro::creditsText(frame, retroFrame)));
         CHECK(same(evo::retro::flybyText(noisy, retroFrame), evo::retro::flybyText(frame, retroFrame)));
+        evo::retro::Palette a{}, b{};
+        evo::retro::creditsPalette(a, frame, retroFrame);
+        evo::retro::creditsPalette(b, noisy, retroFrame);
+        CHECK(a == b);
     }
+}
+
+// The glyphs of every credit on screen at a retro frame, by credit: their x (unrounded first glyph) for the
+// test's own bookkeeping.
+std::string joined(const std::vector<Item>& items) {
+    std::string text;
+    for (const Item& item : items)
+        text += item.text;
+    return text;
+}
+
+// CREDITS: exactly the three credit lines and THE END?, each entering on a bar line, THE END? stopping
+// centred on the accent and holding; the amplitude follows the bass; the paper starts white.
+void testCredits() {
+    CHECK(evo::retro::kCreditsTitle == "EVOLUTION");
+    CHECK(evo::retro::kCreditsLine == "CODE: JOJO · MUSIC: JOYOLO · CONCEPT: JOHN");
+    CHECK(evo::retro::kCreditsGreetings.starts_with("GREETINGS TO  FUTURE CREW · "));
+    CHECK(evo::retro::kCreditsEnd == "THE END?");
+    const TimelineFrame frame = chapterFrame(kCreditsChapter, Effect::Credits, 1);
+    const double start = evo::show::chapterStart(kCreditsChapter);
+    const int track = evo::show::trackAt(start);
+    const evo::show::BeatGridView grid = evo::show::beatGrid(track);
+    // Each entry is a tracked bar line.
+    for (int c = 0; c < 4; ++c) {
+        const double entry = evo::retro::creditEntry(frame, c);
+        const double trackTime = start + entry - evo::show::trackStart(track);
+        const int beat = grid.beatAt(trackTime + 1e-6);
+        CHECK(std::fabs(grid.beatTime(beat) - trackTime) < 1e-6 && grid.bar(beat) == 0);
+        std::printf("credits: credit %d enters at %.3f s\n", c, start + entry);
+        if (c > 0)
+            CHECK(entry > evo::retro::creditEntry(frame, c - 1));
+    }
+    // Every glyph shown belongs to a credit, in order; nothing else is written. The credits never overlap:
+    // each one's last glyph has entered before the next enters.
+    const std::string_view texts[3] = {evo::retro::kCreditsTitle, evo::retro::kCreditsLine,
+                                       evo::retro::kCreditsGreetings};
+    for (int c = 0; c + 1 < 4; ++c) {
+        const double width = 8.0 * static_cast<double>(evo::retro::creditGlyphs(texts[c]).size());
+        CHECK(evo::retro::creditEntry(frame, c) + width / evo::retro::kCreditsSpeed <
+              evo::retro::creditEntry(frame, c + 1));
+    }
+    // A glyph's entry: the frame where the first glyph of a credit is first on screen is its bar's frame.
+    for (int c = 0; c < 3; ++c) {
+        const auto entryFrame =
+            static_cast<std::uint32_t>(std::ceil(evo::retro::creditEntry(frame, c) * 35 - 1e-9));
+        std::string before, after;
+        for (const Item& item : evo::retro::creditsText(frame, entryFrame + 2))
+            after += item.text;
+        CHECK(after.find(std::string(evo::retro::creditGlyphs(texts[c])[0])) != std::string::npos);
+    }
+    // THE END? lands centred on the accent (688.02 s) and holds there, flat.
+    CHECK(std::fabs(start + frame.accentSeconds - 688.02) < 0.01);
+    const auto accent = static_cast<std::uint32_t>(std::floor(frame.accentSeconds * 35));
+    for (std::uint32_t f = accent + 1; f < static_cast<std::uint32_t>(frame.chapterDuration * 35); f += 13) {
+        const std::vector<Item> items = evo::retro::creditsText(frame, f);
+        CHECK(joined(items) == "THE END?" || joined(items).ends_with("THEEND?"));
+        const Item& last = items.back();
+        CHECK(last.text == "?" && last.x == static_cast<float>(evo::retro::kCreditsEndX + 7 * 8));
+        CHECK(last.y == evo::retro::kCreditsBaseY);
+    }
+    const double before = evo::retro::creditsEndX(frame, frame.accentSeconds - 1.0 / 35);
+    CHECK(before > evo::retro::kCreditsEndX && before - evo::retro::kCreditsEndX < 2); // easing in, slowly
+    CHECK(evo::retro::creditsEndX(frame, frame.accentSeconds) == evo::retro::kCreditsEndX);
+    // While it travels it never moves backwards, nor catches up with the greetings' last glyph ahead of it.
+    double x = evo::retro::creditsEndX(frame, evo::retro::creditEntry(frame, 3));
+    CHECK(std::fabs(x - 320) < 1e-9);
+    const double greetingsWidth =
+        8.0 * static_cast<double>(evo::retro::creditGlyphs(evo::retro::kCreditsGreetings).size());
+    for (double t = evo::retro::creditEntry(frame, 3); t < frame.accentSeconds; t += 0.01) {
+        const double next = evo::retro::creditsEndX(frame, t + 0.01);
+        CHECK(next <= x + 1e-9);
+        const double tail = 320 - evo::retro::kCreditsSpeed * (t + 0.01 - evo::retro::creditEntry(frame, 2)) +
+                            greetingsWidth - 8;
+        CHECK(next >= tail + 16);
+        x = next;
+    }
+    // The amplitude is the bass at the retro frame, within its range.
+    double low = 1e9, high = 0;
+    for (std::uint32_t f = 0; f < 900; f += 3) {
+        const double a = evo::retro::creditsAmplitude(frame, f);
+        CHECK(a >= evo::retro::kCreditsAmplitude &&
+              a <= evo::retro::kCreditsAmplitude + evo::retro::kCreditsBassAmp);
+        low = std::min(low, a);
+        high = std::max(high, a);
+    }
+    std::printf("credits: amplitude %.1f to %.1f pixels\n", low, high);
+    CHECK(high - low > 6);
+    // From white: the paper is white on the first frame, black by the first beat.
+    evo::retro::Palette palette{};
+    evo::retro::creditsPalette(palette, frame, 0);
+    CHECK(palette[evo::retro::kCreditsPaper] == evo::retro::rgba(255, 255, 255));
+    evo::retro::creditsPalette(palette, frame, 20);
+    CHECK(palette[evo::retro::kCreditsPaper] == evo::retro::rgba(0, 0, 0));
+    CHECK(palette[evo::retro::kCreditsWhite] == evo::retro::rgba(255, 255, 255));
 }
 
 using Picture = evo::test::RetroPicture;
@@ -250,47 +333,27 @@ bool wholeInside(const Item& item, int width = 8) {
 void testImages(evo::gfx::Context& ctx) {
     RetroStageFixture fixture(ctx, true);
 
-    // CREDITS at t = 4: deep blue with the title and the scroller in white, every glyph where its item says.
+    // CREDITS at t = 4: the credits line in white over the stars on black, every glyph where its item says.
     const std::uint32_t retroFrame = frameAt(4);
     const TimelineFrame credits = chapterFrame(kCreditsChapter, Effect::Credits, middleOf(retroFrame));
     bool rendered = false;
     const Picture picture = fixture.renderPicture(credits, &rendered);
     CHECK(rendered && fixture.stage().retroFrame() == retroFrame);
-    std::size_t blue = 0, white = 0;
-    for (std::uint8_t index : picture.indices) {
-        CHECK(index == 1 || index == 15);
-        (index == 1 ? blue : white) += 1;
-    }
-    std::printf("credits: %zu white and %zu deep blue pixels at t = 4\n", white, blue);
-
     const std::vector<Item> items = evo::retro::creditsText(credits, retroFrame);
-    // The title.
-    for (std::size_t i = 0; i < items[0].text.size(); ++i) {
-        Item letter = items[0];
-        letter.x += 8 * static_cast<float>(i);
-        letter.text = items[0].text.substr(i, 1);
-        CHECK(glyphAt(picture, letter, 15, 1));
-    }
-    // The scroller's first letter, 'E' (glyph 3 after three blanks) at x = 80 + 24, and every other glyph
-    // wholly inside the image.
-    const Item& first = items[1];
-    CHECK(first.text == "E" && first.x == 104);
-    CHECK(first.y == static_cast<float>(std::round(100 + 24 * std::sin((104 + 120) / 40.0))));
-    CHECK(glyphAt(picture, first, 15, 1));
     std::size_t checked = 0;
-    for (std::size_t i = 1; i < items.size(); ++i)
-        if (wholeInside(items[i])) {
-            CHECK(glyphAt(picture, items[i], 15, 1));
+    for (const Item& item : items)
+        if (wholeInside(item) && item.text.size() == 1) {
+            CHECK(glyphAt(picture, item, 15, -1));
             ++checked;
         }
-    std::printf("credits: %zu scroller glyphs checked, the first at (%g, %g)\n", checked, first.x, first.y);
+    std::printf("credits: %zu glyphs checked at t = 4\n", checked);
     CHECK(checked >= 20);
-    // The palette-mapped colours: #000040 behind, white in front.
-    for (std::size_t i = 0; i < picture.indices.size(); ++i) {
-        const bool front = picture.indices[i] == 15;
-        CHECK(picture.rgb[i * 3] == (front ? 0xFF : 0) && picture.rgb[i * 3 + 1] == (front ? 0xFF : 0) &&
-              picture.rgb[i * 3 + 2] == (front ? 0xFF : 0x40));
+    std::size_t stars = 0;
+    for (std::uint8_t index : picture.indices) {
+        CHECK(index == 1 || index == 15 || (index >= 2 && index <= 4)); // the paper, text, stars
+        stars += index >= 2 && index <= 4;
     }
+    CHECK(stars > 40);
 
     // The same retro frame at another time inside it, after another frame: the identical images.
     fixture.render(chapterFrame(kCreditsChapter, Effect::Credits, middleOf(retroFrame + 30)), &rendered);
@@ -300,6 +363,21 @@ void testImages(evo::gfx::Context& ctx) {
     const Picture repeat = fixture.renderPicture(again, &rendered);
     CHECK(rendered && fixture.stage().retroFrame() == retroFrame);
     CHECK(repeat.indices == picture.indices && repeat.rgb == picture.rgb);
+
+    // Once the greetings have left (15 frames after the accent): THE END? alone, centred, flat, white.
+    const auto landed = static_cast<std::uint32_t>(std::floor(credits.accentSeconds * 35)) + 15;
+    const Picture end =
+        fixture.renderPicture(chapterFrame(kCreditsChapter, Effect::Credits, middleOf(landed)));
+    for (const Item& item : evo::retro::creditsText(credits, landed))
+        if (wholeInside(item))
+            CHECK(glyphAt(end, item, 15, -1));
+    std::size_t ink = 0;
+    for (int y = 96; y < 104; ++y)
+        for (int x = static_cast<int>(evo::retro::kCreditsEndX);
+             x < static_cast<int>(evo::retro::kCreditsEndX) + 64; ++x)
+            ink += end.at(x, y) == 15;
+    CHECK(ink > 60 &&
+          ink == static_cast<std::size_t>(std::count(end.indices.begin(), end.indices.end(), 15)));
 
     // FLYBY at t = 3, before its portal: the ship and the stars with the greeting in white over them.
     const std::uint32_t flybyFrame = frameAt(3);
@@ -395,6 +473,7 @@ int main() {
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testPositions();
         testRegistry();
+        testCredits();
         testGreetingClearsCard();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});

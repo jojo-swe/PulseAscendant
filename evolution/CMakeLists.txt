@@ -1194,6 +1194,24 @@ evo_scene_test(glass)
 target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
 evo_scene_test(ship)
 
+# The 1993 stage's colour passes: phosphor persistence and the grid layers (render/retro_stage.cpp). Built
+# with Evolution's shaders, so everything that waits for those waits for these too.
+set(evoRetroColourSpirv "")
+foreach(shader shaders/retro/phosphor.comp shaders/retro/tile.comp)
+    _evo_shader_rule(spirv "${shader}" "" "")
+    list(APPEND evoRetroColourSpirv "${spirv}")
+endforeach()
+_evo_shader_target(Evolution "_retro_colour" "${evoRetroColourSpirv}")
+add_dependencies(Evolution_shaders Evolution_retro_colour_shaders)
+
+# Phosphor persistence on the 1993 picture: the glow of the last frames, a seek equal to playback, and the
+# per-effect switch, through the retro stage with the validation layer on.
+add_executable(phosphor_test tests/phosphor_test.cpp)
+target_link_libraries(phosphor_test PRIVATE evo_render)
+target_compile_definitions(phosphor_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(phosphor_test Evolution_shaders)
+add_test(NAME phosphor COMMAND phosphor_test)
+
 # --- Step 5 Task 23: the City (VECTOR CITY, ASCENT, CITY NIGHT, METROPOLIS) ----------------------------------
 
 # A night city on the 1993 city's grid: towers under procedural facades with millions of windows, wet

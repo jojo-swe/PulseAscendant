@@ -176,7 +176,7 @@ void testEffectRegistry() {
         const TimelineFrame frame = evo::show::sampleTimeline(evo::show::chapterStart(i) + .5);
         const evo::retro::EffectInfo& info = evo::retro::effectFor(frame.effect);
         CHECK((info.shader != nullptr || info.text != nullptr || info.scene != nullptr ||
-               info.resolve != nullptr) &&
+               info.grid != nullptr) &&
               info.retroRate > 0 && info.palette != nullptr);
         palette.fill(0x12345678u);
         info.palette(palette, frame, 7);

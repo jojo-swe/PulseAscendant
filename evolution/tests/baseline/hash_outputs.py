@@ -34,6 +34,8 @@ heavy-tailed light: every output with a path-traced 2026 picture changed (studio
 studio_night_acc, return_30, nebula_40, plasma_wipe, raytrace_2026 and the four streams; Act II's lifted blacks,
 and for studio_night_acc STUDIO NIGHT's +0.7 EV from D, raise the Studio's mean display luminance by 35-42 %); the
 1993-only and placeholder outputs stayed byte for byte.
+Then regenerated for the 1993 screens (phosphor, BOOT, RETURN, REBOOT, the FINALE grid, PORTAL's prompt):
+boot_50, finale_50, portal_50, reboot_10, reboot_60, return_30, stream_finale and stream_studio_cut changed.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

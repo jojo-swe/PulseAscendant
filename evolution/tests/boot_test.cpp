@@ -1,6 +1,6 @@
-// BOOT, chapter 0: the DOS prompt script on the CPU, and its 320x200 palette index image from the retro stage
-// (a text-only effect: cleared, then drawn with the text pass) on the GPU. Runs with the validation layer on
-// and fails on any message it reports.
+// BOOT, chapter 0: the DOS prompt script on its beats on the CPU, and its 320x200 palette index image from
+// the retro stage (a text-only effect: cleared, then drawn with the text pass) on the GPU. Runs with the
+// validation layer on and fails on any message it reports.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -102,13 +102,13 @@ private:
     evo::gfx::Buffer buffer_;
 };
 
-// The registry entry: no shader, the text provider, 35 Hz and the DOS colours.
+// The registry entry: no shader, the text provider, 35 Hz, phosphor and the DOS colours.
 void testRegistry() {
     const evo::retro::EffectInfo& info = evo::retro::effectFor(Effect::Boot);
     CHECK(info.shader == nullptr);
     CHECK(info.text == &evo::retro::bootText);
     CHECK(info.background == &evo::retro::bootBackground);
-    CHECK(info.retroRate == 35);
+    CHECK(info.retroRate == 35 && info.phosphor);
 
     evo::retro::Palette palette{};
     info.palette(palette, boot(1.0), 35);
@@ -118,59 +118,96 @@ void testRegistry() {
     CHECK(palette[15] == evo::retro::rgba(0xFF, 0xFF, 0xFF));
 }
 
-// The script as text at the moments the brief names.
-void testScript() {
-    using evo::retro::bootScreen;
-    const auto screen = [](double seconds) {
-        const TimelineFrame frame = boot(seconds);
-        return bootScreen(frame, static_cast<std::uint32_t>(std::floor(seconds * 35)));
-    };
-    using Lines = std::vector<std::string>;
-    CHECK(screen(0.0) == Lines{"C:\\>"});
-    CHECK(screen(0.5) == Lines{"C:\\>"});
-    CHECK(screen(0.9) == Lines{"C:\\>cd"}); // 0.1 s of typing at 25 characters a second
-    CHECK(screen(1.5) == Lines{"C:\\>cd demo"});
-    CHECK(screen(1.61) == (Lines{"C:\\>cd demo", "C:\\DEMO>"}));
-    // Mid-typing: 2.4 s is retro frame 84, 7 frames after typing starts at frame 77 (2.2 s); 7 * 25 / 35 = 5
-    // characters.
-    CHECK(screen(2.4) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolu"}));
-    CHECK(screen(3.0) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe"}));
-    CHECK(screen(3.41) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026"}));
-    // Each output line starts on its time, not before: 3.95, 4.75 and 5.35 s still lack the line due next.
-    CHECK(screen(3.95) == (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026"}));
-    CHECK(screen(4.01).back() == "Sound Blaster 16: 220h IRQ5 DMA1 ... OK");
-    CHECK(screen(4.75).back() == "Sound Blaster 16: 220h IRQ5 DMA1 ... OK");
-    CHECK(screen(4.81).back() == "Gravis Ultrasound ... not found");
-    CHECK(screen(5.35).back() == "Gravis Ultrasound ... not found");
-    CHECK(screen(5.0) ==
-          (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026",
-                 "Sound Blaster 16: 220h IRQ5 DMA1 ... OK", "Gravis Ultrasound ... not found"}));
-    CHECK(screen(5.41).back() == "VGA 320x200x256 ... OK");
-    CHECK(screen(6.01).back() == "Loading");
-    CHECK(screen(6.24).back() == "Loading");
-    CHECK(screen(6.26).back() == "Loading.");
-    CHECK(screen(6.8).back() == "Loading...");
-    CHECK(screen(7.01).back() == "Loading....");
+using Lines = std::vector<std::string>;
+
+Lines screenAt(std::uint32_t retroFrame) {
+    return evo::retro::bootScreen(boot(1.0), retroFrame);
 }
 
-// Every line of the script fits the 39 columns as written: at every retro frame of the chapter the screen
-// has exactly one row per line written, none wrapped, and the full screen just before the flash is the
-// whole script.
-void testLinesFit() {
-    using Lines = std::vector<std::string>;
+// The first retro frame whose screen satisfies `test`.
+template <typename Test> std::uint32_t firstFrame(Test test) {
+    for (std::uint32_t f = 0; f < 260; ++f)
+        if (test(screenAt(f)))
+            return f;
+    throw std::runtime_error("the screen never shows what the test waits for");
+}
+
+// Within one retro frame of a chapter time: the frame that time falls in.
+bool onBeat(std::uint32_t retroFrame, double seconds) {
+    return retroFrame == static_cast<std::uint32_t>(std::floor(seconds * 35 + 1e-9));
+}
+
+// The script on the beats: the BIOS line, the prompt, the first and last key, the Enter on the accent, the
+// detection lines and LOADING each from the retro frame its beat falls in.
+void testScript() {
+    const TimelineFrame frame = boot(1.0);
+    const auto beat = [&frame](int i) { return evo::retro::chapterBeat(frame, i); };
+    std::printf("boot: beats 0, 2, 4, 6 at %.3f %.3f %.3f %.3f s, accent %.3f s\n", beat(0), beat(2), beat(4),
+                beat(6), frame.accentSeconds);
+    CHECK(std::fabs(beat(0) - 0.41) < 0.01 && std::fabs(beat(2) - 1.26) < 0.01);
+    CHECK(std::fabs(beat(4) - 2.11) < 0.01 && std::fabs(beat(6) - 2.96) < 0.01);
+    CHECK(std::fabs(frame.accentSeconds - 3.05) < 0.01);
+
+    CHECK(screenAt(0).empty()); // black until the first beat
+    CHECK(onBeat(firstFrame([](const Lines& s) { return !s.empty(); }), beat(0)));
+    CHECK(screenAt(20) == Lines{evo::retro::kBootBiosLine});
+    const auto row = [](const Lines& s, std::size_t r) { return s.size() > r ? s[r] : std::string(); };
+    CHECK(onBeat(firstFrame([&](const Lines& s) { return row(s, 2) == "C:\\DEMO>"; }), beat(2)));
+    CHECK(onBeat(firstFrame([&](const Lines& s) { return row(s, 2) == "C:\\DEMO>E"; }), beat(4)));
+    CHECK(onBeat(firstFrame([&](const Lines& s) { return row(s, 2) == "C:\\DEMO>EVOLUTION.EXE"; }), beat(6)));
+    // The keys in between come one at a time, in order.
+    std::size_t typed = 0;
+    for (std::uint32_t f = 0; f < 120; ++f) {
+        const std::size_t now = row(screenAt(f), 2).size();
+        CHECK(now == typed || now == typed + 1 || typed == 0);
+        typed = std::max(typed, now);
+    }
+    // The Enter: the cursor drops to the next row on the accent.
+    const auto rowsWritten = [&frame](std::uint32_t f) {
+        return evo::retro::promptRows(evo::retro::promptWritten(evo::retro::bootScript(frame), f)).size();
+    };
+    std::uint32_t enter = 0;
+    while (rowsWritten(enter) < 4)
+        ++enter;
+    CHECK(onBeat(enter, frame.accentSeconds));
+    CHECK(
+        onBeat(firstFrame([&](const Lines& s) { return row(s, 3).starts_with("Sound Blaster"); }), beat(7)));
+    CHECK(onBeat(firstFrame([&](const Lines& s) { return row(s, 4).ends_with("found"); }), beat(8)));
+    CHECK(onBeat(firstFrame([&](const Lines& s) { return row(s, 5).starts_with("Ray tracing"); }), beat(9)));
+    CHECK(onBeat(firstFrame([&](const Lines& s) { return row(s, 6) == "not yet"; }), beat(11)));
+    CHECK(onBeat(firstFrame([&](const Lines& s) { return row(s, 9).starts_with("LOADING"); }), beat(15)));
+    // The leaders type at 30 characters a second: 5 frames in, 5 * 30 / 35 = 4 characters (a space, 3 dots).
+    const std::uint32_t label =
+        firstFrame([&](const Lines& s) { return row(s, 5).starts_with("Ray tracing"); });
+    CHECK(row(screenAt(label), 5) == "Ray tracing hardware");
+    CHECK(row(screenAt(label + 5), 5) == "Ray tracing hardware ...");
+}
+
+// The detection lines exactly as written, each wrapped at its result like a 40-column screen; the reserved
+// rows stay empty all through, and the screen just before the flash is the whole script.
+void testDetection() {
+    CHECK(std::string(evo::retro::kBootSoundCard) == "Sound Blaster 16 at 220h IRQ 5 DMA 1 ... found");
+    CHECK(std::string(evo::retro::kBootRayTracing) == "Ray tracing hardware .................. not yet");
     const TimelineFrame frame = boot(1.0);
     const std::uint32_t flash = evo::retro::bootFlashFrame(frame);
-    for (std::uint32_t retroFrame = 0; retroFrame < flash; ++retroFrame)
-        for (const std::string& line : evo::retro::bootScreen(frame, retroFrame))
+    const Lines full = evo::retro::bootScreen(frame, flash - 1);
+    CHECK(full == (Lines{evo::retro::kBootBiosLine, "", "C:\\DEMO>EVOLUTION.EXE",
+                         "Sound Blaster 16 at 220h IRQ 5 DMA 1", "... found",
+                         "Ray tracing hardware ..................", "not yet", "", "", "LOADING..."}));
+    CHECK(full[3] + " " + full[4] == evo::retro::kBootSoundCard);
+    CHECK(full[5] + " " + full[6] == evo::retro::kBootRayTracing);
+    CHECK(evo::retro::kBootReservedRows == 2);
+    for (std::uint32_t retroFrame = 0; retroFrame < flash; ++retroFrame) {
+        const Lines screen = evo::retro::bootScreen(frame, retroFrame);
+        for (const std::string& line : screen)
             CHECK(line.size() <= evo::retro::kBootColumns);
-    CHECK(evo::retro::bootScreen(frame, flash - 1) ==
-          (Lines{"C:\\>cd demo", "C:\\DEMO>evolution.exe", "", "EVOLUTION  1993 -> 2026",
-                 "Sound Blaster 16: 220h IRQ5 DMA1 ... OK", "Gravis Ultrasound ... not found",
-                 "VGA 320x200x256 ... OK", "Loading...."}));
+        for (std::size_t r : {7u, 8u})
+            CHECK(screen.size() <= r || screen[r].empty());
+    }
 }
 
 // Where the flash goes: 4 retro frames before the chapter ends (2 white, then black into FLYBY), or at the
-// accent if that came later. BOOT's accent (about 3 s, mid-script) comes earlier.
+// accent if that came later. BOOT's accent (the Enter, about 3 s) comes earlier.
 void testFlashFrame() {
     const TimelineFrame frame = boot(1.0);
     const std::uint32_t flash = evo::retro::bootFlashFrame(frame);
@@ -179,7 +216,6 @@ void testFlashFrame() {
     CHECK(frame.accentSeconds < frame.chapterDuration - 4.0 / 35);
     CHECK(flash == static_cast<std::uint32_t>(std::floor((frame.chapterDuration - 4.0 / 35) * 35)));
     CHECK(flash == 247); // for the current show data: 7.057 s, chapter end 7.1731 s
-    // Two white frames and at least one black one fit before the chapter ends.
     CHECK((flash + 3.0) / 35 < frame.chapterDuration);
 
     TimelineFrame late = frame;
@@ -187,8 +223,7 @@ void testFlashFrame() {
     CHECK(evo::retro::bootFlashFrame(late) ==
           static_cast<std::uint32_t>(std::floor(late.accentSeconds * 35)));
 
-    // The dots stop when the flash starts; from it on the screen is empty.
-    CHECK(evo::retro::bootScreen(frame, flash - 1).back().starts_with("Loading"));
+    CHECK(evo::retro::bootScreen(frame, flash - 1).back().starts_with("LOADING"));
     CHECK(evo::retro::bootScreen(frame, flash).empty());
     CHECK(evo::retro::bootBackground(frame, flash - 1) == 0);
     CHECK(evo::retro::bootBackground(frame, flash) == 15);
@@ -198,8 +233,8 @@ void testFlashFrame() {
 }
 
 // The text, the background and the palette are functions of the retro frame: every time inside one gives
-// the same result, and they read nothing of the frame but the chapter's fixed duration and accent. Covers
-// frames of the script, the two flash frames and the black after them.
+// the same result, and they read nothing of the frame but the chapter's fixed facts. Covers frames of the
+// script, the two flash frames and the black after them.
 void testTextIsPure() {
     const auto same = [](const std::vector<evo::text::Item>& a, const std::vector<evo::text::Item>& b) {
         if (a.size() != b.size())
@@ -216,6 +251,7 @@ void testTextIsPure() {
         late.kick = 1;
         late.energy = 1;
         late.showSeconds += 100;
+        late.localSeconds += 0.3;
         CHECK(same(evo::retro::bootText(early, retroFrame), evo::retro::bootText(late, retroFrame)));
         CHECK(evo::retro::bootBackground(early, retroFrame) == evo::retro::bootBackground(late, retroFrame));
         evo::retro::Palette a{}, b{};
@@ -225,18 +261,22 @@ void testTextIsPure() {
         CHECK(a == b);
     }
     // Grey 8x8 text at scale 1, from the 4-pixel margin, and the cursor as an underscore while it is on.
-    const auto items = evo::retro::bootText(boot(0.1), 3);
+    const auto items = evo::retro::bootText(boot(0.5), 17);
     CHECK(items.size() == 2);
-    CHECK(items[0].text == "C:\\>" && items[0].x == 4 && items[0].y == 4 && items[0].scale == 1);
-    CHECK((items[0].rgba & 0xffu) == 7);
-    CHECK(items[1].text == "_" && items[1].x == 4 + 4 * 8 && items[1].y == 4 && (items[1].rgba & 0xffu) == 7);
-    // 2 Hz: on for the first quarter second of each half (judged at the retro frame's centre), off for the
-    // second: on at 0.0-0.25 and 0.5-0.75 s, off at 0.25-0.5 and 0.75-1.0 s.
-    CHECK(evo::retro::bootText(boot(0.3), 10).size() == 1);
-    CHECK(evo::retro::bootText(boot(0.5), 17).size() == 2);
-    CHECK(evo::retro::bootText(boot(0.7), 24).size() == 2);
-    CHECK(evo::retro::bootText(boot(0.8), 28).size() == 1);
-    CHECK(evo::retro::bootText(boot(1.0), 35).size() == 2);
+    CHECK(items[0].text == evo::retro::kBootBiosLine && items[0].x == 4 && items[0].y == 4 &&
+          items[0].scale == 1 && (items[0].rgba & 0xffu) == 7);
+    CHECK(items[1].text == "_" && items[1].x == 4 && items[1].y == 4 + 16 && (items[1].rgba & 0xffu) == 7);
+    // On the beat: on for the first half of every beat, off for the second.
+    const TimelineFrame frame = boot(1.0);
+    for (int b = 0; b < 15; ++b) {
+        const double beat = evo::retro::chapterBeat(frame, b), next = evo::retro::chapterBeat(frame, b + 1);
+        const auto inBeat = [&](double u) {
+            return static_cast<std::uint32_t>(std::floor((beat + u * (next - beat)) * 35));
+        };
+        CHECK(evo::retro::beatCursorOn(frame, inBeat(0.2), 35));
+        CHECK(!evo::retro::beatCursorOn(frame, inBeat(0.8), 35));
+    }
+    CHECK(!evo::retro::beatCursorOn(frame, 5, 35)); // before the first beat
 }
 
 // The CPU rendering of a string in BOOT's grey at (x, y), compared with a rectangle of the index image.
@@ -262,28 +302,25 @@ void testImages(evo::gfx::Context& ctx) {
     CHECK(evo::retro::effectFor(Effect::Galaxy).shader == evo::retro::kTestPatternShader);
     CHECK(fixture.render(pattern).count(0) < kWidth * kHeight / 2);
 
-    // t = 0.5: the prompt and the cursor only; at 0.3 the cursor is blinked off.
-    const Indices prompt = fixture.render(boot(0.5));
-    std::printf("boot: t=0.5 has %zu set pixels\n", prompt.nonZero());
-    CHECK(prompt.nonZero() > 0 && prompt.nonZero() <= 70);
-    CHECK(prompt.count(7) == prompt.nonZero());
-    CHECK(matchesText(prompt, "C:\\>", 4, 4));
+    // Black until the first beat; at t = 0.5 the BIOS line and the cursor two rows down.
+    CHECK(fixture.render(boot(0.3)).nonZero() == 0);
+    const Indices bios = fixture.render(boot(0.5));
+    CHECK(bios.count(7) == bios.nonZero());
+    CHECK(matchesText(bios, evo::retro::kBootBiosLine, 4, 4));
     for (int x = 0; x < 7; ++x)
-        CHECK(prompt.at(4 + 32 + x, 4 + 7) == 7); // the cursor: row 7 of the fifth cell
-    const Indices blinked = fixture.render(boot(0.3));
-    CHECK(blinked.nonZero() + 7 == prompt.nonZero());
-    CHECK(matchesText(blinked, "C:\\>", 4, 4));
+        CHECK(bios.at(4 + x, 20 + 7) == 7); // the cursor: row 7 of the third row's first cell
 
-    // t = 3.0: "evolution.exe" typed on the second line.
+    // t = 3.0: "EVOLUTION.EXE" typed at the prompt.
     const Indices typed = fixture.render(boot(3.0));
-    CHECK(matchesText(typed, "C:\\>cd demo", 4, 4));
-    CHECK(matchesText(typed, "C:\\DEMO>evolution.exe", 4, 12));
+    CHECK(matchesText(typed, "C:\\DEMO>EVOLUTION.EXE", 4, 20));
 
-    // t = 5.0: the banner and the sound cards add lines.
-    const Indices cards = fixture.render(boot(5.0));
-    std::printf("boot: t=3.0 has %zu set pixels, t=5.0 %zu\n", typed.nonZero(), cards.nonZero());
+    // t = 5.3: the detection lines.
+    const Indices cards = fixture.render(boot(5.3));
+    std::printf("boot: t=3.0 has %zu set pixels, t=5.3 %zu\n", typed.nonZero(), cards.nonZero());
     CHECK(cards.nonZero() > typed.nonZero());
-    CHECK(matchesText(cards, "EVOLUTION  1993 -> 2026", 4, 28));
+    CHECK(matchesText(cards, "Sound Blaster 16 at 220h IRQ 5 DMA 1", 4, 28));
+    CHECK(matchesText(cards, "Ray tracing hardware ..................", 4, 44));
+    CHECK(matchesText(cards, "not yet", 4, 52));
 
     // t = 2.00 and 2.02 are both retro frame 70: the same image, re-rendered after another frame between.
     bool rendered = false;
@@ -317,7 +354,7 @@ int main() {
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
         testScript();
-        testLinesFit();
+        testDetection();
         testFlashFrame();
         testTextIsPure();
         {
