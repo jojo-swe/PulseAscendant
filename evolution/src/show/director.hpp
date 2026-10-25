@@ -66,7 +66,7 @@ inline constexpr std::array<MegamixShot, 11> kMegamixShots = {{
     {32, 4, Effect::Finale,     0.0,  false}, // the room, a card on its first frames
     {36, 2, Effect::Tunnel,    78.0,  false}, // the points as lights
     {38, 1, Effect::Nebula,   282.0,  false}, // the star round the pillar
-    {39, 1, Effect::Wormhole, 492.0,  false}, // the ship crossing
+    {39, 1, Effect::Wormhole, 494.15, false}, // the ship crossing
     {40, 4, Effect::Raytrace, 128.10, true},  // the drop, held
 }};
 // clang-format on

@@ -8,6 +8,7 @@
 
 #include "hit.glsl"
 #include "city_patterns.glsl"
+#include "detail_patterns.glsl"
 
 // Smooth 3D value noise in [0, 1] (integer hashes of the lattice corners).
 float valueNoise3(vec3 p, uint seed) {
@@ -310,6 +311,14 @@ void main() {
         baseColor = wormholeWall(m, h, roughness, emission);
     } else if (m.pattern == kPatternWormholeRing) {
         baseColor = wormholeRing(m, h, roughness, emission);
+    } else if (m.pattern == kPatternSeaBead) {
+#ifdef GEOMETRY_SPHERES
+        seaBead(h, m, roughness);
+#endif
+    } else if (m.pattern == kPatternLightRing) {
+        emission += lightRing(h, m);
+    } else if (m.pattern == kPatternKeyCap) {
+        baseColor = keyCap(h, baseColor);
     }
     writeSurface(h, baseColor, roughness, m.transmission, emission);
 }

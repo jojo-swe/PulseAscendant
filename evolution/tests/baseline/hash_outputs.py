@@ -37,6 +37,11 @@ prompt) boot_50, finale_50, portal_50, the REBOOT and RETURN captures and two st
 stream_finale; the Studio's new cameras every Studio capture and stream, and flyby_2026, now the Studio. The
 Studio's mean display luminance rose by up to 714 % (reboot_60, now REBOOT's close-up on the screen) and fell by
 up to 81 % (portal_50, the CRT nearly dark once the grid has switched off).
+Then regenerated for the polish of the Studio, DOTS and the Spheres (the Studio's sky, town glow, dawn,
+CRT glass, key caps and per-shot exposure; DOTS' identity colours, logo and cameras; RAYTRACE's air, caustics
+and cameras): the Studio's captures and streams, flyby_2026, raytrace_2026 and stream_dots changed; boot_50,
+plasma_wipe, nebula_40 and galaxy_20 stayed byte for byte. The night darkened: studio_night_40 -36 %,
+studio_night_acc -49 %, reboot_60 -23 %.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

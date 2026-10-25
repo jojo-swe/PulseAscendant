@@ -369,12 +369,15 @@ A dark modern room at night (the Studio), all procedural, around a 1993 PC that 
 1993 object in it: a polished concrete floor saw-cut into slabs and a board-formed concrete wall (the
 `Concrete` pattern), plaster walls, an oak desk on brushed steel legs, a slim black window frame, an office
 chair, a black desk lamp with its diffuser recessed in a matte shade, and beyond the window a skyline of dark
-towers with lit windows under the night sky (480 instances of 22 meshes, 33 materials). In it: the beige PC
+towers with lit windows under the night sky (481 instances, all counted from the scene). In it: the beige PC
 and CRT monitor, a 101-key keyboard (one key-cap mesh, 101 instances), a mouse, floppy disks, a mug, and a
 chrome and a glass sphere on small stands beside the monitor, where they reflect and refract the screen.
-Four lights: the CRT's screen, the lamp, the window (a portal) and the moon (an emitter outside the window,
-whose beam falls past the desk onto the floor). The power LEDs and the skyline's windows are camera-only
-emitters: seen, but lighting nothing (no fireflies).
+Five lights: the CRT's screen, the lamp, the window (a portal), the moon (an emitter outside the window,
+whose beam falls past the desk onto the floor; gone at RETURN's dawn) and the town's sodium glow (a dim warm
+panel below and left of the window, hidden from inside, that throws the window's shape onto the right wall).
+The power LEDs and the skyline's windows are camera-only emitters: seen, but lighting nothing (no fireflies).
+The surfaces carry their age: dust specks and a fingerprint on the CRT's glass (the `CrtGlass` pattern) and
+yellowed key caps, pale in the middle and darker at the edges (`KeyCap`).
 
 The CRT shows the live 1993 picture, barrel-warped, behind curved glass (the coat's shading normal bulges, the
 quad stays flat), with a beam profile of 200 lines and, in a 4K close-up, an aperture-grille phosphor mask,
