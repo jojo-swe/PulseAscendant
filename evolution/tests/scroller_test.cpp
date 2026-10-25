@@ -4,6 +4,7 @@
 // fails on any message it reports.
 
 #include "gfx/context.hpp"
+#include "render/epoch_cards.hpp"
 #include "render/renderer.hpp"
 #include "retro/effects.hpp"
 #include "retro/flyby.hpp"
@@ -191,7 +192,7 @@ void testRegistry() {
     CHECK(evo::show::cues[kCreditsChapter].eraFixed == 0 && frame.era == 0.f);
     // FLYBY's: the greeting low over the ship and the stars, white (255) in FLYBY's palette.
     CHECK(same(evo::retro::flybyText(frame, 140),
-               scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 172, 255, true)));
+               scrollerItems(evo::retro::kFlybyText, 140, 60, 6, 30, 171, 255, true)));
 
     // Pure: the same retro frame gives the same items whatever else of the frame changes within it.
     TimelineFrame noisy = chapterFrame(kCreditsChapter, Effect::Credits, middleOf(140) + .01);
@@ -440,9 +441,9 @@ void testImages(evo::gfx::Context& ctx) {
 }
 
 // FLYBY's greeting stays clear of the 1993 epoch card: over the whole chapter its lowest row, drop shadow
-// included, ends above the card's top row at every 16:9 output size (the 320x200 picture fills the output's
-// height, so retro row r starts at output row r * height / 200). The card is drawn bottom-left at its own
-// size, so a greeting at the very bottom of the frame ran through it.
+// included, ends above the card's top row at every 16:9 output size (the card is laid out in the CRT's 4:3
+// rectangle, render/epoch_cards.hpp, so retro row r starts at row r * rectHeight / 200 of it). The card is
+// drawn bottom-left at its own size, so a greeting at the very bottom of the picture would run through it.
 void testGreetingClearsCard() {
     const TimelineFrame flyby = chapterFrame(kFlybyChapter, Effect::Flyby, 3);
     CHECK(flyby.era == 0.f);
@@ -454,13 +455,12 @@ void testGreetingClearsCard() {
             bottom = std::max(bottom, static_cast<int>(std::floor(item.y)) + 8);
     for (const auto& [width, height] :
          {std::pair{640u, 360u}, std::pair{1280u, 720u}, std::pair{1920u, 1080u}, std::pair{3840u, 2160u}}) {
-        const std::vector<Item> hud = evo::render::hudItems(flyby, width, height, false);
-        CHECK(!hud.empty());
-        float cardTop = static_cast<float>(height);
-        for (const Item& item : hud)
-            cardTop = std::min(cardTop, item.y);
-        const double greetingBottom = static_cast<double>(bottom) * height / kHeight;
-        std::printf("flyby: greeting ends at output row %.1f, the card starts at %.0f (%ux%u)\n",
+        const evo::render::ThenCardLayout card =
+            evo::render::thenCardLayout(evo::render::thenCardText(Effect::Flyby), width, height);
+        CHECK(card.rectHeight > 0 && !card.codes.empty());
+        const auto cardTop = static_cast<double>(card.originY);
+        const double greetingBottom = static_cast<double>(bottom) * card.rectHeight / kHeight;
+        std::printf("flyby: greeting ends at picture row %.1f, the card starts at %.0f (%ux%u)\n",
                     greetingBottom, cardTop, width, height);
         CHECK(greetingBottom <= cardTop);
     }
