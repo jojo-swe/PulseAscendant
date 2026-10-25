@@ -581,16 +581,15 @@ void testRejectsWrongImages(Context& ctx, Gpu& gpu) {
     CHECK(thrown == 3);
 }
 
-// (f) The scene registry: FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the Studio (Task 10), every
-// other effect the placeholder (studio_test pins the mapping in full).
+// (f) The scene registry: FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the Studio (Task 10), and no
+// other effect does (scene_table_test pins the mapping in full).
 void testSceneRegistry() {
     using evo::show::Effect;
     for (std::size_t effect = 0; effect < evo::show::kEffectCount; ++effect) {
         const auto e = static_cast<Effect>(effect);
         const bool studio = e == Effect::Finale || e == Effect::Portal || e == Effect::StudioNight ||
                             e == Effect::Return || e == Effect::Reboot;
-        CHECK(evo::modern::sceneFor(e) ==
-              (studio ? evo::modern::SceneId::Studio : evo::modern::SceneId::Placeholder));
+        CHECK((evo::modern::sceneFor(e) == evo::modern::SceneId::Studio) == studio);
     }
 }
 
@@ -628,6 +627,10 @@ void testPlaceholderUnchanged(Context& ctx) {
     int worst = 0, worstBelowKnee = 0, off = 0, channels = 0, frames = 0;
     for (const int chapter : {12, 13, 14, 17, 18, 21, 27})
         for (const double fraction : {.1, .45, .8}) {
+            // Only the chapters that still show the placeholder.
+            if (evo::modern::sceneFor(evo::show::sampleTimeline(evo::show::chapterStart(chapter)).effect) !=
+                evo::modern::SceneId::Placeholder)
+                continue;
             const double t =
                 evo::show::chapterStart(chapter) +
                 fraction * (evo::show::chapterStart(chapter + 1) - evo::show::chapterStart(chapter));

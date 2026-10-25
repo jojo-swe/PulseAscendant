@@ -13,6 +13,9 @@ regenerated after merging main d91fb09 (Tasks 2, 3 and 4), whose environments an
 seven outputs (the lit Studio captures and streams; the merged build equals d91fb09's bytes exactly); then
 regenerated after the NEE shadow-ray fix (150714d), which changed seven outputs again: studio_night_40,
 finale_50, studio_night_acc, return_30 and the streams stream_studio_cut, stream_finale, stream_studio_ascent.
+Step 5 Task 22 (the Spheres scene) changed exactly one output, raytrace_2026, which now path traces RAYTRACE
+instead of the placeholder (and shows its new card); every other sum stayed the same, and SUMS was
+regenerated for that one line.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

@@ -1,5 +1,6 @@
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "modern/scenes/spheres.hpp"
 #include "modern/studio.hpp"
 
 #include <array>
@@ -27,7 +28,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Tunnel, "Tunnel", nullptr},           // Task 19
     {SceneId::Glass, "Glass", nullptr},             // Task 20
     {SceneId::Lens, "Lens", nullptr},               // Task 21
-    {SceneId::Spheres, "Spheres", nullptr},         // Task 22
+    {SceneId::Spheres, "Spheres", &make<Spheres>},  // Task 22
     {SceneId::City, "City", nullptr},               // Task 23
     {SceneId::Cosmos, "Cosmos", nullptr},           // Task 24
     {SceneId::Singularity, "Singularity", nullptr}, // Task 25
@@ -38,14 +39,14 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
 // and stay on the placeholder; each scene task moves its own chapters' rows to its scene (the comment).
 constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEffect{{
     {Effect::Boot, SceneId::Placeholder},
-    {Effect::Flyby, SceneId::Placeholder},    // Ship
-    {Effect::Dots, SceneId::Placeholder},     // Particles
-    {Effect::Plasma, SceneId::Placeholder},   // Nebula
-    {Effect::Tunnel, SceneId::Placeholder},   // Tunnel
-    {Effect::Glenz, SceneId::Placeholder},    // Glass
-    {Effect::Lens, SceneId::Placeholder},     // Lens
-    {Effect::Raytrace, SceneId::Placeholder}, // Spheres
-    {Effect::City, SceneId::Placeholder},     // City
+    {Effect::Flyby, SceneId::Placeholder},  // Ship
+    {Effect::Dots, SceneId::Placeholder},   // Particles
+    {Effect::Plasma, SceneId::Placeholder}, // Nebula
+    {Effect::Tunnel, SceneId::Placeholder}, // Tunnel
+    {Effect::Glenz, SceneId::Placeholder},  // Glass
+    {Effect::Lens, SceneId::Placeholder},   // Lens
+    {Effect::Raytrace, SceneId::Spheres},   // Spheres
+    {Effect::City, SceneId::Placeholder},   // City
     {Effect::Finale, SceneId::Studio},
     {Effect::Portal, SceneId::Studio},
     {Effect::StudioNight, SceneId::Studio},
@@ -54,18 +55,18 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Nebula, SceneId::Placeholder},      // Nebula
     {Effect::Cathedral, SceneId::Placeholder},   // Glass
     {Effect::Ocean, SceneId::Placeholder},       // Particles
-    {Effect::SphereStorm, SceneId::Placeholder}, // Spheres
+    {Effect::SphereStorm, SceneId::Spheres},     // Spheres
     {Effect::Singularity, SceneId::Placeholder}, // Singularity
     {Effect::Return, SceneId::Studio},
     {Effect::Reboot, SceneId::Studio},
-    {Effect::Galaxy, SceneId::Placeholder},           // Cosmos
-    {Effect::PlasmaPlanet, SceneId::Placeholder},     // Nebula
-    {Effect::Wormhole, SceneId::Placeholder},         // Tunnel
-    {Effect::CrystalCity, SceneId::Placeholder},      // Glass
-    {Effect::LensOfGod, SceneId::Placeholder},        // Lens
-    {Effect::RaytraceInfinity, SceneId::Placeholder}, // Spheres
-    {Effect::Metropolis, SceneId::Placeholder},       // City
-    {Effect::Ascendant, SceneId::Placeholder},        // Cosmos
+    {Effect::Galaxy, SceneId::Placeholder},       // Cosmos
+    {Effect::PlasmaPlanet, SceneId::Placeholder}, // Nebula
+    {Effect::Wormhole, SceneId::Placeholder},     // Tunnel
+    {Effect::CrystalCity, SceneId::Placeholder},  // Glass
+    {Effect::LensOfGod, SceneId::Placeholder},    // Lens
+    {Effect::RaytraceInfinity, SceneId::Spheres}, // Spheres
+    {Effect::Metropolis, SceneId::Placeholder},   // City
+    {Effect::Ascendant, SceneId::Placeholder},    // Cosmos
     {Effect::Credits, SceneId::Placeholder},
     {Effect::TheEnd, SceneId::Placeholder},
 }};

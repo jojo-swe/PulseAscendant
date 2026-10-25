@@ -893,8 +893,10 @@ void testPrepareTimes(evo::gfx::Context& ctx) {
     harness.renderer().prepare(mixed);
     CHECK(stage.tracer() != nullptr && stage.sceneGpu(evo::modern::SceneId::Studio) != nullptr);
     const VkDeviceSize bytes = stage.gpuBytes();
-    harness.renderer().prepareAll(); // the Studio is every scene the show has so far
+    harness.renderer().prepare(mixed); // the same scenes again: nothing new
     CHECK(stage.gpuBytes() == bytes);
+    harness.renderer().prepareAll(); // every scene the show has, the Studio among them
+    CHECK(stage.gpuBytes() >= bytes);
 }
 
 void testRejectsEmptySize(evo::gfx::Context& ctx) {

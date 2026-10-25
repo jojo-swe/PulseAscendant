@@ -1008,3 +1008,16 @@ target_include_directories(splat_test PRIVATE tests)
 target_compile_definitions(splat_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(splat_test splat_test_shaders)
 evo_gpu_test(splat splat_test)
+
+# --- Step 5 Task 22: Spheres (RAYTRACE, SPHERE STORM, RAYTRACE INFINITY) ---------------------------------------
+
+# The scene (src/modern/scenes/spheres.cpp) and its particle shader (shaders/modern/particles_spheres.comp,
+# compiled by the shaders/modern glob as modern_particles_spheres.comp.spv).
+target_sources(evo_modern PRIVATE src/modern/scenes/spheres.cpp)
+
+# The standard scene contract (chapter pictures, the CPU sweep, the cards) plus the 1993 mirror, the storm's
+# particle mirror against the GPU, and the chrome sphere reflecting both checker colours. `spheres_scene_test
+# --look <dir> [spp] [width height]` renders stills of the three chapters instead.
+add_executable(spheres_scene_test tests/spheres_scene_test.cpp)
+target_link_libraries(spheres_scene_test PRIVATE evo_scene_fixture)
+evo_gpu_test(scene_spheres spheres_scene_test)
