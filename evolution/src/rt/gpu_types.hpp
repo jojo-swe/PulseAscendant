@@ -59,7 +59,10 @@ enum class Pattern : std::uint32_t {
     CrtGlass = 34,
     KeyCap = 35,
     WormholeWall = 36,
-    WormholeRing = 37
+    WormholeRing = 37,
+    // PLASMA PLANET's sea (the Nebula scene, shaders/rt/plasma_sea.glsl): the 1993 plasma glowing in its palette
+    // under plates of basalt crust, on an analytic sphere.
+    PlasmaSea = 44
 };
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;

@@ -33,6 +33,7 @@ const uint kPatternCrtGlass = 34u;  // Emissive (retro texture): the Studio's CR
 const uint kPatternKeyCap = 35u;    // Pbr: the Studio's yellowed key caps
 const uint kPatternWormholeWall = 36u; // the Ship's WORMHOLE (pbr.rchit): the tunnel's wall, a ring's basalt
 const uint kPatternWormholeRing = 37u;
+const uint kPatternPlasmaSea = 44u; // Pbr class: PLASMA PLANET's sea (plasma_sea.glsl)
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;

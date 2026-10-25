@@ -42,6 +42,9 @@ CRT glass, key caps and per-shot exposure; DOTS' identity colours, logo and came
 and cameras): the Studio's captures and streams, flyby_2026, raytrace_2026 and stream_dots changed; boot_50,
 plasma_wipe, nebula_40 and galaxy_20 stayed byte for byte. The night darkened: studio_night_40 -36 %,
 studio_night_acc -49 %, reboot_60 -23 %.
+Then regenerated for the polish of the Nebula, Tunnel, Cosmos and Singularity scenes (PLASMA's strands, NEBULA's
+relief and shafts, GALAXY's arms and REBOOT's cube of stars): galaxy_20, nebula_40 and plasma_wipe changed; nothing
+else moved.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

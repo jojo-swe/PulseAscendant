@@ -69,7 +69,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Return, SceneId::Studio},
     {Effect::Reboot, SceneId::Studio},
     {Effect::Galaxy, SceneId::Cosmos},
-    {Effect::PlasmaPlanet, SceneId::Placeholder}, // Nebula
+    {Effect::PlasmaPlanet, SceneId::Nebula},
     {Effect::Wormhole, SceneId::Ship},            // the ship's crossing; the wormhole is Tunnel's
     {Effect::CrystalCity, SceneId::Glass},
     {Effect::LensOfGod, SceneId::Lens},
