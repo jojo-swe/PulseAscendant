@@ -76,7 +76,10 @@ Marks marks(int chapter) {
 }
 
 TimelineFrame at(const Marks& m, double trackSeconds) {
-    return sampleTimeline(m.offset + trackSeconds);
+    // The transition schedule as applyEra makes it: FINALE's era is then the director's (its cards).
+    TimelineFrame frame = sampleTimeline(m.offset + trackSeconds);
+    evo::show::applyEra(frame, evo::show::beatGrid(frame.track));
+    return frame;
 }
 
 // (a) a time gives the same frame however the show got there.

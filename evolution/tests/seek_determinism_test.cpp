@@ -14,9 +14,9 @@
 //     fresh renderer started on it;
 //   - a duplicated frame (dt = 0) continues the history, a step of -1/60 s resets it (TimeJump: time running
 //     backwards, as at the show's loop) and equals a fresh renderer there;
-//   - BeatSwap in the window: on the 1993 beats of DOTS (placeholder) and FINALE (the Studio) the modern
-//     stage keeps running unseen and the history never resets, while exports skip it and
-//     report Skipped when it runs again; the window's 1993 beats equal the export's bytes.
+//   - BeatSwap in the window: on the 1993 beats of DOTS (placeholder) the modern stage keeps running unseen
+//     and the history never resets, while exports skip it and report Skipped when it runs again; the
+//     window's 1993 beats equal the export's bytes.
 // Runs with the validation layer on and fails on any message it reports. With an argument, the trace scale
 // of both modes (Task 4 of step 5: CTest runs it again at the window's 0.67, where the window jitters its
 // samples and the temporal upscaler keeps a history of its own; the exports it compares with then render at
@@ -236,7 +236,9 @@ double firstFrameWithEra(int chapter, double from, float era) {
 // never resets across the swaps; exports skip it there and report Skipped when it runs again. A 1993 beat
 // looks the same in both modes.
 void testBeatSwap(evo::gfx::Context& ctx) {
-    for (const int chapter : {kDots, kFinale}) {
+    // DOTS only: FINALE shows the 2026 picture throughout (the megamix's cuts and the room), so its 2026
+    // side is never hidden.
+    for (const int chapter : {kDots}) {
         // From a 2026 beat over the next 1993 beat into the next 2026 beat, frames 0.1 s apart (no time jump
         // in the window; a beat lasts about 0.42 s, so every beat gets frames).
         const double nowBeat = firstFrameWithEra(chapter, chapterTime(chapter, 0.3), 1.f);

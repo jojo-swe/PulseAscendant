@@ -183,8 +183,8 @@ visible, so a skipped stage's stale image never reaches the output:
    RETURN and REBOOT path trace the Studio (below) and denoise it; every other 2026 chapter shows a
    placeholder gradient in the chapter's hue with a circle on kick and beat until step 5.
 4. **Era compositor.** Blends the two by the timeline's era: a Cut or BeatSwap chapter shows one era whole,
-   a Wipe sweeps 2026 in from the left behind a white seam, a Portal cross-fades for now, and a cut flashes
-   white.
+   a Wipe sweeps 2026 in from the left behind a 4-pixel refractive glass edge, a Portal cross-fades for now,
+   and a BeatSwap flip flashes a quarter of white (not in FINALE or a Portal chapter).
 5. **HUD.** The epoch card bottom-left (both cards during a wipe), in the demo's own 8×8 font with a drop
    shadow, scaled with the output in whole steps (one step per 360 lines: 2× at 640×360, 4× at 1280×720,
    8× at 2560×1440, at 1× of the step when a card would not fit). The window also shows the chapter title
