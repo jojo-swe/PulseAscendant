@@ -6,7 +6,7 @@
 // tracer shares with the CPU, in declaration order, into a word buffer, then the shared constants and
 // random.glsl's pcgHash of a few inputs (the CPU mirror rt::pcgHash must agree). The CPU
 // filled each field with its own sentinel, so a field whose scalar-layout offset differs from the C++
-// mirror's offsetof comes back with another field's value (Review Focus 10).
+// mirror's offsetof comes back with another field's value.
 
 #include "../rt/random.glsl"
 #include "../rt/types.glsl"

@@ -1,11 +1,11 @@
 // The denoiser on synthetic G-buffers uploaded from the CPU: demodulate, reproject and accumulate, à-trous,
 // remodulate plus the primary-hit emission. Noise converges under accumulation; a reset (or a rejected
-// reprojection) starts the history over, and a first frame equals the stateless (export) path byte for byte
-// (Review Focus 6); a moving pattern follows its motion vectors, fractional motion interpolates bilinearly;
+// reprojection) starts the history over, and a first frame equals the stateless (export) path byte for byte;
+// a moving pattern follows its motion vectors, fractional motion interpolates bilinearly;
 // the temporal variance estimates the sample variance, also for bright pixels; à-trous keeps depth edges and
 // lighting-only edges at length 1 and removes noise from flat regions; a firefly decays at the stated rate;
-// non-finite guides never match; the emission never enters history or filtering (Review Focus 5); NaN, Inf
-// and huge samples never reach the output or the history (Review Focus 8); the same inputs give the same
+// non-finite guides never match; the emission never enters history or filtering; NaN, Inf
+// and huge samples never reach the output or the history; the same inputs give the same
 // bytes. Frames run with two in flight, with the validation layer and its synchronization validation on;
 // fails on any message.
 
@@ -429,7 +429,7 @@ void testNoiseConverges(gfx::Context& ctx) {
     for (std::uint32_t i = 0; i < 32; ++i)
         frames.push_back(noisyFrame(i, 0.5f, 0.5f));
 
-    // The plan's defaults: alphaColor 0.2 settles at sqrt(sigma^2 * a / (2 - a)) = sqrt(1/12 / 9) = 0.096.
+    // The defaults: alphaColor 0.2 settles at sqrt(sigma^2 * a / (2 - a)) = sqrt(1/12 / 9) = 0.096.
     Harness defaults(ctx);
     const std::vector<Output> out = defaults.run(frames, noFilter());
     for (std::uint32_t i = 0; i < 32; ++i)
@@ -1001,7 +1001,7 @@ double hdrMean(const Output& out) {
 
 // (a) Sparse first frames: Bernoulli lighting (on with p = 0.3 at 1 / 0.3, else 0: mean 1) on one plane at
 // length 1. The edge-robust variance sees all-zero quadrants and claims no noise, so step 4's denoiser left
-// holes (RMSE 0.1833 at length 1 and 0.1346 at length 2 on this input, 3 iterations; the plan guessed
+// holes (RMSE 0.1833 at length 1 and 0.1346 at length 2 on this input, 3 iterations; an earlier estimate was
 // ~0.063). Now sparse neighbourhoods get the plain variance with a first pass by geometry alone, and 5
 // iterations at length <= 3: RMSE below 0.045, and no darker than the samples. Very bright sparse samples
 // stay finite.
@@ -1019,7 +1019,7 @@ void testSparseFirstFrames(gfx::Context& ctx) {
     CHECK(first < 0.045);
     CHECK(second < 0.045);
     // Not darker than the samples: a luminance stop on skewed sparse noise weights the rare bright samples
-    // down (by 9 % on this frame with the plan's plain 3x3 variance: mean 0.906 for samples 0.989;
+    // down (by 9 % on this frame with a plain 3x3 variance: mean 0.906 for samples 0.989;
     // within 2 % now, the rest is the renormalised kernel at the image border). Also for sparser light: p =
     // 0.1 at 4 spp (66 % of the pixels 0).
     for (const auto& [p, spp] : {std::pair{0.3f, 1u}, std::pair{0.1f, 4u}}) {
@@ -1049,7 +1049,7 @@ void testSparseFirstFrames(gfx::Context& ctx) {
     }
 
     // resetAtrousIterations at or below atrousIterations, on input that is not sparse, is step 4's denoiser:
-    // the plan's (a) is then where the improvement comes from.
+    // case (a) is then where the improvement comes from.
     post::DenoiseSettings step4;
     step4.resetAtrousIterations = 0;
     Harness old(ctx);

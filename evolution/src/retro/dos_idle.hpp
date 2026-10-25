@@ -10,7 +10,7 @@
 
 namespace evo::retro {
 
-// The Studio's CRT while no 1993 effect runs (STUDIO NIGHT and RETURN, Decision 3 of step 4): the demo has
+// The Studio's CRT while no 1993 effect runs (STUDIO NIGHT and RETURN): the demo has
 // exited to DOS and the PC sits at the prompt. BOOT's look (8x8 glyphs in grey on black, the same margin and
 // palette): a directory listing of C:\DEMO and, on the last line, `C:\DEMO>` with BOOT's cursor blinking at
 // 2 Hz after it. Text only, at BOOT's rate, and a pure function of the retro frame (nothing else changes).

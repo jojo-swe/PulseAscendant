@@ -1,8 +1,7 @@
 // The 1993 rasterisers: the CPU scene functions (projection, near-plane and guard-band clipping,
 // quantisation, painter's sort) and the GPU passes (shaders/retro/polys.comp and points.comp through
-// render::SceneRaster and the retro stage) against a CPU reference rasteriser written here. Pins Review
-// Focus 1 (shared edges: no cracks, no pixel drawn twice, under rotation) and 2 (primitives far off screen or
-// behind the camera). Runs with the validation layer on and fails on any message it reports.
+// render::SceneRaster and the retro stage) against a CPU reference rasteriser written here. Pins shared edges (no cracks, no pixel drawn twice, under rotation) and primitives far off
+// screen or behind the camera. Runs with the validation layer on and fails on any message it reports.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -453,7 +452,7 @@ void testModes(Fixture& fixture) {
     CHECK(fixture.draw(a) == fixture.draw(b));
 }
 
-// --- GPU: Review Focus 1, shared edges -------------------------------------------------------------------
+// --- GPU: shared edges -------------------------------------------------------------------
 
 // The distance from (px, py) to the segment a-b.
 double segmentDistance(double px, double py, double ax, double ay, double bx, double by) {
@@ -642,7 +641,7 @@ void testClippedFan(Fixture& fixture) {
     std::printf("raster: 64 clipped fans (%zu pieces) cover every pixel exactly once\n", pieces);
 }
 
-// --- GPU: Review Focus 2, far off screen -----------------------------------------------------------------
+// --- GPU: far off screen -----------------------------------------------------------------
 
 // A triangle with a vertex at x = 10^6 pixels draws exactly its on-screen part (up to the quantisation of
 // the cut, within 0.1 pixel of its long edges), and quickly.

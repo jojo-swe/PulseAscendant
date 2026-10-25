@@ -1,6 +1,6 @@
 #version 460
 
-// The denoiser's export firefly filter (Decision 16 of step 5), before everything else: each pixel's
+// The denoiser's export firefly filter, before everything else: each pixel's
 // demodulated illumination is scaled down so that its luminance is at most k times the second-largest
 // luminance of its 3x3 neighbourhood. When the centre is the largest that is the largest of its (up to 8)
 // neighbours, and otherwise the centre never exceeds it; so the bound is k times the largest neighbour. A

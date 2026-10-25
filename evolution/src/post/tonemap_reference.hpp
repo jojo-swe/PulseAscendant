@@ -5,7 +5,7 @@
 
 namespace evo::post {
 
-// The tonemap on the CPU, the mirror shaders/post/tonemap.comp is tested against (Review Focus 6). For linear
+// The tonemap on the CPU, the mirror shaders/post/tonemap.comp is tested against. For linear
 // Rec. 709 light `rgb` (a non-finite component counts as 0):
 //   hdr * 2^exposureEV -> max(0) per component -> Khronos PBR Neutral -> clamp [0, 1] -> sRGB OETF
 //   -> round(v * 255 + d), d a triangular dither in (-0.5, 0.5) from pcg(x, y), clamped to [0, 255].

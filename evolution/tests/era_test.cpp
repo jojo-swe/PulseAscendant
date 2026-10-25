@@ -78,7 +78,7 @@ TimelineFrame at(const Marks& m, double trackSeconds) {
     return sampleTimeline(m.offset + trackSeconds);
 }
 
-// (a) Review Focus 1: a time gives the same frame however the show got there.
+// (a) a time gives the same frame however the show got there.
 void checkDeterminism() {
     std::uint64_t state = 0x2026199320261993ull; // fixed seed: the test is reproducible
     auto next = [&] {
@@ -199,7 +199,7 @@ void checkBeatSwap() {
             CHECK(at(m, grid.beatTime(m.downbeatBeat - 9) + .01).swapCount == twoBarsOut.swapCount);
             CHECK(twoBarsOut.swapCount == onDownbeat.swapCount - 9);
         } else {
-            // Review Focus 5 on the real show (Finale): every beat after the chapter start flips it, less
+            // On the real show (Finale): every beat after the chapter start flips it, less
             // the first when that keeps the count odd.
             ++shortChapters;
             const int first = grid.beatAt(m.start + 1e-6) + 1;
@@ -212,7 +212,7 @@ void checkBeatSwap() {
     CHECK(shortChapters == 1); // Finale, whose accent comes less than four bars in
 }
 
-// Review Focus 5: a chapter whose accent comes too early for the full window starts it at the chapter start.
+// a chapter whose accent comes too early for the full window starts it at the chapter start.
 void checkShortChapters() {
     // BeatSwap on Raytrace with an accent 3 s in: fewer than 4 bars, so it flips on every beat from the
     // start.

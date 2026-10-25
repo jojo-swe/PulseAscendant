@@ -23,7 +23,7 @@ namespace evo::retro {
 // second) are floor(n * rate / 35) home frames on, so RAYTRACE keeps its 10 frames a second. The text is
 // FINALE's own (none; the epoch card is the HUD's), so FLYBY's greeting does not show.
 //
-// Every two beats rather than the plan's two bars: the chapter is 12.2 s, about 7 bars, so two bars would
+// Every two beats rather than two bars: the chapter is 12.2 s, about 7 bars, so two bars would
 // show at most five of the six; and with the current beat data BeatSwap shows 1993 only on every other beat
 // before its downbeat D and 2026 from D on, so a cut every two beats puts each of the six on its own 1993
 // beat, the flash where the beat swaps back to 1993 (era_test's checkBeatSwap pins that pattern for FINALE,

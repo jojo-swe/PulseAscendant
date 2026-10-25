@@ -1,4 +1,4 @@
-"""Check that EVOLUTION runs without an audio device (Review Focus 3). A windowed run under xvfb-run plays a
+"""Check that EVOLUTION runs without an audio device. A windowed run under xvfb-run plays a
 silent WAV of exactly the show's length, so the music itself is acceptable and only the audio driver
 decides:
 - SDL_AUDIODRIVER=nonexistent: exit 0 and "SILENT MODE: cannot start SDL audio" (the monotonic clock);

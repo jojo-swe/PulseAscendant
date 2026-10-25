@@ -43,7 +43,7 @@ struct Options {
 };
 
 inline constexpr float kMinTraceScale = 0.25f;
-inline constexpr float kWindowTraceScale = 0.67f; // the window and --bench (Decision 7 of step 5)
+inline constexpr float kWindowTraceScale = 0.67f; // the window and --bench
 inline constexpr int kMaxBenchFrames = 100000;
 
 // The trace scale a run renders with: --trace-scale, or 1 for the exports (--capture-dir, --render-stream),

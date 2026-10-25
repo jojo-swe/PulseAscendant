@@ -1,8 +1,7 @@
 build/
 dist/
-.superpowers/
 music/source/
 assets/music/*.wav
 *.user
 __pycache__/
-.recall/
+evolution/docs/plans/
