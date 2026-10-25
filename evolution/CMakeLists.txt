@@ -1092,3 +1092,9 @@ target_compile_definitions(light_tree_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TES
 add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders evo_modern_sphere_shaders
                  evo_modern_intersection_shaders)
 evo_gpu_test(light_tree light_tree_test)
+
+# Step 5, Task 17: the Particles scene (DOTS, PARTICLE OCEAN; its particle shader
+# shaders/modern/particles_particles.comp is globbed above) and its test (`scene_particles_test --look <dir>
+# [spp] [detail]` renders 480x270 stills of both chapters; `--memory [detail]` prints the measured bytes).
+target_sources(evo_modern PRIVATE src/modern/scenes/particles.cpp)
+evo_scene_test(particles)

@@ -71,6 +71,7 @@ RenderSettings settings(RenderMode mode) {
     RenderSettings s{kWidth, kHeight}; // CRT and HUD on; the window's spp (1) and bounces (0 = the mode's)
     s.mode = mode;
     s.traceScale = gTraceScale;
+    s.detail = {1.f / 256}; // the scenes' particle counts at test size (DOTS' field)
     return s;
 }
 
