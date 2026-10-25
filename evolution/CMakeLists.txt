@@ -1195,3 +1195,8 @@ target_compile_definitions(secret_part_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_S
 add_dependencies(secret_part_test Evolution_shaders)
 add_test(NAME secret_part COMMAND secret_part_test)
 
+# The video export: chunked, resumable rendering into ffmpeg with the music (tools/render_video.py), on a short
+# stretch at a tiny size.
+add_test(NAME render_video
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_video_test.py $<TARGET_FILE:Evolution>)
+set_tests_properties(render_video PROPERTIES TIMEOUT 300 PROCESSORS 2)
