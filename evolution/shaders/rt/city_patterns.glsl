@@ -255,6 +255,10 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
     vec3 tint = cityRoomTint(light * 7u, materialEmission(m));
     float level = (0.35 + 0.8 * cityDraw(light, 11u)) * (office ? 0.9 + 0.2 * cityDraw(room, 13u) : 1.0);
 
+    // Each building's walls: their own tone and warmth round the material's colour.
+    vec3 wall = m.baseColor * (0.72 + 0.56 * cityDraw(building, 23u)) *
+                mix(vec3(1.07, 1.0, 0.9), vec3(0.9, 0.97, 1.08), cityDraw(building, 29u));
+
     // Prefiltering: where a cell is no bigger than the ray cone's footprint (far away, or after a rough
     // bounce), the facade is its average instead of a pattern that would alias into sparkle.
     float footprint = payload.coneSpread < 0.0 ? 1e6 : abs(payload.coneWidth + payload.coneSpread * gl_HitTEXT);
@@ -267,15 +271,34 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
     // mean: resolved, the lit windows clip in the tonemap and the walls between them stay dark, which a
     // uniform average would not. The wall's share is darkened too (soot, and the sills' and reveals'
     // shadows a distant wall still has): a far facade at night is a dark mass with a warm glow, never grey.
+    // Far away the facade is still a pattern, only coarser: its cells pooled into blocks of `pool` x `pool`
+    // (a power of two, the smallest block over half a pixel across: the samples of a pixel average a few), each block lit as its first cell is (that
+    // cell's own run, clock and room tint), so the blocks of a coarser level are a subset of a finer level's
+    // and the lights stay put as the camera moves; every building keeps its own wall tone and warmth. A far
+    // city at night is lit windows on dark masses down to the horizon, not uniform clay.
+    float pool = exp2(clamp(ceil(log2(0.6 / max(cellPixels, 1e-4))), 0.0, 6.0));
+    float firstBay = pool * floor(bay / pool), firstStorey = shop ? 0.0 : max(pool * floor(storey / pool), 1.0);
+    uint firstCell = cityHash(building ^ (face * 0x51ED27u), uint(firstBay) * 0x1000193u + uint(firstStorey) * 0x9E3779B1u);
+    uint firstRun = firstCell;
+    if (!(style == kPatternCityPunched || shop)) {
+        firstRun = cityHash(building ^ (face * 0x51ED27u), uint(floor(firstBay / 5.0)) * 0x1000193u + uint(firstStorey) * 0x9E3779B1u);
+    }
+    float firstPeriod = 25.0 + 195.0 * cityDraw(firstRun, 3u);
+    float firstEpoch = floor((seconds + firstPeriod * cityDraw(firstRun, 5u)) / firstPeriod);
+    uint firstState = cityHash(firstRun, uint(int(firstEpoch)) + 0x2545F491u);
+    uint firstRoom = cityHash(firstCell, uint(int(firstEpoch)) + 0x68E31DA4u);
+    float blockLit = cityUnit(firstState) < litShare ? 1.0 : 0.0;
+    vec3 blockTint = cityRoomTint((office ? firstState : firstRoom) * 7u, materialEmission(m));
+
     float glassShare = glassWall ? 1.0 : windowShare;
-    vec3 avgColor = mix(m.baseColor * 0.42, m.baseColor2, glassShare);
+    vec3 avgColor = mix(wall * 0.34, m.baseColor2, glassShare);
     float avgRough = mix(m.roughness, 0.3, glassShare);
-    vec3 avgEmission = materialEmission(m) * vec3(1.0, 0.82, 0.62) * (litShare * windowShare * 0.5);
+    vec3 avgEmission = blockTint * vec3(1.0, 0.9, 0.78) * (0.75 * blockLit * windowShare);
     if (detail <= 0.0) {
         baseColor = avgColor;
         roughness = avgRough;
         h.material.metallic = 0.0;
-        h.material.coat = glassShare;
+        h.material.coat = 0.6 * glassShare; // the far glass's reflection broken by its frames and blinds
         h.material.coatRoughness = 0.02;
         emission = avgEmission;
         return;
@@ -292,7 +315,7 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
             // Spandrel glass between the floors, framed by metal mullions.
             float mullion = min(min(fu, 1.0 - fu) * bayWidth, min(v, 1.0 - v) * cellHeight);
             if (mullion < 0.06) {
-                cellColor = m.baseColor * tone;
+                cellColor = wall * tone;
                 cellRough = m.roughness;
                 cellMetal = m.metallic;
                 cellCoat = 0.0;
@@ -302,9 +325,9 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
                 cellCoat = 1.0;
             }
         } else {
-            cellColor = m.baseColor * tone;
-            float block = cityNoise2(vec2(u, y) * 3.3, building + 21u);
-            cellRough = clamp(m.roughness * (0.8 + 0.4 * block), 0.0, 1.0);
+            cellColor = wall * tone;
+            float blotch = cityNoise2(vec2(u, y) * 3.3, building + 21u);
+            cellRough = clamp(m.roughness * (0.8 + 0.4 * blotch), 0.0, 1.0);
             cellCoat = 0.0;
             // Courses of brick or stone (75 mm or 0.6 m high) where the footprint resolves them: mortar joints
             // and each unit's own shade.
@@ -372,7 +395,7 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
     baseColor = mix(avgColor, cellColor, detail);
     roughness = mix(avgRough, cellRough, detail);
     h.material.metallic = mix(0.0, cellMetal, detail);
-    h.material.coat = mix(glassShare, cellCoat, detail);
+    h.material.coat = mix(0.6 * glassShare, cellCoat, detail);
     h.material.coatRoughness = 0.01;
     emission = mix(avgEmission, cellEmission, detail);
 }
