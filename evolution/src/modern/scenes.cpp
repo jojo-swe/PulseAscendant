@@ -3,6 +3,7 @@
 #include "modern/scenes/city.hpp"
 #include "modern/scenes/glass.hpp"
 #include "modern/scenes/lens.hpp"
+#include "modern/scenes/nebula.hpp"
 #include "modern/scenes/particles.hpp"
 #include "modern/scenes/ship.hpp"
 #include "modern/scenes/spheres.hpp"
@@ -30,7 +31,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Studio, "Studio", &make<Studio>},
     {SceneId::Ship, "Ship", &make<Ship>},                // Task 16
     {SceneId::Particles, "Particles", &make<Particles>}, // Task 17
-    {SceneId::Nebula, "Nebula", nullptr},                // Task 18
+    {SceneId::Nebula, "Nebula", &make<Nebula>},          // Task 18
     {SceneId::Tunnel, "Tunnel", &make<Tunnel>},          // Task 19
     {SceneId::Glass, "Glass", &make<Glass>},             // Task 20
     {SceneId::Lens, "Lens", &make<Lens>},                // Task 21
@@ -47,7 +48,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Boot, SceneId::Placeholder},
     {Effect::Flyby, SceneId::Placeholder}, // the Studio's pull-out
     {Effect::Dots, SceneId::Particles},
-    {Effect::Plasma, SceneId::Placeholder}, // Nebula
+    {Effect::Plasma, SceneId::Nebula},
     {Effect::Tunnel, SceneId::Tunnel},
     {Effect::Glenz, SceneId::Glass},
     {Effect::Lens, SceneId::Lens},
@@ -58,7 +59,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::StudioNight, SceneId::Studio},
     {Effect::Ascent, SceneId::City},
     {Effect::CityNight, SceneId::City},
-    {Effect::Nebula, SceneId::Placeholder},    // Nebula
+    {Effect::Nebula, SceneId::Nebula},
     {Effect::Cathedral, SceneId::Glass},
     {Effect::Ocean, SceneId::Particles},
     {Effect::SphereStorm, SceneId::Spheres},     // Spheres
