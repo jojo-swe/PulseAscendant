@@ -68,6 +68,14 @@ public:
     // signalBinary; waits for waitBinary at waitStage (all commands when 0). Moves on to the next slot.
     std::uint64_t submit(VkSemaphore waitBinary = VK_NULL_HANDLE, VkPipelineStageFlags2 waitStage = 0,
                          VkSemaphore signalBinary = VK_NULL_HANDLE);
+    // Splits the frame being recorded into two submits: ends what is recorded so far, submits it, waits for
+    // it on the host, then begins recording the same command buffer again in the same slot (the slot
+    // callbacks do not run: it is still the same frame, with its descriptor sets, uniforms and queries). The
+    // GPU runs the same commands in the same order, so the results are the same; no single submit has to
+    // hold all of the frame, which keeps a long export frame under a display driver's watchdog (Windows
+    // TDR). Bound pipelines, descriptor sets and push constants do not carry over: call it only where the
+    // recording binds again. Throws std::logic_error outside begin()/submit().
+    void split();
     // Host wait until the timeline reaches value. Throws std::logic_error for a value never submitted.
     void wait(std::uint64_t value);
     // Waits for every submit so far.

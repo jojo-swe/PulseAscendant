@@ -39,6 +39,10 @@ struct RenderSettings {
     // degree shutter (the CLI's exports), 0 for none. Exports trace up to 8 time slices of it, one per 4
     // samples (modern/shutter.hpp), for motion blur; the window never has a shutter.
     double shutterSeconds = 0;
+    // Exports only: one submit per time slice of the path tracer (HistoryState::submitPerSlice) instead of
+    // one per frame, so a long 4K frame never sits in one submit (Windows' 2 s TDR). Same bytes either way;
+    // the CLI's exports set it, the window ignores it.
+    bool submitPerSlice = false;
     // Test hooks: the modern stage's scene factory and effect -> scene map (empty: the show's).
     modern::SceneFactory sceneFactory;
     modern::SceneMap sceneMap;
@@ -158,6 +162,7 @@ private:
     std::uint32_t spp_;
     std::uint32_t maxBounces_;
     double shutterSeconds_;
+    bool submitPerSlice_;
     HistoryTracker history_;
     bool modernRanLastFrame_ = false;
     text::TextPass text_; // before the stages that draw with it

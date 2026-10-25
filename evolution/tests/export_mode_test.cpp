@@ -82,6 +82,7 @@ public:
     }
     Renderer::Stats stats() const { return renderer_.lastStats(); }
     const Renderer& renderer() const { return renderer_; }
+    evo::gfx::FrameRing& ring() { return ring_; }
 
 private:
     evo::gfx::Readback readback_;
@@ -158,7 +159,8 @@ void testWindowMatchesExport(evo::gfx::Context& ctx) {
 }
 
 // Export purity: T in two fresh renderers, and after first rendering T - 1/60, gives the same bytes; T + 1/60
-// does not (the seed and the scene move). At spp 2, 5 (two trace dispatches) and 16 (no a-trous filter).
+// does not (the seed and the scene move). At spp 2, 5 (two trace dispatches) and 16 (the light export
+// a-trous).
 void testExportPurity(evo::gfx::Context& ctx) {
     const TimelineFrame t = studioNight(0.4);
     // T - 1/60 is in the same camera shot, so the tracker sees no reset in between.
@@ -185,6 +187,33 @@ void testExportPurity(evo::gfx::Context& ctx) {
         CHECK(first == afterPrevious);
         CHECK(first != later);
     }
+}
+
+// One submit per time slice (the CLI's exports, against Windows' GPU watchdog) gives the same bytes as one
+// submit per frame, at spp 16 with the 180 degree shutter (four dispatches, four slices): the frame really is
+// split, one submit before each slice plus the last.
+void testSubmitPerSlice(evo::gfx::Context& ctx) {
+    const TimelineFrame t = studioNight(0.4);
+    RenderSettings whole = settings(RenderMode::Export, 16, 0);
+    whole.shutterSeconds = 0.5 / 60.0;
+    RenderSettings sliced = whole;
+    sliced.submitPerSlice = true;
+    Harness a(ctx, whole);
+    Harness b(ctx, sliced);
+    const auto submits = [&ctx](Harness& h) {
+        std::uint64_t value = 0;
+        if (vkGetSemaphoreCounterValue(ctx.device(), h.ring().timeline(), &value) != VK_SUCCESS)
+            throw std::runtime_error("vkGetSemaphoreCounterValue");
+        return value;
+    };
+    const std::vector<std::uint8_t> one = a.render(t);
+    const std::uint64_t wholeSubmits = submits(a);
+    const std::vector<std::uint8_t> split = b.render(t);
+    const std::uint64_t slicedSubmits = submits(b);
+    CHECK(wholeSubmits == 1 && slicedSubmits == 5);
+    CHECK(one == split);
+    // The next frame too: the split leaves the ring's slots and the per-frame state as one submit does.
+    CHECK(a.render(studioNight(0.4, kFrame)) == b.render(studioNight(0.4, kFrame)));
 }
 
 // The bounce limit reaches the path tracer: an export at 1 bounce differs from one at 6, and the Export
@@ -220,6 +249,7 @@ int main() {
             testWindowMatchesExport(ctx);
             testExportPurity(ctx);
             testBounces(ctx);
+            testSubmitPerSlice(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(evo::gfx::validationMessagesReported() == 0);

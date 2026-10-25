@@ -94,14 +94,14 @@ inline constexpr std::array<Cue, 31> cues = {{
 
     // Act II: Guitar Trance, 2026 only; from the Studio at night and back to it.
     {194, Effect::StudioNight, Transition::Cut, .4f, 1, "STUDIO NIGHT", "",
-        "2026 · THE STUDIO · 480 INSTANCES · LIT BY ONE SCREEN AND ONE MOON"},
+        "2026 · THE STUDIO · 481 INSTANCES · LIT BY ONE SCREEN AND ONE MOON"},
     {214, Effect::Ascent, Transition::Cut, .7f, 1, "ASCENT", "", "2026 · ASCENT · VOLUMETRIC CLOUDS · MOONLIGHT SHAFTS"},
     {238, Effect::CityNight, Transition::Cut, .8f, 1, "CITY NIGHT", "",
         "2026 · CITY NIGHT · 16,384 LIGHTS · LIGHT TREE · RAIN"},
     {264, Effect::Nebula, Transition::Cut, .6f, 1, "NEBULA", "",
         "2026 · NEBULA · 16,777,216 VOXELS · MULTIPLE SCATTERING · 3 STARS"},
     {292, Effect::Cathedral, Transition::Cut, .8f, 1, "GLASS CATHEDRAL", "",
-        "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS"},
+        "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS · SHAFTS"},
     {322, Effect::Ocean, Transition::Cut, .9f, 1, "PARTICLE OCEAN", "",
         "2026 · 2,097,152 TRACED PARTICLES · ONE SHOT"},
     {344, Effect::SphereStorm, Transition::Cut, 1.f, 1, "SPHERE STORM", "",

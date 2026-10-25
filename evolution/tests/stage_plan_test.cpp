@@ -1,6 +1,7 @@
 // The stage plan and the history tracker, on the CPU: which stages a frame runs and may show, per mode, and
 // when the modern stage's temporal history resets; the samples a frame traces (more on the window's reset
-// frames) and the denoiser settings per mode and spp (the firefly filter in exports from 16 spp only).
+// frames) and the denoiser settings per mode and spp (the firefly filter and a lighter a-trous in exports
+// from 16 spp).
 
 #include "modern/modern_scene.hpp"
 #include "render/stage_plan.hpp"
@@ -415,9 +416,9 @@ void testResetSpp() {
         CHECK(frameSpp(RenderMode::Export, 1, frames) == 1 && frameSpp(RenderMode::Export, 64, frames) == 64);
 }
 
-// The window: temporal, a-trous always, no firefly filter at any spp. Exports: no history, a-trous below
-// 16 spp, the firefly filter from 16. Both: 5 a-trous iterations at history length <= 3 and 4
-// on the volume layer.
+// The window: temporal, a-trous always, no firefly filter at any spp. Exports: no history, 3 a-trous
+// iterations (5 at history length <= 3) below 16 spp; from 16 the firefly filter and a light a-trous of 2
+// iterations in all. Both: 4 on the volume layer.
 void testDenoiseSettings() {
     using evo::render::denoiseSettingsFor;
     evo::render::HistoryState state;
@@ -429,9 +430,9 @@ void testDenoiseSettings() {
         CHECK(window.resetAtrousIterations == 5 && window.volumeAtrousIterations == 4);
         state.mode = RenderMode::Export;
         const auto exported = denoiseSettingsFor(state);
-        CHECK(!exported.temporal && exported.atrousIterations == (spp < 16 ? 3u : 0u));
+        CHECK(!exported.temporal && exported.atrousIterations == (spp < 16 ? 3u : 2u));
         CHECK(exported.fireflyFilter == (spp >= 16) && exported.fireflyK == 4.f);
-        CHECK(exported.resetAtrousIterations == 5 && exported.volumeAtrousIterations == 4);
+        CHECK(exported.resetAtrousIterations == (spp < 16 ? 5u : 2u) && exported.volumeAtrousIterations == 4);
     }
 }
 

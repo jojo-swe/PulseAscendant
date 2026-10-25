@@ -1,7 +1,8 @@
 // The Singularity scene (gravitational lensing) and the gravitational lens (shaders/rt/lensing.glsl) on lavapipe,
 // with the validation layer on; fails on any message.
 //
-// (k) the card names 48-step geodesics, which is the scene's lens; packLensing's refusals;
+// (k) the card names 48-step geodesics, which is the scene's lens, and is the scene's own nowCard; the shots'
+//     exposures stay flat (the white-out is post::Look's); packLensing's refusals;
 // (r) the Einstein ring: a star exactly behind the hole, seen from 20 r_s at 64x64, shows as a ring whose
 //     radius is the analytic one (the null geodesic's exact deflection, integrated finely on the CPU) within
 //     1 px; the weak-field estimate sqrt(2 r_s / D) is printed beside it;
@@ -105,6 +106,17 @@ void testCard() {
     CHECK(std::string(f.nowCard).find("48-STEP GEODESICS") != std::string::npos);
     CHECK(modern::kGeodesicSteps == 48u);
     const modern::Singularity scene{modern::SceneDetail{1.f}};
+    // The scene's own card is the cue line, its step count the lens's at any detail.
+    CHECK(scene.nowCard(show::Effect::Singularity) == f.nowCard);
+    CHECK(modern::Singularity{modern::SceneDetail{1.f / 256}}.nowCard(show::Effect::Singularity) == f.nowCard);
+    CHECK(scene.nowCard(show::Effect::Singularity).find(std::to_string(modern::singularityLens().steps) + "-STEP") !=
+          std::string::npos);
+    CHECK(scene.nowCard(show::Effect::Return).empty());
+    // No white-out of its own: the shots' exposures are flat (post::Look's arc carries the fall to white).
+    const int chapter = chapterOf(show::Effect::Singularity);
+    const double duration = at(chapter, 0.0).chapterDuration;
+    for (double t = 0.0; t < duration; t += 0.25)
+        CHECK(modern::singularityExposureEV(at(chapter, t)) <= 0.5f);
     const modern::SceneFrame frame = scene.frame(f);
     CHECK(frame.lensing && frame.lensing->steps == 48u && frame.lensing->massRadius == 1.f &&
           frame.lensing->influenceRadius == 30.f && frame.lensing->disc);

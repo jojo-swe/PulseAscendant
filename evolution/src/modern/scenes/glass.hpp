@@ -90,6 +90,14 @@ std::uint32_t stainedPaneCount();
 std::uint32_t glassPillarCount();
 // How far the cathedral's east shutter of a window (bay 0 .. 14) is open at a frame, 0 to 1.
 float cathedralShutter(const show::TimelineFrame& frame, int window);
+// The direction towards the cathedral's sun (unit), and the middle of the hero window's glass (the bay whose
+// shutter opens on D, the sun's disc in it).
+Vec3 cathedralSunDirection();
+Vec3 cathedralHeroWindow();
+// The distance from a point to the nearest glass pier's axis (the piers stand in four rows of 16), in metres;
+// and the outline's largest radius about the axis.
+float distanceToPier(Vec3 p);
+float pierReach();
 
 // Test hooks: the glass's Abbe number in GLENZ and CRYSTAL CITY (0: no dispersion), and a clear core.
 struct GlassOptions {

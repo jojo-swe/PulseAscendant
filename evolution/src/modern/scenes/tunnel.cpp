@@ -264,15 +264,15 @@ EnvironmentDesc tunnelSky() {
 }
 
 // The haze: a smoky one, denser where the path dips (falloff along +y), scattering forward so every bead
-// wears a halo. It absorbs about a third of what it meets, more of the red than of the blue, so it keeps the
-// blacks between the rings and the light it scatters leans violet: the far end, seen through the most haze,
-// takes 1993's far colour by itself.
+// wears a halo. It absorbs about a third of what it meets, a little more of the blue than of the red, so it
+// keeps the blacks between the rings and the far end, seen through the most haze, burns the beads' own warm
+// white with the phosphor's blue in it rather than any tint of its own.
 FogDesc tunnelFog() {
     FogDesc fog;
     fog.density = 0.09f;
     fog.baseHeight = 0.f;
     fog.falloff = 0.3f;
-    fog.albedo = {0.66f, 0.63f, 0.73f};
+    fog.albedo = {0.7f, 0.66f, 0.6f};
     fog.phaseG = 0.6f;
     return fog;
 }
@@ -357,18 +357,23 @@ Camera tunnelChapterCamera(const show::TimelineFrame& f) {
     if (u <= 0.f)
         return c;
     // Free: off the axis towards the lower right wall (the near ribs there become the foreground), turned
-    // so the far end sits on the left third, banked into the bends.
+    // so the far end sits on the left third, banked into the bends; then, over the rest of the chapter, one
+    // slow crossing of the tube to its upper left, the far end swinging over to the right third, so no two
+    // bars after the accent frame the tunnel alike.
     const TunnelRing here = tunnelRing(travel);
     const TunnelRing ahead = tunnelRing(travel + kLookAhead);
-    c.eye = here.centre + (here.right * 0.34f - here.up * 0.2f) * u;
-    c.target = lerp(c.target, ahead.centre + ahead.right * 1.45f + ahead.up * 0.1f, u);
+    const float across = smooth(float((f.localSeconds - m.accent - m.barSeconds) /
+                                      std::max(chapterEnd(f) - m.accent - m.barSeconds, 1e-3)));
+    const float offRight = 0.34f - 0.62f * across, offUp = -0.2f + 0.46f * across;
+    c.eye = here.centre + (here.right * offRight + here.up * offUp) * u;
+    c.target = lerp(c.target, ahead.centre + ahead.right * (1.45f - 2.6f * across) + ahead.up * (0.1f - 0.5f * across), u);
     // The path's turn ahead, across the view: its second difference over 4 units.
     const TunnelRing a = tunnelRing(travel + 2.0), b = tunnelRing(travel + 6.0);
     const Vec3 turn = (b.centre - a.centre) - (a.centre - here.centre);
     const float lateral = dot(turn, here.right);
     // Plus a slow roll through the rest of the chapter: the one move of the shot after it breaks free.
-    const float drift =
-        0.16f * smooth(float((f.localSeconds - m.accent) / std::max(chapterEnd(f) - m.accent, 1e-3)));
+    const float drift = 0.16f * smooth(float((f.localSeconds - m.accent) / std::max(chapterEnd(f) - m.accent, 1e-3))) -
+                        0.3f * across;
     const float bank = u * std::clamp(0.35f * lateral, -0.2f, 0.2f) + drift;
     const Vec3 forward = normalize(c.target - c.eye);
     const Vec3 side = normalize(cross(forward, here.up));
@@ -574,12 +579,13 @@ Tunnel::Tunnel(SceneDetail detail) : detail_(detail) {
         m[kRib + v].pattern = static_cast<std::uint32_t>(rt::Pattern::BrushedMetal);
         m[kRib + v].patternScale = 0.6f;
     }
-    // The tube's glazed ceramic, in 1993's two tube colours taken almost to black: under a clear glaze the
-    // beads reflect in it; three glazes from glassy to eggshell.
+    // The tube's glazed ceramic in 1993's checker: a deep cobalt and a warm charcoal (1993's second tube
+    // colour taken to a fired glaze, never violet): under a clear glaze the beads reflect in it, so the
+    // checker shows between the ribs; three glazes from glassy to eggshell.
     constexpr Vec3 kGlazeA[kVariants] = {
-        {0.045f, 0.075f, 0.17f}, {0.05f, 0.082f, 0.18f}, {0.036f, 0.06f, 0.145f}};
+        {0.075f, 0.13f, 0.32f}, {0.085f, 0.14f, 0.34f}, {0.065f, 0.11f, 0.28f}};
     constexpr Vec3 kGlazeB[kVariants] = {
-        {0.07f, 0.045f, 0.1f}, {0.078f, 0.05f, 0.108f}, {0.06f, 0.038f, 0.088f}};
+        {0.16f, 0.13f, 0.11f}, {0.17f, 0.14f, 0.12f}, {0.14f, 0.115f, 0.1f}};
     constexpr float kGlazeRoughness[kVariants] = {0.02f, 0.06f, 0.14f};
     for (std::uint32_t v = 0; v < kVariants; ++v) {
         for (const std::uint32_t k : {kPanelA + v, kPanelB + v}) {
@@ -652,7 +658,7 @@ SceneFrame Tunnel::tunnelFrame(const show::TimelineFrame& frame) const {
     const std::uint32_t dots = tunnelDotsPerRing(detail_);
     const float share = float(kTunnelRetroDots) / float(dots);
     const auto seconds = float(frame.localSeconds);
-    const Vec3 rose{1.f, 0.42f, 0.55f};
+    const Vec3 rose{1.f, 0.55f, 0.24f}; // the pulses run amber: the tungsten beads burning hotter
     f.treeLights.reserve(p.count);
     for (std::uint32_t k = 0; k < p.count; ++k) {
         const rt::SphereRecord s = tunnelLight(k, seconds, p.params);

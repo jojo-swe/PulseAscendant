@@ -2,7 +2,9 @@
 // message.
 //
 // (k) the cards: NEBULA's card names 16,777,216 voxels (256^3, the full-detail grid) and 3 stars, which are
-//     the scene's full-detail configuration and nebulaStats(); detail scales the grid and the splats;
+//     the scene's full-detail configuration and nebulaStats(); PLASMA PLANET's the cloud shell's 256x128x32,
+//     the low pass's grid; the scene's own cards are the cue lines at any detail; detail scales the grid and
+//     the splats;
 // (m) the star shader's spheres equal the C++ mirror (nebulaStar) within 1e-4 at 4 times per chapter, and the
 //     frame's tree lights are those spheres;
 // (b) the bake: two bakes of the same frame are byte-identical, another time differs; NEBULA's emission sits
@@ -11,10 +13,14 @@
 // (h) PLASMA's mean emission hue at 3 times is within 15 degrees of the 1993 picture's mean hue at the same
 //     1993 frame (both in linear light), and the scene's palette ring is the 1993 palette's;
 // (t) at the nebula's projected centre the volume layer's transmittance is below 0.8 and its radiance above 0;
+//     PLASMA on its accent has the camera inside the cloud: T < 0.5 at the frame's centre;
+// (u) PLASMA PLANET: the sun clears the limb on D (468.55) within a frame, hidden before and up after it, and
+//     the shots change on their bar lines;
 // (r) the reveal: star A is hidden behind the centre pillar a bar before the downbeat D (the transmittance to
 //     it under 0.1) and shows on the accent (above 0.3), as the analytic pillars say (the camera's line to A
 //     grazes the centre pillar's edge between them);
-// (p) checkChapterPictures for both chapters and (s) checkSceneSweep (scene_fixture.hpp).
+// (p) checkChapterPictures for the three chapters and (s) checkSceneSweep (scene_fixture.hpp), the clouds'
+//     camera steps at most 0.6 a frame, every view turning under a degree a frame.
 //
 // `scene_nebula_test --look <dir> [spp] [detail]` renders 480x270 stills of both chapters at several moments
 // through the renderer (Export, forced 2026, no HUD) instead; `--volume <spp> <file>` writes one frame's raw
@@ -237,6 +243,24 @@ void testCards() {
     const modern::SceneFrame plasma = full.frame(p);
     CHECK(plasma.medium->grid->size == modern::kPlasmaGrid && !plasma.splats);
     CHECK(plasma.particles->count == modern::kPlasmaStars);
+    // PLASMA PLANET's card: the cloud shell's grid, as the low pass bakes it; the scene's own cards are the
+    // cue lines at any detail.
+    const int planetChapter = chapterOf(show::Effect::PlasmaPlanet);
+    const show::TimelineFrame planet = at(planetChapter, 3.0);
+    std::printf("(k) %s: card \"%s\"\n", planet.title, planet.nowCard);
+    const std::vector<std::uint64_t> shell = cardNumbers(planet.nowCard);
+    CHECK(shell.size() == 4 && shell[1] == modern::kPlanetCloudGrid[0] && shell[2] == modern::kPlanetCloudGrid[1] &&
+          shell[3] == modern::kPlanetCloudGrid[2]);
+    const modern::Nebula small{kTestDetail};
+    for (const show::Effect e : {show::Effect::Plasma, show::Effect::Nebula, show::Effect::PlasmaPlanet}) {
+        const show::TimelineFrame head = at(chapterOf(e), 3.0);
+        CHECK(full.nowCard(e) == head.nowCard && small.nowCard(e) == head.nowCard);
+    }
+    const modern::PlasmaPlanetTimes planetTimes = modern::plasmaPlanetTimes(planet);
+    const modern::SceneFrame lowPass = full.frame(at(planetChapter, planetTimes.lowPass + 1.0));
+    const auto& cloud = lowPass.medium->grid->size;
+    CHECK(cloud[0] == modern::kPlanetCloudGrid[0] && cloud[2] == modern::kPlanetCloudGrid[1] &&
+          cloud[1] == modern::kPlanetCloudGrid[2]);
     // Detail scales the grid by its cube root (never below the minimum) and the splats.
     CHECK(modern::nebulaGridSize(show::Effect::Nebula, kTestDetail) == (std::array<std::uint32_t, 3>{40u, 40u, 40u}));
     CHECK(modern::nebulaGridSize(show::Effect::Nebula, {1e-9f})[0] == modern::kMinNebulaGrid);
@@ -529,6 +553,52 @@ void testProjectedCentre(gfx::Context& ctx) {
     CHECK(luminance > 0.f);
 }
 
+// PLASMA on its accent: the camera has crossed into the cloud, which covers the frame's centre (T < 0.5).
+void testPlasmaInside(gfx::Context& ctx) {
+    constexpr std::uint32_t kW = 160, kH = 90;
+    const int chapter = chapterOf(show::Effect::Plasma);
+    const double accent = at(chapter, 0.0).accentSeconds;
+    const std::vector<Rendered> r = renderVolumes(ctx, show::Effect::Plasma, {accent}, kW, kH, 2, kTestDetail);
+    double t = 0;
+    for (std::uint32_t y = kH / 2 - 1; y <= kH / 2; ++y)
+        for (std::uint32_t x = kW / 2 - 1; x <= kW / 2; ++x)
+            t += 0.25 * r[0].volume.at(x, y, 3);
+    std::printf("(t) PLASMA on its accent (%.2f s): T %.3f at the frame's centre\n", accent, t);
+    CHECK(t < 0.5);
+}
+
+// --- (u) PLASMA PLANET's sunrise
+// -------------------------------------------------------------------------------
+
+void testSunrise() {
+    const int chapter = chapterOf(show::Effect::PlasmaPlanet);
+    const modern::PlasmaPlanetTimes times = modern::plasmaPlanetTimes(at(chapter, 0.0));
+    const double end = at(chapter, 0.0).chapterDuration;
+    std::printf("(u) PLASMA PLANET: crane %.3f s, sunrise (D) %.3f s = show %.3f, low pass %.3f s\n",
+                times.craneStart, times.sunrise, show::chapterStart(chapter) + times.sunrise, times.lowPass);
+    CHECK(std::abs(show::chapterStart(chapter) + times.sunrise - 468.55) < 0.03);
+    // The sun stays behind the planet until D and clears the limb on D, within a frame: from then on it is up.
+    double rise = -1;
+    float previous = -1e9f;
+    for (double t = 0.0; t < end; t += 1.0 / 240.0) {
+        const float clearance = modern::plasmaPlanetSunClearance(modern::nebulaCamera(at(chapter, t)).eye);
+        if (t < times.sunrise - 1.0 / 60.0)
+            CHECK(clearance < 0.f);
+        if (t >= times.sunrise)
+            CHECK(clearance >= 0.f);
+        if (previous < 0.f && clearance >= 0.f && rise < 0)
+            rise = t;
+        previous = clearance;
+    }
+    std::printf("(u) the sun's disc centre clears the limb at %.4f s (D %.4f s)\n", rise, times.sunrise);
+    CHECK(std::abs(rise - times.sunrise) < 1.0 / 60.0);
+    // The shots change on the bar lines.
+    CHECK(modern::nebulaCamera(at(chapter, times.craneStart - 1e-3)).shot == 0u &&
+          modern::nebulaCamera(at(chapter, times.craneStart + 1e-3)).shot == 1u);
+    CHECK(modern::nebulaCamera(at(chapter, times.sunrise + 1e-3)).shot == 2u &&
+          modern::nebulaCamera(at(chapter, times.lowPass + 1e-3)).shot == 3u);
+}
+
 // The smallest clearance between the camera's line to star A and the pillars' analytic capsules (negative:
 // the line passes through a pillar).
 float heroClearance(const Camera& camera) {
@@ -623,14 +693,33 @@ void renderLook(gfx::Context& ctx, const std::filesystem::path& dir, std::uint32
     std::vector<double> times2;
     for (const Shot& s : shots)
         times2.push_back(show::chapterStart(s.effect == show::Effect::Plasma ? plasma : nebula) + s.local);
+    // A development aid: any show times ("t1,t2,..."), of any chapter, named by their time.
+    std::vector<std::string> names;
+    if (const char* list = std::getenv("EVO_LOOK_SHOW_TIMES")) {
+        shots.clear();
+        times2.clear();
+        std::string text = list;
+        for (std::size_t at = 0; at < text.size();) {
+            const std::size_t comma = std::min(text.find(',', at), text.size());
+            const std::string item = text.substr(at, comma - at);
+            times2.push_back(std::stod(item));
+            names.push_back("t" + item);
+            shots.push_back({show::Effect::Nebula, 0.0, names.back().c_str()});
+            at = comma + 1;
+        }
+        for (std::size_t i = 0; i < shots.size(); ++i)
+            shots[i].name = names[i].c_str();
+    }
     renderer.prepare(times2);
     std::filesystem::create_directories(dir);
     for (std::size_t i = 0; i < shots.size(); ++i) {
         const auto start = std::chrono::steady_clock::now();
         show::TimelineFrame f = show::sampleTimeline(times2[i]);
-        f.era = 1.f;
-        f.wipe = 1.f;
-        f.eraCut = 0.f;
+        if (!std::getenv("EVO_LOOK_KEEP_ERA")) {
+            f.era = 1.f;
+            f.wipe = 1.f;
+            f.eraCut = 0.f;
+        }
         VkCommandBuffer cmd = ring.begin();
         renderer.render(cmd, f);
         readback.record(cmd, renderer.output());
@@ -690,13 +779,40 @@ int main(int argc, char** argv) {
         timed("m", [&] { testStars(ctx); });
         timed("b", [&] { testBake(ctx); });
         timed("h", [&] { testPlasmaHue(ctx); });
-        timed("t", [&] { testProjectedCentre(ctx); });
+        timed("t", [&] {
+            testProjectedCentre(ctx);
+            testPlasmaInside(ctx);
+        });
+        timed("u", [&] { testSunrise(); });
         timed("r", [&] { testReveal(ctx); });
         timed("s", [&] {
+            // The sweep at PLASMA PLANET's scale (its orbit is thousands of units out), then the two clouds'
+            // own camera steps at theirs, and the planet's view turning smoothly.
             test::SweepLimits limits;
-            limits.maxCameraStep = 0.6f;
+            limits.maxCameraStep = 40.f;
             const test::SweepStats stats = test::checkSceneSweep(SceneId::Nebula, limits);
-            CHECK(stats.frames > 1500);
+            CHECK(stats.frames > 3000);
+            for (const show::Effect e : {show::Effect::Plasma, show::Effect::Nebula, show::Effect::PlasmaPlanet}) {
+                const int chapter = chapterOf(e);
+                const double duration = at(chapter, 0.0).chapterDuration;
+                double worstStep = 0, worstTurn = 0;
+                Camera previous = modern::nebulaCamera(at(chapter, 0.0));
+                for (double t = 1.0 / 60.0; t < duration; t += 1.0 / 60.0) {
+                    const Camera c = modern::nebulaCamera(at(chapter, t));
+                    if (c.shot == previous.shot) {
+                        const Vec3 a = modern::normalize(c.target - c.eye), b = modern::normalize(previous.target - previous.eye);
+                        worstStep = std::max({worstStep, double(modern::length(c.eye - previous.eye)),
+                                              double(modern::length(c.target - previous.target))});
+                        worstTurn = std::max(worstTurn, std::acos(std::clamp(double(modern::dot(a, b)), -1.0, 1.0)) * 57.29578);
+                    }
+                    previous = c;
+                }
+                std::printf("(s) %s: camera steps at most %.3f units and %.3f degrees a frame within a shot\n",
+                            show::effectName(e), worstStep, worstTurn);
+                CHECK(worstTurn < 1.0);
+                if (e != show::Effect::PlasmaPlanet)
+                    CHECK(worstStep <= 0.6);
+            }
         });
         timed("p", [&] { test::checkChapterPictures(ctx, SceneId::Nebula); });
         CHECK(ctx.validationMessageCount() == 0);

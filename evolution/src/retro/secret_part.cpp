@@ -1,8 +1,8 @@
 #include "retro/secret_part.hpp"
 
+#include "modern/scenes/cosmos.hpp"
 #include "modern/scenes/glass.hpp"
 #include "modern/scenes/particles.hpp"
-#include "modern/scenes/ship_asset.hpp"
 #include "retro/boot.hpp"
 #include "retro/glenz.hpp"
 #include "retro/palette.hpp"
@@ -518,7 +518,7 @@ double secretDuration(const SecretInput& input) {
 SecretStats secretStats() {
     SecretStats stats;
     stats.photons = modern::glassCard(show::Effect::Cathedral).exportPhotons;
-    stats.stars = modern::kShipStars;
+    stats.stars = modern::kGalaxyStars;
     stats.particles = modern::kDotsParticles;
     stats.frames = static_cast<std::uint64_t>(std::ceil(60 * show::showDuration() - 1e-9));
     return stats;

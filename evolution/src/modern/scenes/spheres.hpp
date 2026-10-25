@@ -1,20 +1,24 @@
 #pragma once
 
-// Spheres (the Spheres scene): the 2026 side of RAYTRACE, SPHERE STORM and RAYTRACE INFINITY, all analytic
-// spheres (analytic spheres), one scene object for the three chapters.
+// Spheres: the 2026 side of RAYTRACE, SPHERE STORM and RAYTRACE INFINITY, analytic spheres in one scene
+// object for the three chapters.
 //
 // - RAYTRACE: the 1993 "precalculated" raytrace (retro/raytrace.*) path traced: its six spheres at the same
 //   places at the same time (retro::raytraceSpheres), the central chrome one, four chrome ones and the
 //   emerald glass one orbiting it, plus 42 more chrome, gold, copper and coloured glass spheres bouncing on
 //   the beat round them, over an endless red and white lacquered checkerboard (1 unit squares, as in 1993)
-//   under a Day sky whose sun stands where 1993's point light was, and two large soft rect lights. Until the
-//   accent the camera is 1993's (so the beat swaps show one composition); from the accent it breaks free.
+//   under a Day sky whose sun stands where 1993's point light was, and two large soft rect lights. The air
+//   has depth: a height fog that turns the far board and the horizon into haze, and a thin cirrus deck high
+//   over it (a grid medium, shaders/modern/spheres_medium.comp). The board and its tiles receive the balls'
+//   caustics as a photon map (sharp, without the sun -> ball -> board grain). Until the drop the camera is
+//   1993's (so the beat swaps show one composition); on the drop it breaks free and the sun's disc widens.
 // - SPHERE STORM: kStormSpheres stateless particle spheres (shaders/modern/particles_spheres.comp, mirrored
 //   by spheresParticle) in a vortex over a black mirror floor at dusk; the first kStormEmissive glow and are
-//   the light tree's lights.
+//   the light tree's lights, ember on five of its six ribbons and ice on one.
 // - RAYTRACE INFINITY: a lattice of chrome spheres without end, gold ones and glowing lanterns among them:
 //   the kInfinitySpheres lattice points round the falling camera, recycled as it falls (the same particle
-//   shader, mode 1). Until participating media's fog lands, the spheres shrink away into the sky with distance instead.
+//   shader, mode 1), in a thin haze that gives the halls depth; the spheres also shrink away with distance,
+//   so the lattice's edge never shows.
 //
 // World units are 1993's (the board's squares are 1 unit), +y up.
 
@@ -68,7 +72,8 @@ std::uint32_t stormEmissiveCount(SceneDetail detail);
 float stormRise(const show::TimelineFrame& frame);
 
 // The particle shader's params (shaders/modern/particles_spheres.comp) of a SPHERE STORM frame, mode 0:
-// (count, emissive count, radius scale, 0), (energy, kick, rise, 0). The radius scale grows as the detail
+// (count, emissive count, radius scale, 0), (energy, kick, rise, 0), (drop seconds, bar seconds, 0, 0): the
+// ribbons twist up to one turn a bar from the drop. The radius scale grows as the detail
 // shrinks (the cube root of the lost count, at most 4), so a test's small field still fills about the same
 // volume.
 std::array<float, 16> stormParams(const show::TimelineFrame& frame, SceneDetail detail);
@@ -101,13 +106,15 @@ Camera raytraceRetroCamera();
 // them and bounce on the beat (landing on beats; harder with energy).
 std::array<RaytraceBall, kRaytraceSphereCount> raytraceBalls(const show::TimelineFrame& frame);
 
-// The camera of a Spheres chapter's frame (a pure function of the effect, localSeconds, chapterDuration and
-// accentSeconds):
-//   RAYTRACE           shot 0 until the accent: 1993's camera (retro::raytraceCamera); shot 1: a low orbit
-//                      round the central sphere with a shallow depth of field; shot 2 (the last third after
-//                      the accent): a crane rising over the ring
-//   SPHERE STORM       shot 0 until the accent: a slow orbit closing in on the vortex; shot 1: low under the
-//                      funnel, looking up into it
+// The camera of a Spheres chapter's frame (a pure function of the effect, localSeconds, chapterDuration,
+// accentSeconds and the beat grid), on the four lenses, cut on bar lines:
+//   RAYTRACE           1993's camera until the drop, then a crane back and up over two bars as the lens
+//                      closes to 35 mm; low 85 mm shots among the balls with the horizon on the lower third
+//                      (tracking past the ring, a glass ball's caustic, chrome in chrome, the centre sphere);
+//                      from 7 bars after the drop a low wide 35 mm with the mirror moon on the right third
+//   SPHERE STORM       85 mm at floor level on the spiral at rest against the dusk; 35 mm backing off as it
+//                      rises (from 4 bars before the drop); on the drop 24 mm under the vortex looking up
+//                      through the ribbons against the dusk; from 3 bars after it, an orbit at mid height
 //   RAYTRACE INFINITY  the camera falls through the lattice all chapter on a void column; shot 0 until the
 //                      accent looks down along a diagonal, shot 1 along the lattice's z axis (the endless
 //                      hall), shot 2 (the last third) straight down, rolling

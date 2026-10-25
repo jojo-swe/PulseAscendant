@@ -409,9 +409,17 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         extras.density = &medium_->density();
         extras.majorant = &medium_->majorant();
     }
+    // An export may submit what the frame recorded so far before each slice (the tracer binds its pipeline
+    // and descriptors again after the callback), so no submit holds more than one slice's trace.
+    const bool split = state.submitPerSlice && !interactive;
+    const auto beforeSlice = [&](VkCommandBuffer commands, std::uint32_t k) {
+        if (split)
+            ring_.split(); // the same command buffer records on
+        recordParticles(commands, k);
+    };
     tracer_->trace(cmd, *gpus_[indexOf(id)], slices, continues ? previousCamera_ : std::nullopt, trace,
                    retroImage, extras,
-                   particles ? modern::PathTracer::SliceCallback(recordParticles) : nullptr);
+                   particles || split ? modern::PathTracer::SliceCallback(beforeSlice) : nullptr);
 
     if (state.reset != HistoryReset::None) {
         denoiser_->resetHistory();

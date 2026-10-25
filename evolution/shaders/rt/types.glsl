@@ -27,8 +27,13 @@ const uint kPatternCityRound = 19u;
 const uint kPatternCityStreet = 20u;
 const uint kPatternCityTrail = 21u;
 const uint kPatternCitySign = 22u;
+const uint kPatternSeaBead = 32u;   // detail_patterns.glsl: Pbr spheres, the sea's glitter
+const uint kPatternLightRing = 33u; // Pbr: DOTS' floor and its landing ring
+const uint kPatternCrtGlass = 34u;  // Emissive (retro texture): the Studio's CRT glass, dust and a fingerprint
+const uint kPatternKeyCap = 35u;    // Pbr: the Studio's yellowed key caps
 const uint kPatternWormholeWall = 36u; // the Ship's WORMHOLE (pbr.rchit): the tunnel's wall, a ring's basalt
 const uint kPatternWormholeRing = 37u;
+const uint kPatternPlasmaSea = 44u; // Pbr class: PLASMA PLANET's sea (plasma_sea.glsl)
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;

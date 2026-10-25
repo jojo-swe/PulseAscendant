@@ -37,7 +37,17 @@ prompt) boot_50, finale_50, portal_50, the REBOOT and RETURN captures and two st
 stream_finale; the Studio's new cameras every Studio capture and stream, and flyby_2026, now the Studio. The
 Studio's mean display luminance rose by up to 714 % (reboot_60, now REBOOT's close-up on the screen) and fell by
 up to 81 % (portal_50, the CRT nearly dark once the grid has switched off).
-Then regenerated after the city chapter polish and the lit wormhole tunnel: stream_studio_ascent renders the city, and studio_night_40 moved with the shallower brushed-metal grooves (mean luminance +0.01 %).
+Then regenerated for the polish of the Studio, DOTS and the Spheres (the Studio's sky, town glow, dawn,
+CRT glass, key caps and per-shot exposure; DOTS' identity colours, logo and cameras; RAYTRACE's air, caustics
+and cameras): the Studio's captures and streams, flyby_2026, raytrace_2026 and stream_dots changed; boot_50,
+plasma_wipe, nebula_40 and galaxy_20 stayed byte for byte. The night darkened: studio_night_40 -36 %,
+studio_night_acc -49 %, reboot_60 -23 %.
+Then regenerated for the polish of the Nebula, Tunnel, Cosmos and Singularity scenes (PLASMA's strands, NEBULA's
+relief and shafts, GALAXY's arms and REBOOT's cube of stars): galaxy_20, nebula_40 and plasma_wipe changed; nothing
+else moved.
+Then regenerated after the polish merges (the city's ASCENT, the nebula, GALAXY and REBOOT's cube of stars, and the
+Studio's DOS listing): galaxy_20, nebula_40, plasma_wipe, reboot_10, reboot_60, stream_studio_ascent and
+studio_night_40 changed; the Studio's luminance moved by 0.05 % or less.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
@@ -45,16 +55,17 @@ How later tasks use it (run from evolution/ after building the linux preset):
     python3 tests/baseline/hash_outputs.py build/linux/bin/Evolution build/linux/build-out/baseline \\
         --check tests/baseline/SUMS --luminance tests/baseline/LUMINANCE
 
-- A task whose output must stay byte-exact (a scene without a medium, a scene
+- A change whose output must stay byte-exact (a scene without a medium, a scene
   without receivers, and every pure ABI/refactor change) passes --check: every sum must match.
-- A task that changes the picture on purpose (scene environments, the integrator, the Studio
+- A change that moves the picture on purpose (scene environments, the integrator, the Studio
   light rig, ...) checks the luminance instead: --luminance prints each Studio capture's change against the
-  committed value (within 5 %), and the task commits a new SUMS/LUMINANCE in the same commit,
+  committed value (within 5 %), and the change commits a new SUMS/LUMINANCE in the same commit,
   saying so in its commit message, so the next change compares against the new reference.
 
 Usage: hash_outputs.py <Evolution> <outdir> [--check SUMS] [--luminance LUMINANCE] [--write]
   --write   also writes <outdir>/SUMS and <outdir>/LUMINANCE (copy them here to update the reference).
-Exit code 1 when --check finds a difference."""
+Exit code 1 when --check finds a difference.
+"""
 
 import argparse
 import hashlib

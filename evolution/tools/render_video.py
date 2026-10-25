@@ -12,8 +12,10 @@ Chunks. Chunk k is frames [k * chunk * fps, (k + 1) * chunk * fps) of the range 
 with `--render-stream --time START --first-frame F`, so every frame is the very frame a single stream of the
 whole range would give, and encoded into <out>.parts/chunk_KKKKK.mkv. A chunk is written as .part and renamed
 when ffmpeg finishes; a rerun skips every chunk whose file holds exactly the frames it should (ffprobe), so an
-interrupted render resumes where it stopped. Change the size, rate, spp or codec and the parts directory no longer
-matches: the script refuses rather than mixing them (delete it or pick another --out).
+interrupted render resumes where it stopped. Change the size, rate, spp or codec, or rebuild the executable or its
+shaders (the parts directory's settings.json records their size, time and hashes), and the parts directory no
+longer matches: the script refuses rather than mixing them (delete it or pick another --out). A chunk that fails
+(the app or ffmpeg exits with an error, e.g. a lost GPU device) is rendered once more before the script stops.
 
 Codecs. x264: libx264 -preset slow -crf 12, High profile, 4:2:0, converted from the stream's full-range RGB with
 the BT.709 matrix into TV range and tagged BT.709 (ffmpeg's default matrix is BT.601). hevc_nvenc: the same
@@ -21,7 +23,8 @@ conversion and tags on an NVIDIA encoder. ffv1: lossless RGB in Matroska, for ch
 
 Assembly. The chunks are joined without re-encoding (concat, -c copy), and the music, cut sample-exact to the
 same range and padded with silence to the video's length, is muxed as AAC-LC at 384 kb/s, 48 kHz; MP4 gets
-+faststart.
++faststart and a video timescale of the frame rate, so every frame lasts exactly 1/fps (the Matroska chunks
+keep millisecond timestamps).
 
 --coda appends, after the show, 12 s of black and silence, then 28 s of `--render-stream --secret-part` over the
 music's first 28 s, then 2 s of black and silence.
@@ -34,6 +37,7 @@ Other options go to Evolution unchanged after `--`, e.g. `-- --detail 0.5`.
 """
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -47,6 +51,8 @@ CODA_BLACK_BEFORE = 12.0
 CODA_PART = 28.0
 CODA_BLACK_AFTER = 2.0
 AUDIO_RATE = 48000
+FINGERPRINT_HEAD = 1 << 20  # the executable's bytes hashed for its fingerprint
+ATTEMPTS = 2  # a failed chunk is rendered once more
 
 VIDEO_ARGS = {
     "x264": ["-c:v", "libx264", "-preset", "slow", "-crf", "12", "-profile:v", "high", "-pix_fmt", "yuv420p"],
@@ -102,12 +108,10 @@ def app_command(args, time_s, first_frame, frames, extra):
             "--duration", repr(frames / args.fps), *extra]
 
 
-def encode_piece(args, path, frames, source):
-    """Encodes `frames` frames into `path` (via path.part), from an app command or from black (None)."""
-    if os.path.exists(path) and probe_frames(path) == frames:
-        return False
-    partial = path + ".part"
+def encode_attempt(args, partial, frames, source):
+    """One try at encoding `frames` frames into `partial`; None on success, else what went wrong."""
     encoder = subprocess.Popen(encode_command(args, partial), stdin=subprocess.PIPE)
+    app = None
     try:
         if source is None:
             black = bytes(args.width * args.height * 3)
@@ -121,15 +125,34 @@ def encode_piece(args, path, frames, source):
             app_code = app.wait()
         enc_code = encoder.wait()
     except BaseException:
-        encoder.kill()
+        # Ctrl+C or an error here: stop the app too, or it keeps rendering on the GPU.
+        for process in (app, encoder):
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait()
         raise
     if app_code != 0 or enc_code != 0:
-        sys.exit(f"{os.path.basename(path)}: Evolution exited with {app_code}, ffmpeg with {enc_code}")
+        return f"Evolution exited with {app_code}, ffmpeg with {enc_code}"
     got = probe_frames(partial)
     if got != frames:
-        sys.exit(f"{os.path.basename(path)}: expected {frames} frames, ffmpeg wrote {got}")
-    os.replace(partial, path)
-    return True
+        return f"expected {frames} frames, ffmpeg wrote {got}"
+    return None
+
+
+def encode_piece(args, path, frames, source):
+    """Encodes `frames` frames into `path` (via path.part), from an app command or from black (None); a failed
+    attempt (e.g. the GPU lost its device) is tried once more."""
+    if os.path.exists(path) and probe_frames(path) == frames:
+        return False
+    partial = path + ".part"
+    for attempt in range(1, ATTEMPTS + 1):
+        error = encode_attempt(args, partial, frames, source)
+        if error is None:
+            os.replace(partial, path)
+            return True
+        if attempt < ATTEMPTS:
+            log(f"{os.path.basename(path)}: {error}; trying once more")
+    sys.exit(f"{os.path.basename(path)}: {error} (twice)")
 
 
 def plan_chunks(args, total):
@@ -137,14 +160,37 @@ def plan_chunks(args, total):
     return [(k, k * per_chunk, min(per_chunk, total - k * per_chunk)) for k in range((total + per_chunk - 1) // per_chunk)]
 
 
+def build_fingerprint(exe):
+    """What tells one build from another: the executable's size, modification time and the SHA-256 of its first
+    MiB, and the SHA-256 of its compiled shaders (bin/shaders/*.spv beside it: a shader-only change leaves the
+    executable as it was)."""
+    stat = os.stat(exe)
+    with open(exe, "rb") as f:
+        head = hashlib.sha256(f.read(FINGERPRINT_HEAD)).hexdigest()
+    shaders = hashlib.sha256()
+    folder = os.path.join(os.path.dirname(os.path.abspath(exe)), "shaders")
+    names = sorted(n for n in os.listdir(folder) if n.endswith(".spv")) if os.path.isdir(folder) else []
+    for name in names:
+        shaders.update(name.encode() + b"\0")
+        with open(os.path.join(folder, name), "rb") as f:
+            shaders.update(hashlib.sha256(f.read()).digest())
+    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns, "sha256_head": head,
+            "shaders": len(names), "shaders_sha256": shaders.hexdigest()}
+
+
 def check_parts_dir(args, parts):
     settings = {"width": args.width, "height": args.height, "fps": args.fps, "spp": args.spp, "codec": args.codec,
-                "start": args.start, "chunk": args.chunk, "extra": args.extra}
+                "start": args.start, "chunk": args.chunk, "extra": args.extra, "build": build_fingerprint(args.exe)}
     stamp = os.path.join(parts, "settings.json")
     if os.path.exists(stamp):
         with open(stamp) as f:
-            if json.load(f) != settings:
-                sys.exit(f"{parts} holds a render with other settings; delete it or choose another --out")
+            recorded = json.load(f)
+        others = {k: v for k, v in settings.items() if k != "build"}
+        if recorded.get("build") != settings["build"] and {k: v for k, v in recorded.items() if k != "build"} == others:
+            sys.exit(f"{parts} holds chunks of another build of Evolution (the executable or its shaders changed); "
+                     "delete it or choose another --out, so the video does not mix two builds")
+        if recorded != settings:
+            sys.exit(f"{parts} holds a render with other settings; delete it or choose another --out")
     else:
         os.makedirs(parts, exist_ok=True)
         with open(stamp, "w") as f:
@@ -220,7 +266,8 @@ def render(args, info):
                "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-profile:a", "aac_low",
                "-b:a", "384k", "-ar", str(AUDIO_RATE)]
     if mp4:
-        command += ["-movflags", "+faststart"]
+        # The chunks' millisecond timestamps, rounded to the frame rate's timescale: every frame 1/fps.
+        command += ["-movflags", "+faststart", "-video_track_timescale", str(args.fps)]
     if args.codec == "hevc_nvenc" and mp4:
         command += ["-tag:v", "hvc1"]
     subprocess.run(command + [args.out], check=True)

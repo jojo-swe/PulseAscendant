@@ -1040,12 +1040,17 @@ void testRig() {
             CHECK(f.materials[modern::Studio::kScreenBackMaterial].emissionScale ==
                   modern::Studio::kScreenBackLevel * rig.screen);
             CHECK(f.exposureEV == modern::studioExposureAt(t));
-            if (t.effect != Effect::Portal && t.effect != Effect::Flyby && t.effect != Effect::Return)
+            if (t.effect != Effect::Portal && t.effect != Effect::Flyby && t.effect != Effect::Return &&
+                t.effect != Effect::StudioNight && t.effect != Effect::Reboot)
                 CHECK(f.exposureEV == modern::studioExposureEV(t.effect) &&
                       rig.screen == modern::studioRig(t.effect).screen);
+            // At dawn (RETURN, REBOOT) the moon has set: its emitter and light are dark.
+            const bool dawn = t.effect == Effect::Return || t.effect == Effect::Reboot;
+            CHECK((f.materials[modern::Studio::kMoonMaterial].emissionScale == 0.f) == dawn);
+            CHECK((f.lights[modern::Studio::kMoonLight].emission[0] == 0.f) == dawn);
             for (std::size_t i = 0; i < f.materials.size(); ++i)
                 if (i != modern::Studio::kLampMaterial && i != modern::Studio::kScreenMaterial &&
-                    i != modern::Studio::kScreenBackMaterial)
+                    i != modern::Studio::kScreenBackMaterial && !(dawn && i == modern::Studio::kMoonMaterial))
                     CHECK(std::memcmp(&f.materials[i], &statics.materials[i], sizeof(rt::Material)) == 0);
             CHECK((f.materials[modern::Studio::kLedMaterial].flags & rt::kMaterialCameraOnlyEmission) != 0);
         }

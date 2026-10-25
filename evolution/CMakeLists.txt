@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# The sources are UTF-8 without a BOM (the cards' and the scroller's strings hold non-ASCII text): MSVC would
+# otherwise read them in the system's ANSI code page and mangle those strings outside code page 1252.
+add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 
 include(cmake/Shaders.cmake)
 
@@ -705,7 +708,8 @@ add_test(NAME no_wait_idle
 # The Python music pipeline: beat tracker, placeholder song and the end-to-end header generation.
 add_test(NAME python_tools
     COMMAND Python3::Interpreter -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests -p "test_*.py")
-set_tests_properties(python_tools PROPERTIES TIMEOUT 600)
+# Slow (minutes): labelled so the test presets leave it out; the *-slow presets run it alone.
+set_tests_properties(python_tools PROPERTIES TIMEOUT 600 LABELS slow)
 
 # Opens a real window, so it needs an X server; off by default and run under Xvfb.
 option(EVO_RUNTIME_TESTS "Run tests that open a window (needs xvfb-run)" OFF)

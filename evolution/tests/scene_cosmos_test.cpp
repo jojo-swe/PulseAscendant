@@ -2,12 +2,16 @@
 // any message.
 //
 // (k) the cards: GALAXY's names 16,777,216 stars and 256x64x256 dust, ASCENDANT's 2,097,152 particles and
-//     16,777,216 stars, and those are the full-detail configuration (the frames' counts, the capacities); the
-//     galaxy's frames splat 3x3 in the window;
+//     16,777,216 stars, and those are the full-detail configuration (the frames' counts, the capacities) and
+//     the scene's own nowCard at any detail; the galaxy's frames splat 3x3 in the window;
+// (a) also: the text waypoint (waypointTargets) holds every particle on its pixel of the line;
 // (a) ASCENDANT's flight (the CPU twin): before its lift-off every particle is in the core, at the waypoint and
 //     through its hold every particle is on its waypoint formation, on the accent every particle is on its
 //     logo target, until the release it stays within the logo's sway, after it it has scattered;
-// (m) the particle shader equals the CPU twin within 1e-4 for every particle of a 1/256 field at 9 times;
+// (m) the particle shader equals the CPU twin within 1e-4 for every particle of a 1/256 field at 9 times, and at
+//     2 more with the text waypoint (the shader's font table and pixel walk against text::glyph's);
+// (r) REBOOT's crossing: from its D the camera flies on into GALAXY's approach without a jump, and on its accent
+//     the 1993 cube's 512 points are stars exactly where REBOOT's CRT drew them, frozen from then on;
 // (d) the dust lanes: in GALAXY's edge-on approach the volume layer's transmittance is below 0.9 where the
 //     CPU's dust (integrated along the pixel's ray) is thick, and above it where there is none;
 // (p) checkChapterPictures for both chapters and (s) checkSceneSweep (scene_fixture.hpp).
@@ -27,15 +31,21 @@
 #include "modern/scene.hpp"
 #include "modern/scenes/cosmos.hpp"
 #include "modern/scenes/logo_targets.hpp"
+#include "modern/scenes/shots.hpp"
 #include "render/modern_stage.hpp"
 #include "render/renderer.hpp"
 #include "rt/particles.hpp"
+#include "show/director.hpp"
 #include "show/timeline.hpp"
+#include "text/font8x8.hpp"
+#include "retro/boot.hpp"
+#include "retro/dots.hpp"
 
 #include "scene_fixture.hpp"
 #include "test_env.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -129,6 +139,21 @@ void testCards() {
     const modern::Cosmos small{kTestDetail};
     CHECK(small.starCount() == 65536u && small.particleCount() == 8192u);
     CHECK(small.dustSize()[0] == 40u && small.dustSize()[1] == 10u);
+    // The scene's own cards (what the screen shows) are the cue lines, their numbers the configuration's at
+    // any detail.
+    for (const modern::Cosmos* scene : {&full, &small}) {
+        CHECK(scene->nowCard(show::Effect::Galaxy) == galaxy.nowCard);
+        CHECK(scene->nowCard(show::Effect::Ascendant) == ascendant.nowCard);
+        CHECK(scene->nowCard(show::Effect::Dots).empty());
+    }
+    const std::string stars = modern::groupThousands(modern::kGalaxyStars) + " STARS";
+    CHECK(contains(full.nowCard(show::Effect::Galaxy).c_str(), stars.c_str()));
+    CHECK(contains(full.nowCard(show::Effect::Ascendant).c_str(), stars.c_str()));
+    CHECK(contains(full.nowCard(show::Effect::Ascendant).c_str(),
+                   (modern::groupThousands(modern::kAscendantParticles) + " PARTICLES").c_str()));
+    const std::string dust = std::to_string(modern::kGalaxyDust[0]) + "×" + std::to_string(modern::kGalaxyDust[1]) +
+                             "×" + std::to_string(modern::kGalaxyDust[2]) + " DUST";
+    CHECK(contains(full.nowCard(show::Effect::Galaxy).c_str(), dust.c_str()));
 }
 
 // --- (a) the flight
@@ -151,16 +176,14 @@ void testFlight() {
 
     const std::uint32_t count = modern::kAscendantParticles;
     const modern::ParticleFrame p = modern::ascendantParticleFrame(at(chapter, t.accent), count);
-    const auto formation = static_cast<std::uint32_t>(p.params[6]);
-    CHECK(formation == 1u);
+    CHECK(p.params[6] == 0.f); // the vortex, until a line is given
     const float cell = modern::kLogoCell;
     const Vec3 core = modern::kAscendantGalaxyCentre;
-    double worstLanding = 0, worstWaypoint = 0, farthestCore = 0, widestY = 0;
+    double worstLanding = 0, worstWaypoint = 0, farthestCore = 0;
     std::uint32_t scattered = 0;
     for (std::uint32_t id = 0; id < count; ++id) {
         const Vec3 target = modern::ascendantTarget(id, cell);
-        const Vec3 way = modern::ascendantWaypoint(formation, id, cell);
-        widestY = std::max(widestY, static_cast<double>(std::abs(way.y)));
+        const Vec3 way = modern::ascendantWaypoint(0, id, cell);
         const double landing = distance(v3(modern::ascendantParticle(id, t.accent, p.params).center), target);
         worstLanding = std::max(worstLanding, landing);
         for (const float w : {t.waypoint, t.waypoint + 0.5f * t.hold, t.waypoint + 0.999f * t.hold})
@@ -182,9 +205,48 @@ void testFlight() {
                 count, worstLanding, worstWaypoint, farthestCore, scattered, (count + 60) / 61);
     CHECK(worstLanding == 0.0);
     CHECK(worstWaypoint == 0.0);
-    CHECK(widestY <= 4.01 * cell); // the greeting, not the vortex
     CHECK(farthestCore < 40.0);
     CHECK(scattered > (count / 61) * 9 / 10);
+    // A text waypoint (formation 1): every particle holds its place in the text, which is the font's.
+    const modern::WaypointTargets text = modern::waypointTargets("Hi. yes, you.");
+    CHECK(text.text == "HI. YES, YOU.");
+    CHECK(modern::decodeWaypointText(text.packed).substr(0, 13) == "HI. YES, YOU.");
+    std::uint32_t litExpected = 0;
+    for (const char c : text.text)
+        for (const std::uint8_t row : text::glyph(c))
+            litExpected += std::uint32_t(std::popcount(row));
+    CHECK(text.pixels.size() == litExpected);
+    const modern::ParticleFrame tp = modern::ascendantParticleFrame(at(chapter, t.accent), count, &text);
+    CHECK(tp.params[6] == 1.f);
+    double worstText = 0;
+    for (std::uint32_t id = 0; id < count; id += 13) {
+        const Vec3 way = modern::ascendantWaypoint(1, id, cell, {tp.params[12], tp.params[13], tp.params[14], tp.params[15]});
+        CHECK(distance(way, text.target(id, cell) + Vec3{0.f, 0.12f * 71.f * cell, -0.35f * 71.f * cell}) < 1e-6f);
+        worstText = std::max(worstText, double(distance(v3(modern::ascendantParticle(id, t.waypoint + 0.5f * t.hold,
+                                                                                            tp.params).center), way)));
+        CHECK(distance(v3(modern::ascendantParticle(id, t.accent, tp.params).center), modern::ascendantTarget(id, cell)) ==
+              0.f);
+        // Inside its font pixel of the line.
+        const std::uint32_t lit = std::uint32_t(text.pixels.size());
+        const modern::LogoPixel px = text.pixels[(id % (lit * modern::kWaypointDepth)) % lit];
+        const Vec3 local = text.target(id, cell);
+        CHECK(std::abs(local.x / cell + text.centre.x - float(px.column)) <= 0.5001f);
+        CHECK(std::abs(text.centre.y - local.y / cell - float(px.row)) <= 0.5001f);
+    }
+    CHECK(worstText == 0.0);
+    std::printf("(a) the text waypoint \"%s\": %zu lit pixels, every particle on it through the hold\n",
+                text.text.c_str(), text.pixels.size());
+    // The show itself spells the line for those four frames, and the logo still lands on the accent.
+    const modern::Cosmos shown;
+    const modern::ParticleFrame live = *shown.frame(at(chapter, t.waypoint + 0.5 * t.hold)).particles;
+    CHECK(live.params[6] == 1.f);
+    CHECK(live.params[5] == t.hold && std::abs(t.hold - 4.f / 60.f) < 1e-6f);
+    CHECK(modern::decodeWaypointText({live.params[12], live.params[13], live.params[14], live.params[15]})
+              .substr(0, 13) == "HI. YES, YOU.");
+    CHECK(std::abs(show::chapterStart(chapter) + t.accent - 646.18) < 0.03);
+    const modern::ParticleFrame landed = *shown.frame(at(chapter, t.accent)).particles;
+    CHECK(distance(v3(modern::ascendantParticle(0, t.accent, landed.params).center),
+                   modern::ascendantTarget(0, cell)) == 0.f);
     // Every logo target lies inside its font pixel (the shared table, logo_targets.hpp).
     for (std::uint32_t id = 0; id < 50000; id += 7) {
         const Vec3 target = modern::ascendantTarget(id, cell);
@@ -215,10 +277,15 @@ void testMirror(gfx::Context& ctx) {
                             t.release + 0.3,
                             t.release + 0.9};
     double worst = 0, worstEmission = 0;
-    for (const double local : times) {
+    const modern::WaypointTargets text = modern::waypointTargets("HI. YES, YOU.");
+    for (std::size_t pass = 0; pass < std::size(times) + 2; ++pass) {
+        // The last two passes: the text waypoint (the shader's font table and pixel walk against the CPU's).
+        const bool withText = pass >= std::size(times);
+        const double local = withText ? (pass == std::size(times) ? t.waypoint + 0.5 * t.hold : t.waypoint - 0.4)
+                                      : times[pass];
         const show::TimelineFrame f = at(chapter, local);
         const modern::SceneFrame frame = scene.frame(f);
-        const modern::ParticleFrame& p = *frame.particles;
+        const modern::ParticleFrame p = withText ? modern::ascendantParticleFrame(f, count, &text) : *frame.particles;
         const float seconds = float(f.localSeconds), previous = float(f.localSeconds - 1.0 / 60.0);
         VkCommandBuffer cmd = ring.begin();
         field.record(cmd, p.count, f.localSeconds, f.localSeconds - 1.0 / 60.0, p.params, p.material);
@@ -256,9 +323,69 @@ void testMirror(gfx::Context& ctx) {
             worstEmission = std::max(worstEmission, emission);
         }
     }
-    std::printf("(m) %u particles at 9 times equal the CPU twin: worst %.2e (relative to the distance), "
-                "emission %.2e\n",
+    std::printf("(m) %u particles at 9 times and 2 with the text waypoint equal the CPU twin: worst %.2e "
+                "(relative to the distance), emission %.2e\n",
                 count, worst, worstEmission);
+}
+
+// --- (r) REBOOT's crossing into the galaxy
+// -----------------------------------------------------------------
+
+void testReboot() {
+    const int galaxy = chapterOf(show::Effect::Galaxy);
+    const double start = show::chapterStart(galaxy);
+    const modern::RebootMarks m = modern::rebootMarks(at(galaxy, 0.0));
+    std::printf("(r) REBOOT's crossing %.3f, accent %.3f (show seconds)\n", start + m.crossing, start + m.accent);
+    CHECK(std::abs(start + m.crossing - 426.32) < 0.03 && std::abs(start + m.accent - 426.75) < 0.03);
+    // From the crossing the director shows GALAXY at negative chapter time, and the camera flies on without a
+    // jump into the chapter's own approach (shot 0) up to its cut.
+    const float cut = modern::shots::barsOf(at(galaxy, 0.0)).at(-4);
+    Camera previous{};
+    double worstStep = 0;
+    int frames = 0;
+    for (double t = start + m.crossing; t < start + cut; t += 1.0 / 60.0, ++frames) {
+        const show::TimelineFrame f = show::sceneFrame(show::sampleTimeline(t));
+        CHECK(f.effect == show::Effect::Galaxy);
+        const Camera c = modern::cosmosCamera(f);
+        CHECK(c.shot == 0u && c.fovYDegrees == modern::shots::kLens85);
+        if (frames > 0)
+            worstStep = std::max(worstStep, double(distance(c.eye, previous.eye)));
+        previous = c;
+    }
+    std::printf("(r) %d frames from the crossing to the cut, the eye at most %.2f units a frame\n", frames, worstStep);
+    CHECK(worstStep < 2.2 && frames > 600);
+    // On the accent the 1993 cube's 512 points are stars where REBOOT's CRT showed them: the 2026 camera sees
+    // each star in the direction DOTS' camera saw the point (its view-space x / z and y / z), and from then on
+    // the cube is frozen.
+    const show::TimelineFrame outer = show::sampleTimeline(start + m.accent + 1e-4);
+    const show::TimelineFrame f = show::sceneFrame(outer);
+    const modern::Cosmos scene{kTestDetail};
+    const modern::SplatFrame splats = *scene.frame(f).splats;
+    const Camera c = modern::cosmosCamera(f);
+    const modern::CameraBasis basis = modern::cameraBasis(c);
+    const auto retroFrame = std::uint32_t(std::floor(outer.localSeconds * 35.0));
+    const retro::DotsPoints points =
+        retro::dotsShapePoints(retro::DotsShape::Cube, retroFrame - retro::rebootCubeFrame(outer));
+    double worst = 0;
+    for (std::uint32_t k = 0; k < 512; ++k) {
+        const Vec3 d = modern::galaxyCubeStar(k, splats.params) - c.eye;
+        const double z = modern::dot(d, basis.forward);
+        CHECK(z > 0);
+        const double x26 = modern::dot(d, basis.right) / z, y26 = modern::dot(d, basis.up) / z;
+        const double z93 = points[k][2] + 6.0;
+        const double x93 = points[k][0] / z93, y93 = points[k][1] / z93;
+        if (k % 73 == 0 && std::getenv("EVO_CUBE_DEBUG"))
+            std::printf("  cube %u: 2026 (%.4f %.4f) 1993 (%.4f %.4f)\n", k, x26, y26, x93, y93);
+        worst = std::max({worst, std::abs(x26 - x93), std::abs(y26 - y93)});
+    }
+    std::printf("(r) the cube's stars on the accent: at most %.2e from the directions the CRT drew them in\n", worst);
+    CHECK(worst < 1e-4);
+    // ASCENDANT's white-out is post::Look's arc: the scene's exposure is flat.
+    const int ascendant = chapterOf(show::Effect::Ascendant);
+    for (double t = 0.0; t < at(ascendant, 0.0).chapterDuration; t += 0.25)
+        CHECK(modern::cosmosExposureEV(at(ascendant, t)) == modern::cosmosExposureEV(at(ascendant, 0.0)));
+    const modern::SplatFrame later = *scene.frame(show::sceneFrame(show::sampleTimeline(start + m.accent + 1.0))).splats;
+    CHECK(later.params[14] == splats.params[14] && later.params[15] == splats.params[15]);
 }
 
 // --- (d) the dust lanes
@@ -448,6 +575,7 @@ int main(int argc, char** argv) {
         timed("k", [&] { testCards(); });
         timed("a", [&] { testFlight(); });
         timed("m", [&] { testMirror(ctx); });
+        timed("r", [&] { testReboot(); });
         timed("d", [&] { testDustLanes(ctx); });
         timed("s", [&] {
             test::SweepLimits limits;

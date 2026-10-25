@@ -88,7 +88,8 @@ Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings
     : ring_(ring), timers_(ctx, ring, kMaxGpuScopes), crt_(checked(settings).crt), hud_(settings.hud),
       hudTitle_(settings.hudTitle), mode_(settings.mode), spp_(settings.spp),
       maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)),
-      shutterSeconds_(settings.mode == RenderMode::Export ? settings.shutterSeconds : 0.0), text_(ctx, ring),
+      shutterSeconds_(settings.mode == RenderMode::Export ? settings.shutterSeconds : 0.0),
+      submitPerSlice_(settings.mode == RenderMode::Export && settings.submitPerSlice), text_(ctx, ring),
       retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height, settings.detail,
                                         settings.sceneFactory, settings.sceneMap, settings.traceScale),
       compositor_(ctx, ring, text_, settings.width, settings.height),
@@ -177,7 +178,8 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
                                  frameSpp(mode_, spp_, history_.framesSinceReset()),
                                  maxBounces_,
                                  modern::frameSeedFor(scene.showSeconds, seedFrames),
-                                 shutterSeconds_};
+                                 shutterSeconds_,
+                                 submitPerSlice_};
         modern_.render(cmd, scene, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
         stats_.spp = state.spp;

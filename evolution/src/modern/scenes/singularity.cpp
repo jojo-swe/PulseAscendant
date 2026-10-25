@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace evo::modern {
 
@@ -88,7 +89,9 @@ Camera singularityCamera(const show::TimelineFrame& f) {
     const Station station = mix({-32.f, -4.f, 42.f}, {-95.f, 5.f, 9.f}, s);
     Key k = at(station);
     const CameraBasis basis = cameraBasis({k.eye, k.target, k.up, 31.8f});
-    k.target = k.target + basis.right * (0.9f * station.distance * s * s);
+    // The hole leaves the frame by the last bar, so the white-out finds nothing black in it.
+    k.target = k.target + basis.right * (1.7f * station.distance * s * std::sqrt(s)) +
+               basis.up * (0.5f * station.distance * s * s);
     return makeCamera(k, 31.8f, 3);
 }
 
@@ -105,11 +108,17 @@ Vec3 ringStarDirection(const show::TimelineFrame& f) {
 }
 
 float singularityExposureEV(const show::TimelineFrame& f) {
-    const Bars b = barsOf(f);
-    const auto t = static_cast<float>(f.localSeconds);
-    const auto end = static_cast<float>(f.chapterDuration);
-    // The last two bars burn to white (RETURN's first frame is white).
-    return 0.2f + 6.f * smooth01((t - (end - 2.f * b.bar)) / std::max(2.f * b.bar, 0.1f));
+    // Each shot's base exposure; the white-out of the fall is post::Look's authored arc (378 s to the cut).
+    switch (singularityCamera(f).shot) {
+    case 0:
+        return 0.4f; // the far approach: a thin line of disc on black
+    case 1:
+        return 0.1f;
+    case 2:
+        return 0.f; // the ring, held
+    default:
+        return 0.f;
+    }
 }
 
 Singularity::Singularity(SceneDetail detail) : stars_(singularityStarCount(detail)), grid_(discGridSize(detail)) {
@@ -138,9 +147,9 @@ SceneFrame Singularity::frame(const show::TimelineFrame& f) const {
     disc.densityScale = 1.f;
     disc.albedo = {0.f, 0.f, 0.f};
     disc.phaseG = 0.f;
-    disc.emissionScale = 1.1f * (1.f + 0.45f * bass); // the disc's brightness beats with the bass
-    disc.params = {kDiscHalfWidth, kDiscHalfHeight, 4.f * static_cast<float>(f.localSeconds), 0.55f + 0.4f * bass,
-                   kDiscInner, kDiscOuter, 0.62f, 3.f};
+    disc.emissionScale = 1.3f * (1.f + 0.45f * bass); // the disc's brightness beats with the bass
+    disc.params = {kDiscHalfWidth, kDiscHalfHeight, 4.f * static_cast<float>(f.localSeconds), 0.75f + 0.25f * bass,
+                   kDiscInner, kDiscOuter, 1.3f, 3.f};
     frame.medium = MediumFrame{std::nullopt, disc};
 
     SplatFrame splats;
@@ -155,20 +164,35 @@ SceneFrame Singularity::frame(const show::TimelineFrame& f) const {
 
     EnvironmentDesc& env = frame.environment;
     env = environmentDefaults(EnvironmentKind::Space);
-    env.starBrightness = 1.1f;
-    // The bright star that becomes the Einstein ring. Bright enough for the ring to clip to white, and no more:
-    // the bloom spreads a share of every pixel's light, and a brighter ring floods the accent's frame.
-    env.discDirection = ringStarDirection(f);
-    env.discAngularRadius = 0.12f * kDegrees;
-    env.discRadiance = {3000.f, 3200.f, 3600.f};
-    env.select = 0.f;
-    // Deep space is never quite black; over the last two bars the sky burns to white.
+    // The traced sky is bent exactly, so its stars smear into arcs near the hole: faint until the fall, where
+    // their stretching is the point.
     const Bars b = barsOf(f);
+    const auto t = static_cast<float>(f.localSeconds);
+    env.starBrightness = 0.25f + 0.85f * smooth01((t - b.at(2)) / (2.f * b.bar));
+    // The bright star that becomes the Einstein ring: small, and bright enough for the ring to clip to white
+    // and no more. The bloom spreads a share of every pixel's light (it has no threshold), so the ring's
+    // energy is what floods a frame: this keeps the shadow black and the ring a crisp line.
+    env.discDirection = ringStarDirection(f);
+    env.discAngularRadius = 0.08f * kDegrees;
+    env.discRadiance = {120.f, 130.f, 150.f};
+    env.select = 0.f;
+    // Deep space is never quite black; over the last two bars of the fall the sky ahead brightens (the
+    // infalling eye's blueshift), so that post::Look's white-out arc finds light everywhere but the shadow.
     const auto end = static_cast<float>(f.chapterDuration);
-    const float white = smooth01((static_cast<float>(f.localSeconds) - (end - 2.f * b.bar)) / std::max(2.f * b.bar, 0.1f));
+    const float white = smooth01((t - (end - 2.f * b.bar)) / std::max(2.f * b.bar, 0.1f));
     env.zenith = env.horizon = env.ground =
         Vec3{0.0035f, 0.0045f, 0.008f} * (1.f - white) + Vec3{0.9f, 0.93f, 1.f} * (0.4f * white * white);
     return frame;
+}
+
+// --- The epoch card
+// -----------------------------------------------------------------------------------------------
+
+std::string Singularity::nowCard(show::Effect effect) const {
+    if (effect != show::Effect::Singularity)
+        return {};
+    return std::string("2026") + kCardDot + "GRAVITATIONAL LENSING" + kCardDot + std::to_string(kGeodesicSteps) +
+           "-STEP GEODESICS" + kCardDot + "DOPPLER DISC" + kCardDot + "PATH TRACED";
 }
 
 } // namespace evo::modern

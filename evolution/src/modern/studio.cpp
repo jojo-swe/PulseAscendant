@@ -61,6 +61,15 @@ constexpr float kLampEmitterSize = 0.08f, kLampRecess = 0.035f;
 // The moon (see Studio::kMoonDirection): an 18 cm square 4 m out, about 2.6 degrees across.
 constexpr float kMoonDistance = 4.f, kMoonSize = 0.18f;
 
+// The town's glow: the sodium haze over the streets below and to the left, as a dim warm panel outside the
+// window, hidden behind the wall left of it from inside, that throws the window's shape onto the right wall
+// and lifts that half of the night wide (the bible's motivated fill; the moon stays the key).
+constexpr float kTownWidth = 1.2f, kTownHeight = 0.9f;
+constexpr Vec3 kTownAt{-3.0f, 0.6f, -2.6f};      // below the sill and left of the window, seen from inside
+constexpr Vec3 kTownAim{2.f, 2.f, 1.6f};          // high on the right wall
+constexpr Vec3 kTownColor{1.f, 0.52f, 0.2f};
+constexpr float kTownIntensity = 2.4f;
+
 // Contributions after a rough vertex above this luminance are clamped (TraceSettings::clampIndirect; the
 // integrator's own default is 16, the Studio keeps the tighter value its look was tuned with); at the
 // Studio's exposures (EV 0.3 to 2) step 4's 2 left lamp-lit surfaces sparkling at export spp (no a-trous from
@@ -149,6 +158,7 @@ enum Mesh : std::uint32_t {
     kFloppy,
     kMouse,
     kMoonMesh,
+    kTownMesh,
     kSeat,
     kBackrest,
     kShadeInner,
@@ -192,10 +202,12 @@ enum Material : std::uint32_t {
     kVoid,
     kScreenBack,
     kStar,
+    kTownGlow,
     kMaterialCount
 };
 static_assert(kScreenGlass == Studio::kScreenMaterial && kLampEmitter == Studio::kLampMaterial &&
-              kPowerLed == Studio::kLedMaterial && kScreenBack == Studio::kScreenBackMaterial);
+              kPowerLed == Studio::kLedMaterial && kScreenBack == Studio::kScreenBackMaterial &&
+              kMoonGlow == Studio::kMoonMaterial);
 
 std::vector<rt::Mesh> buildMeshes() {
     std::vector<rt::Mesh> meshes(kMeshCount);
@@ -263,6 +275,7 @@ std::vector<rt::Mesh> buildMeshes() {
                                         {0.f, 0.0345f}}};
     meshes[kMouse] = lathe(mouse, 48);
     meshes[kMoonMesh] = quad(kMoonSize, kMoonSize);
+    meshes[kTownMesh] = quad(kTownWidth, kTownHeight);
     meshes[kSeat] = bevelBox({0.23f, 0.035f, 0.22f}, 0.03f, 3);
     meshes[kBackrest] = bevelBox({0.21f, 0.22f, 0.03f}, 0.025f, 3);
     return meshes;
@@ -275,13 +288,13 @@ std::vector<rt::Material> buildMaterials(StudioRig rig) {
     m[kWallPaint] = plastic({0.66f, 0.64f, 0.6f}, 0.92f);
     m[kCeilingPaint] = plastic({0.56f, 0.55f, 0.53f}, 0.95f);
     // A board-formed concrete wall behind the desk (no joints).
-    m[kConcreteWall] = plastic({0.42f, 0.41f, 0.39f}, 0.85f);
-    setColor(m[kConcreteWall].baseColor2, {0.3f, 0.295f, 0.285f});
+    m[kConcreteWall] = plastic({0.462f, 0.451f, 0.429f}, 0.85f);
+    setColor(m[kConcreteWall].baseColor2, {0.33f, 0.325f, 0.314f});
     m[kConcreteWall].pattern = static_cast<std::uint32_t>(rt::Pattern::Concrete);
     m[kConcreteWall].patternScale = 0.f;
     // Polished concrete: cloudy grey under a satin sealer, saw-cut into 1.2 m slabs.
-    m[kFloorTiles] = plastic({0.36f, 0.355f, 0.345f}, 0.45f);
-    setColor(m[kFloorTiles].baseColor2, {0.25f, 0.245f, 0.24f});
+    m[kFloorTiles] = plastic({0.396f, 0.39f, 0.38f}, 0.45f);
+    setColor(m[kFloorTiles].baseColor2, {0.275f, 0.27f, 0.264f});
     m[kFloorTiles].pattern = static_cast<std::uint32_t>(rt::Pattern::Concrete);
     m[kFloorTiles].patternScale = 1.2f;
     m[kFloorTiles].coat = 0.5f;
@@ -299,17 +312,21 @@ std::vector<rt::Material> buildMaterials(StudioRig rig) {
     m[kBeige] = plastic({0.7f, 0.64f, 0.52f}, 0.5f);
     m[kBeigeDark] = plastic({0.56f, 0.51f, 0.42f}, 0.55f);
     // The picture: phosphor behind grey-green tube glass (Emissive with the retro picture; a smooth coat on
-    // the curved glass reflects the room).
-    m[kScreenGlass] = plastic({0.05f, 0.062f, 0.055f}, 0.4f);
+    // the curved glass reflects the room; the phosphor's green-grey base catches the lamp where the picture
+    // is dark). Not clean: dust specks and a fingerprint low right (Pattern CrtGlass).
+    m[kScreenGlass] = plastic({0.07f, 0.086f, 0.076f}, 0.34f);
+    m[kScreenGlass].pattern = static_cast<std::uint32_t>(rt::Pattern::CrtGlass);
     m[kScreenGlass].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     m[kScreenGlass].texture = rt::kRetroScreenTexture;
     m[kScreenGlass].emissionScale = rig.screen;
     m[kScreenGlass].coat = 1.f;
     m[kScreenGlass].coatRoughness = 0.03f;
     m[kRecess] = plastic({0.06f, 0.06f, 0.06f}, 0.6f);
-    // Key caps: soft, slightly rubbery; light letters, darker modifiers.
-    m[kKeyLight] = plastic({0.74f, 0.71f, 0.63f}, 0.62f);
-    m[kKeyDark] = plastic({0.42f, 0.41f, 0.39f}, 0.62f);
+    // Key caps: soft, slightly rubbery; light letters, darker modifiers; yellowed ABS, pale in the middle of
+    // a cap's top and darker towards its edges (Pattern KeyCap).
+    m[kKeyLight] = plastic({0.76f, 0.72f, 0.62f}, 0.62f);
+    m[kKeyDark] = plastic({0.44f, 0.42f, 0.38f}, 0.62f);
+    m[kKeyLight].pattern = m[kKeyDark].pattern = static_cast<std::uint32_t>(rt::Pattern::KeyCap);
     m[kDriveSlot] = plastic({0.025f, 0.025f, 0.028f}, 0.45f);
     // The power LEDs: green, seen by the camera only (their glow is the bloom's, step 6): a BSDF ray after a
     // rough vertex that found them would be a firefly no light sample could ever take.
@@ -383,6 +400,10 @@ std::vector<rt::Material> buildMaterials(StudioRig rig) {
     m[kScreenBack].flags = rt::kMaterialThinWalled;
     m[kStar] = plastic({0.f, 0.f, 0.f}, 1.f);
     m[kStar].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
+    m[kTownGlow] = plastic({0.f, 0.f, 0.f}, 1.f);
+    m[kTownGlow].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
+    setColor(m[kTownGlow].emission, kTownColor);
+    m[kTownGlow].emissionScale = kTownIntensity;
     return m;
 }
 
@@ -936,7 +957,7 @@ float studioExposureEV(show::Effect effect) {
 EnvironmentDesc studioEnvironment() {
     EnvironmentDesc sky;
     sky.discDirection = Studio::kMoonDirection;
-    sky.horizon = {0.09f, 0.13f, 0.29f};
+    sky.horizon = {0.06f, 0.1f, 0.22f}; // grey-blue, not lavender: the stars are the only white
     sky.haze = 0.15f;
     return sky;
 }
@@ -961,6 +982,14 @@ namespace {
 constexpr float kFlybyGlassEV = -1.25f;
 // RETURN's extra exposure before its cut, while the camera comes in through the window.
 constexpr float kDawnEV = 0.8f;
+// RETURN's dawn: the horizon's grey-blue at its end.
+constexpr Vec3 kDawnHorizon{0.1f, 0.14f, 0.22f};
+// STUDIO NIGHT's exposure once the camera is at the window looking out: the room's 2 EV would show the night
+// sky as a pale dusk; the eye adapts to the sky as the window fills the frame (D - 5 bars to D - 2 bars).
+constexpr float kNightOutsideEV = 0.3f;
+// REBOOT's exposure on its glass (D): the screen's 1.5 times 2^EV near 1, as crt.comp's picture, so the
+// dolly into the picture lands on the 1993 frame's own brightness (FLYBY's approach, reversed).
+constexpr float kRebootGlassEV = -0.4f;
 
 float smoothBetween(double from, double to, double t) {
     const double s = std::clamp((t - from) / (to - from), 0.0, 1.0);
@@ -968,6 +997,19 @@ float smoothBetween(double from, double to, double t) {
 }
 
 } // namespace
+
+EnvironmentDesc studioEnvironmentAt(const show::TimelineFrame& frame) {
+    EnvironmentDesc sky = studioEnvironment();
+    if (frame.effect == show::Effect::Return || frame.effect == show::Effect::Reboot) {
+        // Dawn's first grey: the horizon brightens to grey-blue over RETURN, the moon (and its glow) gone.
+        const double start = landmarks().ret.start, end = landmarks().ret.end;
+        const float s = frame.effect == show::Effect::Reboot ? 1.f : smoothBetween(start, end, frame.showSeconds);
+        const Vec3 night = sky.horizon;
+        sky.horizon = night + (kDawnHorizon - night) * s;
+        sky.glow = 0.f;
+    }
+    return sky;
+}
 
 StudioRig studioRigAt(const show::TimelineFrame& frame) {
     StudioRig rig = studioRig(frame.effect);
@@ -988,19 +1030,27 @@ float studioExposureAt(const show::TimelineFrame& frame) {
     case show::Effect::Flyby:
         // Through the glass the picture fills the frame at about the brightness crt.comp showed it at (a
         // display gain near 1); as the pull-out leaves the screen the exposure opens up to the dark room by
-        // A + 0.5 s, so the room is revealed on the accent. (Before D the Studio is not shown: it closes down
+        // A + 0.25 s, so the room is there on the accent. (Before D the Studio is not shown: it closes down
         // over the approach, as the camera nears the picture.)
         {
             const float glass =
                 t < l.flyby.downbeat
                     ? smoothBetween(l.flyby.downbeat - 2 * l.flyby.bar, l.flyby.downbeat - 0.5, t)
-                    : 1.f - smoothBetween(l.flyby.downbeat, l.flyby.accent + 0.5, t);
+                    : 1.f - smoothBetween(l.flyby.downbeat, l.flyby.accent + 0.25, t);
             return own + (kFlybyGlassEV - own) * glass;
         }
     case show::Effect::Portal: {
         // Behind the glass the exposure opens up with the rig to STUDIO NIGHT's, which the camera lands in.
         const float night = studioExposureEV(show::Effect::StudioNight);
         return own + (night - own) * smoothBetween(l.portal.downbeat, l.portal.accent, t);
+    }
+    case show::Effect::StudioNight: {
+        const ChapterMarks& m = l.night;
+        return own + (kNightOutsideEV - own) * smoothBetween(m.downbeat - 6 * m.bar, m.downbeat - 3 * m.bar, t);
+    }
+    case show::Effect::Reboot: {
+        const ChapterMarks& m = l.reboot;
+        return own + (kRebootGlassEV - own) * smoothBetween(m.downbeat - 3 * m.bar, m.downbeat - 0.5, t);
     }
     case show::Effect::Return: {
         // Before the cut to the close-up the camera comes in from the grey dawn outside: the exposure is
@@ -1020,6 +1070,7 @@ Studio::Studio(SceneDetail) {
     static_.meshes = buildMeshes();
     static_.materials = buildMaterials(studioRig(show::Effect::Return));
     std::array<rt::RectLight, kLightCount> lights{};
+    std::uint32_t townInstance = 0;
 
     auto add = [&](std::uint32_t mesh, std::uint32_t material, const rt::Mat34& transform,
                    std::uint32_t light = rt::kNoLight) {
@@ -1080,6 +1131,15 @@ Studio::Studio(SceneDetail) {
                                               emitted(static_.materials[kMoonGlow]), kMoonWeight);
         // Seen only through the window: light selection gives it no weight where the window hides it.
         lights[kMoonLight].gate = kWindowLight;
+        // The town's glow, facing in through the window towards the right wall (not behind the screen).
+        const rt::Mat34 town =
+            compose(translate(kTownAt), rotationFromTo({0, 0, 1}, normalize(kTownAim - kTownAt)));
+        add(kTownMesh, kTownGlow, town, kTownLight);
+        townInstance = static_cast<std::uint32_t>(instances_.size() - 1);
+        behindHidden_.push_back(townInstance); // behind the screen the room is not lit by it
+        lights[kTownLight] = rectLightForQuad(town, kTownWidth, kTownHeight, rt::LightKind::Emitter,
+                                              emitted(static_.materials[kTownGlow]), kTownWeight);
+        lights[kTownLight].gate = kWindowLight;
     }
 
     // --- The desk: a coated wooden top on brushed steel legs with a rail at the back.
@@ -1430,7 +1490,12 @@ SceneFrame Studio::frame(const show::TimelineFrame& frame) const {
     f.lights[kScreenLight].emission[0] = f.lights[kScreenLight].emission[1] =
         f.lights[kScreenLight].emission[2] = f.materials[kScreenGlass].emissionScale;
     setColor(f.lights[kLampLight].emission, emitted(f.materials[kLampEmitter]));
-    f.environment = studioEnvironment();
+    if (frame.effect == show::Effect::Return || frame.effect == show::Effect::Reboot) {
+        // Dawn: the moon has set.
+        f.materials[kMoonGlow].emissionScale = 0.f;
+        setColor(f.lights[kMoonLight].emission, Vec3{0.f, 0.f, 0.f});
+    }
+    f.environment = studioEnvironmentAt(frame);
     return f;
 }
 

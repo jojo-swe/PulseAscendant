@@ -26,6 +26,34 @@
                 "lhs": "${hostSystemName}",
                 "rhs": "Windows"
             }
+        },
+        {
+            "name": "windows-vs2022",
+            "displayName": "Windows (Visual Studio 2022, x64)",
+            "generator": "Visual Studio 17 2022",
+            "architecture": "x64",
+            "binaryDir": "${sourceDir}/build/windows-vs2022",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-ninja",
+            "displayName": "Windows (Ninja + MSVC cl, Release; from a Developer PowerShell)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/windows-ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
         }
     ],
     "buildPresets": [
@@ -37,6 +65,15 @@
             "name": "windows",
             "configurePreset": "windows",
             "configuration": "Release"
+        },
+        {
+            "name": "windows-vs2022",
+            "configurePreset": "windows-vs2022",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-ninja",
+            "configurePreset": "windows-ninja"
         }
     ],
     "testPresets": [
@@ -48,6 +85,11 @@
             },
             "execution": {
                 "jobs": 8
+            },
+            "filter": {
+                "exclude": {
+                    "label": "slow"
+                }
             }
         },
         {
@@ -56,6 +98,48 @@
             "configuration": "Release",
             "output": {
                 "outputOnFailure": true
+            },
+            "filter": {
+                "exclude": {
+                    "label": "slow"
+                }
+            }
+        },
+        {
+            "name": "windows-vs2022",
+            "configurePreset": "windows-vs2022",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "filter": {
+                "exclude": {
+                    "label": "slow"
+                }
+            }
+        },
+        {
+            "name": "windows-ninja",
+            "configurePreset": "windows-ninja",
+            "output": {
+                "outputOnFailure": true
+            },
+            "filter": {
+                "exclude": {
+                    "label": "slow"
+                }
+            }
+        },
+        {
+            "name": "linux-slow",
+            "configurePreset": "linux",
+            "output": {
+                "outputOnFailure": true
+            },
+            "filter": {
+                "include": {
+                    "label": "slow"
+                }
             }
         }
     ]

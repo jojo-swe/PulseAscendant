@@ -50,7 +50,7 @@ vec3 srgbToLinear(vec3 c) {
 // ones basalt with fine grain, the logo's chrome is gold-leaf smalti (metal); each sits tilted by up to about
 // a degree, its colour and polish vary a little, the polish wears in broad patches, and grey mortar 6 % of a
 // tessera wide fills the joints. Writes the colour, roughness, metallic and normal.
-void tessera(vec2 q, vec3 p, inout HitPoint h, out vec3 color, inout float roughness) {
+void tessera(vec2 q, vec3 p, float saturation, inout HitPoint h, out vec3 color, inout float roughness) {
     vec2 cell = floor(q);
     vec2 f = q - cell;
     ivec2 texel = ivec2(cell);
@@ -58,12 +58,12 @@ void tessera(vec2 q, vec3 p, inout HitPoint h, out vec3 color, inout float rough
     vec3 srgb = rotozoomColour(index) / 255.0;
     uint id = uint(texel.x) * 0x632BE5ABu + uint(texel.y) * 0x85157AF5u + 0x2F1Du;
     float shade = hash01(id);
-    // Stone, not paint: the pixel's colour a little greyed towards its own lightness, and never darker than
-    // dark basalt (real stone reflects a few per cent; a near-black channel would also starve the denoiser's
-    // demodulation).
+    // Stone, not paint: the pixel's colour greyed towards its own lightness (to `saturation` of its chroma),
+    // and never darker than dark basalt (real stone reflects a few per cent; a near-black channel would also
+    // starve the denoiser's demodulation).
     vec3 linear = srgbToLinear(srgb);
     float lightness = dot(linear, vec3(0.2126, 0.7152, 0.0722));
-    vec3 albedo = (0.025 + 0.93 * mix(vec3(lightness), linear, 0.72)) * (0.94 + 0.12 * shade);
+    vec3 albedo = (0.025 + 0.93 * mix(vec3(lightness), linear, saturation)) * (0.94 + 0.12 * shade);
     bool gold = index >= kRotozoomInk && index < kRotozoomOutline;
     if (gold) {
         // Gold leaf under a thin glass skin: a metal, its sheen a little crumpled.
@@ -110,7 +110,7 @@ void tessera(vec2 q, vec3 p, inout HitPoint h, out vec3 color, inout float rough
 }
 
 // Tesserae's coordinates: the world xz plane in tesserae (u along +x, v along +z), moved by baseColor2.xy
-// tesserae. TesseraeSphere's: the
+// tesserae (baseColor2.z, when above 0, is the stone's share of its pixel's chroma; 0.72 otherwise). TesseraeSphere's: the
 // sphere about the instance's origin, mapped along great circles from the point straight above its centre
 // (azimuthal equidistant: square tesserae near the top, continuous everywhere but the point straight below).
 vec2 tesseraCoordinates(Material m, vec3 p) {
@@ -132,7 +132,9 @@ void main() {
     if (m.pattern == kPatternTesserae || m.pattern == kPatternTesseraeSphere) {
         float roughness = m.roughness;
         vec3 color;
-        tessera(tesseraCoordinates(m, h.position), h.position / max(m.patternScale, 1e-4), h, color, roughness);
+        float saturation = m.baseColor2.z > 0.0 ? m.baseColor2.z : 0.72;
+        tessera(tesseraCoordinates(m, h.position), h.position / max(m.patternScale, 1e-4), saturation, h, color,
+                roughness);
         writeSurface(h, color, roughness, m.transmission, materialEmission(m));
         return;
     }

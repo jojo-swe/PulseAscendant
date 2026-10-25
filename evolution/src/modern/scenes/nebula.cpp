@@ -1,10 +1,13 @@
 #include "modern/scenes/nebula.hpp"
 
+#include "modern/environment.hpp"
 #include "modern/mesh_builder.hpp"
+#include "modern/scenes/shots.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <limits>
 #include <span>
 
 namespace evo::modern {
@@ -176,9 +179,9 @@ Camera nebulaFlight(const show::TimelineFrame& f) {
                         {d - 0.45 * (d - a), {-20.f, 4.f, 12.f}},
                         {d, {-21.f, 2.f, -20.f}},
                         {accent, {-21.5f, 2.5f, -29.f}},
-                        {after, {-24.5f, 3.5f, -28.f}},
-                        {after + 0.5 * (end - after), {-28.f, 4.5f, -24.f}},
-                        {end, {-30.5f, 6.f, -19.f}}};
+                        {after, {-26.5f, 3.5f, -27.f}},
+                        {after + 0.5 * (end - after), {-32.f, 5.f, -21.f}},
+                        {end, {-35.5f, 7.f, -15.f}}};
     const Vec3 hero = kNebulaStarCentres[0];
     const Key targets[] = {{a, {-27.f, 1.f, -40.f}},
                            {d - 0.45 * (d - a), {-30.f, 0.f, -60.f}},
@@ -214,6 +217,89 @@ Camera plasmaCamera(const show::TimelineFrame& f) {
     return lookAt(eye, eye + 10.f * look, kFov24, 0);
 }
 
+// --- PLASMA PLANET ----------------------------------------------------------------------------------------
+
+constexpr float kFov50 = 22.9f; // 50 mm at 16:9, vertical
+
+// The terminator's point under the sunrise, the eye on D (behind it along the sun's line: the sun grazes the
+// limb there), and the directions of the crane: up away from the planet, across the sun's line.
+struct PlanetFrame {
+    Vec3 sun, up, side, limb, sunriseEye;
+};
+
+PlanetFrame planetFrame() {
+    PlanetFrame p;
+    p.sun = plasmaPlanetSun();
+    p.up = normalize(Vec3{0.f, 1.f, 0.f} - p.sun * p.sun.y);
+    p.side = normalize(cross(p.sun, p.up));
+    // The sunrise point: a little off the top of the terminator, so the limb runs across the frame on a slant.
+    p.limb = normalize(p.up + 0.22f * p.side) * kPlasmaPlanetRadius;
+    p.sunriseEye = p.limb - p.sun * 1500.f;
+    return p;
+}
+
+// A point at `altitude` over the sea in direction d from the centre.
+Vec3 overSea(Vec3 d, float altitude) {
+    return normalize(d) * (kPlasmaPlanetRadius + altitude);
+}
+
+// The low pass: along the great circle through the sea under (0, 1, 0), heading towards the low sun, at
+// cloud height; u in [0, 1] over the shot.
+Vec3 lowPassHeading() {
+    return normalize(Vec3{0.95f, 0.f, -0.31f});
+}
+
+Camera planetCamera(const show::TimelineFrame& f) {
+    const PlasmaPlanetTimes times = plasmaPlanetTimes(f);
+    const PlanetFrame p = planetFrame();
+    const double end = chapterEnd(f);
+    const double t = std::clamp(f.localSeconds, 0.0, end);
+    const double d = times.sunrise;
+    if (t < times.craneStart) {
+        // Shot 0: high over the night side, drifting along the terminator; the sea's glow and the thin air of
+        // the limb, the sun still far behind the planet.
+        const float u = smooth01(static_cast<float>(t / std::max(times.craneStart, 1e-3)));
+        const Vec3 eye = -p.sun * (2400.f - 200.f * u) + p.side * (-320.f + 220.f * u) + p.up * (480.f + 60.f * u);
+        const Vec3 target = p.limb * 0.6f - p.side * (80.f * u) - p.up * 60.f;
+        Camera c = lookAt(eye, target, kFov35, 0);
+        c.up = p.up;
+        return c;
+    }
+    // The eye's path through the sunrise: craning up the tangent until the sun clears the limb on D, then
+    // towards the sun and down over the terminator into the morning.
+    const Vec3 forward = p.sun * std::cos(0.2f) - p.side * std::sin(0.2f); // the sun on the right third
+    const Vec3 lookSun = normalize(forward - p.up * 0.14f);              // the limb in the upper third
+    const double crane = d - times.craneStart;
+    const Vec3 morning = overSea(p.up + 0.55f * p.sun - 0.1f * p.side, 160.f);
+    if (t < times.lowPass) {
+        const Key eyes[] = {{times.craneStart, p.sunriseEye - p.up * static_cast<float>(90.0 * crane) - p.sun * 60.f},
+                            {d, p.sunriseEye},
+                            {d + 0.45 * (times.lowPass - d), p.limb * 1.12f - p.sun * 550.f + p.up * 60.f},
+                            {times.lowPass, morning}};
+        const Vec3 eye = throughKeys(eyes, t);
+        // The view: on the sun and the limb through the crane and the sunrise, then down and ahead onto the
+        // morning side of the terminator as the camera descends.
+        const float turn = smooth01(static_cast<float>((t - d - 0.5 * times.barSeconds) / (times.lowPass - d - 0.5 * times.barSeconds)));
+        const Vec3 down = normalize(p.sun * 0.8f - normalize(eye) * 0.6f + p.side * 0.15f);
+        const Vec3 look = normalize(lookSun * (1.f - turn) + down * turn);
+        Camera c = lookAt(eye, eye + look * 500.f, kFov35, t < d ? 1u : 2u);
+        c.up = normalize(p.up * (1.f - turn) + normalize(eye) * turn);
+        return c;
+    }
+    // Shot 3: the low pass over the cloud tops, into the low sun, along the great circle under (0, 1, 0).
+    const float u = static_cast<float>((t - times.lowPass) / std::max(end - times.lowPass, 1e-3));
+    const Vec3 heading = lowPassHeading();
+    const float arc = -0.006f + 0.028f * u; // radians along the circle: 28 units of travel
+    const Vec3 radial = Vec3{0.f, 1.f, 0.f} * std::cos(arc) + heading * std::sin(arc);
+    const Vec3 along = heading * std::cos(arc) - Vec3{0.f, 1.f, 0.f} * std::sin(arc);
+    const float altitude = 6.1f + 0.35f * std::sin(3.1f * u); // skimming the cloud tops
+    const Vec3 eye = radial * (kPlasmaPlanetRadius + altitude) + cross(radial, along) * (3.f * u);
+    const Vec3 look = normalize(along - radial * 0.13f - cross(radial, along) * 0.08f);
+    Camera c = lookAt(eye, eye + look * 20.f, kFov24, 3);
+    c.up = radial;
+    return c;
+}
+
 } // namespace
 
 // --- Configuration ---------------------------------------------------------------------------------------------
@@ -228,6 +314,15 @@ NebulaStats nebulaStats() {
 }
 
 std::array<std::uint32_t, 3> nebulaGridSize(show::Effect effect, SceneDetail detail) {
+    if (effect == show::Effect::PlasmaPlanet) {
+        // The larger of the two grids per axis (the orbit's and the low pass's).
+        show::TimelineFrame f{};
+        f.effect = effect;
+        const auto orbit = plasmaPlanetGrid(f, detail).size;
+        f.localSeconds = 1e9;
+        const auto shell = plasmaPlanetGrid(f, detail).size;
+        return {std::max(orbit[0], shell[0]), std::max(orbit[1], shell[1]), std::max(orbit[2], shell[2])};
+    }
     const std::array<std::uint32_t, 3> full =
         effect == show::Effect::Plasma ? kPlasmaGrid : std::array<std::uint32_t, 3>{kNebulaGrid, kNebulaGrid, kNebulaGrid};
     const double scale = std::cbrt(std::clamp(static_cast<double>(detail.scale), 0.0, 1.0));
@@ -291,9 +386,28 @@ rt::SphereRecord nebulaStar(std::uint32_t id, float, const std::array<float, 16>
     return s;
 }
 
+// PLASMA PLANET's sun: the environment's disc (radiance and angular radius) and the irradiance it gives.
+constexpr float kPlanetSunRadiance = 160000.f, kPlanetSunRadius = 0.27f * 3.14159265f / 180.f;
+constexpr float kPlanetSunIrradiance = kPlanetSunRadiance * 3.14159265f * kPlanetSunRadius * kPlanetSunRadius;
+// The clouds' albedo (the air's colour is baked: see the bake's mode 2) and phase.
+constexpr Vec3 kPlanetCloudAlbedo{0.9f, 0.91f, 0.93f};
+constexpr float kPlanetCloudPhaseG = 0.6f;
+
 std::array<float, 16> nebulaMediumParams(const show::TimelineFrame& frame) {
     const bool plasma = frame.effect == show::Effect::Plasma;
     std::array<float, 16> p{};
+    if (frame.effect == show::Effect::PlasmaPlanet) {
+        const PlasmaPlanetGrid grid = plasmaPlanetGrid(frame, {});
+        const Vec3 eye = nebulaCamera(frame).eye;
+        p[0] = 2.f;
+        p[1] = static_cast<float>(frame.localSeconds);
+        p[2] = kPlanetSunIrradiance;
+        p[4] = grid.lo.x, p[5] = grid.lo.y, p[6] = grid.lo.z, p[7] = kPlasmaPlanetRadius;
+        p[8] = grid.hi.x, p[9] = grid.hi.y, p[10] = grid.hi.z;
+        p[11] = frame.localSeconds >= plasmaPlanetTimes(frame).lowPass ? 1.f : 0.f; // the cloud shell
+        p[12] = eye.x, p[13] = eye.y, p[14] = eye.z;
+        return p;
+    }
     p[0] = plasma ? 1.f : 0.f;
     p[1] = static_cast<float>(frame.localSeconds);
     p[2] = std::clamp(frame.bass, 0.f, 1.f);
@@ -308,6 +422,11 @@ std::array<float, 16> nebulaMediumParams(const show::TimelineFrame& frame) {
     } else {
         p[12] = kNebulaOpacity;
         p[13] = kNebulaDensityScale;
+        // Star A's shafts, towards the frame's eye: strongest from the reveal on.
+        const Vec3 eye = nebulaCamera(frame).eye;
+        p[7] = eye.x, p[11] = eye.y, p[14] = eye.z;
+        const NebulaTimes times = nebulaTimes(frame);
+        p[15] = 0.35f + 0.65f * smooth01(static_cast<float>((frame.localSeconds - times.downbeat) / times.barSeconds));
     }
     return p;
 }
@@ -315,6 +434,17 @@ std::array<float, 16> nebulaMediumParams(const show::TimelineFrame& frame) {
 GridMediumDesc nebulaMedium(const show::TimelineFrame& frame, SceneDetail detail) {
     const bool plasma = frame.effect == show::Effect::Plasma;
     GridMediumDesc g;
+    if (frame.effect == show::Effect::PlasmaPlanet) {
+        const PlasmaPlanetGrid grid = plasmaPlanetGrid(frame, detail);
+        g.size = grid.size;
+        g.worldToMedium = mediumBox(grid.lo, grid.hi);
+        g.densityScale = 1.f;
+        g.albedo = kPlanetCloudAlbedo;
+        g.phaseG = kPlanetCloudPhaseG;
+        g.emissionScale = 1.f;
+        g.params = nebulaMediumParams(frame);
+        return g;
+    }
     g.size = nebulaGridSize(frame.effect, detail);
     g.worldToMedium = plasma ? mediumBox(kPlasmaBoxLo, kPlasmaBoxHi) : mediumBox(kNebulaBoxLo, kNebulaBoxHi);
     g.densityScale = plasma ? 0.16f : kNebulaDensityScale;
@@ -380,6 +510,53 @@ float nebulaPillarDistance(Vec3 p) {
     return d;
 }
 
+// --- PLASMA PLANET ----------------------------------------------------------------------------------------
+
+Vec3 plasmaPlanetSun() {
+    return normalize(Vec3{0.95f, 0.27f, 0.12f});
+}
+
+PlasmaPlanetTimes plasmaPlanetTimes(const show::TimelineFrame& f) {
+    const shots::Bars b = shots::barsOf(f);
+    return {b.at(-2), b.d, b.at(5), b.bar};
+}
+
+float plasmaPlanetSunClearance(Vec3 eye) {
+    const Vec3 sun = plasmaPlanetSun();
+    const float along = dot(eye, sun);
+    if (along >= 0.f)
+        return std::numeric_limits<float>::infinity();
+    return length(eye - sun * along) - kPlasmaPlanetRadius;
+}
+
+PlasmaPlanetGrid plasmaPlanetGrid(const show::TimelineFrame& f, SceneDetail detail) {
+    const double scale = std::cbrt(std::clamp(static_cast<double>(detail.scale), 0.0, 1.0));
+    const auto scaled = [&](std::uint32_t n) {
+        return std::max(kMinNebulaGrid, static_cast<std::uint32_t>(std::lround(n * scale)));
+    };
+    PlasmaPlanetGrid g;
+    if (f.localSeconds < plasmaPlanetTimes(f).lowPass) {
+        const float r = kPlasmaPlanetRadius + kPlasmaPlanetAir;
+        g.lo = {-r, -r, -r};
+        g.hi = {r, r, r};
+        g.size = {scaled(kPlasmaPlanetOrbitGrid), scaled(kPlasmaPlanetOrbitGrid), scaled(kPlasmaPlanetOrbitGrid)};
+        return g;
+    }
+    // The low pass's stretch of sea (along x, across z; the sea curves down by up to 4 units inside it).
+    g.lo = {-34.f, kPlasmaPlanetRadius - 4.6f, -62.f};
+    g.hi = {126.f, kPlasmaPlanetRadius + kPlasmaPlanetCloudTop + 1.5f, 18.f};
+    g.size = {scaled(kPlanetCloudGrid[0]), scaled(kPlanetCloudGrid[2]), scaled(kPlanetCloudGrid[1])};
+    return g;
+}
+
+Vec3 plasmaSeaParams(const show::TimelineFrame& f) {
+    // The 1993 effect's own clock (its field moves at 1993's pace) and its palette turning one entry per 1993
+    // frame; the cracks flare on the kick.
+    const auto seconds = static_cast<float>(f.localSeconds);
+    return {seconds, static_cast<float>(std::fmod(f.localSeconds * kPlasmaRingRate, 224.0)),
+            1.6f + 1.2f * std::clamp(f.kick, 0.f, 1.f)};
+}
+
 // --- Cameras ---------------------------------------------------------------------------------------------------
 
 NebulaTimes nebulaTimes(const show::TimelineFrame& f) {
@@ -388,11 +565,23 @@ NebulaTimes nebulaTimes(const show::TimelineFrame& f) {
 }
 
 Camera nebulaCamera(const show::TimelineFrame& frame) {
+    if (frame.effect == show::Effect::PlasmaPlanet)
+        return planetCamera(frame);
     return frame.effect == show::Effect::Plasma ? plasmaCamera(frame) : nebulaFlight(frame);
 }
 
-float nebulaExposureEV(show::Effect effect) {
-    return effect == show::Effect::Plasma ? 0.f : -0.5f;
+float nebulaExposureEV(const show::TimelineFrame& frame) {
+    if (frame.effect == show::Effect::Plasma)
+        return 0.f;
+    if (frame.effect != show::Effect::PlasmaPlanet)
+        return -0.5f;
+    // The night side by the sea's glow, then the day: the exposure follows the sunrise over the bar after D
+    // (the sun's glare does the rest), and the low pass in the morning light.
+    const PlasmaPlanetTimes times = plasmaPlanetTimes(frame);
+    const float day = smooth01(static_cast<float>((frame.localSeconds - times.sunrise) / times.barSeconds));
+    if (frame.localSeconds >= times.lowPass)
+        return -2.3f;
+    return 0.4f - 2.6f * day;
 }
 
 // --- The scene -------------------------------------------------------------------------------------------------
@@ -413,18 +602,81 @@ Nebula::Nebula(SceneDetail detail) : detail_(detail) {
     c.treeLights = kNebulaStars + kNebulaEmbeddedStars;
     c.splats = nebulaSplatCount(detail);
     const auto nebula = nebulaGridSize(show::Effect::Nebula, detail), plasma = nebulaGridSize(show::Effect::Plasma, detail);
+    const auto planet = nebulaGridSize(show::Effect::PlasmaPlanet, detail);
     for (int a = 0; a < 3; ++a)
-        c.mediumGrid[a] = std::max(nebula[a], plasma[a]);
+        c.mediumGrid[a] = std::max({nebula[a], plasma[a], planet[a]});
+
+    // PLASMA PLANET's sea: basalt crust over the glowing plasma (the PlasmaSea pattern), one analytic sphere.
+    rt::Material& sea = static_.materials[kSea];
+    setColor(sea.baseColor, {0.045f, 0.04f, 0.038f});
+    sea.roughness = 0.55f;
+    setColor(sea.emission, {1.f, 1.f, 1.f});
+    sea.emissionScale = 1.4f;
+    sea.pattern = static_cast<std::uint32_t>(rt::Pattern::PlasmaSea);
+    sea.patternScale = kPlasmaPlanetPixels;
+    rt::SphereRecord sphere{};
+    sphere.radius = kPlasmaPlanetRadius;
+    sphere.color[0] = sphere.color[1] = sphere.color[2] = 1.f;
+    sphere.material = kSea;
+    static_.spheres = {sphere};
+    c.spheres = 1;
     static_.particleShader = kNebulaStarsShader;
     static_.splatShader = kNebulaSplatsShader;
     static_.mediumShader = kNebulaMediumShader;
 }
 
+SceneFrame Nebula::planetFrame(const show::TimelineFrame& frame) const {
+    SceneFrame f;
+    f.camera = nebulaCamera(frame);
+    f.exposureEV = nebulaExposureEV(frame);
+    f.clampIndirect = 16.f;
+    const PlasmaPlanetTimes times = plasmaPlanetTimes(frame);
+    const bool lowPass = frame.localSeconds >= times.lowPass;
+    const Vec3 sun = plasmaPlanetSun();
+
+    // The sea, its plasma turning.
+    f.materials = static_.materials;
+    setColor(f.materials[kSea].baseColor2, plasmaSeaParams(frame));
+    SceneInstance planet;
+    planet.mesh = 0;
+    planet.material = kSea;
+    planet.transform = identity();
+    planet.kind = rt::GeometryKind::Spheres;
+    planet.firstSphere = 0;
+    planet.sphereCount = 1;
+    f.instances.push_back(planet);
+
+    MediumFrame medium;
+    medium.grid = nebulaMedium(frame, detail_);
+    EnvironmentDesc& env = f.environment;
+    if (!lowPass) {
+        // Space: the sun's disc and the stars; the air is the grid's.
+        env = environmentDefaults(EnvironmentKind::Space);
+        env.starBrightness = 0.25f;
+    } else {
+        // Under the air: a morning sky from the sea's horizon (which lies a few degrees below the eye's level)
+        // up to a deep zenith; the haze over the sea is the grid's air.
+        env = environmentDefaults(EnvironmentKind::Day);
+        env.zenith = {0.02f, 0.05f, 0.17f};
+        env.horizon = {0.3f, 0.3f, 0.33f};
+        env.ground = env.horizon;
+        env.haze = 0.3f;
+    }
+    env.discDirection = sun;
+    env.discAngularRadius = kPlanetSunRadius;
+    env.discRadiance = Vec3{1.f, 0.96f, 0.9f} * kPlanetSunRadiance;
+    env.select = 1.f; // the sun is the only light
+    f.medium = medium;
+    return f;
+}
+
 SceneFrame Nebula::frame(const show::TimelineFrame& frame) const {
+    if (frame.effect == show::Effect::PlasmaPlanet)
+        return planetFrame(frame);
     const bool plasma = frame.effect == show::Effect::Plasma;
     SceneFrame f;
     f.camera = nebulaCamera(frame);
-    f.exposureEV = nebulaExposureEV(frame.effect);
+    f.exposureEV = nebulaExposureEV(frame);
     f.clampIndirect = 16.f;
     f.environment = environmentDefaults(EnvironmentKind::Space);
     f.environment.starBrightness = plasma ? 0.5f : 0.f; // NEBULA's stars are splats
@@ -476,6 +728,10 @@ SceneFrame Nebula::frame(const show::TimelineFrame& frame) const {
 // ----------------------------------------------------------------------------------------------
 
 std::string Nebula::nowCard(show::Effect effect) const {
+    if (effect == show::Effect::PlasmaPlanet)
+        return std::string("2026") + kCardDot + "PLASMA PLANET" + kCardDot + std::to_string(kPlanetCloudGrid[0]) +
+               "\u00D7" + std::to_string(kPlanetCloudGrid[1]) + "\u00D7" + std::to_string(kPlanetCloudGrid[2]) +
+               " CLOUD SHELL" + kCardDot + "SUNRISE";
     if (effect == show::Effect::Plasma)
         return std::string("2026") + kCardDot + "VOLUMETRIC NEBULA" + kCardDot + "DELTA TRACKING" + kCardDot +
                "MULTIPLE SCATTERING";

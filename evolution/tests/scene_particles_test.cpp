@@ -1,12 +1,14 @@
 // The Particles scene: DOTS and PARTICLE OCEAN on lavapipe, with the validation layer on;
 // fails on any message.
 //
-// (k) the cards: both chapters' 2026 card names 2,097,152, which is the full-detail particle count (the
-//     scene's capacity and its frames' count; the DOTS cube a 128^3 lattice);
+// (k) the cards: each chapter's 2026 card (Particles::nowCard) is the show bible's line with the numbers from
+//     the configuration, and the count before " TRACED PARTICLES" is 2,097,152, the full-detail particle count
+//     (the scene's capacity and its frames' count; the DOTS cube a 128^3 lattice);
 // (l) the logo table (src/modern/scenes/logo_targets.hpp and its GLSL twin) is the font's "EVOLUTION";
-// (t) the morphs land on retro::dotsSchedule's frames: at every arrival each particle lies on its target
-//     (the sphere's shells' radii within 1e-3, every shape's turned target exactly), between morphs it holds,
-//     and inside a morph it is off the target;
+// (t) the 2026 schedule: the first two morphs land on retro::dotsSchedule's frames, the logo on D + 4 bars,
+//     printed one row a beat over the 7 beats before; at every arrival each particle lies on its target (the
+//     sphere's shells' radii within 1e-3, every shape's turned target exactly), between morphs it holds,
+//     inside a morph only a band of the particles is in flight, and every logo row lands on its beat;
 // (m) the shader's particles equal the C++ mirror (dotsParticle, oceanParticle) within 1e-4 (centre,
 //     prevCenter, radius, colour; emission relative) for every particle of a 1/256 field at 10 times per
 //     chapter;
@@ -24,6 +26,7 @@
 #include "gfx/readback.hpp"
 #include "gfx/sync.hpp"
 #include "image/png.hpp"
+#include "modern/card_format.hpp"
 #include "modern/modern_scene.hpp"
 #include "modern/path_tracer.hpp"
 #include "modern/scene.hpp"
@@ -103,15 +106,16 @@ float distance(Vec3 a, Vec3 b) {
 // --- (k) the cards
 // ------------------------------------------------------------------------------------------
 
-// The card's particle count: its last number, thousands separators dropped ("2026 · 2,097,152 PARTICLES").
-std::uint64_t cardNumber(const char* card) {
-    const std::string text(card);
+// The card's particle count: the number before " TRACED PARTICLES", thousands separators dropped.
+std::uint64_t cardNumber(const std::string& text) {
+    const std::size_t at = text.find(" TRACED PARTICLES");
+    CHECK(at != std::string::npos);
     std::string digits;
-    for (std::size_t i = text.size(); i-- > 0;) {
+    for (std::size_t i = at; i-- > 0;) {
         const char c = text[i];
         if (c >= '0' && c <= '9')
             digits.insert(digits.begin(), c);
-        else if (!(c == ',' && !digits.empty()) && !digits.empty())
+        else if (c != ',')
             break;
     }
     std::uint64_t n = 0;
@@ -122,12 +126,18 @@ std::uint64_t cardNumber(const char* card) {
 
 void testCards() {
     const modern::Particles full{modern::SceneDetail{1.f}};
+    const std::string dot = modern::kCardDot;
+    const std::string expected[2] = {
+        "2026" + dot + "2,097,152 TRACED PARTICLES" + dot + "MOTION BLUR" + dot + "DEPTH OF FIELD",
+        "2026" + dot + "2,097,152 TRACED PARTICLES" + dot + "8 GERSTNER WAVES" + dot + "ONE SHOT"};
+    int i = 0;
     for (const show::Effect effect : {show::Effect::Dots, show::Effect::Ocean}) {
         const int chapter = chapterOf(effect);
         const show::TimelineFrame f = at(chapter, 3.0);
-        const std::uint64_t card = cardNumber(f.nowCard);
-        std::printf("(k) %s: card \"%s\" -> %llu\n", f.title, f.nowCard,
-                    static_cast<unsigned long long>(card));
+        const std::string text = full.nowCard(effect);
+        const std::uint64_t card = cardNumber(text);
+        std::printf("(k) %s: card \"%s\" -> %llu\n", f.title, text.c_str(), static_cast<unsigned long long>(card));
+        CHECK(text == expected[i++]);
         CHECK(card == 2'097'152u);
         const modern::SceneFrame frame = full.frame(f);
         CHECK(frame.particles.has_value());
@@ -198,21 +208,35 @@ constexpr DotsShape kOrder[7] = {DotsShape::Cube, DotsShape::Sphere, DotsShape::
 void testSchedule() {
     const int chapter = chapterOf(show::Effect::Dots);
     const show::TimelineFrame head = at(chapter, 0.0);
-    const auto steps = retro::dotsSchedule(head);
+    const auto retroSteps = retro::dotsSchedule(head);
+    const auto steps = modern::dotsSchedule2026(head);
+    const modern::DotsLanding landing = modern::dotsLanding(head);
     const std::uint32_t count = modern::particleCount(modern::kDotsParticles, kTestDetail);
+    // The first two morphs are 1993's; the logo lands on D + 4 bars (40.73 in the show), after 7 beats; the
+    // rest never come.
+    for (std::size_t m = 0; m < 2; ++m) {
+        CHECK(steps[m][0] == float(double(retroSteps[m].first) / retro::kDotsRetroRate));
+        CHECK(steps[m][1] == float(double(retroSteps[m].arrival) / retro::kDotsRetroRate));
+    }
+    const double landingShow = show::chapterStart(chapter) + landing.seconds;
+    std::printf("(t) the logo lands at %.3f s in the show (bar %.3f s)\n", landingShow, landing.bar);
+    CHECK(std::abs(landingShow - 40.73) < 0.02);
+    CHECK(steps[2][1] == landing.seconds && std::abs(steps[2][0] - (landing.seconds - 1.75f * landing.bar)) < 1e-4f);
+    for (std::size_t m = 3; m < 6; ++m)
+        CHECK(steps[m][0] == modern::kDotsNever && steps[m][1] == modern::kDotsNever);
+    // The logo holds to the chapter's end.
+    CHECK(steps[2][1] < head.chapterDuration);
+
     double worstShell = 0, worstOff = 0;
-    for (std::size_t m = 0; m < steps.size(); ++m) {
-        const double arrival = double(steps[m].arrival) / retro::kDotsRetroRate;
-        const double first = double(steps[m].first) / retro::kDotsRetroRate;
-        // The params at the arrival come from the frame there (bass and kick vary; the schedule does not).
+    for (std::size_t m = 0; m < 3; ++m) {
+        const float first = steps[m][0], arrival = steps[m][1];
         const modern::ParticleFrame p = modern::dotsParticleFrame(at(chapter, arrival), count);
-        CHECK(p.params[2 * m] == float(first) && p.params[2 * m + 1] == float(arrival));
-        const float t = p.params[2 * m + 1];
+        CHECK(p.params[2 * m] == first && p.params[2 * m + 1] == arrival);
         const DotsShape shape = kOrder[m + 1];
         float farthest = 0;
         for (std::uint32_t id = 0; id < count; ++id) {
-            const rt::SphereRecord r = modern::dotsParticle(id, t, p.params);
-            const Vec3 target = modern::dotsShapePoint(shape, id, count, t);
+            const rt::SphereRecord r = modern::dotsParticle(id, arrival, p.params);
+            const Vec3 target = modern::dotsShapePoint(shape, id, count, arrival);
             const float off = distance(v3(r.center), target);
             worstOff = std::max(worstOff, double(off));
             CHECK(off <= 1e-6f);
@@ -224,32 +248,53 @@ void testSchedule() {
                 worstShell = std::max(worstShell, error);
                 CHECK(error <= 1e-3);
             }
-            if (shape == DotsShape::Cube) // the turned lattice stays within the cube's circumsphere
-                CHECK(modern::length(v3(r.center)) <= 0.5f * modern::kDotsCubeSide * std::sqrt(3.f) + 1e-4f);
             farthest = std::max(farthest, modern::length(v3(r.center)));
         }
-        // Half way through the morph most particles are off both shapes.
-        if (steps[m].arrival > steps[m].first + 1) {
-            const float mid = float((first + arrival) / 2);
-            std::uint32_t off = 0;
-            for (std::uint32_t id = 0; id < count; id += 3) {
-                const rt::SphereRecord r = modern::dotsParticle(id, mid, p.params);
-                const float a = distance(v3(r.center), modern::dotsShapePoint(kOrder[m], id, count, mid));
-                const float b = distance(v3(r.center), modern::dotsShapePoint(shape, id, count, mid));
-                off += a > 0.01f && b > 0.01f;
-            }
-            CHECK(off > count / 3 * 9 / 10);
-            // Between this arrival and the next morph's first frame the shape holds.
-            if (m + 1 < steps.size() && steps[m + 1].first > steps[m].arrival) {
-                const float hold = float((arrival + double(steps[m + 1].first) / retro::kDotsRetroRate) / 2);
-                for (std::uint32_t id = 0; id < count; id += 17)
-                    CHECK(distance(v3(modern::dotsParticle(id, hold, p.params).center),
-                                   modern::dotsShapePoint(shape, id, count, hold)) <= 1e-6f);
-            }
+        // Half way through the morph a band is in flight: off both shapes, but far fewer than half.
+        const float mid = (first + arrival) / 2;
+        std::uint32_t off = 0, sampled = 0;
+        for (std::uint32_t id = 0; id < count; id += 3, ++sampled) {
+            const rt::SphereRecord r = modern::dotsParticle(id, mid, p.params);
+            const float a = distance(v3(r.center), modern::dotsShapePoint(kOrder[m], id, count, mid));
+            const float b = distance(v3(r.center), modern::dotsShapePoint(shape, id, count, mid));
+            off += a > 0.01f && b > 0.01f;
         }
-        std::printf(
-            "(t) morph %zu arrives at %.4f s (frame %u): every particle on its target, farthest %.3f m\n", m,
-            arrival, steps[m].arrival, farthest);
+        std::printf("(t) morph %zu: %.1f %% in flight half way; arrives at %.4f s, farthest %.3f m\n", m,
+                    100.0 * off / sampled, arrival, farthest);
+        CHECK(off > sampled / 20 && off < sampled * 3 / 10);
+        // Between this arrival and the next morph's first frame the shape holds.
+        const float next = m + 1 < 3 ? steps[m + 1][0] : float(head.chapterDuration);
+        if (next > arrival) {
+            // (The logo's sparks, about one particle in 800, drift off it.)
+            const float hold = (arrival + next) / 2;
+            std::uint32_t away = 0, checked = 0;
+            for (std::uint32_t id = 0; id < count; id += 17, ++checked)
+                away += distance(v3(modern::dotsParticle(id, hold, p.params).center),
+                                 modern::dotsShapePoint(shape, id, count, hold)) > 1e-6f;
+            CHECK(m == 2 ? away <= checked / 100 : away == 0);
+        }
+    }
+    // The logo prints one row a beat: row k lands on the k + 1-th beat after the morph's start.
+    {
+        const float first = steps[2][0], arrival = steps[2][1], beat = (arrival - first) / 7.f;
+        const modern::ParticleFrame p = modern::dotsParticleFrame(at(chapter, arrival), count);
+        constexpr std::uint32_t voxels = modern::kLogoPixels * modern::kLogoDepth;
+        for (std::uint32_t row = 0; row < 7; ++row) {
+            const float lands = first + float(row + 1) * beat;
+            std::uint32_t landed = 0, flying = 0, members = 0;
+            for (std::uint32_t id = 0; id < count; id += 5) {
+                if (modern::logoPixel((id % voxels) % modern::kLogoPixels).row != row)
+                    continue;
+                ++members;
+                const float t1 = lands + 0.002f, t0 = lands - 0.5f * beat;
+                landed += distance(v3(modern::dotsParticle(id, t1, p.params).center),
+                                   modern::dotsShapePoint(DotsShape::Logo, id, count, t1)) <= 1e-4f;
+                flying += distance(v3(modern::dotsParticle(id, t0, p.params).center),
+                                   modern::dotsShapePoint(DotsShape::Logo, id, count, t0)) > 1e-3f;
+            }
+            CHECK(members > 0 && landed == members && flying > members * 9 / 10);
+        }
+        std::printf("(t) the logo prints row by row, one row each %.3f s beat\n", beat);
     }
     std::printf("(t) worst distance from target %.2e, worst sphere shell radius error %.2e\n", worstOff,
                 worstShell);
@@ -272,15 +317,16 @@ void testMirror(gfx::Context& ctx) {
         const show::TimelineFrame head = at(chapter, 0.0);
         std::vector<double> times;
         if (effect == show::Effect::Dots) {
-            // Arrivals, morph middles and holds.
-            const auto steps = retro::dotsSchedule(head);
-            for (std::size_t m = 0; m < 5; ++m) {
-                const double first = double(steps[m].first) / retro::kDotsRetroRate;
-                const double arrival = double(steps[m].arrival) / retro::kDotsRetroRate;
-                times.push_back(m % 2 == 0 ? (first + arrival) / 2 : first + 0.8 * (arrival - first));
-                if (m < 4)
-                    times.push_back(m % 2 == 0 ? arrival : arrival + 0.3);
+            // Morph middles and late flights (the streaks), arrivals, the sparks and the end.
+            const auto steps = modern::dotsSchedule2026(head);
+            for (std::size_t m = 0; m < 3; ++m) {
+                const double first = steps[m][0], arrival = steps[m][1];
+                times.push_back((first + arrival) / 2);
+                times.push_back(first + 0.8 * (arrival - first));
+                if (m < 2)
+                    times.push_back(arrival + 0.3);
             }
+            times.push_back(steps[2][1] + 0.7);
             times.push_back(head.chapterDuration - 0.2);
         } else {
             for (int i = 0; i < 10; ++i)
@@ -520,19 +566,17 @@ void renderLook(gfx::Context& ctx, const std::filesystem::path& dir, std::uint32
     };
     const int dots = chapterOf(show::Effect::Dots), ocean = chapterOf(show::Effect::Ocean);
     const show::TimelineFrame dotsHead = at(dots, 0.0), oceanHead = at(ocean, 0.0);
-    const auto steps = retro::dotsSchedule(dotsHead);
-    const auto mid = [&](std::size_t m, double s) {
-        return (steps[m].first + s * (steps[m].arrival - steps[m].first)) / double(retro::kDotsRetroRate);
-    };
+    const auto steps = modern::dotsSchedule2026(dotsHead);
+    const auto mid = [&](std::size_t m, double s) { return steps[m][0] + s * (steps[m][1] - steps[m][0]); };
     std::vector<Shot> shots = {
         {show::Effect::Dots, 0.9, "dots_1_cube"},
         {show::Effect::Dots, mid(0, 0.5), "dots_2_cube_to_sphere"},
-        {show::Effect::Dots, steps[0].arrival / 35.0 + 0.6, "dots_3_sphere"},
+        {show::Effect::Dots, steps[0][1] + 0.6, "dots_3_sphere"},
         {show::Effect::Dots, mid(1, 0.55), "dots_4_sphere_to_knot"},
-        {show::Effect::Dots, steps[1].arrival / 35.0 + 0.5, "dots_5_knot"},
+        {show::Effect::Dots, steps[1][1] + 3.5, "dots_5_knot_orbit"},
         {show::Effect::Dots, mid(2, 0.6), "dots_6_knot_to_logo"},
-        {show::Effect::Dots, dotsHead.accentSeconds + 0.4, "dots_7_logo"},
-        {show::Effect::Dots, mid(3, 0.5), "dots_8_logo_to_knot"},
+        {show::Effect::Dots, steps[2][1] + 0.4, "dots_7_logo_ring"},
+        {show::Effect::Dots, dotsHead.chapterDuration - 0.3, "dots_8_logo_sparks"},
         {show::Effect::Ocean, 2.0, "ocean_1_skim"},
         {show::Effect::Ocean, 0.4 * oceanHead.accentSeconds + 3.0, "ocean_2_skim"},
         {show::Effect::Ocean, oceanHead.accentSeconds + 2.5, "ocean_3_rise"},

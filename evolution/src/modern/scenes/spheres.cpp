@@ -98,10 +98,10 @@ SceneInstance sphereInstance(std::uint32_t first, std::uint32_t count, std::uint
 
 constexpr std::uint32_t kExtraBalls = kRaytraceSphereCount - kRaytraceRetroSpheres;
 
-// Glass tints: emerald (1993's glass sphere), ruby, sapphire, amber, clear, violet.
+// Glass tints: emerald (1993's glass sphere), ruby, sapphire, amber, clear, champagne.
 constexpr Vec3 kEmerald{0.3f, 0.95f, 0.62f};
 constexpr std::array<Vec3, 5> kGlassTints{
-    {{1.f, 0.22f, 0.26f}, {0.3f, 0.5f, 1.f}, {1.f, 0.66f, 0.2f}, {1.f, 1.f, 1.f}, {0.72f, 0.4f, 1.f}}};
+    {{1.f, 0.22f, 0.26f}, {0.3f, 0.5f, 1.f}, {1.f, 0.66f, 0.2f}, {1.f, 1.f, 1.f}, {1.f, 0.86f, 0.6f}}};
 
 struct BallLook {
     float radius;
@@ -189,6 +189,17 @@ constexpr std::array<Giant, kRaytraceGiants> kGiants{{{{-1100.f, 380.f, 3000.f},
 // when i + j is even (as 1993's squares). Each has its own finish and sits a little unevenly.
 constexpr float kTileHalf = 0.47f, kTileHalfHeight = 0.05f;
 
+// The sun's disc radius (degrees) before the drop, and how much it widens on it.
+constexpr float kRaytraceSunRadius = 1.1f, kRaytraceSunWiden = 0.15f;
+// The caustic receiver: a square of the board round the balls, and its photons at full detail.
+constexpr float kRaytraceReceiverSide = 32.f;
+constexpr std::uint32_t kRaytraceReceiverResolution = 1024, kRaytracePhotons = 1u << 20;
+
+std::uint32_t raytracePhotons(SceneDetail detail) {
+    const double n = std::llround(double(kRaytracePhotons) * std::clamp(double(detail.scale), 0.0, 1.0));
+    return std::uint32_t(std::max(n, 4096.0));
+}
+
 // The light: the sun is the warm key (where 1993's point light stood), the sky the cool fill with a cool
 // softbox behind and left of 1993's camera, and a warm strip high behind the balls their rim (the balls
 // reflect both).
@@ -201,32 +212,35 @@ constexpr float kRimWidth = 14.f, kRimHeight = 2.5f;
 constexpr float kSoftboxWeight = 0.25f;
 
 // RAYTRACE's sky: Day with the sun where 1993's point light stood (behind the camera, up left), its disc
-// widened to 1.1 degrees (radiance lowered to keep its irradiance) for soft shadows.
-EnvironmentDesc raytraceSky() {
+// widened to 1.1 degrees (radiance lowered to keep its irradiance) for soft shadows, and to 1.25 over the
+// beat from the drop (every shadow visibly softens as 2026 takes over). A deep blue zenith over a pale
+// horizon, which the height fog and the cirrus (raytraceMedium) turn from a gradient into air.
+EnvironmentDesc raytraceSky(float sunRadiusDegrees) {
     EnvironmentDesc d = environmentDefaults(EnvironmentKind::Day);
     d.discDirection = normalize(Vec3{-5.f, 9.f, -6.f});
-    const float k = 0.5f / 1.1f;
-    d.discAngularRadius = 1.1f * kDegrees;
+    const float k = 0.5f / sunRadiusDegrees;
+    d.discAngularRadius = sunRadiusDegrees * kDegrees;
     d.discRadiance = Vec3{d.discRadiance.x, d.discRadiance.y * 0.93f, d.discRadiance.z * 0.8f} * (k * k);
-    d.zenith = {0.06f, 0.17f, 0.62f};
-    d.horizon = {0.36f, 0.5f, 0.85f};
-    d.haze = 0.2f;
+    d.zenith = {0.04f, 0.13f, 0.5f};
+    d.horizon = {0.45f, 0.55f, 0.72f};
+    d.haze = 0.35f;
     d.select = 0.8f;
     return d;
 }
 
-// SPHERE STORM's sky: a storm at dusk, slate blue overhead, the sun a warm sliver on the horizon behind the
-// vortex (its key and rim; a cool softbox far to the left fills).
+// SPHERE STORM's sky: a storm at dusk, night blue overhead over an ember band, the sun a warm sliver on the
+// horizon behind the vortex (its key and rim; a cool softbox far to the left fills).
 EnvironmentDesc stormSky() {
     EnvironmentDesc d = environmentDefaults(EnvironmentKind::Dusk);
     d.discDirection = normalize(Vec3{-0.62f, 0.03f, -0.78f});
     d.select = 0.6f;
-    d.zenith = {0.01f, 0.022f, 0.05f};
-    d.horizon = {0.12f, 0.075f, 0.055f};
+    d.zenith = {0.004f, 0.016f, 0.045f}; // deep night blue
+    d.horizon = {0.1f, 0.06f, 0.03f};    // an amber dusk band (redder bands mix with the blue to mauve)
     d.ground = {0.006f, 0.006f, 0.007f};
     d.townDensity = 0.f;
-    d.glow = 0.5f;
+    d.glow = 0.12f; // a tight glow round the sliver, not an orange sky
     d.haze = 0.f;
+    d.discRadiance = d.discRadiance * 0.35f;
     d.select = 1.f;
     return d;
 }
@@ -239,6 +253,34 @@ EnvironmentDesc infinitySky() {
     d.ground = {0.025f, 0.03f, 0.04f};
     d.select = 1.f;
     return d;
+}
+
+// RAYTRACE's air: a height fog that turns the board's far squares and the horizon into haze, and a thin
+// cirrus deck high over it (shaders/modern/spheres_medium.comp), drifting with the wind.
+constexpr float kCirrusBase = 170.f, kCirrusTop = 215.f, kCirrusHalf = 3200.f;
+constexpr std::array<std::uint32_t, 3> kCirrusGrid{512, 8, 512};
+
+MediumFrame raytraceMedium(const show::TimelineFrame& frame) {
+    MediumFrame m;
+    FogDesc fog;
+    fog.density = 0.003f; // thick along the board, thin overhead (a scale height of 12 units)
+    fog.baseHeight = 0.f;
+    fog.falloff = 0.08f;
+    fog.albedo = {0.6f, 0.75f, 0.98f}; // cool: the warm sun scatters to a neutral blue-grey, never mauve
+    fog.phaseG = 0.55f;
+    m.fog = fog;
+    GridMediumDesc grid;
+    grid.size = kCirrusGrid;
+    grid.worldToMedium = mediumBox({-kCirrusHalf, kCirrusBase, -kCirrusHalf}, {kCirrusHalf, kCirrusTop, kCirrusHalf});
+    grid.densityScale = 1.f;
+    grid.albedo = {0.97f, 0.97f, 0.98f};
+    grid.phaseG = 0.7f;
+    grid.emissionScale = 0.f;
+    grid.params[0] = 0.07f;                                      // density at full cover (per unit)
+    grid.params[1] = 0.52f;                                      // coverage
+    grid.params[2] = 0.0012f * float(frame.localSeconds);        // drift
+    m.grid = grid;
+    return m;
 }
 
 // --- Cameras -----------------------------------------------------------------------------------------------
@@ -280,45 +322,151 @@ double lateCut(const show::TimelineFrame& f, double fraction) {
     return std::min(cut, chapterEnd(f) - 0.5);
 }
 
+// The tracked bar line k bars from the drop (negative: before it).
+double barFromDrop(const show::TimelineFrame& f, const SpheresDrop& drop, double k) {
+    return nextBarLine(f, drop.seconds + (k - 0.25) * drop.barSeconds);
+}
+
+// A camera looking from eye towards a horizontal heading (degrees from +z towards -x, so 0 looks along
+// 1993's view and positive turns right), pitched up by `pitch` degrees.
+Camera lookAlong(Vec3 eye, float heading, float pitch, float fov, std::uint32_t shot) {
+    const float h = heading * kDegrees, p = pitch * kDegrees;
+    const Vec3 d{-std::sin(h) * std::cos(p), std::sin(p), std::cos(h) * std::cos(p)};
+    Camera c{eye, eye + d * 10.f, {0, 1, 0}, fov};
+    c.shot = shot;
+    return c;
+}
+
+// The lenses (vertical fields of view at 16:9).
+constexpr float kLens24 = 45.2f, kLens35 = 31.8f, kLens85 = 13.7f;
+// The pitch that puts the horizon on the lower third line of a lens.
+float lowerThird(float fov) {
+    return std::atan(std::tan(0.5f * fov * kDegrees) / 3.f) / kDegrees;
+}
+
+// RAYTRACE's shots, cut on the bars after the drop:
+//   0  until the drop 1993's camera, then (no cut: the camera breaks free) a crane back and up over two
+//      bars while the lens closes from 1993's 46 degrees to 35 mm, holding the centre sphere's size;
+//   1  2 bars: 85 mm at ball height, tracking right past the bouncing ring, the horizon on the lower third;
+//   2  1 bar: 85 mm on a glass ball and the caustic it throws on the board;
+//   3  1 bar: 85 mm, chrome reflecting chrome, drifting left;
+//   4  1 bar: 85 mm low on the centre sphere, the ring reflected in it;
+//   5  to the end: wide and low on 35 mm, the mirror moon on the right third, the balls settling.
 Camera raytraceCamera(const show::TimelineFrame& f) {
     const SpheresDrop drop = spheresDrop(f);
-    const ShotTime s = shotAt(f, {drop.seconds, lateCut(f, 0.62)});
-    const Vec3 centre{0.f, 1.3f, 0.f};
-    if (s.shot == 0)
-        return raytraceRetroCamera();
-    if (s.shot == 1) { // low, round the central sphere, the ring leaping past
-        const float a = lerp(-0.5f * kPi - 0.3f, -0.5f * kPi + 1.15f, s.u);
-        const float r = lerp(6.6f, 5.3f, s.u), h = lerp(1.05f, 0.8f, s.u);
-        Camera c{{r * std::cos(a), h, r * std::sin(a)}, {0.f, lerp(1.6f, 1.05f, s.u), 0.f}, {0, 1, 0}, 40.f};
-        c.aperture = 0.06f;
-        c.focusDistance = length(centre - c.eye) - 1.1f;
-        c.shot = 1;
+    const double bar = drop.barSeconds;
+    const ShotTime s = shotAt(f, {barFromDrop(f, drop, 2), barFromDrop(f, drop, 4), barFromDrop(f, drop, 5),
+                                  barFromDrop(f, drop, 6), barFromDrop(f, drop, 7)});
+    if (s.shot == 0) {
+        const Camera retro = raytraceRetroCamera();
+        if (f.localSeconds < drop.seconds)
+            return retro;
+        const float u = smooth(float((f.localSeconds - drop.seconds) / (2.0 * bar)));
+        const float fov = lerp(retro.fovYDegrees, kLens35, u);
+        // Hold the centre sphere's size: the distance grows as the lens closes.
+        const float distance = length(retro.eye - retro.target) * std::tan(0.5f * retro.fovYDegrees * kDegrees) /
+                               std::tan(0.5f * fov * kDegrees);
+        const float a = lerp(-0.5f * kPi, -0.5f * kPi - 0.35f, u), rise = lerp(std::atan2(1.f, 8.f), 0.42f, u);
+        const Vec3 target{0.f, lerp(1.f, 1.3f, u), 0.f};
+        const Vec3 out{std::cos(a) * std::cos(rise), std::sin(rise), std::sin(a) * std::cos(rise)};
+        Camera c{target + out * distance, target, {0, 1, 0}, fov};
+        c.shot = 0;
         return c;
     }
-    const float a = lerp(-0.5f * kPi + 0.7f, -0.5f * kPi + 1.35f, s.u);
-    const float r = lerp(10.5f, 9.f, s.u), h = lerp(2.6f, 7.4f, s.u);
-    Camera c{{r * std::cos(a), h, r * std::sin(a)}, {0.f, 0.4f, 1.2f}, {0, 1, 0}, 48.f};
-    c.shot = 2;
+    const float tilt = lowerThird(kLens85);
+    const auto u = s.u;
+    if (s.shot == 1) { // tracking right at ball height, the ring between us and the centre sphere
+        const float a = lerp(-0.5f * kPi + 0.55f, -0.5f * kPi - 0.15f, u);
+        const Vec3 eye{19.f * std::cos(a), 0.55f, 19.f * std::sin(a)};
+        const Vec3 aim = normalize(Vec3{-eye.x, 0.f, -eye.z});
+        Camera c = lookAlong(eye, std::atan2(-aim.x, aim.z) / kDegrees, tilt, kLens85, 1);
+        c.aperture = 0.04f;
+        c.focusDistance = length(eye) - 9.f;
+        return c;
+    }
+    if (s.shot == 2) { // a glass ball and its caustic, the sun behind the camera
+        const RaytraceBall glass = raytraceBalls(f)[kRaytraceGlassBall];
+        const Vec3 at{glass.centre.x, glass.radius, glass.centre.z};
+        // Across the sunlight, from the outside of its orbit and above the bounces: the ball and, on the board
+        // beside its shadow, the caustic it focuses.
+        const Vec3 across = normalize(Vec3{6.f, 0.f, -5.f});
+        const RaytraceBall first = raytraceRetroBalls(f.localSeconds - double(s.t))[kRaytraceGlassBall];
+        const Vec3 outward = normalize(Vec3{first.centre.x, 0.f, first.centre.z}); // chosen once per shot
+        const Vec3 side = dot(across, outward) >= 0.f ? across : across * -1.f;
+        const Vec3 eye = at + side * (5.2f - 0.4f * u) + Vec3{0.f, 2.6f, 0.f};
+        Camera c{eye, at + Vec3{0.25f, -0.45f, 0.3f}, {0, 1, 0}, kLens85};
+        c.aperture = 0.04f;
+        c.focusDistance = length(at - eye);
+        c.shot = 2;
+        return c;
+    }
+    // (Shots 3 and 4 stay in the corridor the extra balls keep clear: radius 4.2 to 7.3 on the arc from
+    // 0.5 rad right of 1993's camera to 1.45 left of it.)
+    if (s.shot == 3) { // chrome reflecting chrome, drifting left
+        const float a = lerp(-0.5f * kPi + 1.0f, -0.5f * kPi + 0.6f, u);
+        const Vec3 eye{6.1f * std::cos(a), 0.9f, 6.1f * std::sin(a)};
+        Camera c = lookAlong(eye, std::atan2(eye.x, -eye.z) / kDegrees + 8.f, tilt + 1.f, kLens85, 3);
+        c.aperture = 0.035f;
+        c.focusDistance = length(eye) - 1.3f; // the centre sphere's face
+        return c;
+    }
+    if (s.shot == 4) { // the centre sphere close, the whole ring in it
+        const float a = lerp(-0.5f * kPi + 0.3f, -0.5f * kPi + 0.1f, u);
+        const Vec3 eye{6.6f * std::cos(a), 1.1f, 6.6f * std::sin(a)};
+        Camera c{eye, {0.f, 1.25f, 0.f}, {0, 1, 0}, kLens85};
+        c.aperture = 0.04f;
+        c.focusDistance = length(eye - Vec3{0.f, 1.3f, 0.f}) - 1.3f;
+        c.shot = 4;
+        return c;
+    }
+    // Wide and low: the board runs to the fog, the mirror moon low on the right third.
+    const Vec3 eye{lerp(3.5f, 2.f, u), lerp(1.6f, 1.35f, u), lerp(-21.f, -19.f, u)};
+    Camera c = lookAlong(eye, lerp(4.f, 7.f, u), lowerThird(kLens35), kLens35, 5);
     return c;
 }
 
 Camera stormCamera(const show::TimelineFrame& f) {
     const SpheresDrop drop = spheresDrop(f);
-    // Wide through the rise, which starts on the drop; under the funnel two bars later.
-    const ShotTime s = shotAt(f, {nextBarLine(f, drop.seconds + 1.5 * drop.barSeconds)});
+    // 85 mm at floor level until the rise begins (4 bars before D); 35 mm backing off as it rises; on D under
+    // the vortex on 24 mm looking up through the ribbons against the dusk; from 3 bars on, an orbit at mid
+    // height.
+    const ShotTime s = shotAt(f, {barFromDrop(f, drop, -4), drop.seconds, barFromDrop(f, drop, 3)});
+    // The dusk is behind the vortex: the cameras stand on the side away from the sun.
+    const Vec3 away = normalize(Vec3{0.62f, 0.f, 0.78f});
+    const Vec3 side{away.z, 0.f, -away.x};
     if (s.shot == 0) {
-        const float a = 0.35f + 1.9f * s.u;
-        const float r = lerp(18.f, 13.5f, s.u), h = lerp(1.6f, 3.4f, s.u);
-        return {{r * std::cos(a), h, r * std::sin(a)}, {0.f, lerp(1.5f, 4.3f, s.u), 0.f}, {0, 1, 0}, 48.f};
+        const Vec3 eye = away * 30.f + side * lerp(-1.5f, 1.5f, s.u) + Vec3{0.f, 0.22f, 0.f};
+        // The sun's sliver off-centre, near the right third, not behind the vortex's heart.
+        Camera c{eye, side * 4.f + Vec3{0.f, 0.45f, 0.f}, {0, 1, 0}, kLens85};
+        c.aperture = 0.25f;
+        c.focusDistance = 30.f;
+        return c;
     }
-    const float a = 2.1f + 1.5f * s.u;
-    const float r = lerp(4.6f, 4.0f, s.u), h = lerp(1.7f, 1.4f, s.u);
-    Camera c{{r * std::cos(a), h, r * std::sin(a)}, {0.f, 8.f, 0.f}, {0, 1, 0}, 64.f};
-    c.shot = 1;
+    if (s.shot == 1) {
+        const Vec3 eye = away * lerp(16.f, 21.f, s.u) + side * lerp(2.f, 3.5f, s.u) + Vec3{0.f, lerp(0.9f, 2.4f, s.u), 0.f};
+        Camera c{eye, {0.f, lerp(1.2f, 2.6f, s.u), 0.f}, {0, 1, 0}, kLens35};
+        c.shot = 1;
+        return c;
+    }
+    if (s.shot == 2) {
+        // Low beyond the skirt, the lens tilted up 22 degrees: the funnel climbs the frame over the dusk band.
+        const float a = 0.3f * (s.u - 0.5f);
+        const Vec3 dir = away * std::cos(a) + side * std::sin(a);
+        const Vec3 eye = dir * 14.f + Vec3{0.f, 0.45f, 0.f};
+        Camera c{eye, Vec3{0.f, 0.45f + 14.f * std::tan(22.f * kDegrees), 0.f}, {0, 1, 0}, kLens24};
+        c.shot = 2;
+        return c;
+    }
+    const float a = 0.9f + 1.1f * s.u;
+    const Vec3 dir = away * std::cos(a) + side * std::sin(a);
+    const Vec3 eye = dir * lerp(17.f, 15.f, s.u) + Vec3{0.f, lerp(5.5f, 4.8f, s.u), 0.f};
+    Camera c{eye, {0.f, 4.6f, 0.f}, {0, 1, 0}, kLens35};
+    c.shot = 3;
     return c;
 }
 
 constexpr float kFallSpeed = 2.2f;
+constexpr float kInfinityFog = 0.0035f, kInfinityFogFalloff = 0.08f; // per unit at the camera; per unit up
 
 Camera infinityCamera(const show::TimelineFrame& f) {
     const SpheresDrop drop = spheresDrop(f);
@@ -329,17 +477,17 @@ Camera infinityCamera(const show::TimelineFrame& f) {
     if (s.shot == 0) {
         const float yaw = 0.7f + 0.45f * s.u, pitch = (52.f - 14.f * s.u) * kDegrees;
         const Vec3 d{std::cos(pitch) * std::cos(yaw), -std::sin(pitch), std::cos(pitch) * std::sin(yaw)};
-        return {eye, eye + d, {0, 1, 0}, 62.f};
+        return {eye, eye + d, {0, 1, 0}, kLens24};
     }
     if (s.shot == 1) {
         const float pitch = (-6.f + 9.f * s.u) * kDegrees, yaw = 0.5f * kPi + 0.05f * (s.u - 0.5f);
         const Vec3 d{std::cos(pitch) * std::cos(yaw), -std::sin(pitch), std::cos(pitch) * std::sin(yaw)};
-        Camera c{eye, eye + d, {0, 1, 0}, 58.f};
+        Camera c{eye, eye + d, {0, 1, 0}, kLens24};
         c.shot = 1;
         return c;
     }
     const float roll = 0.3f + 1.4f * s.u;
-    Camera c{eye, eye + Vec3{0.f, -1.f, 0.f}, {std::cos(roll), 0.f, std::sin(roll)}, 70.f};
+    Camera c{eye, eye + Vec3{0.f, -1.f, 0.f}, {std::cos(roll), 0.f, std::sin(roll)}, kLens24};
     c.shot = 2;
     return c;
 }
@@ -413,6 +561,9 @@ std::array<float, 16> stormParams(const show::TimelineFrame& frame, SceneDetail 
     p[4] = std::clamp(frame.energy, 0.f, 1.f);
     p[5] = std::clamp(frame.kick, 0.f, 1.f);
     p[6] = stormRise(frame);
+    const SpheresDrop drop = spheresDrop(frame);
+    p[8] = float(drop.seconds);
+    p[9] = float(drop.barSeconds);
     return p;
 }
 
@@ -437,6 +588,7 @@ rt::SphereRecord stormParticle(std::uint32_t id, float seconds, std::span<const 
     const float u1 = unitOf(h1), u2 = unitOf(h2), u3 = unitOf(h3), u4 = unitOf(h4), u5 = unitOf(h5);
 
     float r, y, angle;
+    bool iceRibbon = false;
     if (u1 < 0.72f) {
         const float f = u2 * u2 * (1.6f - 0.6f * u2);
         y = 0.35f + 11.f * f;
@@ -445,7 +597,10 @@ rt::SphereRecord stormParticle(std::uint32_t id, float seconds, std::span<const 
         r = lerp(2.f + 8.f * f, r, rise);
         const float omega = 2.4f / (0.7f + r);
         const float ribbon = std::floor(6.f * u4) / 6.f;
-        angle = stormPhase(kTau * (ribbon + 1.3f * f) + 0.24f * (u5 - 0.5f) + omega * seconds);
+        iceRibbon = ribbon == 0.f;
+        const float x = std::max(seconds - params[8], 0.f) / params[9];
+        const float twist = kTau * (x >= 1.f ? x - 0.5f : x * x * x - 0.5f * x * x * x * x);
+        angle = stormPhase(kTau * (ribbon + 1.3f * f) + 0.24f * (u5 - 0.5f) + omega * seconds + twist);
         r *= 1.f + 0.16f * energy + 0.3f * kick * f;
         y += 0.22f * std::sin(stormPhase(3.f * angle + 1.3f * seconds + kTau * u5));
     } else {
@@ -470,14 +625,12 @@ rt::SphereRecord stormParticle(std::uint32_t id, float seconds, std::span<const 
     float emission = 0.f;
     const std::uint32_t pick = h5 % 8u;
     if (glows) {
-        colour = pick < 4u   ? Vec3{1.f, 0.42f, 0.1f}
-                 : pick < 7u ? Vec3{1.f, 0.82f, 0.55f}
-                             : Vec3{0.45f, 0.72f, 1.f};
-        emission = (2.5f + 3.5f * u4) * (1.f + 1.5f * kick);
-    } else if (pick == 0u) {
-        colour = {1.f, 0.8f, 0.42f};
-    } else if (pick == 1u) {
-        colour = {0.98f, 0.7f, 0.62f};
+        colour = iceRibbon   ? Vec3{0.55f, 0.78f, 1.f}
+                 : pick < 6u ? Vec3{1.f, 0.28f, 0.04f}
+                             : Vec3{1.f, 0.5f, 0.16f};
+        emission = (0.9f + 1.3f * u4) * (1.f + 1.5f * kick);
+    } else if (iceRibbon) {
+        colour = {0.82f, 0.9f, 1.f};
     }
     setColor(p.color, colour);
     p.material = 0;
@@ -675,6 +828,11 @@ Spheres::Spheres(SceneDetail detail) : detail_(detail) {
             m[k].coatRoughness = kTileCoatRoughness[v];
         }
     }
+    // The board and its tiles receive the balls' caustics (one receiver, RAYTRACE's).
+    for (std::uint32_t k = kBoard; k < kTileWhite + kTileVariants; ++k) {
+        m[k].flags |= rt::kMaterialCausticReceiver;
+        m[k].receiver = 0;
+    }
     m[kChrome] = metal({0.96f, 0.96f, 0.97f}, 0.f);
     m[kGold] = metal({1.f, 0.76f, 0.33f}, 0.1f); // satin
     // Satin copper under a smooth clear coat.
@@ -733,7 +891,10 @@ Spheres::Spheres(SceneDetail detail) : detail_(detail) {
     const std::uint32_t side = infinitySide(detail);
     static_.capacity.particles = std::max(stormCount(detail), side * side * side);
     static_.capacity.treeLights = stormEmissiveCount(detail);
+    static_.capacity.causticResolution = kRaytraceReceiverResolution;
+    static_.capacity.mediumGrid = kCirrusGrid;
     static_.particleShader = "modern_particles_spheres.comp.spv";
+    static_.mediumShader = "modern_spheres_medium.comp.spv";
 }
 
 SceneFrame Spheres::frame(const show::TimelineFrame& frame) const {
@@ -754,7 +915,10 @@ SceneFrame Spheres::raytraceFrame(const show::TimelineFrame& frame) const {
     // The sunlit board is about 1.5: sun -> chrome -> board paths (caustics through 48 balls) would speckle
     // at the default.
     f.clampIndirect = 2.f;
-    f.environment = raytraceSky();
+    const SpheresDrop drop = spheresDrop(frame);
+    const float widen = smooth(float((frame.localSeconds - drop.seconds) / (0.25 * drop.barSeconds)));
+    f.environment = raytraceSky(kRaytraceSunRadius + kRaytraceSunWiden * widen);
+    f.medium = raytraceMedium(frame);
     f.instances.push_back({kFloorMesh, kBoard, floorUnder(f.camera.eye, -0.04f)});
     const std::array<RaytraceBall, kRaytraceSphereCount> balls = raytraceBalls(frame);
     for (std::uint32_t i = 0; i < kRaytraceSphereCount; ++i)
@@ -800,17 +964,30 @@ SceneFrame Spheres::raytraceFrame(const show::TimelineFrame& frame) const {
         f.lights.push_back(rectLightForQuad(place, l.width, l.height, rt::LightKind::Emitter,
                                             colorOf(m.emission) * m.emissionScale, kSoftboxWeight));
     }
+    // The sun's caustics through the balls (the glass ones focus it, the chrome ones throw its reflections)
+    // as a photon map on the board round them: sharp, and none of the sun -> ball -> board grain.
+    CausticFrame c;
+    c.receivers = {receiverForQuad(compose(translate({0.f, 0.f, 0.f}), rotate({1.f, 0.f, 0.f}, -0.5f * kPi)),
+                                   kRaytraceReceiverSide, kRaytraceReceiverSide, kRaytraceReceiverResolution)};
+    c.photons = raytracePhotons(detail_);
+    c.light = -1;
+    c.casterInstanceFirst = 1;
+    c.casterInstanceCount = kRaytraceSphereCount;
+    f.caustics = c;
     return f;
 }
 
 SceneFrame Spheres::stormFrame(const show::TimelineFrame& frame) const {
     SceneFrame f;
     f.camera = spheresCamera(frame);
-    f.exposureEV = spheresExposureEV(show::Effect::SphereStorm);
+    // Per shot: the first two look into the sun's sliver on the horizon, so they are exposed down.
+    constexpr float kShotEV[4] = {-0.2f, -0.1f, 0.2f, 0.15f};
+    f.exposureEV = kShotEV[std::min<std::uint32_t>(f.camera.shot, 3)];
     f.clampIndirect = 16.f;
     f.environment = stormSky();
     f.instances.push_back({kFloorMesh, kObsidian, floorUnder(f.camera.eye)});
-    const rt::Mat34 fill = compose(facing({-9.f, 10.f, 24.f}, {0.f, 4.f, 0.f}), scale({3.f, 3.f, 3.f}));
+    // High above every camera's frame: it fills the chrome from the cool side, unseen.
+    const rt::Mat34 fill = compose(facing({-9.f, 30.f, 24.f}, {0.f, 4.f, 0.f}), scale({3.f, 3.f, 3.f}));
     SceneInstance box{kSoftboxMesh, kSoftbox, fill};
     box.light = 0;
     f.instances.push_back(box);
@@ -845,9 +1022,24 @@ SceneFrame Spheres::stormFrame(const show::TimelineFrame& frame) const {
 SceneFrame Spheres::infinityFrame(const show::TimelineFrame& frame) const {
     SceneFrame f;
     f.camera = spheresCamera(frame);
-    f.exposureEV = spheresExposureEV(show::Effect::RaytraceInfinity);
+    // Per shot: looking down (shots 0 and 2) the camera looks into the haze it falls towards; opened up.
+    constexpr float kShotEV[3] = {0.3f, 0.f, 0.6f};
+    f.exposureEV = kShotEV[std::min<std::uint32_t>(f.camera.shot, 2)];
     f.clampIndirect = 16.f;
     f.environment = infinitySky();
+    // Depth: a dusk-lit haze through the lattice, so the halls recede in steps of air and the lanterns glow
+    // in it. A height fog based at the camera, thickening below it and thinning above (an endless homogeneous
+    // fog would let no light in from the sky at all): the depths the camera falls into are haze, the low sun
+    // still reaches it.
+    MediumFrame medium;
+    FogDesc fog;
+    fog.density = kInfinityFog;
+    fog.baseHeight = f.camera.eye.y;
+    fog.falloff = kInfinityFogFalloff;
+    fog.albedo = {0.55f, 0.58f, 0.66f}; // a cool, dim haze: the dark channels between the spheres stay dark
+    fog.phaseG = 0.4f;
+    medium.fog = fog;
+    f.medium = medium;
     // The lattice round the camera, recycled as it falls.
     ParticleFrame p;
     p.params = infinityParams(f.camera.eye, detail_, frame.localSeconds - spheresDrop(frame).seconds);

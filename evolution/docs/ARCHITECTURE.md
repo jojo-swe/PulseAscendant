@@ -139,12 +139,10 @@ None of this can be checked on lavapipe.
 - `accel_test` prints `warning: synchronization validation unavailable` rather than `SKIP sync validation` and has
   no `SKIP_REGULAR_EXPRESSION`, unlike the other synchronisation tests.
 - **Windows GPU timeout (TDR) at 4K.** No single dispatch traces more than 4 spp (estimated 0.06-0.15 s at 4K on a
-  4090), but an export frame is one submission of ceil(spp / 4) dispatches: about 1-4 s at 64 spp and 4-16 s at
-  256 spp (unmeasured). Run `--capture-dir` at 3840x2160 with `--spp 256` in STUDIO NIGHT (t about 205) and time
-  it. If the driver misbehaves (device lost, frozen desktop), split a frame's trace over several submissions in
-  `runRenderStream` / `runCapture`, bounded by a ray budget such as
-  `samplesPerSubmit = max(1, 4 * 1920 * 1080 / (w * h))`, as a function of (spp, resolution) only so that window
-  and export keep agreeing.
+  4090), and the exports submit a frame per shutter slice (`FrameRing::split` before each slice's TLAS build):
+  at 64 spp 8 submits of 2 dispatches, about 0.1-0.5 s each (unmeasured). Run `--capture-dir` at 3840x2160 with
+  `--spp 256` in STUDIO NIGHT (t about 205) and time it; if the driver still resets, raise `TdrDelay` (README,
+  "Release and the 4K video").
 - **Windows and audio.** `cmake --preset windows`, `ctest --preset windows`, and listen with headphones (act joins,
   A/V offset with `--audio-offset`, unplugging the device).
 - **`--bench`** measures the window's rendering without a window. From the build directory:
@@ -164,7 +162,8 @@ None of this can be checked on lavapipe.
 ## Known open items
 
 - Blotchy first window frames after a history reset at 1 spp (dark holes in lit beige plastic that fade in about
-  ten frames); export at 16 spp or more keeps fine grain in dark corners at the default 64 spp.
+  ten frames); export at 16 spp or more filters lightly (2 à-trous iterations), so the darkest corners can keep
+  a little grain at the default 64 spp.
 - Single-scatter GGX loses energy in rough metals; glass is tinted by base colour at every pass and transmission
   lacks an eta-squared term; the glass sphere's caustic is weak (photon maps are still to come).
 - Below 2 fps on lavapipe every window frame is a time jump, so accumulation never builds up.

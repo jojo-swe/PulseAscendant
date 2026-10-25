@@ -6,7 +6,7 @@
 //     every kind's defaults pack to valid uniforms, the disc and dome shares, and the refusals (also through
 //     checkSceneFrame, which the path tracer and the scene sweep run); the Studio's frames keep their own
 //     NightSky (studioEnvironment, the Studio light rig), never sampled, and its moon emitter stands along that
-//     sky's glow direction;
+//     sky's glow direction; RETURN and REBOOT keep that sky with the moon's glow out and the horizon at dawn;
 // (a) disc and dome sampling: every sample's pdf equals environmentPdf (1e-4) and its radiance equals
 //     environmentLighting; the pdf integrates to 1 over the sphere (importance-sampled Monte Carlo, 1 %);
 //     the disc gets discShare of the samples, all inside it;
@@ -451,18 +451,30 @@ void testDescriptions() {
     modern::checkSceneFrame(s.statics, s.frame);
     s.frame.environment.select = 2;
     CHECK(throws<std::invalid_argument>([&] { modern::checkSceneFrame(s.statics, s.frame); }));
-    // The Studio keeps its own NightSky in every chapter, never sampled (its window portal samples the sky),
-    // and stands its moon emitter along that sky's disc and glow direction.
+    // The Studio keeps its own NightSky, never sampled (its window portal samples the sky), and stands its
+    // moon emitter along that sky's disc and glow direction. RETURN and REBOOT are the same sky at dawn:
+    // the moon's glow is out and the horizon has lifted off the night colour.
     const rt::EnvironmentUniforms studioSky = modern::packEnvironment(modern::studioEnvironment());
     CHECK(studioSky.kind == std::uint32_t(EnvironmentKind::NightSky));
+    const EnvironmentDesc nightSky = modern::studioEnvironment();
     const std::unique_ptr<modern::ModernScene> studio = modern::makeScene(modern::SceneId::Studio);
     for (const int chapter : {9, 10, 11, 19, 20})
         for (const double fraction : {0.1, 0.5, 0.9}) {
             const modern::SceneFrame f = studio->frame(show::sampleTimeline(
                 show::chapterStart(chapter) +
                 fraction * (show::chapterStart(chapter + 1) - show::chapterStart(chapter))));
-            CHECK(sameWords(modern::packEnvironment(f.environment), studioSky));
+            CHECK(f.environment.kind == EnvironmentKind::NightSky);
             CHECK(f.environment.select == 0.f);
+            const bool dawn = chapter >= 19;
+            if (!dawn)
+                CHECK(sameWords(modern::packEnvironment(f.environment), studioSky));
+            else {
+                CHECK(f.environment.glow == 0.f);
+                CHECK(f.environment.horizon.x > nightSky.horizon.x && f.environment.horizon.y > nightSky.horizon.y);
+                CHECK(f.environment.discDirection.x == nightSky.discDirection.x &&
+                      f.environment.discDirection.y == nightSky.discDirection.y &&
+                      f.environment.discDirection.z == nightSky.discDirection.z);
+            }
         }
     const Vec3 studioMoon = modern::normalize(modern::Studio::kMoonDirection);
     CHECK(std::abs(studioMoon.x - studioSky.discDirection[0]) < 1e-6f &&
@@ -861,8 +873,10 @@ double chapterTime(int chapter, double fraction) {
 // wide dolly; REBOOT: a dark modern room, the CRT's light rig and exposure).
 // Re-measured on the merge of the Studio light rig with the NEE shadow-ray fix (d91fb09 and later), which lit REBOOT more.
 // Re-measured again with the Studio's takes (STUDIO NIGHT's dolly back to the night wide, REBOOT's close-up)
-// and the per-act grade (Act II's lifted blacks): 0.07627 and 0.13525 before.
-constexpr double kStudioNightBaseline = 0.20728, kRebootBaseline = 0.23459;
+// and the per-act grade (Act II's lifted blacks): 0.07627 and 0.13525, then 0.20728 and 0.23459.
+// Re-measured after the Studio polish (the night sky, the town glow and the per-shot exposure): the night
+// wide is darker and REBOOT's close-up sits lower.
+constexpr double kStudioNightBaseline = 0.11457, kRebootBaseline = 0.17955;
 constexpr int kStudioNight = 11, kReboot = 20;
 
 void testStudio(gfx::Context& ctx) {

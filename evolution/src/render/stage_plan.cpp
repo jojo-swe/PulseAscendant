@@ -77,8 +77,16 @@ post::DenoiseSettings denoiseSettingsFor(const HistoryState& state) {
     post::DenoiseSettings settings;
     const bool interactive = state.mode == RenderMode::Interactive;
     settings.temporal = interactive;
-    settings.atrousIterations = interactive || state.spp < kExportFilterSpp ? kAtrousIterations : 0u;
-    settings.fireflyFilter = !interactive && state.spp >= kExportFilterSpp;
+    const bool fine = !interactive && state.spp >= kExportFilterSpp;
+    settings.fireflyFilter = fine;
+    if (fine) {
+        // Every export pixel has a history of one frame, so the reset iterations would apply to all of
+        // them: both are set to the light pass, steps 1 and 2.
+        settings.atrousIterations = kExportFineAtrousIterations;
+        settings.resetAtrousIterations = kExportFineAtrousIterations;
+    } else {
+        settings.atrousIterations = kAtrousIterations;
+    }
     return settings;
 }
 

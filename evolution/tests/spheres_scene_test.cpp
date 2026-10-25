@@ -1,13 +1,14 @@
 // The Spheres scene: RAYTRACE, SPHERE STORM and RAYTRACE INFINITY. With the validation
 // layer and its synchronization validation on; fails on any message it reports.
 //   (a) the map: exactly the three chapters show Spheres;
-//   (b) the cards: every count the three 2026 cards state is the configuration's (RAYTRACE's
-//       "60 FPS" is a frame rate, which --bench measures on the target GPU); the configuration is 48 balls (6
+//   (b) the cards: the three 2026 cards (Spheres::nowCard) are the show bible's lines, and every count they
+//       state is the configuration's (RAYTRACE's "60 FPS" is a frame rate, which --bench measures on the
+//       target GPU; INFINITY's "6 BOUNCES" is the export's bounce limit); the configuration is 48 balls (6
 //       from 1993) and a colossal one, 32,768 storm particles of which 4,096 glow, and the 32,768 lattice
 //       spheres round the camera;
 //   (c) the 1993 mirror: the first six balls equal retro::raytraceSpheres at the same time (the scene mirrors
-//       it: evo_modern cannot link the retro code), ball 3 is the glass one, and until the accent the camera
-//       is retro::raytraceCamera;
+//       it: evo_modern cannot link the retro code), ball 3 is the glass one, until the drop the camera is
+//       retro::raytraceCamera, and from it the same shot cranes away;
 //   (d) the sweep: checkSceneSweep over the three chapters every 1/60 s; RAYTRACE's balls never sink into the
 //       board, overlap or come near the camera; the camera never comes near a lattice sphere or (sampled
 //       every tenth frame at full detail) a storm particle;
@@ -33,6 +34,7 @@
 #include "modern/scene.hpp"
 #include "modern/scenes/spheres.hpp"
 #include "render/renderer.hpp"
+#include "render/stage_plan.hpp"
 #include "retro/raytrace.hpp"
 #include "rt/particles.hpp"
 #include "show/timeline.hpp"
@@ -166,15 +168,23 @@ void testCards() {
     CHECK(modern::infinitySide({1.f / 256}) == 5);
     CHECK(modern::Spheres({1.f / 256}).staticScene().capacity.particles == 128);
 
-    // The cards: a count must be the configuration's; a frame rate is measured with --bench.
+    // The cards (Spheres::nowCard): the show bible's lines, and a count must be the configuration's; a frame
+    // rate is measured with --bench; the bounces are the export's (render::kExportMaxBounces).
     const std::vector<long> counts = {modern::kRaytraceSphereCount + modern::kRaytraceGiants,
                                       modern::kStormSpheres, modern::kStormEmissive,
                                       modern::kInfinitySpheres};
+    const std::string dot = " · ";
+    const std::string expected[3] = {
+        "2026" + dot + "REAL-TIME PATH TRACING" + dot + "49 SPHERES" + dot + "60 FPS",
+        "2026" + dot + "32,768 SPHERES" + dot + "4,096 OF THEM LIGHTS" + dot + "LIGHT TREE" + dot + "MOTION BLUR",
+        "2026" + dot + "32,768 MIRROR SPHERES" + dot + "INFINITE REFLECTIONS" + dot + "6 BOUNCES"};
     int stated = 0;
-    int frameRates = 0;
-    for (const int chapter : {kRaytrace, kStorm, kInfinity}) {
-        const std::string card = show::sampleTimeline(show::chapterStart(chapter)).nowCard;
-        CHECK(!card.empty());
+    int frameRates = 0, bounces = 0;
+    const show::Effect effects[3] = {show::Effect::Raytrace, show::Effect::SphereStorm,
+                                     show::Effect::RaytraceInfinity};
+    for (int k = 0; k < 3; ++k) {
+        const std::string card = full.nowCard(effects[k]);
+        CHECK(card == expected[k]);
         for (const CardNumber& n : cardNumbers(card)) {
             if (n.value == 2026 && n.unit.empty())
                 continue; // the year
@@ -183,11 +193,17 @@ void testCards() {
                 continue;
             }
             std::printf("card \"%s\": %ld %s\n", card.c_str(), n.value, n.unit.c_str());
+            if (n.unit == "BOUNCES") {
+                CHECK(n.value == long(render::kExportMaxBounces));
+                ++bounces;
+                continue;
+            }
             CHECK(std::find(counts.begin(), counts.end(), n.value) != counts.end());
             ++stated;
         }
     }
     CHECK(frameRates == 1); // RAYTRACE's "60 FPS"
+    CHECK(bounces == 1);    // RAYTRACE INFINITY's "6 BOUNCES"
     CHECK(stated == 4);     // 49 spheres; 32,768 and 4,096; 32,768
     // The parser itself, on a card with a count.
     const std::vector<CardNumber> dots = cardNumbers("2026 · 2,097,152 PARTICLES");
@@ -250,7 +266,9 @@ void testRetroMirror() {
         ++frames;
     }
     CHECK(frames > 20);
-    CHECK(scene.frame(show::sampleTimeline(accent + 0.01)).camera.shot == 1);
+    // On the drop the camera breaks free without a cut: the same shot, craning away from 1993's eye.
+    const modern::Camera free = scene.frame(show::sampleTimeline(accent + 0.01)).camera;
+    CHECK(free.shot == 0 && modern::length(free.eye - c.eye) > 0.05f && free.fovYDegrees < c.fovYDegrees);
 }
 
 // --- (i) the drop
@@ -331,7 +349,7 @@ void testDrop() {
 void testSweep() {
     const auto start = std::chrono::steady_clock::now();
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Spheres, {.maxCameraStep = 0.3f});
-    CHECK(stats.frames > 5000 && stats.shots == 3 + 2 + 3);
+    CHECK(stats.frames > 5000 && stats.shots == 6 + 4 + 3);
     CHECK(stats.maxLights == 2);
 
     // Physical sanity, frame by frame.
@@ -339,6 +357,7 @@ void testSweep() {
     const modern::Spheres full;
     const modern::SceneStatic& statics = scene.staticScene();
     float closestBall = 1e9f, closestLattice = 1e9f, closestParticle = 1e9f, lowestBall = 1e9f;
+    double closestBallAt = 0, closestParticleAt = 0;
     for (const int chapter : {kRaytrace, kStorm, kInfinity}) {
         const double begin = show::chapterStart(chapter), end = show::chapterStart(chapter + 1);
         int n = 0;
@@ -350,8 +369,10 @@ void testSweep() {
                 const auto balls = modern::raytraceBalls(f);
                 for (std::uint32_t i = 0; i < balls.size(); ++i) {
                     lowestBall = std::min(lowestBall, balls[i].centre.y - balls[i].radius);
-                    closestBall =
-                        std::min(closestBall, modern::length(balls[i].centre - eye) - balls[i].radius);
+                    const float gap = modern::length(balls[i].centre - eye) - balls[i].radius;
+                    if (gap < closestBall)
+                        closestBallAt = t;
+                    closestBall = std::min(closestBall, gap);
                     for (std::uint32_t k = modern::kRaytraceRetroSpheres; k < i; ++k)
                         CHECK(modern::length(balls[i].centre - balls[k].centre) >
                               balls[i].radius + balls[k].radius);
@@ -371,15 +392,19 @@ void testSweep() {
                 for (std::uint32_t id = 0; id < modern::kStormSpheres; ++id) {
                     const rt::SphereRecord p = modern::spheresParticle(id, seconds, params);
                     const Vec3 c{p.center[0], p.center[1], p.center[2]};
-                    closestParticle = std::min(closestParticle, modern::length(c - eye) - p.radius);
+                    const float gap = modern::length(c - eye) - p.radius;
+                    if (gap < closestParticle)
+                        closestParticleAt = t;
+                    closestParticle = std::min(closestParticle, gap);
                 }
             }
         }
     }
     std::printf(
-        "sweep: closest ball %.3f, lowest ball bottom %.5f, closest lattice sphere %.3f, closest storm "
-        "particle %.3f (%.1f s)\n",
-        closestBall, lowestBall, closestLattice, closestParticle, secondsSince(start));
+        "sweep: closest ball %.3f (at %.2f s), lowest ball bottom %.5f, closest lattice sphere %.3f, closest "
+        "storm particle %.3f (at %.2f s) (%.1f s)\n",
+        closestBall, closestBallAt, lowestBall, closestLattice, closestParticle, closestParticleAt,
+        secondsSince(start));
     CHECK(lowestBall > -1e-4f);
     CHECK(closestBall > 0.4f);
     CHECK(closestLattice > 0.4f);
