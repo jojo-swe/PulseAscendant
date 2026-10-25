@@ -17,8 +17,10 @@ namespace evo::render {
 // Puts the two eras on the output, in two passes at the render resolution:
 //   crt.comp        the 320x200 retro picture into a centred 4:3 rectangle of the output, black around it,
 //                   with the CRT look or plain nearest-neighbour; the rectangle is the same either way;
-//   composite.comp  that screen and the modern image blended by era, wipe, transition and eraCut into the
-//                   R8G8B8A8_UNORM output (also usable as a blit and copy source);
+//   composite.comp  that screen and the modern image blended by era, wipe and transition into the
+//                   R8G8B8A8_UNORM output (also usable as a blit and copy source), a Wipe's line drawn as a
+//                   refractive edge, plus the era flip's white flash (show::eraFlash); FINALE shows the
+//                   modern image over the whole frame whatever its era (show::holdsModern);
 // then the overlay text (the HUD) is blended over the output with the text pass.
 //
 // `visible` (kRetroVisible | kModernVisible) says which stages' images the frame may show: an image whose bit

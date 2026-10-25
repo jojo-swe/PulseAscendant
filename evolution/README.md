@@ -190,6 +190,21 @@ visible, so a skipped stage's stale image never reaches the output:
    8× at 2560×1440, at 1× of the step when a card would not fit). The window also shows the chapter title
    top-left as a development aid; captures and `--render-stream` never do. Key H or `--no-hud` hides it.
 
+### Scene cuts and the megamix
+
+A frame may show another chapter's 2026 scene than its own (`src/show/director.cpp`). FINALE is a megamix of
+hard cuts on the beat grid, from one shot every two beats down to a quarter beat: RAYTRACE between the balls,
+the CITY puddle, the DOTS logo, the LENS sphere, the GLENZ caustic, the room, TUNNEL, NEBULA, the WORMHOLE
+ship, and the RAYTRACE drop held still, stopping dead on the chapter's downbeat, after which the Studio holds.
+REBOOT looks at the galaxy from its glass crossing on. A cut renders the source scene at its own scene time
+(advancing from the source time, or held), so its 2026 picture is that scene's picture; each cut resets the
+history, so the window's first frame after it traces the reset frame's samples. The 1993 side, the
+compositor and the cards follow the frame itself: FINALE always shows the 2026 picture (the 1993 grid is on
+the Studio's CRT, and the retro stage runs only while the Studio is shown), with the 2026 card during a cut
+and the 1993 card in the room. A Wipe's line is a strip of glass four pixels wide that shows the 1993 side
+refracted and a little brighter, and only the BeatSwap flips of DOTS, GLENZ and RAYTRACE flash, at a quarter
+of white.
+
 ### The 1993 rasteriser
 
 Polygon and dot effects work as they did on a 486: the CPU transforms the scene once per retro frame (in

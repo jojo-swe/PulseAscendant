@@ -1,11 +1,14 @@
 #include "render/renderer.hpp"
 
 #include "modern/path_tracer.hpp"
+#include "show/director.hpp"
 #include "text/font8x8.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -139,7 +142,12 @@ void Renderer::setTraceScale(float scale) {
 void Renderer::prepare(std::span<const double> showSeconds) {
     std::array<bool, modern::kSceneCount> done{};
     for (const double seconds : showSeconds) {
-        const modern::SceneId id = modern_.sceneOf(show::sampleTimeline(seconds).effect);
+        // The scene the frame shows: a megamix or REBOOT frame's cut, else its own chapter's.
+        const show::TimelineFrame frame = show::sampleTimeline(seconds);
+        const std::optional<show::SceneCut> cut = show::sceneCut(frame);
+        const show::Effect effect =
+            cut ? show::cues[static_cast<std::size_t>(cut->chapter)].effect : frame.effect;
+        const modern::SceneId id = modern_.sceneOf(effect);
         bool& prepared = done[static_cast<std::size_t>(id)];
         if (!prepared)
             modern_.prepare(id);
@@ -148,7 +156,10 @@ void Renderer::prepare(std::span<const double> showSeconds) {
 }
 
 void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
-    const StagePlan plan = planStages(frame, mode_, modern_.samplesRetro(frame));
+    // The 2026 side renders the frame's scene cut, if any (show/director.hpp): its scene, camera shot, scene
+    // time and so its history and seed. The 1993 side, the compositor and the HUD follow the frame itself.
+    const show::TimelineFrame scene = show::sceneFrame(frame);
+    const StagePlan plan = planStages(frame, mode_, modern_.samplesRetro(scene));
     const VkExtent2D size = output().extent();
     stats_.gpuMs = timers_.lastCompleted(); // read by the ring's begin() for this frame's slot
     timers_.begin(cmd, "total");
@@ -166,19 +177,24 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
     stats_.spp = 0;
     stats_.traceJitter = {0.f, 0.f};
     if (plan.modern) {
+        // A cut changes the chapter (or the scene time jumps), so it resets the history like any chapter
+        // change: the window shows the reset frame's samples, an export the frame at the cut's scene time.
         const HistoryKey key{
-            frame.chapter, modern_.shotFor(frame), frame.showSeconds, size.width, size.height, mode_, spp_};
+            scene.chapter, modern_.shotFor(scene), scene.showSeconds, size.width, size.height, mode_, spp_};
         stats_.historyReset = history_.advance(key, !modernRanLastFrame_);
-        // Export frames stand alone: the seed depends on the show time only, not on the frames before.
+        // Export frames stand alone: the seed depends on the scene time only, not on the frames before.
         const std::uint32_t seedFrames = mode_ == RenderMode::Export ? 0u : history_.framesSinceReset();
+        // The shutter's slices stay inside the scene's chapter, so a scene shown before its chapter starts
+        // (REBOOT's look ahead at GALAXY) is traced at its own time alone.
+        const double shutter = scene.localSeconds < 0.0 ? 0.0 : shutterSeconds_;
         const HistoryState state{stats_.historyReset,
                                  history_.framesSinceReset(),
                                  mode_,
                                  frameSpp(mode_, spp_, history_.framesSinceReset()),
                                  maxBounces_,
-                                 modern::frameSeedFor(frame.showSeconds, seedFrames),
-                                 shutterSeconds_};
-        modern_.render(cmd, frame, state, plan.retro ? &retro_.image() : nullptr);
+                                 modern::frameSeedFor(scene.showSeconds, seedFrames),
+                                 shutter};
+        modern_.render(cmd, scene, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
         stats_.spp = state.spp;
         stats_.traceJitter = modern_.lastTraceJitter();

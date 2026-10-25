@@ -24,10 +24,13 @@ struct StagePlan {
 };
 
 // Visible, as the compositor blends: Cut and BeatSwap show 2026 from era 0.5 and 1993 below it; Portal shows
-// 2026 while era > 0 and 1993 while era < 1; Wipe shows 2026 while wipe > 0 and 1993 while wipe < 1.
+// 2026 while era > 0 and 1993 while era < 1; Wipe shows 2026 while wipe > 0 and 1993 while wipe < 1 (its
+// refractive edge shows 1993). FINALE (show::holdsModern) shows 2026 only, whatever the era.
 // Runs: the retro stage when it is visible or the modern stage samples it (the Studio's CRT); the modern
 // stage when it is visible, and in the window also through a BeatSwap, Portal or Wipe chapter while it is
-// hidden, so its history stays warm for the next swap. Exports skip it strictly.
+// hidden, so its history stays warm for the next swap. Exports skip it strictly. In FINALE the retro stage
+// therefore runs exactly while the Studio is shown, not during the megamix's cuts to other scenes; the
+// renderer passes modernSamplesRetro for the scene the frame shows (show::sceneFrame).
 StagePlan planStages(const show::TimelineFrame& frame, RenderMode mode, bool modernSamplesRetro);
 
 // The path tracer's bounce limit: `requested`, or the mode's default for 0.
