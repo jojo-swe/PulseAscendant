@@ -29,6 +29,9 @@ Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the cit
 changed; every other output, the Studio's included, stayed byte for byte.
 Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
 Then galaxy_20 changed when GALAXY moved from the placeholder to the Cosmos scene; nothing else moved.
+Then regenerated for the Studio's new takes and the Portal crossings: every Studio capture and the three Studio
+streams changed (new cameras and handheld), and flyby_2026, now the Studio; every 1993 and non-Studio output
+stayed byte for byte.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
