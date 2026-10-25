@@ -17,7 +17,9 @@
 // must be a delta surface (causticDeltaSurface); at each delta surface Fresnel picks reflection or
 // refraction (a dielectric: transmission tinted by baseColor; a dispersive one, abbe > 0, fixes a hero
 // wavelength on the first meeting, weighting the flux by spectralRgb, and refracts with dispersiveIor; a
-// metal: reflection weighted by its delta lobes' Fresnel), at most kMaxPhotonDeltaEvents of them. A
+// metal: reflection weighted by its delta lobes' Fresnel), at most kMaxPhotonDeltaEvents of them; a thin-walled
+// pane (kMaterialThinWalled) is no event but a filter the photon passes, tinted (its reflection is dropped); a segment inside a solid dielectric takes its Beer-Lambert transmittance (Material::baseColor2 is
+// the absorption per unit length; the photon is inside when it leaves along the outward normal). A
 // non-delta surface ends the photon: a receiver of this frame (after >= 1 delta event) takes its flux times
 // the Lambert lobe's Fresnel transmission, bilinearly into 2x2 texels of its map, in fixed point
 // (unitsPerFlux, rounded, at most 2^20 per texel and channel) with integer atomics, order independent.
@@ -86,6 +88,7 @@ vec3 offsetOrigin(vec3 p, vec3 ng, vec3 direction) {
 }
 
 struct PhotonHit {
+    float t; // along the ray
     vec3 position;
     vec3 normal;          // shading, outward
     vec3 geometricNormal; // outward
@@ -128,6 +131,7 @@ bool traceHit(vec3 origin, vec3 d, out PhotonHit h) {
     }
     InstanceRecord record = instanceRecords[rayQueryGetIntersectionInstanceCustomIndexEXT(q, true)];
     uint primitive = uint(rayQueryGetIntersectionPrimitiveIndexEXT(q, true));
+    h.t = rayQueryGetIntersectionTEXT(q, true);
     mat4x3 objectToWorld = rayQueryGetIntersectionObjectToWorldEXT(q, true);
     mat4x3 worldToObject = rayQueryGetIntersectionWorldToObjectEXT(q, true);
     if (type == gl_RayQueryCommittedIntersectionGeneratedEXT) {
@@ -141,6 +145,7 @@ bool traceHit(vec3 origin, vec3 d, out PhotonHit h) {
         h.normal = h.geometricNormal;
         h.material = materials[s.material];
         h.material.baseColor *= s.color;
+        h.material.baseColor2 *= s.color;
         return true;
     }
     h.material = materials[record.material];
@@ -261,6 +266,7 @@ void main() {
     }
     bool hero = false; // a wavelength is fixed
     float lambda = 0.0;
+    uint panes = 0u; // passed, at most kMaxPhotonDeltaEvents of them
     for (uint events = 0u;; ++events) {
         PhotonHit h;
         if (!traceHit(origin, direction, h)) {
@@ -277,6 +283,25 @@ void main() {
         }
         if (events == kMaxPhotonDeltaEvents) {
             return;
+        }
+        bool pane = isDielectric(s) && (m.flags & kMaterialThinWalled) != 0u;
+        if (pane) {
+            if (++panes > kMaxPhotonDeltaEvents) {
+                return;
+            }
+            // A pane is a filter, not an event: the photon passes on with its transmission (the light it
+            // reflects is not followed), as the camera's paths and shadow rays treat it.
+            float r = fresnelDielectric(abs(dot(wo, h.normal)), 1.0 / bsdfIor(s));
+            flux *= clamp(s.baseColor, 0.0, 1.0) * ((1.0 - r) / (1.0 + r));
+            if (!(maxComponent3(flux) > 0.0)) {
+                return;
+            }
+            origin = offsetOrigin(h.position, h.geometricNormal, direction);
+            --events; // the loop counts it back
+            continue;
+        }
+        if (isDielectric(s) && dot(direction, h.geometricNormal) > 0.0) {
+            flux *= dielectricTransmittance(m.baseColor2, h.t); // the segment crossed its interior
         }
         vec3 n = dot(wo, h.normal) >= 0.0 ? h.normal : -h.normal; // towards wo
         float cosI = dot(wo, n);

@@ -458,10 +458,14 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         std::vector<rt::InstanceRecord> records;
         instances.reserve(frame.instances.size());
         records.reserve(frame.instances.size());
+        bool panes = false;
         for (std::size_t i = 0; i < frame.instances.size(); ++i) {
             const SceneInstance& in = frame.instances[i];
             const auto index = static_cast<std::uint32_t>(i);
             const auto materialClass = static_cast<rt::MaterialClass>(materials[in.material].materialClass);
+            const bool pane = (materials[in.material].flags & rt::kMaterialThinWalled) != 0 &&
+                              materials[in.material].transmission > 0.5f;
+            panes = panes || pane;
             const bool spheres = in.kind == rt::GeometryKind::Spheres;
             // A sphere instance's BLAS: the particle field's this frame, or its range's of the static
             // spheres (checkSceneFrame found the range).
@@ -471,7 +475,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                                          : scene.spheres()->address(
                                                *scene.spheres()->findRange({in.firstSphere, in.sphereCount}));
             instances.push_back(
-                {in.mesh, in.transform, index, rt::hitGroupFor(materialClass, in.kind), 0xFF, blas});
+                {in.mesh, in.transform, index, rt::hitGroupFor(materialClass, in.kind),
+                 pane ? rt::kInstanceMaskPane : rt::kInstanceMaskSolid, blas});
             const std::uint32_t flags = (spheres ? rt::kInstanceSpheres : 0u) |
                                         (spheres && in.dynamicSpheres ? rt::kInstanceDynamicSpheres : 0u);
             records.push_back({spheres ? in.firstSphere : in.mesh, in.material, in.light, flags});
@@ -512,7 +517,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         u.maxBounces = settings.maxBounces;
         u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
                   (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
-                  (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u);
+                  (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u) |
+                  (panes ? rt::kTraceFlagThinPanes : 0u);
         u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
         u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
         u.clampIndirect = settings.clampIndirect;

@@ -245,6 +245,9 @@ void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmissio
     payload.medium = h.material.medium;
     payload.primitive = h.primitive;
     payload.prevPosition = h.prevPosition;
+    // Beer-Lambert inside glass: a dielectric's baseColor2 is its absorption per unit length.
+    bool solidGlass = transmission > 0.5 && (h.material.flags & kMaterialThinWalled) == 0u;
+    payload.absorption = solidGlass ? max(h.material.baseColor2, vec3(0.0)) : vec3(0.0);
 }
 
 vec3 materialEmission(Material m) {

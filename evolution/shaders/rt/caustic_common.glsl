@@ -15,7 +15,7 @@
 
 #include "bsdf.glsl"
 
-const uint kMaxPhotonDeltaEvents = 6u; // modern::kMaxPhotonDeltaEvents
+const uint kMaxPhotonDeltaEvents = 10u; // modern::kMaxPhotonDeltaEvents
 
 // A world point's uv on a receiver (rows 0 and 1 of its worldToUv).
 vec2 receiverUv(CausticReceiver r, vec3 p) {

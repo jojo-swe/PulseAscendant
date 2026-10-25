@@ -47,6 +47,10 @@ const uint kHitGroupsPerKind = 4u;
 const uint kTraceFlagNee = 1u; // FrameUniforms.flags
 const uint kTraceFlagRussianRoulette = 2u;
 const uint kTraceFlagFixedLightSelection = 4u; // step 4's fixed selectWeights (comparisons)
+const uint kTraceFlagThinPanes = 8u; // the frame has thin-walled glass (shadow rays then pass through it)
+// TLAS instance masks: thin-walled glass panes, and everything else (shadow rays see only the latter).
+const uint kInstanceMaskSolid = 1u;
+const uint kInstanceMaskPane = 2u;
 
 struct Vertex { // 32 bytes
     vec3 position;
@@ -78,7 +82,7 @@ struct Material { // 96 bytes
     uint pattern;
     uint texture; // a member name, so the built-in texture() stays callable
     float patternScale;
-    vec3 baseColor2;
+    vec3 baseColor2; // the pattern's second colour; a solid dielectric's absorption per unit length
     uint materialClass;
     uint flags; // kMaterial*
     float abbe;

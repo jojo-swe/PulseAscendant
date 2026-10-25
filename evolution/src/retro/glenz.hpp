@@ -72,6 +72,10 @@ inline constexpr double kGlenzScale = 1.2;
 inline constexpr double kGlenzFloor = -0.75;
 inline constexpr double kGlenzLift = 1.1;
 inline constexpr double kGlenzCameraDistance = 8.0;
+// The spin, radians a second about x, y and z, and the starting angles (the 2026 glenz turns the same way,
+// modern/scenes/glass.hpp). The star is turned about x, then y, then z.
+inline constexpr double kGlenzSpin[3] = {0.83, 1.21, 0.47};
+inline constexpr double kGlenzStartAngle[3] = {0.4, 0.2, 0.1};
 
 // Where the bounce is, at `seconds` into the chapter, between the chapter's tracked beats: 0 on a beat,
 // rising to 1 just before the next (beats before the first or after the last keep the nearest beat length).

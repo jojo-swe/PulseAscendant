@@ -372,12 +372,18 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         if (!caustics_)
             throw std::invalid_argument("ModernStage: a frame with caustics from a scene whose "
                                         "capacity.causticResolution is 0");
-        const std::uint32_t photons =
-            slices[0].caustics->photons *
-            (state.mode == RenderMode::Export && state.spp >= modern::kExportPhotonSpp
-                 ? modern::kExportPhotonFactor
-                 : 1u);
-        caustics_->prepare(object.staticScene(), slices[0], photons,
+        // Such exports also resolve the maps at kExportMapFactor times the receivers' resolution, where the maps
+        // hold it.
+        const bool fine = state.mode == RenderMode::Export && state.spp >= modern::kExportPhotonSpp;
+        const std::uint32_t photons = slices[0].caustics->photons * (fine ? modern::kExportPhotonFactor : 1u);
+        const modern::SceneFrame* causticFrame = &slices[0];
+        modern::SceneFrame fineFrame;
+        if (fine) {
+            fineFrame = slices[0];
+            fineFrame.caustics = modern::exportCaustics(*slices[0].caustics, caustics_->maxResolution());
+            causticFrame = &fineFrame;
+        }
+        caustics_->prepare(object.staticScene(), *causticFrame, photons,
                            rt::pcgHash(modern::frameSeedFor(frame.showSeconds, 0) ^ 0x43415553u));
         extras.causticMaps = &caustics_->maps();
         extras.causticReceivers = &caustics_->receiverTable();
