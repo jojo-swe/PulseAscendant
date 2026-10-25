@@ -1,0 +1,239 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The Particles scene's particle field (step 5, Task 17): DOTS and PARTICLE OCEAN, one pure function of
+// (id, seconds, params) each, chosen by params[3].w. src/modern/scenes/particles.cpp mirrors both on the CPU
+// (dotsParticle, oceanParticle) and documents the shapes; scene_particles_test checks the two agree.
+//
+// DOTS (mode 0): params[0..2] = the six morphs' (first, arrival) in chapter seconds (retro::dotsSchedule's
+// frames / 35), params[3] = (count, turbulence, flash, 0). The particle holds a shape, or flows from one to the
+// next: cube -> sphere -> torus knot -> logo -> knot -> sphere -> cube.
+// PARTICLE OCEAN (mode 1): params[0] = (count, sea radius, wave scale, flash), params[3].w = 1.
+
+#include "particles_common.glsl"
+#include "logo_targets.glsl"
+
+const float kPi = 3.14159265;
+const float kTau = 6.28318531;
+
+float hashUnit(uint x) {
+    return logoUnit(logoHash(x));
+}
+
+// The golden-ratio fraction of i (i / phi mod 1) in 32-bit fixed point.
+float golden(uint i) {
+    return logoUnit(i * 0x9E3779B9u);
+}
+
+float smooth01(float x) {
+    x = clamp(x, 0.0, 1.0);
+    return x * x * (3.0 - 2.0 * x);
+}
+
+// --- DOTS ---------------------------------------------------------------------------------------------------
+
+const float kCubeSide = 1.2;
+const float kSphereRadius = 0.78;
+const uint kSphereShells = 4u;
+const float kShellStep = 0.09;
+const float kKnotMajor = 0.5, kKnotMinor = 0.22, kKnotLift = 1.4, kKnotTube = 0.1;
+const float kLogoCell = 0.038;
+const float kDotsRadius = 0.0022;
+const float kFullCount = 2097152.0;
+
+uint latticeSide(uint count) {
+    uint n = uint(pow(float(count), 1.0 / 3.0) + 0.5);
+    while (n * n * n > count) {
+        --n;
+    }
+    while ((n + 1u) * (n + 1u) * (n + 1u) <= count) {
+        ++n;
+    }
+    return n;
+}
+
+vec3 cubeTarget(uint id, uint count) {
+    uint n = latticeSide(count);
+    uint j = id % (n * n * n);
+    vec3 lattice = vec3(float(j % n), float(j / (n * n)), float((j / n) % n));
+    return (lattice / float(n - 1u) - 0.5) * kCubeSide;
+}
+
+vec3 sphereTarget(uint id, uint count) {
+    uint shell = id % kSphereShells, k = id / kSphereShells;
+    uint n = (count - 1u - shell) / kSphereShells + 1u;
+    float y = float(2u * k + 1u) / float(n) - 1.0;
+    float ring = sqrt(max(1.0 - y * y, 0.0));
+    float angle = kTau * (golden(k) + 0.37 * float(shell));
+    float radius = kSphereRadius * (1.0 - kShellStep * float(shell));
+    return radius * vec3(ring * cos(angle), y, ring * sin(angle));
+}
+
+vec3 knotTarget(uint id, uint count) {
+    float t = kTau * (float(id) + 0.5) / float(count);
+    float c2 = cos(2.0 * t), s2 = sin(2.0 * t), c3 = cos(3.0 * t), s3 = sin(3.0 * t);
+    float r = kKnotMajor + kKnotMinor * c3;
+    vec3 centre = vec3(r * c2, kKnotLift * kKnotMinor * s3, r * s2);
+    vec3 tangent = normalize(vec3(-3.0 * kKnotMinor * s3 * c2 - 2.0 * r * s2, 3.0 * kKnotLift * kKnotMinor * c3,
+                                  -3.0 * kKnotMinor * s3 * s2 + 2.0 * r * c2));
+    vec3 normal = normalize(cross(tangent, vec3(0.0, 1.0, 0.0)));
+    vec3 binormal = cross(normal, tangent);
+    float phi = kTau * golden(id);
+    float tube = kKnotTube * (1.0 - 0.15 * float(id % 3u));
+    return centre + tube * (cos(phi) * normal + sin(phi) * binormal);
+}
+
+// About y by yaw, then about x by pitch (retro/dots.cpp's turn()).
+vec3 turn(vec3 p, float yaw, float pitch) {
+    float cy = cos(yaw), sy = sin(yaw), cx = cos(pitch), sx = sin(pitch);
+    float x = cy * p.x + sy * p.z, z = -sy * p.x + cy * p.z;
+    return vec3(x, cx * p.y - sx * z, sx * p.y + cx * z);
+}
+
+// Shape 0 cube, 1 sphere, 2 knot, 3 logo, turned as the 1993 shapes turn at t: the solids spin, the logo sways.
+vec3 shapePoint(uint shape, uint id, uint count, float t) {
+    if (shape == 3u) {
+        return turn(logoTarget(id, kLogoCell), 0.12 * sin(kTau * t / 3.7), 0.10 * sin(kTau * t / 2.9));
+    }
+    vec3 p = shape == 0u ? cubeTarget(id, count) : shape == 1u ? sphereTarget(id, count) : knotTarget(id, count);
+    return turn(p, 0.6 + 0.85 * t, 0.4 + 0.12 * t);
+}
+
+// A divergence-free displacement: six plane waves of a vector potential, each contributing
+// cos(w.p + c t + phase) along normalize(w x e).
+const vec3 kCurlWave[6] = vec3[6](vec3(2.1, 0.7, -1.3), vec3(-1.1, 2.6, 0.9), vec3(0.8, -1.4, 3.1),
+                                  vec3(4.3, 1.9, 2.2), vec3(-2.7, -3.8, 1.6), vec3(1.5, 4.6, -3.9));
+const vec3 kCurlAxis[6] = vec3[6](vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0),
+                                  vec3(0.6, 0.0, 0.8), vec3(0.0, 0.8, 0.6), vec3(0.8, 0.6, 0.0));
+const float kCurlAmplitude[6] = float[6](0.5, 0.45, 0.4, 0.25, 0.22, 0.18);
+const float kCurlSpeed[6] = float[6](0.9, -1.1, 1.3, 1.7, -1.9, 2.3);
+
+vec3 curl(vec3 p, float t) {
+    vec3 d = vec3(0.0);
+    for (int k = 0; k < 6; ++k) {
+        float phase = dot(kCurlWave[k], p) + kCurlSpeed[k] * t + 1.7 * float(k);
+        d += kCurlAmplitude[k] * cos(phase) * normalize(cross(kCurlWave[k], kCurlAxis[k]));
+    }
+    return d;
+}
+
+const uint kOrder[7] = uint[7](0u, 1u, 2u, 3u, 2u, 1u, 0u);
+
+const vec3 kGlow[4] = vec3[4](vec3(0.12, 0.27, 0.9), vec3(0.55, 0.85, 1.0), vec3(1.0, 0.5, 0.15),
+                              vec3(1.0, 0.82, 0.55));
+
+SphereRecord dotsParticle(uint id, float seconds, vec4 params[4]) {
+    uint count = uint(params[3].x);
+    float turbulence = params[3].y, flash = params[3].z;
+    uint held = 0u, from = 0u, to = 0u, morph = 0u;
+    float s = 0.0;
+    bool morphing = false;
+    for (uint m = 0u; m < 6u; ++m) {
+        float first = params[m / 2u][2u * (m % 2u)], arrival = params[m / 2u][2u * (m % 2u) + 1u];
+        if (seconds >= arrival) {
+            held = kOrder[m + 1u];
+            continue;
+        }
+        if (seconds > first) {
+            morphing = true;
+            from = kOrder[m];
+            to = kOrder[m + 1u];
+            morph = m;
+            s = (seconds - first) / (arrival - first);
+        }
+        break;
+    }
+    vec3 p;
+    float flight = 0.0, logo = 0.0;
+    if (morphing) {
+        vec3 a = shapePoint(from, id, count, seconds), b = shapePoint(to, id, count, seconds);
+        // The top leaves first: a band of flight sweeps down through the formation (a little hashed spread).
+        float delay = 0.8 * clamp(0.5 - 0.6 * a.y, 0.0, 1.0) + 0.2 * hashUnit(id ^ 0x5BD1E995u);
+        float blend = smooth01((s - 0.55 * delay) / 0.45);
+        flight = sin(kPi * blend);
+        vec3 mid = (a + (b - a) * blend) * (1.0 + 0.3 * flight);
+        float swirl = (morph % 2u == 0u ? 1.4 : -1.4) * flight;
+        float c = cos(swirl), sn = sin(swirl);
+        mid = vec3(c * mid.x + sn * mid.z, mid.y, -sn * mid.x + c * mid.z);
+        // Three steps along the flow: filaments rather than a blur.
+        float step = 0.34 * flight * flight * turbulence;
+        p = mid;
+        for (int i = 0; i < 3; ++i) {
+            p += step * curl(p, seconds + 0.37 * float(i));
+        }
+        logo = to == 3u ? blend : from == 3u ? 1.0 - blend : 0.0;
+    } else {
+        p = shapePoint(held, id, count, seconds);
+        logo = held == 3u ? 1.0 : 0.0;
+    }
+
+    // The logo lands on the chapter's accent (morph 2's arrival): a shock of light that dies away.
+    float shock = seconds >= params[1].y ? exp(-(seconds - params[1].y) / 0.6) : 0.0;
+    uint h = logoHash(id ^ 0xA511E9B3u);
+    SphereRecord r;
+    r.center = p;
+    r.radius = kDotsRadius * pow(kFullCount / float(count), 1.0 / 3.0);
+    if (logoUnit(h) < 0.04 + 0.1 * logo) {
+        r.color = kGlow[(h >> 4) & 3u];
+        r.emission = 7.0 * (1.0 + 2.0 * flash) * (1.0 + flight) * (1.0 + 0.6 * logo) * (1.0 + 2.0 * shock);
+    } else {
+        // In flight the chrome turns ice blue and glows faintly: the morph reads as a stream of light.
+        vec3 chrome = vec3(0.92, 0.93, 0.96) * (0.9 + 0.1 * logoUnit(logoHash(h)));
+        r.color = chrome + (vec3(0.45, 0.75, 1.0) - chrome) * flight;
+        r.emission = 0.25 * flight * flight + 0.3 * shock * logo;
+    }
+    r.material = 0u;
+    r.prevCenter = vec3(0.0);
+    return r;
+}
+
+// --- PARTICLE OCEAN -----------------------------------------------------------------------------------------
+
+// Eight Gerstner waves: direction (unit), wave number k = 2 pi / wavelength, angular speed sqrt(9.81 k),
+// amplitude (times the wave scale) and phase. Each moves its particles by Q A along its direction, Q = 0.5.
+const vec2 kWaveDirection[8] = vec2[8](vec2(0.94, 0.34), vec2(0.77, 0.64), vec2(0.99, -0.14), vec2(0.6, -0.8),
+                                       vec2(0.87, 0.5), vec2(0.34, 0.94), vec2(0.97, 0.24), vec2(0.71, -0.71));
+const float kWaveNumber[8] = float[8](0.4488, 0.6614, 0.8976, 1.1855, 1.6111, 2.244, 2.992, 4.1888);
+const float kWaveSpeed[8] = float[8](2.0983, 2.5472, 2.9674, 3.4102, 3.9755, 4.692, 5.4177, 6.4103);
+const float kWaveAmplitude[8] = float[8](0.308, 0.209, 0.154, 0.1166, 0.0858, 0.0616, 0.0462, 0.033);
+const float kWavePhase[8] = float[8](0.0, 1.3, 2.9, 4.1, 0.7, 5.3, 2.2, 3.7);
+const float kWaveSteepness = 0.5;
+
+SphereRecord oceanParticle(uint id, float seconds, vec4 params[4]) {
+    uint count = uint(params[0].x);
+    float sea = params[0].y, scale = params[0].z, flash = params[0].w;
+    float radial = sea * sqrt((float(id) + 0.5) / float(count));
+    float angle = kTau * golden(id);
+    vec2 base = radial * vec2(cos(angle), sin(angle));
+    vec3 p = vec3(base.x, 0.0, base.y);
+    float total = 0.0;
+    for (int k = 0; k < 8; ++k) {
+        float a = kWaveAmplitude[k] * scale;
+        float f = kWaveNumber[k] * dot(kWaveDirection[k], base) - kWaveSpeed[k] * seconds + kWavePhase[k];
+        float c = cos(f);
+        p.x += kWaveSteepness * a * kWaveDirection[k].x * c;
+        p.z += kWaveSteepness * a * kWaveDirection[k].y * c;
+        p.y += a * sin(f);
+        total += a;
+    }
+    float crest = p.y / max(total, 1e-6);
+    // Foam: a third of the beads (hashed) near a crest glow cyan, flaring on the kick. Troughs read darker
+    // (deep water between the swells); beads thin out over the last 12 % of the radius, so the sea's edge
+    // dissolves.
+    float foam = logoUnit(logoHash(id ^ 0x2C1B3C6Du)) < 0.35 ? smooth01((crest - 0.55) / 0.25) : 0.0;
+    float depth = 0.45 + 0.55 * smooth01(0.5 + 0.5 * crest);
+    float edge = smooth01((1.0 - radial / sea) / 0.12);
+    SphereRecord r;
+    r.center = p;
+    r.radius = 0.5 * sea * 1.7724539 / sqrt(float(count)) * edge;
+    vec3 metal = vec3(0.95, 0.9, 0.84) * depth;
+    r.color = metal + (vec3(0.1, 0.75, 1.0) - metal) * foam;
+    r.emission = foam * (0.3 + 2.5 * flash) * 2.0;
+    r.material = 0u;
+    r.prevCenter = vec3(0.0);
+    return r;
+}
+
+SphereRecord particle(uint id, float seconds, vec4 params[4]) {
+    return params[3].w == 1.0 ? oceanParticle(id, seconds, params) : dotsParticle(id, seconds, params);
+}

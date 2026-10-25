@@ -556,8 +556,10 @@ void testRegistry(gfx::Context& ctx) {
         const bool studio = effect == Effect::Finale || effect == Effect::Portal ||
                             effect == Effect::StudioNight || effect == Effect::Return ||
                             effect == Effect::Reboot;
-        CHECK(modern::sceneFor(effect) == (studio ? modern::SceneId::Studio : modern::SceneId::Placeholder));
-        CHECK((modern::makeScene(modern::sceneFor(effect)) != nullptr) == studio);
+        CHECK((modern::sceneFor(effect) == modern::SceneId::Studio) == studio);
+        // Every effect shows the placeholder (no scene object) or a scene that has one.
+        CHECK((modern::makeScene(modern::sceneFor(effect), {1.f / 256}) != nullptr) ==
+              (modern::sceneFor(effect) != modern::SceneId::Placeholder));
     }
     // STUDIO NIGHT is 2026 only, yet the renderer runs the retro stage for the CRT.
     gfx::FrameRing ring(ctx);

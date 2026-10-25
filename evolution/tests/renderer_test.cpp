@@ -892,9 +892,14 @@ void testPrepareTimes(evo::gfx::Context& ctx) {
     const std::vector<double> mixed{plasma[0], studioNight(0.2).showSeconds, studioNight(0.9).showSeconds};
     harness.renderer().prepare(mixed);
     CHECK(stage.tracer() != nullptr && stage.sceneGpu(evo::modern::SceneId::Studio) != nullptr);
+    for (std::size_t id = 0; id < evo::modern::kSceneCount; ++id) // no other scene
+        if (static_cast<evo::modern::SceneId>(id) != evo::modern::SceneId::Studio)
+            CHECK(stage.sceneGpu(static_cast<evo::modern::SceneId>(id)) == nullptr);
     const VkDeviceSize bytes = stage.gpuBytes();
-    harness.renderer().prepareAll(); // the Studio is every scene the show has so far
+    harness.renderer().prepare(mixed); // once
     CHECK(stage.gpuBytes() == bytes);
+    harness.renderer().prepareAll(); // every scene of the show: at least the Studio's bytes
+    CHECK(stage.gpuBytes() >= bytes);
 }
 
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
