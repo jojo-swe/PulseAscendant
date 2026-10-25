@@ -158,6 +158,33 @@ void finalePalette(Palette& palette, const show::TimelineFrame&, std::uint32_t) 
         palette[kFinaleRamp + i] = rgba(kRamp[i][0], kRamp[i][1], kRamp[i][2]);
 }
 
+std::vector<text::Item> finaleCardText(const show::TimelineFrame&, std::uint32_t) {
+    int height = 0;
+    for (std::size_t i = 0; i < kFinaleCardLines.size(); ++i) {
+        height += 8 * kFinaleCardLines[i].scale;
+        if (i + 1 < kFinaleCardLines.size())
+            height += kFinaleCardLines[i + 1].scale == kFinaleCardLines[i].scale ? kFinaleCardLeading
+                                                                                 : kFinaleCardGap;
+    }
+    std::vector<text::Item> items;
+    int y = (200 - height) / 2;
+    for (std::size_t i = 0; i < kFinaleCardLines.size(); ++i) {
+        const FinaleCardLine& line = kFinaleCardLines[i];
+        const int width = 8 * line.scale * static_cast<int>(std::string(line.text).size());
+        items.push_back({static_cast<float>((320 - width) / 2), static_cast<float>(y),
+                         static_cast<float>(line.scale), indexColour(kFinaleWhite), line.text});
+        y += 8 * line.scale;
+        if (i + 1 < kFinaleCardLines.size())
+            y += kFinaleCardLines[i + 1].scale == line.scale ? kFinaleCardLeading : kFinaleCardGap;
+    }
+    return items;
+}
+
+void finaleCardPalette(Palette& palette, const show::TimelineFrame&, std::uint32_t) {
+    palette.fill(rgba(0, 0, 0));
+    palette[kFinaleWhite] = rgba(255, 255, 255);
+}
+
 void finaleScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
     cardCursor(scene, frame, retroFrame, kFinaleRetroRate, kFinaleWhite);
 }

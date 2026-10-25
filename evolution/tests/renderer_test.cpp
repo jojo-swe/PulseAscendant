@@ -910,6 +910,41 @@ void testCutEqualsSource(evo::gfx::Context& ctx) {
     CHECK(studio.renderModern(unmoved).rgb != galaxy.rgb);
 }
 
+// The megamix's thank-you card in an export: the 60 fps frames 10420-10422 are the 1993 picture over the whole
+// frame (the retro stage only, the CRT's 4:3 rectangle lit by white text on black, nothing outside it); the
+// frames 10419 and 10423 on either side are the room, the 2026 picture held over the whole frame.
+void testThankYouCard(evo::gfx::Context& ctx) {
+    Harness harness(ctx, stubSettings(RenderMode::Export, 2));
+    const auto stats = [&] { return harness.renderer().lastStats(); };
+    std::optional<Picture> card;
+    for (long i = 10419; i <= 10423; ++i) {
+        const TimelineFrame frame = evo::show::sampleTimeline(i / 60.0);
+        const bool shown = i >= 10420 && i <= 10422;
+        CHECK(evo::show::thankYouCard(frame) == shown);
+        const Picture output = harness.render(frame);
+        if (shown) {
+            CHECK(stats().retroRendered || card.has_value()); // drawn on the first, held after
+            CHECK(!stats().modernRendered);
+            if (card)
+                CHECK(output.rgb == card->rgb);
+            card = output;
+            // 160x90: the 4:3 rectangle is 120 wide from x = 20; black outside it, white text on black inside.
+            int white = 0;
+            for (std::uint32_t y = 0; y < output.height; ++y)
+                for (std::uint32_t x = 0; x < output.width; ++x) {
+                    if (x < 20 || x >= 140)
+                        CHECK(output.black(x, y));
+                    white += output.at(x, y)[1] > 128;
+                }
+            CHECK(white > 40 && white < 160 * 90 / 4);
+        } else {
+            CHECK(stats().modernRendered);
+            CHECK(output.rgb == harness.renderModern(frame).rgb); // the room, 2026 only
+        }
+    }
+    save(*card, "thank_you_card.png");
+}
+
 // In the window, each cut resets the history (Chapter) and its first frame equals a 4-spp export of the
 // frame byte for byte; frames within a cut continue it; the room after D continues across frames.
 void testCutHistory(evo::gfx::Context& ctx) {
@@ -1016,6 +1051,7 @@ int main() {
             testPrepareTimes(ctx);
             testCutEqualsSource(ctx);
             testCutHistory(ctx);
+            testThankYouCard(ctx);
             testPrepareCuts(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);

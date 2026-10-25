@@ -66,6 +66,26 @@ std::uint32_t finaleHomeStart(show::Effect effect);
 // The scroller's glyphs in the centre cell `elapsed` FINALE frames in (FINALE's own text without the card).
 std::vector<text::Item> finaleScroller(std::uint32_t elapsed);
 
+// The megamix's thank-you card (show::thankYouCard): three frames of a 1993 text screen over the whole
+// frame, phosphor white on black in the 8x8 font, every line centred. The headline is at 2x, broken at its
+// full stop (its 21 glyphs would need 336 of the screen's 320 pixels on one line), the thanks under it at 1x,
+// broken the same way; kFinaleCardLines top to bottom, kFinaleCardGap empty pixel rows between the two.
+struct FinaleCardLine {
+    const char* text;
+    int scale;
+};
+inline constexpr std::array<FinaleCardLine, 4> kFinaleCardLines = {{
+    {"YOU PAUSED.", 2},
+    {"GOOD EYE.", 2},
+    {"WE ONLY HAD ONE FRAME", 1},
+    {"TO SAY THANK YOU.", 1},
+}};
+inline constexpr int kFinaleCardLeading = 4; // empty pixel rows between two lines of one block
+inline constexpr int kFinaleCardGap = 16;    // empty pixel rows between the headline and the line under it
+// The card's lines, laid out (centred on the 320x200 screen, in kFinaleWhite).
+std::vector<text::Item> finaleCardText(const show::TimelineFrame& frame, std::uint32_t retroFrame);
+void finaleCardPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame);
+
 // The EffectInfo parts of FINALE. The grid: the eight tiles, FINALE's own picture in the centre cell, and in
 // the card's rect while the card shows.
 std::vector<GridLayer> finaleGrid(const show::TimelineFrame& frame, std::uint32_t retroFrame);

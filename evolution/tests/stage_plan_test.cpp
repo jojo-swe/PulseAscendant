@@ -138,14 +138,14 @@ void testForcedEra() {
 
 // What composite.comp reads, modelled independently of planStages: the weights the pixel centre x + 0.5 of
 // a width-pixel output gives the 1993 screen and the 2026 image (as in the shader: FINALE the 2026 image
-// whatever the era, Wipe by column with a 4-pixel refractive edge that shows the 1993 screen, Portal a mix by
+// whatever the era but on the thank-you card's frames, which select by era like a BeatSwap, Wipe by column with a 4-pixel refractive edge that shows the 1993 screen, Portal a mix by
 // era, Cut and BeatSwap a select at era 0.5).
 struct Weights {
     float then, now;
 };
 
 Weights compositeWeights(const TimelineFrame& frame, std::uint32_t x, std::uint32_t width) {
-    if (frame.effect == Effect::Finale)
+    if (frame.effect == Effect::Finale && !evo::show::thankYouCard(frame))
         return {0.f, 1.f};
     const float centre = static_cast<float>(x) + .5f;
     const float edge = frame.wipe * static_cast<float>(width);
@@ -222,7 +222,7 @@ void testFinale() {
             CHECK(planIs(planStages(finale, mode, true), false, true, true, true));
         }
 
-    int room = 0, cuts = 0;
+    int room = 0, cuts = 0, card = 0;
     const double start = evo::show::chapterStart(9), end = evo::show::chapterStart(10);
     for (double t = start; t < end; t += 1.0 / 60) {
         const TimelineFrame frame = evo::show::sampleTimeline(t);
@@ -230,6 +230,18 @@ void testFinale() {
         // What the renderer asks the modern stage: whether the scene shown samples the retro image.
         const bool studio = evo::modern::sceneFor(scene.effect) == evo::modern::SceneId::Studio;
         CHECK(studio == !evo::show::sceneCut(frame).has_value());
+        if (evo::show::thankYouCard(frame)) {
+            // The thank-you card: the 1993 picture over the whole frame (era 0), the room behind it hidden;
+            // the window keeps the Studio's history warm, as through any BeatSwap.
+            CHECK(studio && frame.era == 0.f);
+            for (RenderMode mode : kModes) {
+                const StagePlan plan = planStages(frame, mode, studio);
+                CHECK(plan.retroVisible && plan.retro && !plan.modernVisible);
+                CHECK(plan.modern == (mode == RenderMode::Interactive));
+            }
+            ++card;
+            continue;
+        }
         for (RenderMode mode : kModes) {
             const StagePlan plan = planStages(frame, mode, studio);
             CHECK(plan.modernVisible && plan.modern && !plan.retroVisible);
@@ -237,8 +249,8 @@ void testFinale() {
         }
         (studio ? room : cuts) += 1;
     }
-    std::printf("FINALE: %d room frames, %d cut frames\n", room, cuts);
-    CHECK(cuts > 60 * 3 && room > 60 * 7);
+    std::printf("FINALE: %d room frames, %d cut frames, %d card frames\n", room, cuts, card);
+    CHECK(cuts > 60 * 3 && room > 60 * 7 && card == evo::show::kThankYouFrames);
 }
 
 void testBounces() {

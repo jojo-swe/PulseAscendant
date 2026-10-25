@@ -39,6 +39,8 @@ namespace evo::render {
 //   the current one and the decayed older ones (retro::kPhosphorFrames). A picture missing from that cache
 //   (after a seek, or on a chapter's first frames) is rendered from its own retro frame, never carried over
 //   from what was shown, so a seek shows exactly what playback does.
+// On the three frames of the FINALE megamix's thank-you card (show::thankYouCard) the stage draws
+// retro::finaleCardEffect() instead of FINALE's grid, cached under a key of its own.
 // Everything runs only when the retro frame changes: retroFrame = floor(localSeconds * retroRate), keyed
 // together with the chapter (and the effect), so a chapter that starts on the same retro frame number as the
 // last one still renders its own picture. Every shader and texture is made up front, so no chapter stalls.

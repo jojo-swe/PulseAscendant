@@ -4,8 +4,9 @@
 //       chapter's first beat to D, which ends the last row exactly;
 //   (b) at least 8 distinct sources, each row's scene time inside its shot of the source chapter from the
 //       first to the last frame of the row, the drop held on one time;
-//   (c) the room holds over [D, 182.52) and around the reserved card frames; every 1/60 s frame of the show
-//       has a cut only in FINALE's cut rows and in REBOOT from D on; era is 1 in cuts and 0 in the room;
+//   (c) the room holds over [D, 182.52) and around the thank-you card; every 1/60 s frame of the show has a
+//       cut only in FINALE's cut rows and in REBOOT from D on; era is 1 in cuts and 0 in the room; the card
+//       is exactly the three frames 10420-10422, which alone in FINALE do not hold the 2026 picture;
 //   (d) a cut frame is the source's own frame but for the era fields; REBOOT's GALAXY frame is GALAXY's
 //   chapter
 //       with a negative local time that runs continuously into the chapter's first frame;
@@ -171,12 +172,13 @@ void testCutsAcrossTheShow() {
     std::printf("REBOOT: D %.4f\n", rebootD);
     CHECK(std::abs(rebootD - 426.32) < 0.02);
 
-    long cutFrames = 0, frames = 0;
+    long cutFrames = 0, frames = 0, cardFrames = 0;
     for (long i = 0; i / 60.0 < show::showDuration(); ++i, ++frames) {
         const double t = i / 60.0;
         const TimelineFrame frame = sampleTimeline(t);
         const std::optional<SceneCut> cut = show::sceneCut(frame);
-        CHECK(show::holdsModern(frame) == (frame.chapter == kFinale));
+        CHECK(show::holdsModern(frame) == (frame.chapter == kFinale && !show::thankYouCard(frame)));
+        cardFrames += show::thankYouCard(frame) ? 1 : 0;
         if (frame.chapter == kFinale) {
             const std::size_t row = rowAt(t);
             const bool cutRow = row < kRows && kMegamixShots[row].source != Effect::Finale;
@@ -194,6 +196,25 @@ void testCutsAcrossTheShow() {
     std::printf("sweep: %ld frames, %ld with a cut\n", frames, cutFrames);
     CHECK(frames > 60 * 700);
     CHECK(cutFrames > 60 * 4); // the megamix's cut rows and REBOOT from D: about 3.9 s + 5.7 s
+    CHECK(cardFrames == show::kThankYouFrames);
+}
+
+// The thank-you card: exactly the 60 fps frames 10420, 10421 and 10422 (173.6667 to 173.7000), the first
+// three of the card row from 173.6631; the room (no cut, era 0, the 2026 picture held) on either side.
+void testThankYouCard() {
+    const double start = show::megamixStart(static_cast<int>(show::kThankYouRow));
+    std::printf("thank-you card from %.4f\n", start);
+    CHECK(std::abs(start - 173.6631) < 1e-3);
+    CHECK(show::kMegamixShots[show::kThankYouRow].source == Effect::Finale);
+    for (long i = 10416; i <= 10426; ++i) {
+        const TimelineFrame frame = finaleAt(i / 60.0);
+        const bool card = i >= 10420 && i <= 10422;
+        CHECK(show::thankYouCard(frame) == card);
+        CHECK(show::holdsModern(frame) == !card);
+        CHECK(frame.era == 0.f); // the room's rows 5 and 6 (from 173.4523), the card included
+        CHECK(!show::sceneCut(frame).has_value());
+    }
+    CHECK(!show::thankYouCard(sampleTimeline(173.68 - 60.0))); // only in FINALE
 }
 
 // --- (d) ---------------------------------------------------------------------------------------------------
@@ -294,6 +315,7 @@ int main() {
         testSchedule();
         testSources();
         testCutsAcrossTheShow();
+        testThankYouCard();
         testSceneFrames();
         testFlash();
     } catch (const std::exception& error) {

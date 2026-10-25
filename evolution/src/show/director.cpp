@@ -126,13 +126,22 @@ TimelineFrame sceneFrame(const TimelineFrame& frame) {
     return cut ? sceneFrame(frame, *cut) : frame;
 }
 
+bool thankYouCard(const TimelineFrame& frame) {
+    if (frame.effect != Effect::Finale)
+        return false;
+    const double start = megamixStart(static_cast<int>(kThankYouRow));
+    const double end = start + kThankYouFrames / kThankYouFrameRate;
+    const double t = frame.showSeconds + kOnBoundary;
+    return t >= start && t < end;
+}
+
 void applyDirection(TimelineFrame& frame) {
     if (frame.effect == Effect::Finale)
         frame.era = megamixCut(frame.showSeconds) ? 1.f : 0.f;
 }
 
 bool holdsModern(const TimelineFrame& frame) {
-    return frame.effect == Effect::Finale;
+    return frame.effect == Effect::Finale && !thankYouCard(frame);
 }
 
 float eraFlash(const TimelineFrame& frame) {

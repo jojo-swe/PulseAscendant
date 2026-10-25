@@ -4,7 +4,8 @@
 // continues FINALE's count. On the GPU, through the retro stage: every tile equals the box-downsampled (in
 // linear light) solo render of its effect without its text, the centre and the gutters hold FINALE's own
 // picture, the 1993 card is typed bottom-left on black cells, and a frame is the same after another frame and
-// from a fresh stage. Runs with the validation layer on and fails on any message it reports.
+// from a fresh stage; the megamix's thank-you card replaces the grid on exactly its three frames. Runs with the
+// validation layer on and fails on any message it reports.
 
 #include "gfx/context.hpp"
 #include "retro/boot.hpp"
@@ -17,8 +18,10 @@
 #include "retro/tunnel.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/cues.hpp"
+#include "show/director.hpp"
 #include "show/timeline.hpp"
 #include "test_env.hpp"
+#include "text/font8x8.hpp"
 
 #include <algorithm>
 #include <array>
@@ -278,6 +281,65 @@ void testImages(evo::gfx::Context& ctx) {
     }
 }
 
+// The thank-you card, through the retro stage frame by frame as an export sees it: the 60 fps frames
+// 10420-10422 show exactly the card's lines in white on black (every glyph pixel of the 8x8 font white, every
+// other pixel black), centred and inside the screen; 10419 and 10423 show the grid, as a fresh stage draws it.
+void testThankYouCard(evo::gfx::Context& ctx) {
+    // The card's picture on the CPU.
+    const std::vector<evo::text::Item> items = evo::retro::finaleCardText(finale(0), 0);
+    CHECK(items.size() == evo::retro::kFinaleCardLines.size());
+    std::vector<std::uint8_t> expected(320 * 200, 0);
+    int top = 200, bottom = 0;
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        const evo::text::Item& item = items[i];
+        CHECK(item.text == evo::retro::kFinaleCardLines[i].text);
+        CHECK(static_cast<int>(item.scale) == evo::retro::kFinaleCardLines[i].scale);
+        const int scale = static_cast<int>(item.scale);
+        const int width = evo::text::textWidth(item.text, scale);
+        CHECK(std::abs(2 * static_cast<int>(item.x) + width - 320) <= 1); // centred
+        CHECK(item.x >= 8 && item.x + width <= 312);
+        top = std::min(top, static_cast<int>(item.y));
+        bottom = std::max(bottom, static_cast<int>(item.y) + 8 * scale);
+        for (std::size_t g = 0; g < item.text.size(); ++g) {
+            const evo::text::GlyphRows& rows = evo::text::glyph(item.text[g]);
+            for (int row = 0; row < 8; ++row)
+                for (int col = 0; col < 8; ++col)
+                    if ((rows[static_cast<std::size_t>(row)] >> (7 - col)) & 1)
+                        for (int dy = 0; dy < scale; ++dy)
+                            for (int dx = 0; dx < scale; ++dx) {
+                                const int x = static_cast<int>(item.x) + (static_cast<int>(g) * 8 + col) * scale + dx;
+                                const int y = static_cast<int>(item.y) + row * scale + dy;
+                                expected[static_cast<std::size_t>(y * 320 + x)] = 255;
+                            }
+        }
+    }
+    CHECK(std::abs((top + bottom) - 200) <= 1); // the block centred vertically
+    CHECK(std::string(items[0].text) + " " + items[1].text == "YOU PAUSED. GOOD EYE.");
+    CHECK(std::string(items[2].text) + " " + items[3].text == "WE ONLY HAD ONE FRAME TO SAY THANK YOU.");
+
+    RetroStageFixture stage(ctx, true);
+    for (long i = 10418; i <= 10424; ++i) {
+        const TimelineFrame frame = evo::show::sampleTimeline(i / 60.0);
+        CHECK(frame.effect == Effect::Finale);
+        const bool card = i >= 10420 && i <= 10422;
+        CHECK(evo::show::thankYouCard(frame) == card);
+        const evo::test::RetroPicture picture = stage.renderPicture(frame);
+        if (card) {
+            for (std::size_t p = 0; p < expected.size(); ++p)
+                for (std::size_t c = 0; c < 3; ++c)
+                    CHECK(picture.rgb[p * 3 + c] == expected[p]);
+        } else {
+            RetroStageFixture fresh(ctx, true);
+            CHECK(fresh.renderPicture(frame).rgb == picture.rgb);
+            std::size_t differ = 0;
+            for (std::size_t p = 0; p < expected.size(); ++p)
+                differ += picture.rgb[p * 3] != expected[p];
+            CHECK(differ > 320 * 200 / 4); // the grid, not the card
+        }
+    }
+    std::printf("finale: the thank-you card on frames 10420-10422 only\n");
+}
+
 } // namespace
 
 int main() {
@@ -292,6 +354,7 @@ int main() {
             if (!ctx.validationEnabled())
                 std::printf("warning: validation layer unavailable; only the pixels are checked\n");
             testImages(ctx);
+            testThankYouCard(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(evo::gfx::validationMessagesReported() == 0);

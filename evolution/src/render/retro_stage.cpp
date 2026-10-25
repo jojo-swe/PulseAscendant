@@ -4,6 +4,7 @@
 #include "gfx/paths.hpp"
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
+#include "show/director.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -53,6 +54,9 @@ struct TilePushConstants {
     std::uint32_t masked;
 };
 static_assert(sizeof(TilePushConstants) == 40);
+
+// The cache key's effect for the thank-you card, which is no chapter's effect.
+constexpr int kCardKey = -1;
 
 constexpr VkDeviceSize kPaletteBytes = sizeof(retro::Palette);
 // The most pictures one render() draws: a grid's layer sources (the 3x3 grid's eight tiles and its own
@@ -288,9 +292,12 @@ void RetroStage::drawPicture(VkCommandBuffer cmd, const retro::EffectInfo& effec
 }
 
 bool RetroStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
-    const retro::EffectInfo& effect = effects_(frame.effect);
+    // The megamix's thank-you card replaces FINALE's grid for its frames; it is cached under its own key, so
+    // the frames before and after it, in the same retro frame, still draw the grid.
+    const bool card = show::thankYouCard(frame);
+    const retro::EffectInfo& effect = card ? retro::finaleCardEffect() : effects_(frame.effect);
     retroFrame_ = retroFrameOf(frame, effect.retroRate);
-    const Key key{frame.chapter, static_cast<int>(frame.effect), retroFrame_};
+    const Key key{frame.chapter, card ? kCardKey : static_cast<int>(frame.effect), retroFrame_};
     if (cached_ == key)
         return false;
     picturesDrawn_ = 0;

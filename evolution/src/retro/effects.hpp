@@ -131,4 +131,8 @@ inline constexpr std::uint32_t kPlasmaRetroRate = 35;
 // and check that it is the test pattern).
 const EffectInfo& effectFor(show::Effect effect);
 
+// The FINALE megamix's thank-you card (retro/finale.hpp): a text screen at FINALE's rate, drawn by the stage
+// instead of FINALE's grid on the frames show::thankYouCard names.
+const EffectInfo& finaleCardEffect();
+
 } // namespace evo::retro

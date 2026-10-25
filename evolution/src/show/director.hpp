@@ -4,6 +4,7 @@
 #include "show/timeline.hpp"
 
 #include <array>
+#include <cstddef>
 #include <optional>
 
 namespace evo::show {
@@ -105,12 +106,23 @@ TimelineFrame sceneFrame(const TimelineFrame& frame, const SceneCut& cut);
 // The frame the 2026 side renders: sceneFrame(frame, cut) under a cut, the frame itself otherwise.
 TimelineFrame sceneFrame(const TimelineFrame& frame);
 
+// The megamix's card row: the room, opened by kThankYouFrames frames (at 60 a second) of a 1993 text screen
+// over the whole frame, through the CRT (retro/finale.hpp, finaleCard). The frames round them show the room.
+inline constexpr std::size_t kThankYouRow = 6;
+inline constexpr int kThankYouFrames = 3;
+inline constexpr double kThankYouFrameRate = 60;
+static_assert(kMegamixShots[kThankYouRow].source == Effect::Finale, "the card opens a room row");
+
+// Whether a frame is one of the card's: FINALE, in [megamixStart(kThankYouRow), that + kThankYouFrames / 60).
+bool thankYouCard(const TimelineFrame& frame);
+
 // The director's part of a frame, after applyEra: in FINALE the era says what the cards show, 1 (the 2026
 // card) during a cut and 0 (the 1993 card) in the room. Everything else is left as applyEra made it.
 void applyDirection(TimelineFrame& frame);
 
 // Whether the compositor shows the 2026 picture over the whole frame whatever the era: FINALE, where the
-// megamix's cuts and the Studio between them are both 2026 pictures (the 1993 grid is on the Studio's CRT).
+// megamix's cuts and the Studio between them are both 2026 pictures (the 1993 grid is on the Studio's CRT),
+// except the card's frames, which show the 1993 picture (era 0) over the whole frame.
 bool holdsModern(const TimelineFrame& frame);
 
 // The white the compositor adds over the whole frame for an era flip: kEraFlash * eraCut, and none in FINALE

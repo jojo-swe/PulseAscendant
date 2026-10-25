@@ -152,4 +152,12 @@ const EffectInfo& effectFor(show::Effect effect) {
     }
 }
 
+const EffectInfo& finaleCardEffect() {
+    static constexpr EffectInfo kCard{.shader = nullptr,
+                                      .retroRate = kFinaleRetroRate,
+                                      .palette = finaleCardPalette,
+                                      .text = finaleCardText};
+    return kCard;
+}
+
 } // namespace evo::retro
