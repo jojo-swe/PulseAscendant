@@ -10,8 +10,8 @@
 // (c) MIS stays unbiased: a Cornell box with three lights of powers 1 : 30 : 900 has the same mean with
 //     NEE + MIS as with BSDF sampling alone, and its per-pixel variance is at most 0.6 of step 4's fixed
 //     selection weights;
-// (d) the Studio: at desk points the DOS screen (nearly black) gets under 5 % of the samples (step 4: 30 %),
-//     an all-white picture over 20 %;
+// (d) the Studio in RETURN (the lamp on): at desk points the DOS screen (nearly black) gets under 8 % of the
+//     samples (step 4: 30 %), an all-white picture over 20 %;
 // (e) the Studio's moon is only chosen where the segment to it crosses the window.
 //
 // With --measure <dir> it renders the Studio at 1 spp with per-point and with fixed selection against a
@@ -171,8 +171,10 @@ public:
     }
 
 private:
-    static constexpr std::array<gfx::Binding, 6> kBindings = {
+    // The tree's nodes (Task 12: lightImportance reads the root of a Tree light; these frames have none).
+    static constexpr std::array<gfx::Binding, 7> kBindings = {
         gfx::Binding{EVO_BINDING_FRAME, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+        gfx::Binding{EVO_BINDING_TREE_NODES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
         gfx::Binding{EVO_BINDING_LIGHTS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
         gfx::Binding{EVO_BINDING_RETRO_SCREEN, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
         gfx::Binding{EVO_BINDING_ENVIRONMENT, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
@@ -202,6 +204,9 @@ private:
         gfx::Buffer pointBuffer(ctx_, {points.size() * sizeof(ProbePoint), kStorage, true, "probe points"});
         writeBuffer(pointBuffer, points.data(), points.size() * sizeof(ProbePoint));
         gfx::Buffer output(ctx_, {floats * sizeof(float), kStorage, true, "probe results"});
+        const rt::LightTreeNode noTree{};
+        gfx::Buffer treeNodes(ctx_, {sizeof noTree, kStorage, true, "probe tree nodes"});
+        writeBuffer(treeNodes, &noTree, sizeof noTree);
 
         VkCommandBuffer cmd = ring_.begin();
         retro.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -209,8 +214,9 @@ private:
         const auto whole = [](const gfx::Buffer& b) {
             return VkDescriptorBufferInfo{b.handle(), 0, VK_WHOLE_SIZE};
         };
-        const std::array<gfx::DescriptorWrite, 6> writes = {
+        const std::array<gfx::DescriptorWrite, 7> writes = {
             gfx::DescriptorWrite::buffer(EVO_BINDING_FRAME, whole(frame)),
+            gfx::DescriptorWrite::buffer(EVO_BINDING_TREE_NODES, whole(treeNodes)),
             gfx::DescriptorWrite::buffer(EVO_BINDING_LIGHTS, whole(lightBuffer)),
             gfx::DescriptorWrite::image(
                 EVO_BINDING_RETRO_SCREEN,
@@ -534,7 +540,7 @@ void testCornellThreeLights(gfx::Context& ctx) {
 // --- (d), (e): the Studio
 // -----------------------------------------------------------------------------------
 
-constexpr int kStudioNight = 11;
+constexpr int kStudioNight = 11, kReturn = 19;
 constexpr float kDeskTop = 0.75f; // studio.cpp's desk top
 
 show::TimelineFrame chapterAt(int chapter, double fraction) {
@@ -563,7 +569,9 @@ private:
 void testStudioScreen(gfx::Context& ctx, Probe& probe, gfx::Image& dos) {
     const auto start = std::chrono::steady_clock::now();
     const modern::Studio studio;
-    const std::vector<rt::RectLight> lights = studio.frame(chapterAt(kStudioNight, 0.2)).lights;
+    // RETURN: the DOS prompt with the lamp on (Task 14 of step 5 turns the lamp off in STUDIO NIGHT, where
+    // the dark screen is then rightly the desk's main light).
+    const std::vector<rt::RectLight> lights = studio.frame(chapterAt(kReturn, 0.2)).lights;
     gfx::Image white = makeRetro(ctx, [](std::uint32_t, std::uint32_t) { return Rgb8{255, 255, 255}; });
     // On the desk: in front of the keyboard, right of it, and in the lamp's pool left of the monitor.
     const std::vector<ProbePoint> desk = {probePoint({0.f, kDeskTop + 5e-4f, -0.03f}, {0, 1, 0}, false),
@@ -582,7 +590,8 @@ void testStudioScreen(gfx::Context& ctx, Probe& probe, gfx::Image& dos) {
             k, 100 * dark[k].pdf[screen], 100 * lit[k].pdf[screen], 100 * fixed[k].pdf[screen],
             100 * dark[k].pdf[modern::Studio::kLampLight], 100 * lit[k].pdf[modern::Studio::kLampLight],
             100 * dark[k].pdf[modern::Studio::kMoonLight], 100 * dark[k].pdf[modern::Studio::kWindowLight]);
-        CHECK(dark[k].pdf[screen] > 0.f && dark[k].pdf[screen] < 0.05f);
+        // Under 8 %: Task 14 of step 5 raised RETURN's screen from 1.2 to 1.5 (5.6 % right of the keyboard).
+        CHECK(dark[k].pdf[screen] > 0.f && dark[k].pdf[screen] < 0.08f);
     }
     CHECK(lit[0].pdf[screen] > 0.2f);
     // Step 4's fixed selection is selectWeight / sum (a quarter now that the moon is a fourth light).

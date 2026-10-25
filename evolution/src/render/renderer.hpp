@@ -34,6 +34,10 @@ struct RenderSettings {
     // The 2026 side traces at traceSize(width, height, traceScale) and upscales in time (Task 4 of step 5);
     // in (0, 1]. The window runs at 0.67 by default (--trace-scale), the CLI's exports always at 1.
     float traceScale = 1.f;
+    // The export shutter (Task 9 of step 5): the seconds the shutter is open per frame, 0.5 / fps for a 180
+    // degree shutter (the CLI's exports), 0 for none. Exports trace up to 8 time slices of it, one per 4
+    // samples (modern/shutter.hpp), for motion blur; the window never has a shutter.
+    double shutterSeconds = 0;
     // Test hooks: the modern stage's scene factory and effect -> scene map (empty: the show's).
     modern::SceneFactory sceneFactory;
     modern::SceneMap sceneMap;
@@ -143,6 +147,7 @@ private:
     RenderMode mode_;
     std::uint32_t spp_;
     std::uint32_t maxBounces_;
+    double shutterSeconds_;
     HistoryTracker history_;
     bool modernRanLastFrame_ = false;
     text::TextPass text_; // before the stages that draw with it

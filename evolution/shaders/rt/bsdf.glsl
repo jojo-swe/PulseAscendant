@@ -276,6 +276,15 @@ vec3 evalRoughDielectricLocal(vec3 tint, float a, float eta, vec3 wo, vec3 wi, o
 
 // --- Public interface --------------------------------------------------------------------------------------
 
+// Path regularisation (Task 6 of step 5): the surface with every lobe, the coat too, at least `least` rough.
+// A delta lobe (roughness < kDeltaRoughness) becomes a GGX lobe when least >= kDeltaRoughness. The caller
+// passes the result to bsdfEval and bsdfSample alike.
+Surface regularizedSurface(Surface s, float least) {
+    s.roughness = max(s.roughness, least);
+    s.coatRoughness = max(s.coatRoughness, least);
+    return s;
+}
+
 // Whether any lobe is not a delta, i.e. whether bsdfEval can be non-zero: only then may next-event
 // estimation (and MIS) contribute. False for smooth glass and for a smooth metal without a rough coat.
 bool bsdfHasNonDeltaLobe(Surface s) {

@@ -1,0 +1,323 @@
+#version 460
+#extension GL_EXT_ray_query : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_GOOGLE_include_directive : require
+
+// Caustic photons (step 5, Task 13; modern::CausticMaps records it after the frame's TLAS build). One
+// invocation per photon, photon = gl_GlobalInvocationID.y * 65536 + x (CausticMaps::kPhotonsPerRow), a pure
+// function of (photon, seed): every random number is randomFloat(seed, (photon, kPhotonStream), 0, dim).
+//
+// Emission (towards the casters' bounding sphere, the source record of the receiver table):
+// - the environment's disc: a point q uniform on the sphere's cross-section across the disc's axis, a
+//   direction w uniform in the disc's cone (travelling away from the sun), the photon starting
+//   sourceDistance back along w through q; flux = L |w . axis| (pi R^2) Omega_disc / N;
+// - a rect Emitter light: a point y uniform on it, w uniform in the cone it sees the sphere in (its
+//   hemisphere from inside the sphere); flux = Le max(w . n_light, 0) A Omega_cone / N.
+// Path: ray queries (spheres generated from their AABB candidates with sphere.glsl's math). The first hit
+// must be a delta surface (causticDeltaSurface); at each delta surface Fresnel picks reflection or
+// refraction (a dielectric: transmission tinted by baseColor; a dispersive one, abbe > 0, fixes a hero
+// wavelength on the first meeting, weighting the flux by spectralRgb, and refracts with dispersiveIor; a
+// metal: reflection weighted by its delta lobes' Fresnel), at most kMaxPhotonDeltaEvents of them. A
+// non-delta surface ends the photon: a receiver of this frame (after >= 1 delta event) takes its flux times
+// the Lambert lobe's Fresnel transmission, bilinearly into 2x2 texels of its map, in fixed point
+// (unitsPerFlux, rounded, at most 2^20 per texel and channel) with integer atomics, order independent.
+
+#include "../rt/types.glsl"
+#include "../rt/random.glsl"
+#include "../rt/sphere.glsl"
+#include "../rt/spectral.glsl"
+#include "../rt/caustic_common.glsl"
+
+layout(local_size_x = 64, local_size_y = 1) in;
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
+layout(set = 0, binding = 1, scalar) readonly buffer InstanceBlock { InstanceRecord instanceRecords[]; };
+layout(set = 0, binding = 2, scalar) readonly buffer MaterialBlock { Material materials[]; };
+layout(set = 0, binding = 3, scalar) readonly buffer VertexBlock { Vertex vertices[]; };
+layout(set = 0, binding = 4, scalar) readonly buffer IndexBlock { uint indices[]; };
+layout(set = 0, binding = 5, scalar) readonly buffer MeshRecordBlock { MeshRecord meshRecords[]; };
+layout(set = 0, binding = 6, scalar) readonly buffer StaticSphereBlock { SphereRecord staticSpheres[]; };
+layout(set = 0, binding = 7, scalar) readonly buffer ParticleSphereBlock { SphereRecord particleSpheres[]; };
+layout(set = 0, binding = 8, scalar) readonly buffer LightBlock { RectLight lights[]; };
+layout(set = 0, binding = 9, scalar) readonly buffer EnvironmentBlock { EnvironmentUniforms environment; };
+layout(set = 0, binding = 10, scalar) readonly buffer ReceiverBlock { CausticReceiver receiverTable[]; };
+layout(set = 0, binding = 11, std430) buffer AccumulatorBlock { uint accumulator[]; };
+
+layout(push_constant) uniform Push {
+    uint photonCount;
+    uint seed;
+    uint receiverCount;
+    uint mapSize;         // the accumulator's texels per side (a receiver uses its resolution^2 corner)
+    float unitsPerFlux;   // fixed-point units per unit of flux
+    float sourceDistance; // how far back a disc photon starts
+    uint orderMultiplier; // a test hook: photon i runs as (i * multiplier + offset) mod count
+    uint orderOffset;
+} pc;
+
+const uint kPhotonsPerRow = 65536u;
+const uint kPhotonStream = 0x50484F54u; // "PHOT": the photons' own random stream
+const float kPhotonRayMax = 1e30;
+const float kMaxUnits = 1048576.0;
+
+uint gPhoton;
+
+float maxComponent3(vec3 v) {
+    return max(v.x, max(v.y, v.z));
+}
+
+float rand(uint dimension) {
+    return randomFloat(pc.seed, uvec2(gPhoton, kPhotonStream), 0u, dimension);
+}
+
+// A direction uniform in the cone of half-angle acos(cosMax) about the unit axis.
+vec3 sampleCone(vec3 axis, float cosMax, vec2 u) {
+    float cosTheta = 1.0 - u.x * (1.0 - cosMax);
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+    float phi = 2.0 * kBsdfPi * u.y;
+    vec3 t;
+    vec3 b;
+    orthonormalBasis(axis, t, b);
+    return normalize(axis * cosTheta + (t * cos(phi) + b * sin(phi)) * sinTheta);
+}
+
+vec3 offsetOrigin(vec3 p, vec3 ng, vec3 direction) {
+    float scale = 1e-4 * (1.0 + max(abs(p.x), max(abs(p.y), abs(p.z))));
+    return p + ng * (dot(direction, ng) >= 0.0 ? scale : -scale);
+}
+
+struct PhotonHit {
+    vec3 position;
+    vec3 normal;          // shading, outward
+    vec3 geometricNormal; // outward
+    Material material;    // baseColor times a sphere's colour (patterns are not evaluated)
+};
+
+vec3 safeNormalize(vec3 v, vec3 fallback) {
+    float len2 = dot(v, v);
+    return len2 > 1e-30 && isFinite(len2) ? v * inversesqrt(len2) : fallback;
+}
+
+SphereRecord sphereOf(InstanceRecord record, uint primitive) {
+    uint index = record.mesh + primitive;
+    return (record.flags & kInstanceDynamicSpheres) != 0u ? particleSpheres[index] : staticSpheres[index];
+}
+
+// The closest hit along origin + t d, as the closest-hits evaluate it (hit.glsl's hitPoint()).
+bool traceHit(vec3 origin, vec3 d, out PhotonHit h) {
+    rayQueryEXT q;
+    rayQueryInitializeEXT(q, tlas, gl_RayFlagsOpaqueEXT, 0xFF, origin, 0.0, d, kPhotonRayMax);
+    while (rayQueryProceedEXT(q)) {
+        if (rayQueryGetIntersectionTypeEXT(q, false) == gl_RayQueryCandidateIntersectionAABBEXT) {
+            InstanceRecord record = instanceRecords[rayQueryGetIntersectionInstanceCustomIndexEXT(q, false)];
+            SphereRecord s = sphereOf(record, uint(rayQueryGetIntersectionPrimitiveIndexEXT(q, false)));
+            float tMax = rayQueryGetIntersectionTypeEXT(q, true) != gl_RayQueryCommittedIntersectionNoneEXT
+                             ? rayQueryGetIntersectionTEXT(q, true)
+                             : kPhotonRayMax;
+            float t;
+            uint kind;
+            if (sphereIntersect(rayQueryGetIntersectionObjectRayOriginEXT(q, false),
+                                rayQueryGetIntersectionObjectRayDirectionEXT(q, false), s.center, s.radius,
+                                rayQueryGetRayTMinEXT(q), tMax, t, kind)) {
+                rayQueryGenerateIntersectionEXT(q, t);
+            }
+        }
+    }
+    uint type = rayQueryGetIntersectionTypeEXT(q, true);
+    if (type == gl_RayQueryCommittedIntersectionNoneEXT) {
+        return false;
+    }
+    InstanceRecord record = instanceRecords[rayQueryGetIntersectionInstanceCustomIndexEXT(q, true)];
+    uint primitive = uint(rayQueryGetIntersectionPrimitiveIndexEXT(q, true));
+    mat4x3 objectToWorld = rayQueryGetIntersectionObjectToWorldEXT(q, true);
+    mat4x3 worldToObject = rayQueryGetIntersectionWorldToObjectEXT(q, true);
+    if (type == gl_RayQueryCommittedIntersectionGeneratedEXT) {
+        SphereRecord s = sphereOf(record, primitive);
+        vec3 od = rayQueryGetIntersectionObjectRayDirectionEXT(q, true);
+        float t = rayQueryGetIntersectionTEXT(q, true);
+        vec3 local = rayQueryGetIntersectionObjectRayOriginEXT(q, true) + t * od - s.center;
+        vec3 nLocal = safeNormalize(local, -normalize(od));
+        h.position = objectToWorld * vec4(s.center + s.radius * nLocal, 1.0);
+        h.geometricNormal = safeNormalize((nLocal * worldToObject).xyz, -d);
+        h.normal = h.geometricNormal;
+        h.material = materials[s.material];
+        h.material.baseColor *= s.color;
+        return true;
+    }
+    h.material = materials[record.material];
+    MeshRecord mesh = meshRecords[record.mesh];
+    uint first = mesh.firstIndex + 3u * primitive;
+    Vertex v0 = vertices[mesh.firstVertex + indices[first]];
+    Vertex v1 = vertices[mesh.firstVertex + indices[first + 1u]];
+    Vertex v2 = vertices[mesh.firstVertex + indices[first + 2u]];
+    vec2 bary = rayQueryGetIntersectionBarycentricsEXT(q, true);
+    vec3 b = vec3(1.0 - bary.x - bary.y, bary.x, bary.y);
+    h.position = objectToWorld * vec4(v0.position * b.x + v1.position * b.y + v2.position * b.z, 1.0);
+    bool front = rayQueryGetIntersectionFrontFaceEXT(q, true);
+    vec3 ng = (cross(v1.position - v0.position, v2.position - v0.position) * worldToObject).xyz;
+    h.geometricNormal = safeNormalize(ng, front ? -d : d);
+    vec3 n = ((v0.normal * b.x + v1.normal * b.y + v2.normal * b.z) * worldToObject).xyz;
+    h.normal = safeNormalize(n, h.geometricNormal);
+    if ((dot(h.normal, d) < 0.0) != (dot(h.geometricNormal, d) < 0.0)) {
+        h.normal = h.geometricNormal;
+    }
+    return true;
+}
+
+Surface surfaceOf(Material m) {
+    Surface s;
+    s.baseColor = m.baseColor;
+    s.roughness = m.roughness;
+    s.metallic = m.metallic;
+    s.ior = m.ior;
+    s.transmission = m.transmission;
+    s.coat = m.coat;
+    s.coatRoughness = m.coatRoughness;
+    s.emission = vec3(0.0);
+    return s;
+}
+
+// The photon's start: origin, direction and flux (0 when it carries none).
+bool emit(vec4 sphere, uint light, out vec3 origin, out vec3 direction, out vec3 flux) {
+    origin = vec3(0.0);
+    direction = vec3(0.0, -1.0, 0.0);
+    flux = vec3(0.0);
+    float n = float(pc.photonCount);
+    if (light == kNoLight) {
+        if (!(environment.discCosRadius < 1.0)) {
+            return false;
+        }
+        vec3 axis = environment.discDirection;
+        vec3 towardsSun = sampleCone(axis, environment.discCosRadius, vec2(rand(2u), rand(3u)));
+        direction = -towardsSun;
+        vec3 t;
+        vec3 b;
+        orthonormalBasis(axis, t, b);
+        vec2 disk = sampleConcentricDisk(vec2(rand(0u), rand(1u))) * sphere.w;
+        vec3 q = sphere.xyz + t * disk.x + b * disk.y;
+        origin = q - direction * pc.sourceDistance;
+        float solidAngle = 2.0 * kBsdfPi * (1.0 - environment.discCosRadius);
+        flux = environment.intensity * environment.discRadiance * abs(dot(towardsSun, axis)) *
+               (kBsdfPi * sphere.w * sphere.w) * solidAngle / n;
+        return true;
+    }
+    RectLight l = lights[light];
+    vec3 y = l.corner + rand(0u) * l.edgeU + rand(1u) * l.edgeV;
+    vec3 nl = normalize(cross(l.edgeU, l.edgeV));
+    vec3 toCentre = sphere.xyz - y;
+    float d2 = dot(toCentre, toCentre);
+    float r2 = sphere.w * sphere.w;
+    float cosMax = d2 > r2 ? sqrt(1.0 - r2 / d2) : 0.0;
+    vec3 axis = d2 > r2 ? toCentre * inversesqrt(d2) : nl;
+    direction = sampleCone(axis, cosMax, vec2(rand(2u), rand(3u)));
+    float cosLight = dot(direction, nl);
+    if (!(cosLight > 0.0)) {
+        return false;
+    }
+    origin = offsetOrigin(y, nl, direction);
+    flux = l.emission * cosLight * l.area * (2.0 * kBsdfPi * (1.0 - cosMax)) / n;
+    return true;
+}
+
+void deposit(uint receiver, vec3 p, vec3 flux) {
+    CausticReceiver r = receiverTable[receiver];
+    vec2 uv = receiverUv(r, p);
+    if (!insideUnitSquare(uv)) {
+        return;
+    }
+    vec2 xy = uv * float(r.resolution) - 0.5;
+    ivec2 corner = ivec2(floor(xy));
+    vec2 f = xy - vec2(corner);
+    vec3 units = flux * pc.unitsPerFlux;
+    uint base = receiver * pc.mapSize * pc.mapSize * 3u;
+    for (int k = 0; k < 4; ++k) {
+        ivec2 texel = corner + ivec2(k & 1, k >> 1);
+        if (texel.x < 0 || texel.y < 0 || texel.x >= int(r.resolution) || texel.y >= int(r.resolution)) {
+            continue;
+        }
+        float w = ((k & 1) != 0 ? f.x : 1.0 - f.x) * ((k >> 1) != 0 ? f.y : 1.0 - f.y);
+        uvec3 add = uvec3(min(round(units * w), vec3(kMaxUnits)));
+        uint index = base + (uint(texel.y) * pc.mapSize + uint(texel.x)) * 3u;
+        for (uint c = 0u; c < 3u; ++c) {
+            if (add[c] != 0u) {
+                atomicAdd(accumulator[index + c], add[c]);
+            }
+        }
+    }
+}
+
+void main() {
+    uint i = gl_GlobalInvocationID.y * kPhotonsPerRow + gl_GlobalInvocationID.x;
+    if (i >= pc.photonCount) {
+        return;
+    }
+    gPhoton = (i * pc.orderMultiplier + pc.orderOffset) % pc.photonCount;
+    CausticReceiver source = receiverTable[pc.receiverCount];
+    vec4 sphere = source.worldToUv.rows[0];
+    vec3 origin;
+    vec3 direction;
+    vec3 flux;
+    if (!emit(sphere, source.layer, origin, direction, flux) || !(maxComponent3(flux) > 0.0)) {
+        return;
+    }
+    bool hero = false; // a wavelength is fixed
+    float lambda = 0.0;
+    for (uint events = 0u;; ++events) {
+        PhotonHit h;
+        if (!traceHit(origin, direction, h)) {
+            return;
+        }
+        Material m = h.material;
+        Surface s = surfaceOf(m);
+        vec3 wo = -direction;
+        if (!causticDeltaSurface(s)) {
+            if (events > 0u && (m.flags & kMaterialCausticReceiver) != 0u && m.receiver < pc.receiverCount) {
+                deposit(m.receiver, h.position, flux * lambertThrough(s, abs(dot(wo, h.normal))));
+            }
+            return;
+        }
+        if (events == kMaxPhotonDeltaEvents) {
+            return;
+        }
+        vec3 n = dot(wo, h.normal) >= 0.0 ? h.normal : -h.normal; // towards wo
+        float cosI = dot(wo, n);
+        if (!(cosI > 0.0)) {
+            return;
+        }
+        vec3 wi;
+        if (isDielectric(s)) {
+            float ior = bsdfIor(s);
+            if (m.abbe > 0.0) {
+                if (!hero) {
+                    lambda = kSpectralMinNm + kSpectralRangeNm * rand(4u);
+                    flux *= spectralRgb(lambda);
+                    hero = true;
+                }
+                ior = clamp(dispersiveIor(ior, m.abbe, lambda), 1.0, 4.0);
+            }
+            float eta = dot(wo, h.normal) > 0.0 ? 1.0 / ior : ior;
+            float fresnel = fresnelDielectric(cosI, eta);
+            if (rand(5u + events) < fresnel) {
+                wi = 2.0 * cosI * n - wo;
+            } else {
+                float cosT = sqrt(max(0.0, 1.0 - eta * eta * (1.0 - cosI * cosI)));
+                wi = normalize(-eta * wo + (eta * cosI - cosT) * n);
+                flux *= clamp(s.baseColor, 0.0, 1.0);
+            }
+        } else {
+            OpaqueLobes l = opaqueLobes(s, cosI);
+            float throughCoat = 1.0 - coatFresnel(l.coat, cosI);
+            flux *= coatFresnel(l.coat, cosI) + throughCoat * throughCoat * fresnelSchlick(l.f0, l.f90, cosI);
+            wi = 2.0 * cosI * n - wo;
+        }
+        // The geometry must agree on the side wi leaves to (pathtrace.rgen's sidesAgree).
+        bool reflected = dot(wi, n) > 0.0;
+        if ((dot(wi, h.geometricNormal) * dot(wo, h.geometricNormal) > 0.0) != reflected) {
+            return;
+        }
+        if (!(maxComponent3(flux) > 0.0) || !allFinite(flux)) {
+            return;
+        }
+        origin = offsetOrigin(h.position, h.geometricNormal, wi);
+        direction = wi;
+    }
+}

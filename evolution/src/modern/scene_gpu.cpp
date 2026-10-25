@@ -1,5 +1,7 @@
 #include "modern/scene_gpu.hpp"
 
+#include "rt/light_tree.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <span>
@@ -59,10 +61,16 @@ Vec3 vec3(const float v[3]) {
     return {v[0], v[1], v[2]};
 }
 
+// A transform's linear part applied to v (a column of it for a unit axis).
+Vec3 transformNormalFree(const rt::Mat34& m, Vec3 v) {
+    return transformPoint(m, v) - transformPoint(m, {0, 0, 0});
+}
+
 // NEE uses a light's emission, area, kind and facing; a BSDF ray that hits the light's instance uses that
 // instance's material and facing. Multiple importance sampling weighs the two as estimators of one integral,
-// so they must describe the same emitter, or the picture is silently biased (step 4, Task 7 review I1).
-// Expects the instances' mesh, material and light indices checked.
+// so they must describe the same emitter, or the picture is silently biased (step 4, Task 7 review I1). A
+// camera-only emitter (Task 6 of step 5) is never a light: the integrator ignores its emission after a rough
+// vertex, where NEE would add it. Expects the instances' mesh, material and light indices checked.
 void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& materials) {
     for (std::size_t i = 0; i < frame.lights.size(); ++i) {
         const rt::RectLight& l = frame.lights[i];
@@ -70,8 +78,8 @@ void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& mater
         if (l.kind > static_cast<std::uint32_t>(rt::LightKind::Tree))
             throw std::invalid_argument(what + "has kind " + std::to_string(l.kind) +
                                         ", which is no LightKind");
-        if (l.kind == static_cast<std::uint32_t>(rt::LightKind::Tree))
-            throw std::invalid_argument(what + "is a light tree, which needs step 5's Task 12");
+        if (l.kind == static_cast<std::uint32_t>(rt::LightKind::Tree) && l.gate != rt::kNoLight)
+            throw std::invalid_argument(what + "is a light tree, which no portal gates");
         const float area = length(cross(vec3(l.edgeU), vec3(l.edgeV)));
         if (!nearlyEqual(l.area, area))
             throw std::invalid_argument(what + "has area " + std::to_string(l.area) +
@@ -91,10 +99,17 @@ void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& mater
         const std::string what =
             "instance " + std::to_string(i) + " is light " + std::to_string(in.light) + ", ";
         const auto kind = static_cast<rt::LightKind>(l.kind);
+        if (kind == rt::LightKind::Tree) { // checkTreeLights checks the rest
+            if (in.kind != rt::GeometryKind::Spheres)
+                throw std::invalid_argument(what + "a light tree, but no set of spheres");
+            continue;
+        }
         if (kind == rt::LightKind::Portal)
             throw std::invalid_argument(what + "a portal: an opening, not a surface");
         if (linearDeterminant(in.transform) < 0.f)
             throw std::invalid_argument(what + "but its transform mirrors: it emits from the light's back");
+        if ((m.flags & rt::kMaterialCameraOnlyEmission) != 0u)
+            throw std::invalid_argument(what + "but its material's emission is camera-only (never a light)");
         const bool screen = m.texture == rt::kRetroScreenTexture;
         if (kind == rt::LightKind::Emitter) {
             if (screen)
@@ -124,8 +139,10 @@ void checkSphereInstance(const SceneStatic& scene, const SceneFrame& frame,
     const std::string what = "instance " + std::to_string(i) + " ";
     if (in.material >= materials.size())
         throw std::out_of_range(what + "names a material that does not exist");
-    if (in.light != rt::kNoLight)
-        throw std::invalid_argument(what + "is a set of spheres, which is no light");
+    if (in.light != rt::kNoLight &&
+        (in.light >= frame.lights.size() ||
+         frame.lights[in.light].kind != static_cast<std::uint32_t>(rt::LightKind::Tree)))
+        throw std::invalid_argument(what + "is a set of spheres, which is no light but the light tree");
     const std::string range =
         "(" + std::to_string(in.firstSphere) + ", " + std::to_string(in.sphereCount) + ")";
     if (in.dynamicSpheres) {
@@ -175,6 +192,96 @@ void checkStaticSphereClasses(const SceneStatic& scene, const SceneFrame& frame,
         }
     }
 }
+// The light tree (Task 12): at most one RectLight of kind Tree, and then tree lights (none without one), at
+// most capacity.treeLights; exactly one instance, a sphere instance, is that light, and tree light k is its
+// sphere firstSphere + k, within its spheres (the particle field's count when dynamic); the instance scales
+// uniformly; every light has a finite centre, a radius > 0, an emission and a scale >= 0, and for static
+// spheres the centre, radius and emission treeLightsOf gives (a dynamic field's are the scene's C++ mirror).
+void checkTreeLights(const SceneStatic& scene, const SceneFrame& frame,
+                     const std::vector<rt::Material>& materials) {
+    std::uint32_t tree = rt::kNoLight;
+    for (std::size_t i = 0; i < frame.lights.size(); ++i)
+        if (frame.lights[i].kind == static_cast<std::uint32_t>(rt::LightKind::Tree)) {
+            if (tree != rt::kNoLight)
+                throw std::invalid_argument("lights " + std::to_string(tree) + " and " + std::to_string(i) +
+                                            " are both light trees (a frame has one)");
+            tree = static_cast<std::uint32_t>(i);
+        }
+    const std::vector<TreeLightFrame>& lights = frame.treeLights;
+    if (tree == rt::kNoLight) {
+        if (!lights.empty())
+            throw std::invalid_argument(std::to_string(lights.size()) +
+                                        " tree lights, but no light of kind Tree stands for them");
+        return;
+    }
+    const std::string what = "light tree " + std::to_string(tree) + " ";
+    if (lights.empty())
+        throw std::invalid_argument(what + "has no tree lights");
+    if (lights.size() > scene.capacity.treeLights)
+        throw std::length_error(std::to_string(lights.size()) +
+                                " tree lights, more than the scene's capacity of " +
+                                std::to_string(scene.capacity.treeLights));
+    if (lights.size() > rt::kMaxTreeLights)
+        throw std::length_error(std::to_string(lights.size()) + " tree lights, more than " +
+                                std::to_string(rt::kMaxTreeLights));
+    const SceneInstance* treeInstance = nullptr;
+    for (const SceneInstance& in : frame.instances)
+        if (in.light == tree) {
+            if (treeInstance)
+                throw std::invalid_argument(what +
+                                            "is more than one instance (its lights are one set of spheres)");
+            treeInstance = &in;
+        }
+    if (!treeInstance)
+        throw std::invalid_argument(what + "is no instance's light (its spheres are the tree's lights)");
+    const SceneInstance& in = *treeInstance;
+    const std::uint32_t available = in.dynamicSpheres ? frame.particles->count : in.sphereCount;
+    if (lights.size() > available)
+        throw std::invalid_argument(what + "has " + std::to_string(lights.size()) +
+                                    " lights, more than the " + std::to_string(available) +
+                                    " spheres of its instance");
+    const float sx = length(transformNormalFree(in.transform, {1, 0, 0}));
+    const float sy = length(transformNormalFree(in.transform, {0, 1, 0}));
+    const float sz = length(transformNormalFree(in.transform, {0, 0, 1}));
+    if (!(std::abs(sx - sy) <= 1e-4f * sx && std::abs(sx - sz) <= 1e-4f * sx))
+        throw std::invalid_argument(what +
+                                    "is an instance that does not scale uniformly (its spheres would be "
+                                    "ellipsoids)");
+    std::vector<TreeLightFrame> expected;
+    if (!in.dynamicSpheres)
+        expected = treeLightsOf(scene, in, materials, static_cast<std::uint32_t>(lights.size()));
+    for (std::size_t k = 0; k < lights.size(); ++k) {
+        const TreeLightFrame& l = lights[k];
+        const char* wrong = nullptr;
+        if (l.sphere != in.firstSphere + k)
+            wrong = "is not sphere firstSphere + k of its instance";
+        else if (!std::isfinite(l.center.x) || !std::isfinite(l.center.y) || !std::isfinite(l.center.z))
+            wrong = "has a centre that is not finite";
+        else if (!(l.radius > 0.f) || !std::isfinite(l.radius))
+            wrong = "has a radius that is not finite and > 0";
+        else if (!(l.emission.x >= 0.f && l.emission.y >= 0.f && l.emission.z >= 0.f) ||
+                 !std::isfinite(l.emission.x + l.emission.y + l.emission.z))
+            wrong = "has an emission that is not finite and >= 0";
+        else if (!(l.scale >= 0.f) || !std::isfinite(l.scale))
+            wrong = "has a scale that is not finite and >= 0";
+        else if (!expected.empty()) {
+            const TreeLightFrame& e = expected[k];
+            const float tolerance =
+                1e-4f * (1.f + std::max({std::abs(e.center.x), std::abs(e.center.y), std::abs(e.center.z)}));
+            if (std::abs(l.center.x - e.center.x) > tolerance ||
+                std::abs(l.center.y - e.center.y) > tolerance ||
+                std::abs(l.center.z - e.center.z) > tolerance || !nearlyEqual(l.radius, e.radius))
+                wrong = "is not where its sphere is (centre and radius under the instance's transform)";
+            else if (!nearlyEqual(l.emission.x, e.emission.x) || !nearlyEqual(l.emission.y, e.emission.y) ||
+                     !nearlyEqual(l.emission.z, e.emission.z))
+                wrong =
+                    "has an emission other than its sphere's radiance (colour * emission + its material's)";
+        }
+        if (wrong)
+            throw std::invalid_argument("tree light " + std::to_string(k) + " " + wrong);
+    }
+}
+
 } // namespace
 
 void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
@@ -228,6 +335,7 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
     }
     checkStaticSphereClasses(scene, frame, materials);
     checkLights(frame, materials);
+    checkTreeLights(scene, frame, materials);
     packEnvironment(frame.environment); // throws for an invalid environment
     checkSplats(frame.splats, capacity.splats, scene.splatShader);
 }

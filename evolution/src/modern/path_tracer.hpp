@@ -13,15 +13,19 @@
 #include "gfx/rt_pipeline.hpp"
 #include "modern/scene.hpp"
 #include "modern/scene_gpu.hpp"
+#include "modern/shutter.hpp"
 #include "rt/accel.hpp"
 #include "rt/geometry.hpp"
+#include "rt/light_tree.hpp"
 
 #include <volk.h>
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace evo::gfx {
@@ -35,7 +39,12 @@ struct TraceSettings {
     std::uint32_t frameSeed = 0;
     bool nee = true;
     bool russianRoulette = true; // from bounce 3
-    float clampIndirect = 64.f;  // luminance limit of a contribution after the first bounce
+    // Task 6 of step 5: the luminance limit of a contribution after a rough (non-delta) vertex: the primary
+    // hit's NEE and camera -> delta chain -> light paths are never clamped.
+    float clampIndirect = 16.f;
+    // Path regularisation: after the first rough vertex every lobe (and the coat) has at least this
+    // roughness, in sampling and evaluation alike (MIS stays consistent); 0 turns it off.
+    float regularizeRoughness = 0.25f;
     // Choose lights by their fixed selectWeight alone, as step 4 did, instead of by their importance at each
     // shading point (power, distance, orientation, gate); only for comparisons.
     bool fixedLightSelection = false;
@@ -48,6 +57,10 @@ struct TraceSettings {
     // The frame's chapter-local show time (show::TimelineFrame::localSeconds), FrameUniforms::seconds: what
     // hit-shader patterns animate with (Tasks 18 and 23) and the export shutter offsets from (Task 9).
     float seconds = 0.f;
+    // The export shutter (Task 9): the offset in seconds of slice k from `seconds`
+    // (FrameUniforms::shutterOffset), for the slices of a trace() (the slice frames themselves are the
+    // caller's). Shaders that animate with the time use seconds + shutterOffset. Unused slices stay 0.
+    std::array<float, kMaxShutterSlices> sliceOffsets{};
 };
 
 // Samples per trace dispatch: an export at many spp is split so that no dispatch runs long enough to trip a
@@ -79,6 +92,7 @@ struct GBuffer {
 // any frame it traces. The largest over the scenes prepared (ModernStage).
 struct TracerCapacity {
     std::uint32_t instances = 0, lights = 0, materials = 0;
+    std::uint32_t treeLights = 0; // the light tree's lights (Task 12; its nodes: 2 treeLights - 1)
 };
 // The capacity a scene needs.
 TracerCapacity tracerCapacity(const SceneCapacity& scene);
@@ -112,13 +126,23 @@ struct TraceExtras {
     const gfx::Buffer* medium = nullptr;             // 18: MediumUniforms (Task 11)
     gfx::Image* density = nullptr;                   // 19: 3D RGBA16F density + emission (Task 11)
     gfx::Image* majorant = nullptr;                  // 20: 3D R16F majorant per cell (Task 11)
-    const gfx::Buffer* previousTransforms = nullptr; // 21: Mat34[] per instance (Task 9)
-    const gfx::Buffer* staticSpheres = nullptr;      // 22: replaces the scene's SphereRecord[] (a hook)
-    const gfx::Buffer* particleSpheres = nullptr;    // 23: SphereRecord[], the particle field (Task 8)
-    VkDeviceAddress particleBlas = 0;                // the particle field's BLAS (Task 8; no binding)
-    gfx::Image* causticMaps = nullptr;               // 24: 2D array RGBA16F irradiance (Task 13)
-    const gfx::Buffer* lensing = nullptr;            // 25: LensingUniforms (Task 25)
-    const gfx::Buffer* causticReceivers = nullptr;   // 27: CausticReceiver[] (Task 13)
+    const gfx::Buffer* previousTransforms = nullptr; // 21: replaces the packed Mat34[] (a hook)
+    // The previous frame's instances, while the history continues (empty: none): what trace() packs into
+    // binding 21. Instance i of the frame moved from previousInstances[i].transform when both frames have the
+    // same count and the same sequence of (mesh, kind, sphere range) and the same dynamic-sphere flags; else
+    // (a different scene state, a seek, an instance that appeared) the frame's own transforms are used and
+    // only the camera moves the surface in the motion guide.
+    std::span<const SceneInstance> previousInstances;
+    const gfx::Buffer* staticSpheres = nullptr;    // 22: replaces the scene's SphereRecord[] (a hook)
+    const gfx::Buffer* particleSpheres = nullptr;  // 23: SphereRecord[], the particle field (Task 8)
+    VkDeviceAddress particleBlas = 0;              // the particle field's BLAS (Task 8; no binding)
+    gfx::Image* causticMaps = nullptr;             // 24: 2D array RGBA16F irradiance (Task 13)
+    const gfx::Buffer* lensing = nullptr;          // 25: LensingUniforms (Task 25)
+    const gfx::Buffer* causticReceivers = nullptr; // 27: CausticReceiver[] (Task 13)
+    // Task 13: recorded after the TLAS build and before the trace dispatches, with the frame's TLAS and the
+    // buffers the trace binds (modern::CausticMaps::record shoots the photons there). Required, with
+    // causticMaps and causticReceivers, by a frame with caustics.
+    std::function<void(VkCommandBuffer, const PhotonScene&)> photons;
 };
 
 // The path tracer every 2026 scene shares (step 5, Task 1): the ray tracing pipeline and its SBT (8 hit
@@ -146,19 +170,42 @@ public:
     void resize(std::uint32_t width, std::uint32_t height);
 
     // Records into the frame being recorded on the ring: the TLAS build over the scene's BLASes, this slot's
-    // FrameUniforms, instance records, lights and (when the frame has its own table) materials, then
-    // ceil(spp / kSppPerDispatch) trace dispatches (lighting, emission and albedo keep a running mean across
-    // them; the other guides come from the first). previousCamera feeds the motion guide (nullopt: motion
-    // invalid). retroScreen (R8G8B8A8_SRGB, mipmapped) is sampled through sampledView() in GENERAL when the
-    // scene samples the retro screen (else it is ignored and may be null); trace() records the barrier.
-    // Throws, before recording anything, std::invalid_argument for spp 0 or a scene that samples the retro
-    // screen without a retro image or a frame that places its particle field without extras.particleSpheres
-    // and particleBlas, std::length_error for a frame larger than the tracer's capacity, what
-    // checkSceneFrame throws, and std::logic_error outside ring.begin()/submit() or for a second trace in one
-    // frame. The particle field must have been recorded earlier in this frame (ModernStage does).
+    // FrameUniforms, instance records, previous transforms, lights and (when the frame has its own table)
+    // materials, then ceil(spp / kSppPerDispatch) trace dispatches (lighting, emission and albedo keep a
+    // running mean across them; the other guides come from one dispatch). previousCamera feeds the motion
+    // guide (nullopt: motion invalid); extras.previousInstances makes it a per-object motion (see
+    // TraceExtras). retroScreen (R8G8B8A8_SRGB, mipmapped) is sampled through sampledView() in GENERAL when
+    // the scene samples the retro screen (else it is ignored and may be null); trace() records the barrier.
+    //
+    // The export shutter: `slices` are the frame at the times of up to kMaxShutterSlices time slices, in time
+    // order (shutterSlices(), sliceOffset() and sliceFrame()/sliceSeconds() in shutter.hpp give the times).
+    // Each slice has its own TLAS (built after the previous slice's dispatches), uniforms, instances, lights,
+    // materials and environment; the frame's dispatches are split evenly over them (sliceOfDispatch()), so
+    // the picture is the mean over the slices; the guides (depth, normal, motion, volume) come from the first
+    // dispatch of slice slices.size() / 2. beforeSlice(cmd, k), if given, is called while recording just
+    // before slice k's TLAS build: the caller's per-slice work that the slice's TLAS and traces must see (the
+    // particle field's rebuild at the slice's time; it may be called with cmd outside the tracer's passes and
+    // must order itself against the earlier slices' traces, as ParticleField::record does). All slices belong
+    // to the same scene (SceneGpu), and each must pass checkSceneFrame.
+    //
+    // Throws, before recording anything, std::invalid_argument for spp 0, no slices, more than
+    // kMaxShutterSlices slices, more slices than dispatches, or a scene that samples the retro screen
+    // without a retro image or a slice that places its particle field without extras.particleSpheres and
+    // particleBlas, std::length_error for a slice larger than the tracer's capacity, what checkSceneFrame
+    // throws, and std::logic_error outside ring.begin()/submit() or for a second trace in one frame. The
+    // particle field must have been recorded earlier in this frame (ModernStage does, per slice).
+    using SliceCallback = std::function<void(VkCommandBuffer, std::uint32_t)>;
+    void trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<const SceneFrame> slices,
+               const std::optional<Camera>& previousCamera, const TraceSettings& settings,
+               gfx::Image* retroScreen, const TraceExtras& extras = {},
+               const SliceCallback& beforeSlice = {});
+    // One slice: the frame at its own time.
     void trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFrame& frame,
                const std::optional<Camera>& previousCamera, const TraceSettings& settings,
-               gfx::Image* retroScreen, const TraceExtras& extras = {});
+               gfx::Image* retroScreen, const TraceExtras& extras = {}) {
+        trace(cmd, scene, std::span<const SceneFrame>(&frame, 1), previousCamera, settings, retroScreen,
+              extras);
+    }
 
     // GPU timer scopes for the TLAS build ("tlas") and the trace dispatches ("trace") of every later trace()
     // (null: none). The timers must outlive the tracer's use of them.
@@ -172,8 +219,9 @@ public:
     VkDeviceSize imageBytes() const;
     // The device memory of everything else the tracer allocates, as allocated (VMA): the TLAS (storage,
     // scratch, instance buffers), the per-slot uniform, environment, instance, light and material buffers,
-    // the shader binding table and the feature dummies. A task that adds a buffer to the tracer adds it here
-    // (shared_tracer_test (b) compares the sum with the allocator's statistics).
+    // the light tree's per-slot buffers, the shader binding table and the feature dummies. A task that adds a
+    // buffer to the tracer adds it here (shared_tracer_test (b) compares the sum with the allocator's
+    // statistics).
     VkDeviceSize bufferBytes() const;
 
     struct Stats {
@@ -188,10 +236,17 @@ public:
 private:
     using SlotBuffers = std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight>;
     void createImages();
-    // The per-slot instance, light and material buffers of a capacity.
+    // The per-slot instance, light, material and previous transform buffers of a capacity: kMaxShutterSlices
+    // regions each, one per time slice (region k at k * the region stride, 256-byte aligned), and the light
+    // tree's nodes and lights (Task 12; the same regions).
     struct FrameBuffers {
-        SlotBuffers instanceRecords, lights, materials;
+        SlotBuffers instanceRecords, lights, materials, previousTransforms, treeNodes, treeLights;
     };
+    // The frame's light tree (Task 12): built from the frame's tree lights when their centres, radii,
+    // emissions or spheres change (treeKey_ holds the last ones), else refit for their scales alone. The
+    // tree is a pure function of the frame either way (the build is deterministic), so a seek never sees
+    // another frame's tree.
+    const rt::LightTree& lightTreeFor(const SceneFrame& frame);
     FrameBuffers createFrameBuffers(const TracerCapacity& capacity) const;
 
     gfx::Context& ctx_;
@@ -208,7 +263,13 @@ private:
     // The feature bindings' stand-ins: a zeroed buffer, and one-texel images of the right types.
     gfx::Buffer dummyBuffer_;
     gfx::Image dummyDensity_, dummyMajorant_, dummyCaustics_;
-    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_, materials_;
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_, materials_,
+        previousTransforms_;
+    // The light tree's nodes and lights (bindings EVO_BINDING_TREE_NODES and EVO_BINDING_TREE_LIGHTS), per
+    // slot, and the tree they were last packed from (Task 12).
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> treeNodes_, treeLights_;
+    std::vector<rt::TreeLight> treeKey_;
+    rt::LightTree tree_;
     // The frame's environment (SceneFrame::environment packed, binding EVO_BINDING_ENVIRONMENT), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
     GBuffer gbuffer_;

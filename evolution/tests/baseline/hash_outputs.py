@@ -13,7 +13,19 @@ regenerated after merging main d91fb09 (Tasks 2, 3 and 4), whose environments an
 seven outputs (the lit Studio captures and streams; the merged build equals d91fb09's bytes exactly); then
 regenerated after the NEE shadow-ray fix (150714d), which changed seven outputs again: studio_night_40,
 finale_50, studio_night_acc, return_30 and the streams stream_studio_cut, stream_finale, stream_studio_ascent.
-Then regenerated when DOTS' 2026 half became the Particles scene (step 5, Task 17): only stream_dots changed.
+Then regenerated after merging step 5 Task 14 (Studio polish, a422931): the Studio's light rig, cameras and
+concrete changed seven outputs again (studio_night_40, finale_50, studio_night_acc, return_30 and the streams
+stream_studio_cut, stream_finale, stream_studio_ascent); reboot_60, portal_50, reboot_10 and every non-Studio
+output stayed byte for byte.
+Then, merging step 5 Task 9, its export shutter changed one more: studio_night_acc (spp 5 is two dispatches, so two time slices of the
+180 degree shutter at the default 60 fps; mean luminance +0.13 %). Every capture at spp 4 or fewer and every
+stream (spp 1-2) has a single slice and stayed byte for byte the same.
+Then regenerated after merging step 5 Task 6 (the integrator v2: path regularisation, the clamp after a rough
+vertex, the Studio's camera-only LEDs), which changed the Studio outputs again.
+Then regenerated when DOTS' 2026 half became the Particles scene (step 5, Task 17), on top of Tasks 6, 12 and
+13: those merges had left seven Studio sums (studio_night_40, finale_50, studio_night_acc, return_30 and the
+three Studio streams) stale; the same build with DOTS mapped back to the placeholder gives all of the new sums
+but stream_dots, which is the Particles scene's only change.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
