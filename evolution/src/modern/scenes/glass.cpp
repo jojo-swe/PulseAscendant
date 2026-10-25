@@ -370,15 +370,15 @@ constexpr float kFirstPillarZ = 5.f, kBay = 3.4f;
 constexpr int kBays = 16; // pillars per row; windows between them
 constexpr int kWindows = kBays - 1;
 constexpr std::array<float, 4> kPillarRows = {-8.f, -3.6f, 3.6f, 8.f};
-// A pillar: a clustered gothic pier of flint glass, a faceted octagonal core with four shafts on its axes and
-// four slender ones between them, from its moulded stone base (kPlinth) to its capital (kPillarTop). Every
+// A pillar: a clustered gothic pier of light flint glass, a faceted octagonal core with four shafts on its axes
+// and four slender ones between them, from its moulded stone base (kPlinth) to its capital (kPillarTop). Every
 // facet is a prism: the sun through a pier breaks into spectra.
 constexpr float kPlinth = 0.6f;
 constexpr float kPillarTop = 7.23f; // the capital's underside
 constexpr float kPierCore = 0.27f;  // the octagon's inradius
 constexpr float kPierShaft = 0.15f, kPierShaftAt = 0.29f; // the four shafts: radius, distance from the axis
 constexpr float kPierFillet = 0.075f, kPierFilletAt = 0.33f; // the four between them
-constexpr int kPierFacets = 72;
+constexpr int kPierFacets = 32;
 constexpr float kWindowWidth = 2.2f, kWindowBottom = 3.f, kWindowTop = 9.6f;
 constexpr int kWindowCols = 4, kWindowRows = 12;
 constexpr float kRoseRadius = 4.f, kRoseY = 16.f, kGableTop = 26.f;
@@ -935,7 +935,9 @@ std::vector<rt::Material> buildMaterials(const GlassOptions& options) {
     m[kShutterWood].pattern = static_cast<std::uint32_t>(rt::Pattern::WoodPlanks);
     m[kShutterWood].patternScale = 0.18f;
     setColor(m[kShutterWood].baseColor2, {0.08f, 0.045f, 0.025f});
-    m[kPillarGlass] = glass({0.25f, 0.05f, 0.12f}, 1.52f, 0.f);
+    // The piers: a light flint, clear, less dispersive than the glenz's (its fire would turn every column the
+    // windows shine through into rainbow static), still splitting the sun on the floor.
+    m[kPillarGlass] = glass({0.f, 0.f, 0.f}, 1.58f, abbe > 0.f ? 40.f : 0.f);
     m[kLead] = pbr({0.06f, 0.06f, 0.065f}, 0.5f);
     m[kLead].metallic = 1.f;
     m[kLampEmitter] = emitter(kLampColor, kLampRadiance);
@@ -947,7 +949,7 @@ std::vector<rt::Material> buildMaterials(const GlassOptions& options) {
     m[kQuartz] = glass({0.035f, 0.012f, 0.006f}, 1.6f, abbe); // glacial: blue-green through metres
     // The plaza sculpture's core: the cobalt's place taken by amber, the sun's colour (Act III's gold).
     m[kAmberCore] = m[kCobalt];
-    setColor(m[kAmberCore].baseColor2, options.clearCore ? Vec3{} : Vec3{0.01f, 0.05f, 0.2f});
+    setColor(m[kAmberCore].baseColor2, options.clearCore ? Vec3{} : Vec3{0.f, 0.02f, 0.09f});
     m[kPavingOutside] = stone({0.46f, 0.45f, 0.43f}, {0.34f, 0.33f, 0.32f}, 0.6f, 0.9f);
     m[kPavingOutside].coat = 0.15f;
     m[kPavingOutside].coatRoughness = 0.1f;
@@ -1137,8 +1139,8 @@ Camera glenzCamera(const show::TimelineFrame& f) {
     // it to the star: the spectra in the bottom two thirds of the frame, the glass (its lower half) in the top third;
     // a slow push in, focused on the middle of the fan.
     const std::array<Key, 2> keys = {{
-        {{-6.4f, 1.2f, 2.4f}, {-1.5f, 0.12f, 0.75f}},
-        {{-5.9f, 1.12f, 2.25f}, {-1.4f, 0.12f, 0.72f}},
+        {{-6.4f, 1.2f, 2.4f}, {-1.5f, 0.3f, 0.75f}},
+        {{-5.9f, 1.12f, 2.25f}, {-1.4f, 0.3f, 0.72f}},
     }};
     const Key k = alongKeys(keys, st.s);
     return makeCamera(k, kLens85, 0.012f, length(kCausticAt - k.eye), st.shot);
@@ -1350,7 +1352,7 @@ Glass::Glass(SceneDetail detail, GlassOptions options) : detail_(detail), option
     // The piers themselves, in bay order: flint glass on their bases.
     for (int k = 0; k < kBays; ++k)
         for (std::size_t r = 0; r < kPillarRows.size(); ++r)
-            pillars_.push_back({kPier, kFlint, translate({kPillarRows[r], kPlinth, pillarZ(k)})});
+            pillars_.push_back({kPier, kPillarGlass, translate({kPillarRows[r], kPlinth, pillarZ(k)})});
 }
 
 SceneFrame Glass::frame(const show::TimelineFrame& f) const {
@@ -1666,7 +1668,7 @@ SceneFrame Glass::crystalFrame(const show::TimelineFrame& f) const {
     const rt::Mat34 flat = rotate({1, 0, 0}, -0.5f * kPi);
     out.instances.push_back(
         {kQuad, kPaving, place({0.5f * (p.x0 + p.x1), 0, 0.5f * (p.z0 + p.z1)}, flat, {p.x1 - p.x0, p.z1 - p.z0, 1})});
-    const float far = 400.f;
+    const float far = 3000.f; // to the horizon: the haze, not an edge, ends it
     auto ground = [&](float x0, float x1, float z0, float z1) {
         out.instances.push_back(
             {kQuad, kPavingOutside, place({0.5f * (x0 + x1), 0, 0.5f * (z0 + z1)}, flat, {x1 - x0, z1 - z0, 1})});
