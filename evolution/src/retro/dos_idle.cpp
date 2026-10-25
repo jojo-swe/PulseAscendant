@@ -1,8 +1,11 @@
 #include "retro/dos_idle.hpp"
 
+#include "retro/portal.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string_view>
 
 namespace evo::retro {
 
@@ -28,18 +31,64 @@ constexpr std::array<const char*, 15> kScreen = {
     kDosIdlePrompt,
 };
 
+static_assert(std::string_view(kScreen[0]).starts_with(kDosIdlePrompt) &&
+              std::string_view(kScreen[0]).substr(std::string_view(kDosIdlePrompt).size()) == kDosIdleCommand);
+
+std::uint32_t idleFrameOf(double seconds) {
+    return static_cast<std::uint32_t>(std::floor(std::max(seconds, 0.0) * kDosIdleRetroRate + 1e-9));
+}
+
+// The chapter's tracked beat that is bar 1's downbeat.
+int promptBeat(const show::TimelineFrame& frame) {
+    const double bar = chapterDownbeat(frame, 1);
+    int beat = 0;
+    while (chapterBeat(frame, beat) < bar - 1e-6)
+        ++beat;
+    return beat;
+}
+
 } // namespace
 
-std::vector<std::string> dosIdleScreen(const show::TimelineFrame& /*frame*/, std::uint32_t /*retroFrame*/) {
-    return {kScreen.begin(), kScreen.end()};
+std::uint32_t dosIdlePromptFrame(const show::TimelineFrame& frame) {
+    return idleFrameOf(chapterDownbeat(frame, 1));
+}
+
+std::uint32_t dosIdleKeyFrame(const show::TimelineFrame& frame, int key) {
+    return idleFrameOf(chapterBeat(frame, promptBeat(frame) + 1 + key));
+}
+
+std::uint32_t dosIdleListFrame(const show::TimelineFrame& frame) {
+    return idleFrameOf(chapterDownbeat(frame, 2));
+}
+
+std::vector<std::string> dosIdleScreen(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    if (retroFrame < dosIdlePromptFrame(frame))
+        return {};
+    if (retroFrame >= dosIdleListFrame(frame))
+        return {kScreen.begin(), kScreen.end()};
+    const std::string_view command = kDosIdleCommand;
+    std::size_t typed = 0;
+    while (typed < command.size() && retroFrame >= dosIdleKeyFrame(frame, static_cast<int>(typed)))
+        ++typed;
+    return {std::string(kDosIdlePrompt) + std::string(command.substr(0, typed))};
 }
 
 std::vector<text::Item> dosIdleText(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    std::vector<text::Item> items;
+    if (retroFrame < dosIdlePromptFrame(frame)) {
+        // PORTAL's last screen, as it left it.
+        constexpr std::uint32_t kWhite = 0xFF000000u | kBootWhite;
+        const std::string text = kPortalPromptText;
+        items.push_back({kPortalPromptX, kPortalPromptY, 1, kWhite, text});
+        if (beatCursorOn(frame, retroFrame, kDosIdleRetroRate))
+            items.push_back({static_cast<float>(kPortalPromptX + 8 * static_cast<int>(text.size())),
+                             kPortalPromptY, 1, kWhite, "_"});
+        return items;
+    }
     constexpr std::uint32_t kGrey = 0xFF000000u | kBootGrey; // drawIndex writes the low byte
     const auto x = [](std::size_t column) { return static_cast<float>(kBootMargin + 8 * column); };
     const auto y = [](std::size_t row) { return static_cast<float>(kBootMargin + kBootLineHeight * row); };
     const std::vector<std::string> screen = dosIdleScreen(frame, retroFrame);
-    std::vector<text::Item> items;
     for (std::size_t row = 0; row < screen.size(); ++row)
         if (!screen[row].empty())
             items.push_back({x(0), y(row), 1, kGrey, screen[row]});

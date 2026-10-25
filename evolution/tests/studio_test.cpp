@@ -14,9 +14,10 @@
 //   (d) studioCamera: finite, smooth within a shot, cutting exactly at the authored times, on the four
 //   lenses; (e) the scene: 101 key caps on one mesh, every transform finite, within the TLAS's capacity, the
 //   lights; (f) sceneFor's mapping, and STUDIO NIGHT running the retro stage for the CRT; (g) the DOS idle
-//   screen: C:\DEMO> with BOOT's 2 Hz cursor, a pure function of the retro frame; (h) the CRT stays sharp in
-//   the window (RETURN's close-up): every shot that shows the screen focuses on its plane
-//       with a small aperture; at 1 spp the same frame shown twice barely changes in the screen, and the
+//   screen: PORTAL's `THE SCREEN_` (its cursor on the beat) until bar 1, C:\DEMO> on bar 1, `dir` on the
+//   beats, the listing on bar 2 with BOOT's 2 Hz cursor, a pure function of the beats and retro frame;
+//   (h) the CRT stays sharp in the window (RETURN's close-up): every shot that shows the screen focuses on
+//       its plane with a small aperture; at 1 spp the same frame shown twice barely changes in the screen, and the
 //       30th window frame's screen matches a 32 spp export of the same time (64 until Task 14 of step 5,
 //       which halved it for the time budget: the screen differs from either by 0.003, the bound is 0.025);
 //   (i) the Studio's clampIndirect (0.5; step 4: 2) reaches the path tracer: its lighting equals a trace at
@@ -872,37 +873,94 @@ void testRegistry(gfx::Context& ctx) {
 
 void testDosIdle() {
     namespace retro = evo::retro;
-    // STUDIO NIGHT's CRT shows the DOS listing (RETURN has a screen of its own, closing_test).
+    // STUDIO NIGHT's CRT shows the DOS prompt (RETURN has a screen of its own, closing_test).
     {
         const retro::EffectInfo& info = retro::effectFor(Effect::StudioNight);
         CHECK(info.text == &retro::dosIdleText && info.shader == nullptr);
         CHECK(info.retroRate == retro::kBootRetroRate);
     }
-    const TimelineFrame a = chapterAt(kStudioNight, 0.2), b = chapterAt(kReturn, 0.6);
-    int toggles = 0;
-    bool last = true;
-    for (std::uint32_t f = 0; f < 35 * 4; ++f) {
+    constexpr std::uint32_t kRate = retro::kDosIdleRetroRate;
+    const TimelineFrame a = chapterAt(kStudioNight, 0.2), late = chapterAt(kStudioNight, 0.9);
+    const std::uint32_t prompt = retro::dosIdlePromptFrame(a), list = retro::dosIdleListFrame(a);
+    // Bar 1 and bar 2 of the chapter, the keys on the three beats between them.
+    CHECK(std::abs(prompt - std::floor(retro::chapterDownbeat(a, 1) * kRate)) < 0.5);
+    CHECK(std::abs(list - std::floor(retro::chapterDownbeat(a, 2) * kRate)) < 0.5);
+    CHECK(retro::chapterDownbeat(a, 1) > 0.5 && prompt > 0);
+    std::uint32_t previous = prompt;
+    for (int key = 0; key < 3; ++key) {
+        const std::uint32_t at = retro::dosIdleKeyFrame(a, key);
+        CHECK(at > previous && at < list);
+        previous = at;
+    }
+
+    // The opening is PORTAL's last screen: the same text in the same place and the same white, its cursor on
+    // the beat.
+    const double join = show::chapterStart(kStudioNight);
+    const TimelineFrame portal = show::sampleTimeline(join - 1e-3);
+    CHECK(portal.effect == Effect::Portal);
+    const std::uint32_t portalLast =
+        static_cast<std::uint32_t>(std::floor(portal.localSeconds * retro::effectFor(Effect::Portal).retroRate));
+    const std::vector<evo::text::Item> left = retro::effectFor(Effect::Portal).text(portal, portalLast);
+    CHECK(!left.empty() && left.front().text == "THE SCREEN");
+    retro::Palette portalPalette{}, idlePalette{};
+    retro::effectFor(Effect::Portal).palette(portalPalette, portal, portalLast);
+    retro::effectFor(Effect::StudioNight).palette(idlePalette, a, 0);
+
+    int beatToggles = 0, dosToggles = 0;
+    bool lastBeat = true, lastDos = true;
+    for (std::uint32_t f = 0; f < list + 35 * 4; ++f) {
         const std::vector<std::string> screen = retro::dosIdleScreen(a, f);
-        CHECK(screen.back() == retro::kDosIdlePrompt);
-        for (const std::string& row : screen)
-            CHECK(row.size() <= retro::kBootColumns);
         const std::vector<evo::text::Item> items = retro::dosIdleText(a, f);
-        const bool cursor = items.back().text == "_";
-        CHECK(cursor == retro::promptCursorOn(f));
-        if (cursor) // in the cell right after the prompt, on its row
-            CHECK(items.back().x ==
-                      float(retro::kBootMargin + 8 * std::string(retro::kDosIdlePrompt).size()) &&
-                  items.back().y == float(retro::kBootMargin + retro::kBootLineHeight * (screen.size() - 1)));
-        toggles += cursor != last;
-        last = cursor;
-        // Pure in the retro frame: another time, another chapter, the same picture.
-        const std::vector<evo::text::Item> again = retro::dosIdleText(b, f);
+        // Pure in the chapter's beats and the retro frame: another time of the chapter, the same picture.
+        const std::vector<evo::text::Item> again = retro::dosIdleText(late, f);
         CHECK(again.size() == items.size());
         for (std::size_t i = 0; i < items.size(); ++i)
-            CHECK(again[i].text == items[i].text && again[i].x == items[i].x && again[i].y == items[i].y);
+            CHECK(again[i].text == items[i].text && again[i].x == items[i].x && again[i].y == items[i].y &&
+                  again[i].rgba == items[i].rgba);
+        const bool cursor = items.back().text == "_";
+        if (f < prompt) {
+            CHECK(screen.empty());
+            CHECK(items.front().text == left.front().text && items.front().x == left.front().x &&
+                  items.front().y == left.front().y);
+            CHECK(idlePalette[items.front().rgba & 0xFFu] == portalPalette[left.front().rgba & 0xFFu]);
+            CHECK(cursor == retro::beatCursorOn(a, f, kRate));
+            if (cursor)
+                CHECK(items.back().x == left.front().x + 8.f * 10 && items.back().y == left.front().y);
+            beatToggles += cursor != lastBeat;
+            lastBeat = cursor;
+            continue;
+        }
+        CHECK(!screen.empty() && screen.size() <= 25);
+        for (const std::string& row : screen)
+            CHECK(row.size() <= retro::kBootColumns);
+        CHECK(cursor == retro::promptCursorOn(f));
+        if (cursor) // in the cell right after the last row's text, on its row
+            CHECK(items.back().x == float(retro::kBootMargin + 8 * screen.back().size()) &&
+                  items.back().y == float(retro::kBootMargin + retro::kBootLineHeight * (screen.size() - 1)));
+        if (f < list) {
+            // The prompt and the keys typed so far, alone on the cleared screen.
+            std::size_t typed = 0;
+            while (typed < 3 && f >= retro::dosIdleKeyFrame(a, static_cast<int>(typed)))
+                ++typed;
+            CHECK(screen.size() == 1 &&
+                  screen[0] == std::string(retro::kDosIdlePrompt) + std::string("dir").substr(0, typed));
+            continue;
+        }
+        // The listing, exactly, ending on the prompt with the DOS prompt's own 2 Hz cursor.
+        CHECK(screen.size() == 15 && screen.front() == std::string(retro::kDosIdlePrompt) + "dir" &&
+              screen.back() == retro::kDosIdlePrompt);
+        CHECK(screen[10] == "CLAP     WAV         0 10-24-93");
+        CHECK(screen[11] == "        4 file(s)    912,512 bytes");
+        if (f > list) {
+            dosToggles += cursor != lastDos;
+        }
+        lastDos = cursor;
     }
-    CHECK(toggles == 15); // 2 Hz over 4 s from on: 8 times off, 7 times on again
-    std::printf("(g) DOS idle: %s with a 2 Hz cursor\n", retro::kDosIdlePrompt);
+    CHECK(beatToggles >= 2);                      // the beat cursor blinks through the opening bar
+    CHECK(dosToggles >= 14 && dosToggles <= 16); // 2 Hz over 4 s
+    std::printf("(g) DOS idle: THE SCREEN_ to frame %u, %s on bar 1, dir on the beats, the listing on bar 2 "
+                "(frame %u)\n",
+                prompt, retro::kDosIdlePrompt, list);
 }
 
 // --- (h)
