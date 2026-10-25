@@ -58,12 +58,13 @@ const std::array<gfx::Binding, EVO_BINDING_COUNT> kBindings = {
 
 // pathtrace.rgen's push constants: which of the frame's samples this dispatch traces, and the subpixel
 // window they are box-filtered over (its corner relative to the pixel's, and its size; (0, 0) and (1, 1) for
-// the whole pixel).
+// the whole pixel), and whether it writes the guides (one dispatch of the frame does).
 struct TracePush {
     std::uint32_t sampleBase, sampleCount;
     float windowOrigin[2], windowSize[2];
+    std::uint32_t guides; // non-zero: this dispatch also writes the guides (depth, normal, motion, volume)
 };
-static_assert(sizeof(TracePush) == 24);
+static_assert(sizeof(TracePush) == 28);
 
 // The largest struct a feature binding may declare (MediumUniforms): the dummy buffer covers any of them.
 constexpr VkDeviceSize kDummyBufferBytes = 256;
@@ -139,10 +140,58 @@ void writeBuffer(const gfx::Buffer& buffer, const void* data, std::size_t bytes)
     buffer.flush();
 }
 
-// A host-visible storage buffer of `count` elements (at least one: a buffer of size 0 is invalid).
+// A per-slot buffer holds one region per time slice (kMaxShutterSlices). A storage buffer descriptor's offset
+// must be a multiple of minStorageBufferOffsetAlignment, at most 256 by the specification, so regions start
+// on 256 bytes.
+constexpr VkDeviceSize kRegionAlignment = 256;
+
+// The bytes between two regions of `count` elements (at least one: a buffer of size 0 is invalid).
+VkDeviceSize regionStride(std::size_t elementBytes, std::uint32_t count) {
+    const VkDeviceSize bytes = VkDeviceSize{elementBytes} * std::max(count, 1u);
+    return (bytes + kRegionAlignment - 1) / kRegionAlignment * kRegionAlignment;
+}
+
+// The nodes of a light tree of n lights (0 lights: none).
+std::uint32_t treeNodeCount(std::uint32_t lights) {
+    return lights > 0 ? 2 * lights - 1 : 0;
+}
+
+// A host-visible storage buffer of kMaxShutterSlices regions of `count` elements each.
 gfx::Buffer slotBuffer(gfx::Context& ctx, std::size_t elementBytes, std::uint32_t count, const char* name) {
-    return gfx::Buffer(ctx,
-                       {elementBytes * std::max(count, 1u), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, name});
+    return gfx::Buffer(ctx, {regionStride(elementBytes, count) * kMaxShutterSlices,
+                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, name});
+}
+
+// Copies `bytes` to region `slice` of a slotBuffer of regions `stride` bytes apart (no flush: the caller
+// flushes the buffer once all regions are written).
+void writeRegion(const gfx::Buffer& buffer, VkDeviceSize stride, std::uint32_t slice, const void* data,
+                 std::size_t bytes) {
+    if (bytes > 0)
+        std::memcpy(static_cast<std::byte*>(buffer.mapped()) + stride * slice, data, bytes);
+}
+
+// The descriptor range of region `slice` (the elements of a slotBuffer, at least one).
+VkDescriptorBufferInfo regionInfo(const gfx::Buffer& buffer, VkDeviceSize stride, std::uint32_t slice,
+                                  std::size_t elementBytes, std::uint32_t count) {
+    return {buffer.handle(), stride * slice, VkDeviceSize{elementBytes} * std::max(count, 1u)};
+}
+
+// Whether the previous frame's instances describe the same objects as this frame's, instance by instance (so
+// that previous[i].transform is where instance i was): the same count, mesh, kind and sphere range.
+bool describesSameInstances(std::span<const SceneInstance> now, std::span<const SceneInstance> before) {
+    if (now.size() != before.size())
+        return false;
+    for (std::size_t i = 0; i < now.size(); ++i) {
+        const SceneInstance& a = now[i];
+        const SceneInstance& b = before[i];
+        if (a.kind != b.kind || a.dynamicSpheres != b.dynamicSpheres)
+            return false;
+        if (a.kind == rt::GeometryKind::Triangles
+                ? a.mesh != b.mesh
+                : a.firstSphere != b.firstSphere || a.sphereCount != b.sphereCount)
+            return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -154,12 +203,12 @@ std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset) {
 }
 
 TracerCapacity tracerCapacity(const SceneCapacity& scene) {
-    return {scene.instances, scene.lights, scene.materials};
+    return {scene.instances, scene.lights, scene.materials, scene.treeLights};
 }
 
 TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b) {
     return {std::max(a.instances, b.instances), std::max(a.lights, b.lights),
-            std::max(a.materials, b.materials)};
+            std::max(a.materials, b.materials), std::max(a.treeLights, b.treeLights)};
 }
 
 std::uint32_t PathTracer::pipelinesCreated() {
@@ -180,17 +229,17 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
     ++gPipelinesCreated;
     ringBegin_ = ring.onBegin([this](std::uint32_t) { tracedThisFrame_ = false; });
     for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
-        uniforms_[slot] = gfx::Buffer(
-            ctx, {sizeof(rt::FrameUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "frame uniforms"});
-        environments_[slot] =
-            gfx::Buffer(ctx, {sizeof(rt::EnvironmentUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true,
-                              "environment uniforms"});
+        uniforms_[slot] = slotBuffer(ctx, sizeof(rt::FrameUniforms), 1, "frame uniforms");
+        environments_[slot] = slotBuffer(ctx, sizeof(rt::EnvironmentUniforms), 1, "environment uniforms");
     }
     FrameBuffers buffers = createFrameBuffers(capacity_);
     instanceRecords_ = std::move(buffers.instanceRecords);
     lights_ = std::move(buffers.lights);
     materials_ = std::move(buffers.materials);
-    tlas_ = std::make_unique<rt::Tlas>(ctx_, ring_, capacity_.instances);
+    previousTransforms_ = std::move(buffers.previousTransforms);
+    treeNodes_ = std::move(buffers.treeNodes);
+    treeLights_ = std::move(buffers.treeLights);
+    tlas_ = std::make_unique<rt::Tlas>(ctx_, ring_, capacity_.instances, kMaxShutterSlices);
     createImages();
 }
 
@@ -203,6 +252,11 @@ PathTracer::FrameBuffers PathTracer::createFrameBuffers(const TracerCapacity& ca
             slotBuffer(ctx_, sizeof(rt::InstanceRecord), capacity.instances, "instance records");
         b.lights[slot] = slotBuffer(ctx_, sizeof(rt::RectLight), capacity.lights, "rect lights");
         b.materials[slot] = slotBuffer(ctx_, sizeof(rt::Material), capacity.materials, "frame materials");
+        b.previousTransforms[slot] =
+            slotBuffer(ctx_, sizeof(rt::Mat34), capacity.instances, "previous transforms");
+        b.treeNodes[slot] = slotBuffer(ctx_, sizeof(rt::LightTreeNode), treeNodeCount(capacity.treeLights),
+                                       "tree nodes");
+        b.treeLights[slot] = slotBuffer(ctx_, sizeof(rt::TreeLight), capacity.treeLights, "tree lights");
     }
     return b;
 }
@@ -210,7 +264,7 @@ PathTracer::FrameBuffers PathTracer::createFrameBuffers(const TracerCapacity& ca
 void PathTracer::reserve(const TracerCapacity& capacity) {
     const TracerCapacity grown = unite(capacity_, capacity);
     if (grown.instances == capacity_.instances && grown.lights == capacity_.lights &&
-        grown.materials == capacity_.materials)
+        grown.materials == capacity_.materials && grown.treeLights == capacity_.treeLights)
         return;
     // The frames in flight may still read the TLAS and the slots' buffers; nothing of the frame being
     // recorded (if any) uses them before trace(). A queue idle, not a timeline wait: synchronization
@@ -219,11 +273,14 @@ void PathTracer::reserve(const TracerCapacity& capacity) {
     // The new buffers and TLAS first: if one cannot be made, nothing has changed.
     std::unique_ptr<rt::Tlas> tlas;
     if (grown.instances != capacity_.instances)
-        tlas = std::make_unique<rt::Tlas>(ctx_, ring_, grown.instances);
+        tlas = std::make_unique<rt::Tlas>(ctx_, ring_, grown.instances, kMaxShutterSlices);
     FrameBuffers buffers = createFrameBuffers(grown);
     instanceRecords_ = std::move(buffers.instanceRecords);
     lights_ = std::move(buffers.lights);
     materials_ = std::move(buffers.materials);
+    previousTransforms_ = std::move(buffers.previousTransforms);
+    treeNodes_ = std::move(buffers.treeNodes);
+    treeLights_ = std::move(buffers.treeLights);
     if (tlas)
         tlas_ = std::move(tlas);
     capacity_ = grown;
@@ -255,7 +312,9 @@ VkDeviceSize PathTracer::imageBytes() const {
 VkDeviceSize PathTracer::bufferBytes() const {
     VkDeviceSize bytes = tlas_->bytes() + pipeline_.sbtBytes() + dummyBuffer_.bytes() + blackScreen_.bytes() +
                          dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
-    for (const SlotBuffers* buffers : {&uniforms_, &instanceRecords_, &lights_, &materials_, &environments_})
+    for (const SlotBuffers* buffers :
+         {&uniforms_, &instanceRecords_, &lights_, &materials_, &previousTransforms_, &environments_,
+          &treeNodes_, &treeLights_})
         for (const gfx::Buffer& buffer : *buffers)
             bytes += buffer.bytes();
     return bytes;
@@ -274,9 +333,30 @@ void PathTracer::resize(std::uint32_t width, std::uint32_t height) {
     createImages();
 }
 
-void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFrame& frame,
+const rt::LightTree& PathTracer::lightTreeFor(const SceneFrame& frame) {
+    std::vector<rt::TreeLight> key(frame.treeLights.size());
+    std::vector<float> scale(frame.treeLights.size());
+    for (std::size_t k = 0; k < key.size(); ++k) {
+        const TreeLightFrame& l = frame.treeLights[k];
+        rt::TreeLight& t = key[k];
+        store(t.center, l.center);
+        t.radius = l.radius;
+        store(t.emission, l.emission);
+        t.sphere = l.sphere;
+        scale[k] = l.scale;
+    }
+    if (key.size() != treeKey_.size() ||
+        std::memcmp(key.data(), treeKey_.data(), key.size() * sizeof(rt::TreeLight)) != 0) {
+        tree_ = rt::buildLightTree(key);
+        treeKey_ = std::move(key);
+    }
+    rt::refitLightTree(tree_, scale);
+    return tree_;
+}
+
+void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<const SceneFrame> slices,
                        const std::optional<Camera>& previousCamera, const TraceSettings& settings,
-                       gfx::Image* retroScreen, const TraceExtras& extras) {
+                       gfx::Image* retroScreen, const TraceExtras& extras, const SliceCallback& beforeSlice) {
     // Everything that can be refused is checked before anything is written or recorded.
     if (!ring_.recording())
         throw std::logic_error("PathTracer::trace() outside FrameRing::begin()/submit()");
@@ -286,6 +366,16 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
             "uniforms, instances and lights when it runs)");
     if (settings.spp == 0)
         throw std::invalid_argument("PathTracer::trace(): spp 0");
+    const auto sliceCount = static_cast<std::uint32_t>(slices.size());
+    const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
+    if (sliceCount == 0 || sliceCount > kMaxShutterSlices)
+        throw std::invalid_argument("PathTracer::trace(): " + std::to_string(sliceCount) +
+                                    " time slices (1 to " + std::to_string(kMaxShutterSlices) + ")");
+    if (sliceCount > dispatches)
+        throw std::invalid_argument("PathTracer::trace(): " + std::to_string(sliceCount) +
+                                    " time slices for spp " + std::to_string(settings.spp) +
+                                    ", which is only " + std::to_string(dispatches) +
+                                    " dispatches (one slice per dispatch at most)");
     for (int a = 0; a < 2; ++a) {
         const float footprint = settings.pixelFootprint[a], jitter = settings.pixelJitter[a];
         if (!(footprint > 0.f && footprint <= 1.f) || !(std::fabs(jitter) + 0.5f * footprint <= 0.5f + 1e-6f))
@@ -301,104 +391,153 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
                                  ", more than the tracer's capacity of " + std::to_string(most) +
                                  " (reserve() it)");
     };
-    if (frame.instances.size() > capacity_.instances)
-        throw tooMany("instances", frame.instances.size(), capacity_.instances);
-    if (frame.lights.size() > capacity_.lights)
-        throw tooMany("lights", frame.lights.size(), capacity_.lights);
-    if (frame.materials.size() > capacity_.materials)
-        throw tooMany("materials", frame.materials.size(), capacity_.materials);
-    checkSceneFrame(scene.source(), frame);
-    const bool dynamicSpheres =
-        std::any_of(frame.instances.begin(), frame.instances.end(), [](const SceneInstance& in) {
-            return in.kind == rt::GeometryKind::Spheres && in.dynamicSpheres;
-        });
-    if (dynamicSpheres && (extras.particleSpheres == nullptr || extras.particleBlas == 0))
-        throw std::invalid_argument(
-            "PathTracer::trace(): the frame places its particle field, but no particle "
-            "spheres and BLAS come with it (TraceExtras)");
-    const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
-    const std::vector<rt::Material>& materials =
-        frame.materials.empty() ? scene.source().materials : frame.materials;
-    std::vector<rt::Instance> instances;
-    std::vector<rt::InstanceRecord> records;
-    instances.reserve(frame.instances.size());
-    records.reserve(frame.instances.size());
-    for (std::size_t i = 0; i < frame.instances.size(); ++i) {
-        const SceneInstance& in = frame.instances[i];
-        const auto index = static_cast<std::uint32_t>(i);
-        const auto materialClass = static_cast<rt::MaterialClass>(materials[in.material].materialClass);
-        const bool spheres = in.kind == rt::GeometryKind::Spheres;
-        // A sphere instance's BLAS: the particle field's this frame, or its range's of the static spheres
-        // (checkSceneFrame found the range).
-        VkDeviceAddress blas = 0;
-        if (spheres)
-            blas =
-                in.dynamicSpheres
-                    ? extras.particleBlas
-                    : scene.spheres()->address(*scene.spheres()->findRange({in.firstSphere, in.sphereCount}));
-        instances.push_back(
-            {in.mesh, in.transform, index, rt::hitGroupFor(materialClass, in.kind), 0xFF, blas});
-        const std::uint32_t flags = (spheres ? rt::kInstanceSpheres : 0u) |
-                                    (spheres && in.dynamicSpheres ? rt::kInstanceDynamicSpheres : 0u);
-        records.push_back({spheres ? in.firstSphere : in.mesh, in.material, in.light, flags});
+    for (const SceneFrame& frame : slices) {
+        if (frame.instances.size() > capacity_.instances)
+            throw tooMany("instances", frame.instances.size(), capacity_.instances);
+        if (frame.lights.size() > capacity_.lights)
+            throw tooMany("lights", frame.lights.size(), capacity_.lights);
+        if (frame.materials.size() > capacity_.materials)
+            throw tooMany("materials", frame.materials.size(), capacity_.materials);
+        if (frame.treeLights.size() > capacity_.treeLights)
+            throw tooMany("tree lights", frame.treeLights.size(), capacity_.treeLights);
+        checkSceneFrame(scene.source(), frame);
+        const bool dynamicSpheres =
+            std::any_of(frame.instances.begin(), frame.instances.end(), [](const SceneInstance& in) {
+                return in.kind == rt::GeometryKind::Spheres && in.dynamicSpheres;
+            });
+        if (dynamicSpheres && (extras.particleSpheres == nullptr || extras.particleBlas == 0))
+            throw std::invalid_argument(
+                "PathTracer::trace(): the frame places its particle field, but no particle "
+                "spheres and BLAS come with it (TraceExtras)");
+        // Task 13: caustics need the maps' image, receiver table and photon pass (the maps check the frame in
+        // detail; the receivers' materials are checked here too, since the closest-hits read their table).
+        if (frame.caustics &&
+            (extras.causticMaps == nullptr || extras.causticReceivers == nullptr || !extras.photons))
+            throw std::invalid_argument(
+                "PathTracer::trace(): the frame has caustics, but no caustic maps, receiver "
+                "table and photon pass come with it (TraceExtras)");
+        checkCausticFrame(scene.source(), frame, ~0u);
     }
-    tracedThisFrame_ = true; // nothing is refused from here on
 
-    const CameraBasis basis = cameraBasis(frame.camera);
-    const Camera& prev = previousCamera ? *previousCamera : frame.camera;
-    const CameraBasis prevBasis = cameraBasis(prev);
-    rt::FrameUniforms u{};
-    store(u.cameraPosition, frame.camera.eye);
-    store(u.cameraRight, basis.right);
-    store(u.cameraUp, basis.up);
-    store(u.cameraForward, basis.forward);
-    u.tanHalfFovY = tanHalfFov(frame.camera);
-    u.aspect = static_cast<float>(width_) / static_cast<float>(height_);
-    u.aperture = frame.camera.aperture;
-    u.focusDistance = frame.camera.focusDistance;
-    store(u.prevPosition, prev.eye);
-    store(u.prevRight, prevBasis.right);
-    store(u.prevUp, prevBasis.up);
-    store(u.prevForward, prevBasis.forward);
-    u.prevTanHalfFovY = tanHalfFov(prev);
-    u.prevAspect = u.aspect;
-    u.prevValid = previousCamera ? 1u : 0u;
-    u.pixelSpread = std::atan(2.f * u.tanHalfFovY / static_cast<float>(height_));
-    u.width = width_;
-    u.height = height_;
-    u.frameSeed = settings.frameSeed;
-    u.spp = settings.spp; // spp and instanceCount: not read by the shaders (for a debugger's eyes)
-    u.maxBounces = settings.maxBounces;
-    u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
-              (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
-              (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u);
-    u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
-    u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
-    u.clampIndirect = settings.clampIndirect;
-    u.seconds = settings.seconds;
-    for (const rt::RectLight& light : frame.lights)
-        u.lightWeightSum += std::max(light.selectWeight, 0.f);
-    // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
-    // regularisation, no tree lights, medium, caustics or lensing.
-    u.environmentSelect = frame.environment.select;
-    u.sliceIndex = 0;
-    u.sliceCount = 1;
-
-    // This slot's buffers: the ring's begin() waited for the frame that last read them.
+    // Each slice's tables, written to its region of this slot's buffers: the ring's begin() waited for the
+    // frame that last read them, and the regions keep the slices apart while the GPU has not run any yet.
     const std::uint32_t slot = ring_.slot();
-    writeBuffer(uniforms_[slot], &u, sizeof u);
-    writeBuffer(environments_[slot], &environment, sizeof environment);
-    writeBuffer(instanceRecords_[slot], records.data(), records.size() * sizeof(rt::InstanceRecord));
-    writeBuffer(lights_[slot], frame.lights.data(), frame.lights.size() * sizeof(rt::RectLight));
-    if (!frame.materials.empty())
-        writeBuffer(materials_[slot], frame.materials.data(), frame.materials.size() * sizeof(rt::Material));
-    const gfx::Buffer& materialTable = frame.materials.empty() ? scene.staticMaterials() : materials_[slot];
+    const VkDeviceSize uniformStride = regionStride(sizeof(rt::FrameUniforms), 1);
+    const VkDeviceSize environmentStride = regionStride(sizeof(rt::EnvironmentUniforms), 1);
+    const VkDeviceSize instanceStride = regionStride(sizeof(rt::InstanceRecord), capacity_.instances);
+    const VkDeviceSize previousStride = regionStride(sizeof(rt::Mat34), capacity_.instances);
+    const VkDeviceSize lightStride = regionStride(sizeof(rt::RectLight), capacity_.lights);
+    const VkDeviceSize materialStride = regionStride(sizeof(rt::Material), capacity_.materials);
+    const VkDeviceSize treeNodeStride = regionStride(sizeof(rt::LightTreeNode), treeNodeCount(capacity_.treeLights));
+    const VkDeviceSize treeLightStride = regionStride(sizeof(rt::TreeLight), capacity_.treeLights);
+    std::vector<std::vector<rt::Instance>> sliceInstances(sliceCount);
+    for (std::uint32_t k = 0; k < sliceCount; ++k) {
+        const SceneFrame& frame = slices[k];
+        const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
+        const std::vector<rt::Material>& materials =
+            frame.materials.empty() ? scene.source().materials : frame.materials;
+        std::vector<rt::Instance>& instances = sliceInstances[k];
+        std::vector<rt::InstanceRecord> records;
+        instances.reserve(frame.instances.size());
+        records.reserve(frame.instances.size());
+        for (std::size_t i = 0; i < frame.instances.size(); ++i) {
+            const SceneInstance& in = frame.instances[i];
+            const auto index = static_cast<std::uint32_t>(i);
+            const auto materialClass = static_cast<rt::MaterialClass>(materials[in.material].materialClass);
+            const bool spheres = in.kind == rt::GeometryKind::Spheres;
+            // A sphere instance's BLAS: the particle field's this frame, or its range's of the static
+            // spheres (checkSceneFrame found the range).
+            VkDeviceAddress blas = 0;
+            if (spheres)
+                blas = in.dynamicSpheres ? extras.particleBlas
+                                         : scene.spheres()->address(
+                                               *scene.spheres()->findRange({in.firstSphere, in.sphereCount}));
+            instances.push_back(
+                {in.mesh, in.transform, index, rt::hitGroupFor(materialClass, in.kind), 0xFF, blas});
+            const std::uint32_t flags = (spheres ? rt::kInstanceSpheres : 0u) |
+                                        (spheres && in.dynamicSpheres ? rt::kInstanceDynamicSpheres : 0u);
+            records.push_back({spheres ? in.firstSphere : in.mesh, in.material, in.light, flags});
+        }
+        // The previous transforms (binding 21): instance i's transform in the previous frame, or its current
+        // one (no motion of its own) where the previous frame's instances are not this slice's.
+        const bool havePrevious = describesSameInstances(frame.instances, extras.previousInstances);
+        std::vector<rt::Mat34> previousTransforms;
+        previousTransforms.reserve(frame.instances.size());
+        for (std::size_t i = 0; i < frame.instances.size(); ++i)
+            previousTransforms.push_back(havePrevious ? extras.previousInstances[i].transform
+                                                      : frame.instances[i].transform);
 
-    if (timers_)
-        timers_->begin(cmd, "tlas");
-    tlas_->build(cmd, scene.blases(), instances);
-    if (timers_)
-        timers_->end(cmd);
+        const CameraBasis basis = cameraBasis(frame.camera);
+        const Camera& prev = previousCamera ? *previousCamera : frame.camera;
+        const CameraBasis prevBasis = cameraBasis(prev);
+        rt::FrameUniforms u{};
+        store(u.cameraPosition, frame.camera.eye);
+        store(u.cameraRight, basis.right);
+        store(u.cameraUp, basis.up);
+        store(u.cameraForward, basis.forward);
+        u.tanHalfFovY = tanHalfFov(frame.camera);
+        u.aspect = static_cast<float>(width_) / static_cast<float>(height_);
+        u.aperture = frame.camera.aperture;
+        u.focusDistance = frame.camera.focusDistance;
+        store(u.prevPosition, prev.eye);
+        store(u.prevRight, prevBasis.right);
+        store(u.prevUp, prevBasis.up);
+        store(u.prevForward, prevBasis.forward);
+        u.prevTanHalfFovY = tanHalfFov(prev);
+        u.prevAspect = u.aspect;
+        u.prevValid = previousCamera ? 1u : 0u;
+        u.pixelSpread = std::atan(2.f * u.tanHalfFovY / static_cast<float>(height_));
+        u.width = width_;
+        u.height = height_;
+        u.frameSeed = settings.frameSeed;
+        u.spp = settings.spp; // spp and instanceCount: not read by the shaders (for a debugger's eyes)
+        u.maxBounces = settings.maxBounces;
+        u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
+                  (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
+                  (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u);
+        u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
+        u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
+        u.clampIndirect = settings.clampIndirect;
+        u.regularizeRoughness = settings.regularizeRoughness;
+        u.seconds = settings.seconds;
+        for (const rt::RectLight& light : frame.lights)
+            u.lightWeightSum += std::max(light.selectWeight, 0.f);
+        // Step 5's fields, each set by the task that reads it: no tree lights, medium or lensing; the caustic
+        // receivers (Task 13).
+        u.environmentSelect = frame.environment.select;
+        u.treeLightCount = static_cast<std::uint32_t>(frame.treeLights.size()); // Task 12
+        u.causticReceivers =
+            frame.caustics ? static_cast<std::uint32_t>(frame.caustics->receivers.size()) : 0u;
+        u.shutterOffset = settings.sliceOffsets[k];
+        u.sliceIndex = k;
+        u.sliceCount = sliceCount;
+
+        writeRegion(uniforms_[slot], uniformStride, k, &u, sizeof u);
+        writeRegion(environments_[slot], environmentStride, k, &environment, sizeof environment);
+        writeRegion(instanceRecords_[slot], instanceStride, k, records.data(),
+                    records.size() * sizeof(rt::InstanceRecord));
+        writeRegion(previousTransforms_[slot], previousStride, k, previousTransforms.data(),
+                    previousTransforms.size() * sizeof(rt::Mat34));
+        writeRegion(lights_[slot], lightStride, k, frame.lights.data(),
+                    frame.lights.size() * sizeof(rt::RectLight));
+        if (!frame.materials.empty())
+            writeRegion(materials_[slot], materialStride, k, frame.materials.data(),
+                        frame.materials.size() * sizeof(rt::Material));
+        // The light tree (Task 12; checkSceneFrame checked its lights, so neither the build nor the refit
+        // throws): this slice's, since a light's scale may change within the shutter.
+        if (!frame.treeLights.empty()) {
+            const rt::LightTree& tree = lightTreeFor(frame);
+            writeRegion(treeNodes_[slot], treeNodeStride, k, tree.nodes.data(),
+                        tree.nodes.size() * sizeof(rt::LightTreeNode));
+            writeRegion(treeLights_[slot], treeLightStride, k, tree.lights.data(),
+                        tree.lights.size() * sizeof(rt::TreeLight));
+        }
+    }
+    for (const gfx::Buffer* buffer : {&uniforms_[slot], &environments_[slot], &instanceRecords_[slot],
+                                      &previousTransforms_[slot], &lights_[slot], &materials_[slot],
+                                      &treeNodes_[slot], &treeLights_[slot]})
+        buffer->flush();
+    tracedThisFrame_ = true; // nothing is refused from here on
 
     gfx::Image& screen = scene.samplesRetro() ? *retroScreen : blackScreen_;
     // The feature images: the frame's, or the stand-ins (already in GENERAL, sampled).
@@ -422,67 +561,143 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     auto extraBuffer = [&](std::uint32_t binding, const gfx::Buffer* buffer) {
         return storageBuffer(binding, buffer ? *buffer : dummyBuffer_);
     };
-    const std::array<gfx::DescriptorWrite, EVO_BINDING_COUNT> writes = {
-        gfx::DescriptorWrite::accelerationStructure(EVO_BINDING_TLAS, tlas_->handle()),
-        storageImage(EVO_BINDING_LIGHTING, gbuffer_.lighting),
-        storageImage(EVO_BINDING_EMISSION, gbuffer_.emission),
-        storageImage(EVO_BINDING_ALBEDO, gbuffer_.albedo),
-        storageImage(EVO_BINDING_NORMAL, gbuffer_.normal),
-        storageImage(EVO_BINDING_DEPTH, gbuffer_.depth),
-        storageImage(EVO_BINDING_MOTION, gbuffer_.motion),
-        storageBuffer(EVO_BINDING_FRAME, uniforms_[slot]),
-        storageBuffer(EVO_BINDING_MATERIALS, materialTable),
-        storageBuffer(EVO_BINDING_LIGHTS, lights_[slot]),
-        storageBuffer(EVO_BINDING_INSTANCES, instanceRecords_[slot]),
-        storageBuffer(EVO_BINDING_VERTICES, scene.geometry().vertices()),
-        storageBuffer(EVO_BINDING_INDICES, scene.geometry().indices()),
-        storageBuffer(EVO_BINDING_MESH_RECORDS, scene.geometry().meshRecords()),
-        sampledImage(EVO_BINDING_RETRO_SCREEN, screen),
-        storageBuffer(EVO_BINDING_ENVIRONMENT,
-                      extras.environment ? *extras.environment : environments_[slot]),
-        extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes),
-        extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights),
-        extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
-        sampledImage(EVO_BINDING_DENSITY, density),
-        sampledImage(EVO_BINDING_MAJORANT, majorant),
-        extraBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS, extras.previousTransforms),
-        storageBuffer(EVO_BINDING_STATIC_SPHERES, extras.staticSpheres ? *extras.staticSpheres
-                                                  : scene.spheres()    ? scene.spheres()->records()
-                                                                       : dummyBuffer_),
-        extraBuffer(EVO_BINDING_PARTICLE_SPHERES, extras.particleSpheres),
-        sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
-        extraBuffer(EVO_BINDING_LENSING, extras.lensing),
-        storageImage(EVO_BINDING_VOLUME, gbuffer_.volume),
-        extraBuffer(EVO_BINDING_CAUSTIC_RECEIVERS, extras.causticReceivers),
+    auto regionBuffer = [](std::uint32_t binding, const VkDescriptorBufferInfo& info) {
+        return gfx::DescriptorWrite::buffer(binding, info);
     };
-    pipeline_.bind(cmd, ring_, writes);
+    const gfx::Buffer& staticSpheres = extras.staticSpheres ? *extras.staticSpheres
+                                       : scene.spheres()    ? scene.spheres()->records()
+                                                            : dummyBuffer_;
+    // The descriptor set of slice k: its regions of this slot's per-slice buffers, the rest shared.
+    auto writesFor = [&](std::uint32_t k) {
+        const SceneFrame& frame = slices[k];
+        const gfx::Buffer& materialTable =
+            frame.materials.empty() ? scene.staticMaterials() : materials_[slot];
+        const std::array<gfx::DescriptorWrite, EVO_BINDING_COUNT> writes = {
+            gfx::DescriptorWrite::accelerationStructure(EVO_BINDING_TLAS, tlas_->handle()),
+            storageImage(EVO_BINDING_LIGHTING, gbuffer_.lighting),
+            storageImage(EVO_BINDING_EMISSION, gbuffer_.emission),
+            storageImage(EVO_BINDING_ALBEDO, gbuffer_.albedo),
+            storageImage(EVO_BINDING_NORMAL, gbuffer_.normal),
+            storageImage(EVO_BINDING_DEPTH, gbuffer_.depth),
+            storageImage(EVO_BINDING_MOTION, gbuffer_.motion),
+            regionBuffer(EVO_BINDING_FRAME,
+                         regionInfo(uniforms_[slot], uniformStride, k, sizeof(rt::FrameUniforms), 1)),
+            frame.materials.empty()
+                ? storageBuffer(EVO_BINDING_MATERIALS, materialTable)
+                : regionBuffer(EVO_BINDING_MATERIALS, regionInfo(materials_[slot], materialStride, k,
+                                                                 sizeof(rt::Material), capacity_.materials)),
+            regionBuffer(EVO_BINDING_LIGHTS,
+                         regionInfo(lights_[slot], lightStride, k, sizeof(rt::RectLight), capacity_.lights)),
+            regionBuffer(EVO_BINDING_INSTANCES, regionInfo(instanceRecords_[slot], instanceStride, k,
+                                                           sizeof(rt::InstanceRecord), capacity_.instances)),
+            storageBuffer(EVO_BINDING_VERTICES, scene.geometry().vertices()),
+            storageBuffer(EVO_BINDING_INDICES, scene.geometry().indices()),
+            storageBuffer(EVO_BINDING_MESH_RECORDS, scene.geometry().meshRecords()),
+            sampledImage(EVO_BINDING_RETRO_SCREEN, screen),
+            extras.environment
+                ? storageBuffer(EVO_BINDING_ENVIRONMENT, *extras.environment)
+                : regionBuffer(EVO_BINDING_ENVIRONMENT, regionInfo(environments_[slot], environmentStride, k,
+                                                                   sizeof(rt::EnvironmentUniforms), 1)),
+            // The tree's buffers: the frame's slice (a non-null TraceExtras pointer replaces them, a hook), or
+            // the dummy.
+            extras.treeNodes || frame.treeLights.empty()
+                ? extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes)
+                : regionBuffer(EVO_BINDING_TREE_NODES,
+                               regionInfo(treeNodes_[slot], treeNodeStride, k, sizeof(rt::LightTreeNode),
+                                          treeNodeCount(capacity_.treeLights))),
+            extras.treeLights || frame.treeLights.empty()
+                ? extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights)
+                : regionBuffer(EVO_BINDING_TREE_LIGHTS,
+                               regionInfo(treeLights_[slot], treeLightStride, k, sizeof(rt::TreeLight),
+                                          capacity_.treeLights)),
+            extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
+            sampledImage(EVO_BINDING_DENSITY, density),
+            sampledImage(EVO_BINDING_MAJORANT, majorant),
+            extras.previousTransforms
+                ? storageBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS, *extras.previousTransforms)
+                : regionBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS,
+                               regionInfo(previousTransforms_[slot], previousStride, k, sizeof(rt::Mat34),
+                                          capacity_.instances)),
+            storageBuffer(EVO_BINDING_STATIC_SPHERES, staticSpheres),
+            extraBuffer(EVO_BINDING_PARTICLE_SPHERES, extras.particleSpheres),
+            sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
+            extraBuffer(EVO_BINDING_LENSING, extras.lensing),
+            storageImage(EVO_BINDING_VOLUME, gbuffer_.volume),
+            extraBuffer(EVO_BINDING_CAUSTIC_RECEIVERS, extras.causticReceivers),
+        };
+        return writes;
+    };
 
-    // ceil(spp / kSppPerDispatch) dispatches. lighting, emission and albedo keep a running mean, so each
-    // dispatch reads what the one before wrote; the other guides come from the first dispatch alone. Every
-    // dispatch still gets a barrier on all seven: the raygen writes the guides statically, and
-    // synchronization validation judges a dispatch by the accesses its pipeline could make, not the ones it
-    // makes.
+    // ceil(spp / kSppPerDispatch) dispatches, split evenly over the slices. lighting, emission and albedo
+    // keep a running mean over the frame's samples, so each dispatch reads what the one before wrote; the
+    // other guides come from the first dispatch of the middle slice alone. Every dispatch still gets a
+    // barrier on all seven: the raygen writes the guides statically, and synchronization validation judges a
+    // dispatch by the accesses its pipeline could make, not the ones it makes. With one slice the TLAS build
+    // and the trace are timed apart; with several, the builds are part of the "trace" scope (a frame has only
+    // so many timer scopes).
     constexpr VkAccessFlags2 kReadWrite =
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-    const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
-    if (timers_)
+    const std::uint32_t guideSlice = sliceCount / 2;
+    const bool singleSlice = sliceCount == 1;
+    if (!singleSlice && timers_)
         timers_->begin(cmd, "trace");
+    std::uint32_t boundSlice = kMaxShutterSlices; // none yet
+    bool tracing = false;                         // the single slice's "trace" scope is open
     for (std::uint32_t d = 0; d < dispatches; ++d) {
+        const std::uint32_t k = sliceOfDispatch(d, dispatches, sliceCount);
+        if (k != boundSlice) {
+            if (tracing && timers_) {
+                timers_->end(cmd);
+                tracing = false;
+            }
+            if (beforeSlice)
+                beforeSlice(cmd, k);
+            if (singleSlice && timers_)
+                timers_->begin(cmd, "tlas");
+            tlas_->build(cmd, scene.blases(), sliceInstances[k]);
+            // Task 13: the photon pass, once, against the first slice's TLAS and tables (region 0 of this
+            // slot's per-slice buffers), before any trace dispatch: the maps are a function of the frame's
+            // time, shared by every slice.
+            if (d == 0 && slices[0].caustics) {
+                const SceneFrame& first = slices[0];
+                PhotonScene photons;
+                photons.tlas = tlas_->handle();
+                photons.instances = &instanceRecords_[slot];
+                photons.materials = first.materials.empty() ? &scene.staticMaterials() : &materials_[slot];
+                photons.vertices = &scene.geometry().vertices();
+                photons.indices = &scene.geometry().indices();
+                photons.meshRecords = &scene.geometry().meshRecords();
+                photons.staticSpheres = &staticSpheres;
+                photons.particleSpheres = extras.particleSpheres ? extras.particleSpheres : &dummyBuffer_;
+                photons.lights = &lights_[slot];
+                photons.environment = extras.environment ? extras.environment : &environments_[slot];
+                extras.photons(cmd, photons);
+            }
+            if (singleSlice && timers_) {
+                timers_->end(cmd);
+                timers_->begin(cmd, "trace");
+                tracing = true;
+            }
+            pipeline_.bind(cmd, ring_, writesFor(k));
+            boundSlice = k;
+        }
         for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               kReadWrite);
         for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion, &gbuffer_.volume})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        const bool firstOfSlice = d == 0 || sliceOfDispatch(d - 1, dispatches, sliceCount) != k;
         const TracePush push{d * kSppPerDispatch,
                              std::min(kSppPerDispatch, settings.spp - d * kSppPerDispatch),
                              {0.5f + settings.pixelJitter[0] - 0.5f * settings.pixelFootprint[0],
                               0.5f + settings.pixelJitter[1] - 0.5f * settings.pixelFootprint[1]},
-                             {settings.pixelFootprint[0], settings.pixelFootprint[1]}};
+                             {settings.pixelFootprint[0], settings.pixelFootprint[1]},
+                             k == guideSlice && firstOfSlice ? 1u : 0u};
         pipeline_.push(cmd, &push, sizeof push);
         pipeline_.traceRays(cmd, width_, height_);
     }
-    if (timers_)
+    if (timers_ && (tracing || !singleSlice))
         timers_->end(cmd);
     stats_.traceDispatches = dispatches;
 }

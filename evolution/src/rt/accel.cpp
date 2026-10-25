@@ -341,10 +341,13 @@ tlasBuildInfo(const VkAccelerationStructureGeometryKHR& geometry) {
 
 } // namespace
 
-Tlas::Tlas(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t maxInstances)
-    : ctx_(ctx), ring_(ring), maxInstances_(maxInstances) {
+Tlas::Tlas(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t maxInstances,
+           std::uint32_t maxBuildsPerFrame)
+    : ctx_(ctx), ring_(ring), maxInstances_(maxInstances), maxBuilds_(maxBuildsPerFrame) {
     if (maxInstances == 0)
         throw std::invalid_argument("Tlas: maxInstances must be positive");
+    if (maxBuildsPerFrame == 0)
+        throw std::invalid_argument("Tlas: maxBuildsPerFrame must be positive");
 
     const VkAccelerationStructureGeometryKHR geometry = instanceGeometry(0);
     const VkAccelerationStructureBuildGeometryInfoKHR build = tlasBuildInfo(geometry);
@@ -361,7 +364,8 @@ Tlas::Tlas(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t maxInstances)
     alignedAddress(scratch_, scratchDesc.alignment, "TLAS scratch");
     for (std::uint32_t slot = 0; slot < instanceBuffers_.size(); ++slot) {
         const std::string name = "tlas instances slot " + std::to_string(slot);
-        gfx::BufferDesc desc{VkDeviceSize{maxInstances} * sizeof(VkAccelerationStructureInstanceKHR),
+        gfx::BufferDesc desc{VkDeviceSize{maxInstances} * maxBuildsPerFrame *
+                                 sizeof(VkAccelerationStructureInstanceKHR),
                              VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
                                  VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                              true, name.c_str()};
@@ -371,7 +375,7 @@ Tlas::Tlas(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t maxInstances)
     }
     tlas_ = createAccelerationStructure(ctx, storage_, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, "tlas");
     // Tells the destructor whether the ring is still there to wait for, and starts each frame unbuilt.
-    ringAlive_ = ring.onBegin([this](std::uint32_t) { builtThisFrame_ = false; });
+    ringAlive_ = ring.onBegin([this](std::uint32_t) { builtThisFrame_ = 0; });
 }
 
 Tlas::~Tlas() {
@@ -401,8 +405,10 @@ VkDeviceSize Tlas::bytes() const {
 void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Instance> instances) {
     if (!ringAlive_.active() || !ring_.recording())
         throw std::logic_error("Tlas::build() outside its ring's begin() and submit()");
-    if (builtThisFrame_)
-        throw std::logic_error("Tlas::build(): a second build in one frame (its traces read the first)");
+    if (builtThisFrame_ >= maxBuilds_)
+        throw std::logic_error("Tlas::build(): " + std::to_string(builtThisFrame_ + 1) +
+                               " builds in one frame, more than the " + std::to_string(maxBuilds_) +
+                               " allowed (the earlier builds' traces read the TLAS)");
     if (instances.size() > maxInstances_)
         throw std::length_error("Tlas::build(): " + std::to_string(instances.size()) +
                                 " instances for at most " + std::to_string(maxInstances_));
@@ -424,12 +430,15 @@ void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Ins
     }
 
     // Nothing below throws: from here on the frame has its build.
-    builtThisFrame_ = true;
-
-    // This slot's previous frame has completed (begin() waited for it), so its instances are free to write.
+    // This slot's previous frame has completed (begin() waited for it), so its instances are free to write:
+    // this build's own region of them, since the earlier builds of this frame have not run yet.
     const gfx::Buffer& instanceBuffer = instanceBuffers_[ring_.slot()];
+    const VkDeviceSize regionBytes = VkDeviceSize{maxInstances_} * sizeof(VkAccelerationStructureInstanceKHR);
+    const VkDeviceSize offset = VkDeviceSize{builtThisFrame_} * regionBytes;
+    ++builtThisFrame_;
     if (!records.empty()) {
-        std::memcpy(instanceBuffer.mapped(), records.data(), records.size() * sizeof records[0]);
+        std::memcpy(static_cast<std::byte*>(instanceBuffer.mapped()) + offset, records.data(),
+                    records.size() * sizeof records[0]);
         instanceBuffer.flush();
     }
 
@@ -437,7 +446,7 @@ void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Ins
     memoryBarriers(cmd, {{kTracers, kAsRead, kBuild, kAsRead | kAsWrite},
                          {kBuild, kAsWrite, kBuild, kAsRead | kAsWrite}});
 
-    const VkAccelerationStructureGeometryKHR geometry = instanceGeometry(instanceBuffer.address());
+    const VkAccelerationStructureGeometryKHR geometry = instanceGeometry(instanceBuffer.address() + offset);
     VkAccelerationStructureBuildGeometryInfoKHR build = tlasBuildInfo(geometry);
     build.dstAccelerationStructure = tlas_;
     build.scratchData.deviceAddress = scratch_.address();

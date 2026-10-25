@@ -23,7 +23,7 @@ namespace evo::rt {
 // --- Materials and lights ----------------------------------------------------------------------------------
 
 enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Checker = 3 }; // = hit group
-enum class Pattern : std::uint32_t { None = 0, WoodPlanks = 1, BrushedMetal = 2 };
+enum class Pattern : std::uint32_t { None = 0, WoodPlanks = 1, BrushedMetal = 2, Concrete = 3 };
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;
 
@@ -140,7 +140,7 @@ struct FrameUniforms { // 208 bytes, scalar
     std::uint32_t flags; // kTraceFlag*
     std::uint32_t lightCount;
     std::uint32_t instanceCount;
-    float clampIndirect;            // luminance limit of one contribution after the first bounce
+    float clampIndirect;            // luminance limit of one contribution after a rough vertex
     float lightWeightSum;           // the sum of every light's selectWeight (no shader reads it since Task 3)
     float regularizeRoughness;      // the least roughness of every lobe after the first rough vertex (Task 6)
     std::uint32_t treeLightCount;   // the lights of the light tree (Task 12)
