@@ -16,6 +16,26 @@ hitAttributeEXT vec2 hitBarycentrics;
 #endif
 layout(location = 0) rayPayloadInEXT HitPayload payload;
 
+// How far a hit point moved with its instance since the previous frame: the instance's previous transform
+// (binding 21, PathTracer: the current one when the frame has no matching previous instances) applied to the
+// object-space point it had then (`before`), minus the current transform applied to the point it has now
+// (`now`). Exactly 0 when the instance and the point both stayed, so a still object has no motion at all.
+vec3 hitMotion(vec3 now, vec3 before) {
+    Mat34 m = previousTransforms[gl_InstanceCustomIndexEXT];
+    mat4x3 c = gl_ObjectToWorldEXT; // column-major: c[column][row]
+    vec4 r0 = vec4(c[0][0], c[1][0], c[2][0], c[3][0]);
+    vec4 r1 = vec4(c[0][1], c[1][1], c[2][1], c[3][1]);
+    vec4 r2 = vec4(c[0][2], c[1][2], c[2][2], c[3][2]);
+    if (now == before && m.rows[0] == r0 && m.rows[1] == r1 && m.rows[2] == r2) {
+        return vec3(0.0);
+    }
+    vec4 a = vec4(before, 1.0);
+    vec4 b = vec4(now, 1.0);
+    vec3 then = vec3(dot(m.rows[0], a), dot(m.rows[1], a), dot(m.rows[2], a));
+    vec3 here = vec3(dot(r0, b), dot(r1, b), dot(r2, b));
+    return then - here;
+}
+
 struct HitPoint {
     vec3 position;        // world
     vec3 normal;          // world shading normal, outward (on the geometric normal's side of the viewer)
@@ -28,7 +48,8 @@ struct HitPoint {
     vec3 dPdu, dPdv;      // world change per unit of u and of v across the triangle (0 for a degenerate uv map)
     vec3 emission;        // the object's own emission on top of its material's (a sphere's colour * emission)
     uint primitive;       // HitPayload.primitive: the triangle of the mesh, or the sphere's index in its buffer
-    vec3 prevPosition;    // HitPayload.prevPosition: the hit point where it was in the previous frame
+    vec3 prevPosition;    // HitPayload.prevPosition: the hit point where it was in the previous frame (the
+                          // previous camera is the guide's business: this is in world space)
 };
 
 #ifdef GEOMETRY_SPHERES
@@ -53,8 +74,9 @@ HitPoint hitPoint() {
     vec3 dir = gl_WorldRayDirectionEXT;
     vec3 local = gl_ObjectRayOriginEXT + gl_HitTEXT * gl_ObjectRayDirectionEXT - s.center;
     vec3 nLocal = safeNormalize(local, -normalize(gl_ObjectRayDirectionEXT));
-    h.position = gl_ObjectToWorldEXT * vec4(s.center + s.radius * nLocal, 1.0); // on the surface
-    h.prevPosition = gl_ObjectToWorldEXT * vec4(s.prevCenter + s.radius * nLocal, 1.0);
+    vec3 surface = s.center + s.radius * nLocal;
+    h.position = gl_ObjectToWorldEXT * vec4(surface, 1.0); // on the surface
+    h.prevPosition = h.position + hitMotion(surface, s.prevCenter + s.radius * nLocal);
     h.front = gl_HitKindEXT == kSphereHitOutside;
     // Normals go to world space through the inverse transpose: n * WorldToObject.
     h.geometricNormal = safeNormalize((nLocal * gl_WorldToObjectEXT).xyz, h.front ? -dir : dir);
@@ -115,7 +137,7 @@ HitPoint hitPoint() {
     h.dPdv = uvDet != 0.0 ? (d1.x * w2 - d2.x * w1) / uvDet : vec3(0.0);
     h.emission = vec3(0.0);
     h.primitive = uint(gl_PrimitiveID);
-    h.prevPosition = h.position; // Task 9: the hit point under the previous transform
+    h.prevPosition = h.position + hitMotion(p, p); // the same point under the previous transform
     return h;
 }
 

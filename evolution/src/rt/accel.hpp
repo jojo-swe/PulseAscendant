@@ -90,8 +90,12 @@ struct Instance {
 // and a barrier (BUILD writes -> RAY_TRACING_SHADER | COMPUTE_SHADER acceleration structure reads) for this
 // frame's traces.
 //
-// One build per frame: a second build() in the same frame throws std::logic_error, since it would overwrite
-// the instance buffer and the TLAS that the first build's traces in this command buffer read.
+// Builds per frame (maxBuildsPerFrame, 1 by default): a build beyond them throws std::logic_error. Each
+// build of a frame gets its own region of the slot's instance buffer (the CPU writes them all while the
+// frame is recorded, before the GPU runs the first build), and rebuilds the same TLAS after the traces
+// recorded since the build before it (its barrier makes the previous traces and builds finish first): the
+// export shutter traces one TLAS per time slice this way. A second build with only one allowed would
+// overwrite the TLAS that the first build's traces in this command buffer read.
 //
 // Lifetime: a Tlas belongs to the ring it was made with. Its destructor waits for every submit of that ring
 // while the ring lives (a frame in flight may still trace the TLAS); that is a full stall of the ring, fine
@@ -103,20 +107,22 @@ struct Instance {
 // Context's single queue in order. A second queue would need semaphores between its submits and these.
 class Tlas {
 public:
-    // Throws std::invalid_argument for maxInstances 0.
-    Tlas(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t maxInstances);
+    // Throws std::invalid_argument for maxInstances 0 or maxBuildsPerFrame 0.
+    Tlas(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t maxInstances,
+         std::uint32_t maxBuildsPerFrame = 1);
     ~Tlas();
     Tlas(const Tlas&) = delete;
     Tlas& operator=(const Tlas&) = delete;
 
-    // Throws, before recording anything, std::logic_error outside ring.begin()/submit() or for a second build
-    // in the frame (a refused build does not count), std::length_error
+    // Throws, before recording anything, std::logic_error outside ring.begin()/submit() or for a build
+    // beyond maxBuildsPerFrame in the frame (a refused build does not count), std::length_error
     // for more than maxInstances instances, std::out_of_range for a mesh not in `blases` (an instance without
     // its own `blas`) and
     // std::invalid_argument for a customIndex or hitGroup over 24 bits.
     void build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Instance> instances);
     VkAccelerationStructureKHR handle() const { return tlas_; }
     std::uint32_t maxInstances() const { return maxInstances_; }
+    std::uint32_t maxBuildsPerFrame() const { return maxBuilds_; }
     // The device memory of the TLAS's storage, its scratch and the per-slot instance buffers, as allocated.
     VkDeviceSize bytes() const;
 
@@ -125,12 +131,12 @@ private:
 
     gfx::Context& ctx_;
     gfx::FrameRing& ring_;
-    std::uint32_t maxInstances_ = 0;
+    std::uint32_t maxInstances_ = 0, maxBuilds_ = 1;
     gfx::Buffer storage_;
     gfx::Buffer scratch_;
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> instanceBuffers_;
     VkAccelerationStructureKHR tlas_ = VK_NULL_HANDLE;
-    bool builtThisFrame_ = false;            // reset by the ring's begin()
+    std::uint32_t builtThisFrame_ = 0;       // builds so far this frame; reset by the ring's begin()
     gfx::FrameRing::Subscription ringAlive_; // active while ring_ lives
 };
 

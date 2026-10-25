@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace evo::modern {
 class PathTracer;
@@ -81,6 +82,14 @@ bool validTraceScale(float scale);
 // rt::ParticleField (made on the first prepared scene with a particle shader and grown to the largest
 // capacity.particles prepared), at the frame's chapter-local time (prevCenter at the previous frame's while
 // the history continues, else at the same time), then traces with that slot's spheres and BLAS.
+//
+// Motion (Task 9): the stage remembers the last frame's instances along with its camera, while the history
+// continues, and hands them to the tracer, whose motion guide then holds each surface point's own motion
+// (an instance's previous transform, a sphere's or particle's prevCenter) besides the camera's; after a reset
+// there is nothing to remember. In Export with state.shutterSeconds > 0 and more than 4 samples the frame is
+// traced in up to 8 time slices (modern/shutter.hpp): the scene's frame() is asked for each slice's time
+// (sampleTimeline at the chapter-clamped time, so no slice leaves the frame's chapter), the particle field is
+// rebuilt per slice, and the guides come from the middle slice. The window has no shutter.
 //
 // GPU timers (setTimers): "particles" (the particle field), "tlas" and "trace" (the tracer), "denoise",
 // "upscale" (below scale 1), "tonemap"; "fill" and "tonemap" for the placeholder.
@@ -188,8 +197,9 @@ private:
     std::unique_ptr<post::Upscaler> upscaler_;
     gfx::Image traceHdr_; // the denoised picture at the trace size, below scale 1 (else empty)
     std::unique_ptr<modern::PathTracer> tracer_;
-    std::optional<modern::Camera> previousCamera_; // the last frame's, while the history continues
-    double previousSeconds_ = 0;                   // the last traced frame's chapter-local time
+    std::optional<modern::Camera> previousCamera_;         // the last frame's, while the history continues
+    std::vector<modern::SceneInstance> previousInstances_; // likewise: the last frame's instances (Task 9)
+    double previousSeconds_ = 0;                           // the last traced frame's chapter-local time
     gfx::GpuTimers* timers_ = nullptr;
     std::array<float, 2> lastJitter_{0.f, 0.f};
 };

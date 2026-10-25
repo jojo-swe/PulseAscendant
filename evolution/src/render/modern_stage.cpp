@@ -3,6 +3,7 @@
 #include "gfx/gpu_timers.hpp"
 #include "modern/path_tracer.hpp"
 #include "modern/scene_gpu.hpp"
+#include "modern/shutter.hpp"
 #include "post/denoiser.hpp"
 #include "post/upscale.hpp"
 #include "rt/particles.hpp"
@@ -12,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace evo::render {
 
@@ -26,7 +28,9 @@ constexpr float kUpscaleFeedback = 0.9f;
 constexpr float kUpscaleClipGamma = 1.f;
 
 gfx::ImageDesc hdrDesc(std::uint32_t width, std::uint32_t height) {
-    return {width, height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT, 1, "modern hdr"};
+    // Transfer-source usage so that tests can read the light back (hdr()).
+    return {width, height, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1, "modern hdr"};
 }
 
 // Transfer source too: tests read the 2026 picture back on its own.
@@ -183,6 +187,7 @@ void ModernStage::resizeTraced() {
     upscaler_->resize(traceWidth_, traceHeight_, width_, height_);
     traceHdr_ = upscales() ? gfx::Image(ctx_, hdrDesc(traceWidth_, traceHeight_)) : gfx::Image();
     previousCamera_.reset();
+    previousInstances_.clear();
 }
 
 void ModernStage::setTimers(gfx::GpuTimers* timers) {
@@ -252,14 +257,35 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     if (object.samplesRetro() && retroImage == nullptr)
         throw std::invalid_argument("ModernStage: a scene that shows the retro screen needs the retro image");
     prepare(id); // setup on the first frame of an unprepared scene (see the class comment)
-    const modern::SceneFrame scene = object.frame(frame);
     const bool interactive = state.mode == RenderMode::Interactive;
     const bool continues = interactive && state.reset == HistoryReset::None;
+
+    // The export shutter: the scene's frame at each slice's time, clamped into the frame's chapter. The
+    // window (and an export at 4 spp or fewer, or without a shutter) has one slice: the frame itself.
+    const std::uint32_t sliceCount =
+        modern::shutterSlices(state.spp, interactive ? 0.0 : state.shutterSeconds);
+    std::vector<modern::SceneFrame> slices;
+    std::vector<double> sliceLocal; // each slice's chapter-local time
+    slices.reserve(sliceCount);
+    modern::TraceSettings trace;
+    for (std::uint32_t k = 0; k < sliceCount; ++k) {
+        if (sliceCount == 1) {
+            slices.push_back(object.frame(frame));
+            sliceLocal.push_back(frame.localSeconds);
+            continue;
+        }
+        const double local = modern::sliceSeconds(frame.localSeconds, frame.chapterDuration, k, sliceCount,
+                                                  state.shutterSeconds);
+        slices.push_back(object.frame(modern::sliceFrame(frame, local)));
+        sliceLocal.push_back(local);
+        trace.sliceOffsets[k] = static_cast<float>(local - frame.localSeconds);
+    }
+    const std::uint32_t guideSlice = sliceCount / 2; // the slice the guides (and the next motion) come from
+    const modern::SceneFrame& scene = slices[guideSlice];
 
     // The window jitters its samples within each trace pixel below scale 1; a reset frame and exports do not.
     const post::SubpixelWindow window =
         post::subpixelWindow(traceWidth_, traceHeight_, width_, height_, state.framesSinceReset, interactive);
-    modern::TraceSettings trace;
     trace.spp = state.spp;
     trace.maxBounces = state.maxBounces;
     trace.frameSeed = state.frameSeed;
@@ -269,21 +295,36 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     trace.pixelFootprint = window.footprint;
     lastJitter_ = window.jitter;
     modern::TraceExtras extras;
-    if (scene.particles) {
-        // The particle field first (checked with the rest of the frame before anything is recorded).
-        const modern::SceneStatic& statics = object.staticScene();
-        modern::checkSceneFrame(statics, scene);
-        const modern::ParticleFrame& p = *scene.particles;
+    // The previous frame's instances, while the history continues: the previous transforms of the motion
+    // guide.
+    if (continues)
+        extras.previousInstances = previousInstances_;
+    const modern::SceneStatic& statics = object.staticScene();
+    const bool particles = std::any_of(slices.begin(), slices.end(),
+                                       [](const modern::SceneFrame& s) { return s.particles.has_value(); });
+    if (particles) {
+        // The particle field is rebuilt per slice, at the slice's time, just before that slice's TLAS build
+        // (each slice is checked with the rest of its frame before anything is recorded).
+        for (const modern::SceneFrame& s : slices)
+            modern::checkSceneFrame(statics, s);
         particles_->setShader(statics.particleShader);
-        beginScope(cmd, "particles");
-        particles_->record(cmd, p.count, frame.localSeconds,
-                           continues ? previousSeconds_ : frame.localSeconds, p.params, p.material);
-        endScope(cmd);
         extras.particleSpheres = &particles_->records();
         extras.particleBlas = particles_->blasAddress();
     }
-    tracer_->trace(cmd, *gpus_[indexOf(id)], scene, continues ? previousCamera_ : std::nullopt, trace,
-                   retroImage, extras);
+    const auto recordParticles = [&](VkCommandBuffer commands, std::uint32_t k) {
+        if (!slices[k].particles)
+            return;
+        const modern::ParticleFrame& p = *slices[k].particles;
+        if (sliceCount == 1)
+            beginScope(commands, "particles");
+        particles_->record(commands, p.count, sliceLocal[k], continues ? previousSeconds_ : sliceLocal[k],
+                           p.params, p.material);
+        if (sliceCount == 1)
+            endScope(commands);
+    };
+    tracer_->trace(cmd, *gpus_[indexOf(id)], slices, continues ? previousCamera_ : std::nullopt, trace,
+                   retroImage, extras,
+                   particles ? modern::PathTracer::SliceCallback(recordParticles) : nullptr);
 
     if (state.reset != HistoryReset::None) {
         denoiser_->resetHistory();
@@ -310,7 +351,8 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     tonemap_.record(cmd, hdr_, image_, scene.exposureEV);
     endScope(cmd);
     previousCamera_ = scene.camera;
-    previousSeconds_ = frame.localSeconds;
+    previousInstances_ = scene.instances;
+    previousSeconds_ = sliceLocal[guideSlice];
 }
 
 } // namespace evo::render

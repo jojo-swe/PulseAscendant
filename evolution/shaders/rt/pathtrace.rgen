@@ -2,8 +2,10 @@
 #extension GL_GOOGLE_include_directive : require
 
 // The path tracer's integrator: one invocation per pixel traces this dispatch's samples (push constants) and
-// keeps a running mean of lighting, emission and albedo over the frame's samples; the first dispatch also
-// writes the depth, normal and motion guides from the unjittered centre ray.
+// keeps a running mean of lighting, emission and albedo over the frame's samples; one dispatch of the frame
+// (the first, unless the export shutter splits the frame into time slices: then the first of the middle
+// slice) also writes the depth, normal and motion guides from the unjittered centre ray. Every slice has its
+// own camera, instances and lights in frame (the uniforms), so a slice traces its own moment.
 //
 // Per sample: box-filter jitter in the pixel's subpixel window (push constants; the whole pixel by default)
 // and a thin-lens origin; then a loop over bounces. A hit's emission at the primary hit goes to the emission
@@ -38,6 +40,7 @@ layout(push_constant) uniform Push {
     uint sampleCount; // samples this dispatch traces
     vec2 windowOrigin; // the subpixel window's corner relative to the pixel's ((0, 0): the whole pixel)
     vec2 windowSize;   // its size in pixels ((1, 1): the whole pixel)
+    uint guides;       // non-zero: this dispatch also writes the guides (the volume layer, depth, normal, motion)
 } pc;
 
 layout(location = 0) rayPayloadEXT HitPayload payload;
@@ -387,7 +390,10 @@ bool previousPixel(vec3 p, float w, out vec2 pixel) {
     return true;
 }
 
-// depth, normal and motion from the unjittered centre ray through a pinhole.
+// depth, normal and motion from the unjittered centre ray through a pinhole. The motion is where the hit
+// surface point was in the previous frame's picture (its prevPosition: the point under its instance's
+// previous transform, or around a sphere's prevCenter) minus where it is now; without a previous camera it is
+// invalid (z = 0).
 void writeGuides(ivec2 pixel) {
     vec2 centre = vec2(gPixel) + 0.5;
     vec3 direction = cameraDirection(centre);
@@ -405,7 +411,7 @@ void writeGuides(ivec2 pixel) {
         imageStore(depthImage, pixel, vec4(depth));
         vec3 n = dot(payload.normal, direction) > 0.0 ? -payload.normal : payload.normal; // facing the camera
         imageStore(normalImage, pixel, vec4(n, payload.roughness));
-        if (frame.prevValid != 0u && previousPixel(payload.position, 1.0, previous)) {
+        if (frame.prevValid != 0u && previousPixel(payload.prevPosition, 1.0, previous)) {
             motion = vec4(previous - centre, 1.0, 0.0);
         }
     }
@@ -441,7 +447,7 @@ void main() {
     imageStore(emissionImage, pixel, vec4(min(emission / after, vec3(65504.0)), 1.0));
     imageStore(albedoImage, pixel, vec4(albedo / after, 1.0));
 
-    if (pc.sampleBase == 0u) {
+    if (pc.guides != 0u) {
         // The volume layer: no medium in the frame (Task 11 integrates the primary segment's in-scattered
         // radiance and transmittance here while mediumActive()).
         imageStore(volumeImage, pixel, vec4(0.0, 0.0, 0.0, 1.0));
