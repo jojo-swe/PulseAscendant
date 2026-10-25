@@ -27,6 +27,7 @@ const uint kPatternCityRound = 19u;
 const uint kPatternCityStreet = 20u;
 const uint kPatternCityTrail = 21u;
 const uint kPatternCitySign = 22u;
+const uint kPatternPlasmaSea = 44u; // Pbr class: PLASMA PLANET's sea (plasma_sea.glsl)
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;

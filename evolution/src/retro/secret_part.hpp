@@ -58,7 +58,7 @@ SecretInput settledInput(const SecretInput& input);
 // the show's length.
 struct SecretStats {
     std::uint64_t photons = 0;   // caustic photons in an export frame of GLASS CATHEDRAL
-    std::uint64_t stars = 0;     // the star field the ship flies through
+    std::uint64_t stars = 0;     // the stars of the galaxy (GALAXY and ASCENDANT)
     std::uint64_t particles = 0; // DOTS' traced particles
     std::uint64_t frames = 0;    // the video at 60 frames a second: ceil(60 x showDuration())
 };

@@ -8,17 +8,20 @@
 // temperature) with its dust as a grid medium of kGalaxyDust voxels over the disc
 // (shaders/modern/cosmos_medium.comp): dark lanes along the arms' inner edges, a thin diffuse disc that shows
 // edge-on as the lane across the bulge, filaments, and pink HII knots that glow on the spines. The camera
-// approaches edge-on on an 85 mm lens with the lane black across the bulge (shot 0), then on the bar
+// approaches edge-on on an 85 mm lens with the lane black across the bulge (shot 0; it starts at REBOOT's
+// crossing, where the director shows this scene at negative chapter time and the 1993 cube's 512 points
+// become stars ahead of the camera, frozen on REBOOT's accent), then on the bar
 // line swings above the plane on a 35 mm lens until it looks straight down at D; on the accent the bulge is
 // centred and the arms fill the frame; on the bar after it dives into an arm. The bulge's stars breathe with
 // the energy; the arms stay steady.
 //
 // ASCENDANT: the same galaxy hangs in the sky behind the EVOLUTION logo (logo_targets.hpp). Its core holds
 // kAscendantParticles traced particles (shaders/modern/cosmos_particles.comp; ascendantParticle() is the CPU
-// twin) in DOTS' ember, ivory and ice. They lift off one by one from the start of shot 1, stream towards the
-// camera, pass through a waypoint formation one bar before D (held for four frames: the formation is a
-// parameter, a vortex by default; another table of targets can spell a word there), and land on their logo
-// targets exactly on the accent, lit by the sun from camera-right while the camera orbits on a 50 mm lens.
+// twin) in DOTS' identity colours across the logo (ember on the left, ivory, ice on the right; the front face
+// lighter than the sides). They lift off strand by strand from the start of shot 1 and stream towards the
+// camera in filaments, pass through a waypoint formation one bar before D (held for four frames: a vortex by
+// default, or a line of text: waypointTargets), and land on their logo targets exactly on the accent, lit by
+// the sun from camera-right while the camera orbits on a 50 mm lens.
 // From the fourth bar after D the logo's rows light up one per bar from the bottom; on the chapter's last
 // downbeat the particles release and scatter outwards as light while the frame goes to phosphor white.
 //
@@ -28,11 +31,13 @@
 
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "modern/scenes/logo_targets.hpp"
 #include "rt/gpu_types.hpp"
 #include "show/timeline.hpp"
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace evo::modern {
@@ -72,13 +77,41 @@ struct AscendantTimes {
 };
 AscendantTimes ascendantTimes(const show::TimelineFrame& frame);
 
-// The particle frame: params as cosmos_particles.comp documents them (formation 0, the vortex).
-ParticleFrame ascendantParticleFrame(const show::TimelineFrame& frame, std::uint32_t count);
+// A text waypoint (formation 1): the particles pass through `text` in the 8x8 font on their way to the logo,
+// filled as the logo's targets fill the logo (logo_targets.hpp's scheme, kWaypointDepth voxels deep, centred on
+// the lit pixels' bounding box, the front face at z = +1 cell; shaders/modern/waypoint_text.glsl is the GPU
+// twin). Characters are upper-cased; those outside ASCII 32..95 become '?'; at most kWaypointGlyphs show.
+// `packed` is what the particle frame carries (params[12..15]: six-bit codes, four to a float).
+inline constexpr std::uint32_t kWaypointGlyphs = 16, kWaypointDepth = 2;
+struct WaypointTargets {
+    std::string text;              // as spelled (upper case, cut to kWaypointGlyphs, trailing spaces dropped)
+    std::array<float, 4> packed{}; // the particle frame's params[12..15]
+    std::vector<LogoPixel> pixels; // the lit pixels, row-major over the line (column, row)
+    Vec2 centre{};                 // their bounding box's centre (column, row)
+    // Particle id's target in the text, in the text's frame (cells of `cell`).
+    Vec3 target(std::uint32_t id, float cell) const;
+};
+WaypointTargets waypointTargets(const std::string& text);
+std::string decodeWaypointText(const std::array<float, 4>& packed);
+
+// The particle frame: params as cosmos_particles.comp documents them: formation 0 (the vortex), or the text
+// waypoint when one is given.
+ParticleFrame ascendantParticleFrame(const show::TimelineFrame& frame, std::uint32_t count,
+                                     const WaypointTargets* waypoint = nullptr);
 // The shader's particle(id, seconds, params) on the CPU (prevCenter and material left 0), and a particle's
-// logo target and waypoint, in the logo's frame.
+// logo target and waypoint (the formation's text from params[12..15]), in the logo's frame.
 rt::SphereRecord ascendantParticle(std::uint32_t id, float seconds, const std::array<float, 16>& params);
 Vec3 ascendantTarget(std::uint32_t id, float cell);
-Vec3 ascendantWaypoint(std::uint32_t formation, std::uint32_t id, float cell);
+Vec3 ascendantWaypoint(std::uint32_t formation, std::uint32_t id, float cell, const std::array<float, 4>& text = {});
+
+// REBOOT's crossing (its D, where the director switches to GALAXY's scene) and accent, in GALAXY's chapter
+// seconds (negative), from any GALAXY frame; and the 1993 cube's star `id` (< 512) in the world as
+// cosmos_splats.comp places it from a GALAXY splat frame's params (the CPU twin).
+struct RebootMarks {
+    float crossing, accent;
+};
+RebootMarks rebootMarks(const show::TimelineFrame& galaxyFrame);
+Vec3 galaxyCubeStar(std::uint32_t id, const std::array<float, 16>& params);
 
 // The galaxy's splats in either chapter (params as cosmos_splats.comp documents them).
 SplatFrame galaxySplatFrame(const show::TimelineFrame& frame, std::uint32_t stars);
@@ -99,6 +132,7 @@ public:
     SceneFrame frame(const show::TimelineFrame& frame) const override;
     Camera camera(const show::TimelineFrame& frame) const override { return cosmosCamera(frame); }
     bool samplesRetro() const override { return false; }
+    std::string nowCard(show::Effect effect) const override;
     std::uint32_t starCount() const { return stars_; }
     std::uint32_t particleCount() const { return particles_; }
     const std::array<std::uint32_t, 3>& dustSize() const { return dust_; }

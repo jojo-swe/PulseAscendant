@@ -47,7 +47,10 @@ enum class Pattern : std::uint32_t {
     CityRound = 19,
     CityStreet = 20,
     CityTrail = 21,
-    CitySign = 22
+    CitySign = 22,
+    // PLASMA PLANET's sea (the Nebula scene, shaders/rt/plasma_sea.glsl): the 1993 plasma glowing in its palette
+    // under plates of basalt crust, on an analytic sphere.
+    PlasmaSea = 44
 };
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;

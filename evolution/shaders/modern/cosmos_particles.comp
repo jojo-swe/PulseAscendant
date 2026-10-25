@@ -2,23 +2,26 @@
 #extension GL_GOOGLE_include_directive : require
 
 // ASCENDANT's particle field (src/modern/scenes/cosmos.cpp, whose ascendantParticle() is the CPU twin and
-// documents the flight): every particle starts in the galaxy's core, lifts off at its own time, flies through
-// a waypoint formation to its target in the EVOLUTION logo, lands exactly on the accent, lights up row by row
-// from the bottom on the bars, and on the release scatters outwards as light. Positions are in the logo's
-// frame (centred on the logo; the instance places it). params:
+// documents the flight): every particle starts in the galaxy's core, lifts off at its own time along one of
+// kStrands filaments, flies through a waypoint formation to its target in the EVOLUTION logo, lands exactly on
+// the accent, lights up row by row from the bottom on the bars, and on the release scatters outwards as light.
+// Positions are in the logo's frame (centred on the logo; the instance places it). params:
 //   params[0] = (count, the accent (landing), the first lift-off, the lift-offs' spread)
 //   params[1] = (the waypoint time, how long the formation holds, the waypoint formation, the release)
 //   params[2] = (the bottom row's lighting time, the bar's length, flash (kick), the logo's cell size)
-//   params[3] = (the core's centre in the logo's frame, the core's radius)
-
+//   params[3] = formation 1's text (waypoint_text.glsl), else unused
 #include "particles_common.glsl"
 #include "logo_targets.glsl"
+#include "waypoint_text.glsl"
 
 const float kPi = 3.14159265;
 const float kTau = 6.28318531;
 const float kFullCount = 2097152.0;
 const float kRadius = 0.0052; // at full detail, for a cell of kReferenceCell
 const float kReferenceCell = 0.09;
+// The galaxy's core in the logo's frame (modern::kAscendantGalaxyCentre) and the particles' cloud in it.
+const vec3 kAscendantCore = vec3(10.0, 34.0, -320.0);
+const float kAscendantCoreRadius = 2.5;
 
 float hashUnit(uint x) {
     return logoUnit(logoHash(x));
@@ -42,10 +45,14 @@ vec3 targetAndRow(uint id, float cell, out uint row) {
 }
 
 // The waypoint formation the flight passes through (and holds for params[1].y seconds). Formation 0 is the
-// vortex: a tilted whirl behind the logo, which in motion reads as part of the swirl. Another formation is
-// another table of targets (the same voxel scheme as the logo's), selected here by its number.
-vec3 waypoint(uint formation, uint id, float cell) {
+// vortex: a tilted whirl behind the logo, which in motion reads as part of the swirl. Formation 1 is the text
+// in params[3] (waypoint_text.glsl), a little behind the logo and facing the camera.
+vec3 waypoint(uint formation, uint id, float cell, vec4 text) {
     float width = 71.0 * cell;
+    vec3 target;
+    if (formation == 1u && waypointTextTarget(text, id, cell, target)) {
+        return target + vec3(0.0, 0.12 * width, -0.35 * width);
+    }
     float a = kTau * golden(id) + 2.5 * hashUnit(id ^ 0x77AAu);
     float r = width * (0.12 + 0.42 * sqrt(hashUnit(id ^ 0x1F3Du)));
     float wobble = 0.06 * width * (hashUnit(id ^ 0x5151u) - 0.5);
@@ -64,11 +71,17 @@ vec3 turn(vec3 p, float yaw, float pitch) {
     return vec3(x, cx * p.y - sx * z, sx * p.y + cx * z);
 }
 
-// The identity colours of DOTS: ember, ivory and ice.
-vec3 identity(uint h) {
-    float u = logoUnit(h);
-    return u < 0.35 ? vec3(1.0, 0.42, 0.12) : u < 0.8 ? vec3(0.95, 0.9, 0.82) : vec3(0.55, 0.78, 1.0);
+// The identity colours of DOTS across the logo: ember on the left, through ivory, to ice on the right (x in
+// [-1, 1] over the logo's width), each particle a little off its neighbours.
+vec3 identity(float x, uint h) {
+    float u = clamp(0.5 + 0.5 * x + 0.16 * (logoUnit(h) - 0.5), 0.0, 1.0);
+    const vec3 ember = vec3(1.0, 0.36, 0.08), ivory = vec3(0.95, 0.88, 0.76), ice = vec3(0.5, 0.74, 1.0);
+    return u < 0.5 ? mix(ember, ivory, u * 2.0) : mix(ivory, ice, u * 2.0 - 1.0);
 }
+
+// The filaments: particles lift off in kStrands strands, each its own curve out of the core, its particles
+// leaving one after another and keeping close to it.
+const uint kStrands = 72u;
 
 SphereRecord particle(uint id, float t, vec4 params[4]) {
     uint count = uint(params[0].x);
@@ -76,35 +89,38 @@ SphereRecord particle(uint id, float t, vec4 params[4]) {
     float wayTime = params[1].x, wayHold = params[1].y, release = params[1].w;
     uint formation = uint(params[1].z);
     float rowStart = params[2].x, bar = params[2].y, flash = params[2].z, cell = params[2].w;
-    vec3 core = params[3].xyz;
-    float coreRadius = params[3].w;
+    vec3 core = kAscendantCore;
 
     uint row;
     vec3 target = targetAndRow(id, cell, row);
     uint h = logoHash(id ^ 0x41534344u);
+    uint strand = logoHash(id ^ 0x5354u) % kStrands;
+    uint sh = logoHash(strand * 0x9E3779B9u + 0x51u);
     float g1 = sqrt(-2.0 * log(max(hashUnit(h + 1u), 1e-7)));
     vec3 ball = vec3(cos(kTau * hashUnit(h + 2u)), sin(kTau * hashUnit(h + 2u)), 0.0) * g1;
     ball.z = sqrt(-2.0 * log(max(hashUnit(h + 3u), 1e-7))) * cos(kTau * hashUnit(h + 4u));
-    vec3 start = core + coreRadius * vec3(ball.x, 0.45 * ball.y, ball.z);
-    float lift = liftStart + liftSpread * hashUnit(h + 5u);
-    vec3 way = waypoint(formation, id, cell);
+    vec3 start = core + kAscendantCoreRadius * vec3(ball.x, 0.45 * ball.y, ball.z);
+    // A strand leaves over a fifth of the spread, the strands one after another across it.
+    float lift = liftStart + liftSpread * (0.8 * hashUnit(sh + 5u) + 0.2 * hashUnit(h + 5u));
+    vec3 way = waypoint(formation, id, cell, params[3]);
     float width = 71.0 * cell;
 
     vec3 p;
     float flight = 0.0;
-    float inCore = 0.0;
     if (t <= lift) {
         p = start;
-        inCore = 1.0;
     } else if (t < wayTime) {
-        // Out of the core along a curve that fans out around the stream (each particle its own side).
+        // Out of the core along the strand's curve: its bow and side are the strand's, a particle strays a
+        // little (more as it slows, near the formation).
         float s = (t - lift) / (wayTime - lift);
         vec3 axis = normalize(way - start);
         vec3 side = normalize(cross(axis, vec3(0.0, 1.0, 0.0)));
         vec3 up = cross(side, axis);
-        float a = kTau * golden(id * 7u + 3u);
-        float bow = length(way - start) * (0.08 + 0.22 * hashUnit(h + 6u));
-        vec3 control = mix(start, way, 0.6) + bow * (cos(a) * side + sin(a) * up);
+        float a = kTau * hashUnit(sh + 6u);
+        float bow = length(way - start) * (0.12 + 0.25 * hashUnit(sh + 7u));
+        float stray = width * 0.035 * (0.3 + s);
+        vec3 jitter = vec3(hashUnit(h + 11u), hashUnit(h + 12u), hashUnit(h + 13u)) - 0.5;
+        vec3 control = mix(start, way, 0.6) + bow * (cos(a) * side + sin(a) * up) + stray * 6.0 * jitter;
         p = bezier(start, control, way, smooth01(s));
         flight = sin(kPi * s);
     } else if (t < wayTime + wayHold) {
@@ -132,15 +148,20 @@ SphereRecord particle(uint id, float t, vec4 params[4]) {
     float shock = t >= accent ? exp(-(t - accent) / 0.45) : 0.0;
     float rowTime = rowStart + float(6u - min(row, 6u)) * bar;
     float lit = t >= accent ? smooth01((t - rowTime) / 0.4) : 0.0;
-    vec3 colour = identity(h);
+    // The logo's front face (its first layer) catches the sun; the sides and the back are the colour's
+    // deeper tone, so the extrusion reads.
+    float front = smoothstep(1.5 * cell, 2.6 * cell, target.z);
+    vec3 colour = identity(target.x / (0.5 * width), h) * (0.55 + 0.45 * front);
     SphereRecord r;
     r.center = p;
     float far = clamp(length(p) / max(length(core), 1e-3), 0.0, 1.0);
+    // In the core they are small and dark among the galaxy's stars; they grow as they lift.
+    float grown = smooth01((t - lift) / 0.6);
     r.radius = kRadius * (cell / kReferenceCell) * pow(kFullCount / float(count), 1.0 / 3.0) *
-               (1.0 + 5.0 * far) * (1.0 + 3.0 * released);
+               (1.0 + 5.0 * far) * (1.0 + 3.0 * released) * (0.25 + 0.75 * grown);
     bool spark = hashUnit(h + 10u) < 0.05;
-    float glow = (spark ? 5.0 : 0.0) + 0.3 * inCore + 1.6 * flight * (1.0 + flash) + 1.4 * shock + 3.2 * lit +
-                 released * (8.0 + 60.0 * released);
+    float glow = (spark ? 5.0 * grown : 0.0) + 1.6 * flight * (1.0 + flash) + 1.4 * shock + 3.2 * lit +
+                 released * (6.0 + 14.0 * released);
     r.color = mix(colour, vec3(1.0, 0.86, 0.66), 0.5 * lit);
     r.emission = glow;
     r.material = 0u;

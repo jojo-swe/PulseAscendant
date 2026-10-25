@@ -37,6 +37,9 @@ prompt) boot_50, finale_50, portal_50, the REBOOT and RETURN captures and two st
 stream_finale; the Studio's new cameras every Studio capture and stream, and flyby_2026, now the Studio. The
 Studio's mean display luminance rose by up to 714 % (reboot_60, now REBOOT's close-up on the screen) and fell by
 up to 81 % (portal_50, the CRT nearly dark once the grid has switched off).
+Then regenerated for the polish of the Nebula, Tunnel, Cosmos and Singularity scenes (PLASMA's strands, NEBULA's
+relief and shafts, GALAXY's arms and REBOOT's cube of stars): galaxy_20, nebula_40 and plasma_wipe changed; nothing
+else moved.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

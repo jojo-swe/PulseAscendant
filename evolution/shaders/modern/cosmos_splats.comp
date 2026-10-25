@@ -5,15 +5,49 @@
 //   params[0] = (the galaxy's centre in the world, its radius)
 //   params[1] = (tilt about x, yaw about y, the turn so far in radians, total flux at the reference)
 //   params[2] = (star count, the bulge's gain (it breathes with the music; the arms stay steady), star radius,
-//                0)
-//   params[3] unused.
+//                the cube's camera azimuth in degrees)
+//   params[3] = (the cube's camera elevation in degrees and distance, the cube's yaw and pitch): GALAXY only
+//                (distance 0: none). REBOOT's 1993 cube becomes stars 0..511: the 8 x 8 x 8 lattice of DOTS
+//                (retro/dots.cpp's makeCube, turned by yaw then pitch as dotsShapePoints turns it), set
+//                kCubeDistance in front of the camera that orbits the galaxy at that azimuth, elevation and
+//                distance (cosmos.cpp's approach on REBOOT's accent), as DOTS' camera sees it from 6 units: each
+//                star in the direction the CRT drew its point.
 
 #extension GL_GOOGLE_include_directive : require
 
 #include "splat_common.glsl"
 #include "galaxy.glsl"
 
+// DOTS' camera stands 6 of its units from the cube's middle: the same geometry at kCubeDistance, so every star
+// lies in the direction its point lay from DOTS' camera (the 85 mm lens magnifies the middle of the old
+// picture, as the camera at the glass does), and the camera flies on through the lattice.
+const float kCubeDistance = 150.0;
+const float kCubeScale = kCubeDistance / 6.0;
+const float kCubeFlux = 30.0; // a 1993 dot: far brighter than any of the galaxy's stars
+
+SplatPoint cubeStar(uint id, vec4 params[4]) {
+    float a = radians(params[2].w), e = radians(params[3].x), distance = params[3].y;
+    vec3 out_ = vec3(cos(e) * sin(a), sin(e), cos(e) * cos(a));
+    vec3 up = vec3(-sin(e) * sin(a), cos(e), -sin(e) * cos(a));
+    vec3 forward = -out_;
+    vec3 right = cross(forward, up);
+    // The lattice point, x fastest, then z, then y (makeCube), side 1.8, centred.
+    vec3 lattice = vec3(float(id % 8u), float(id / 64u), float((id / 8u) % 8u)) * (1.8 / 7.0) - 0.9;
+    float yaw = params[3].z, pitch = params[3].w;
+    float cy = cos(yaw), sy = sin(yaw), cx = cos(pitch), sx = sin(pitch);
+    float x = cy * lattice.x + sy * lattice.z, z = -sy * lattice.x + cy * lattice.z;
+    vec3 q = vec3(x, cx * lattice.y - sx * z, sx * lattice.y + cx * z);
+    SplatPoint s;
+    s.position = out_ * distance + forward * kCubeDistance + kCubeScale * (q.x * right + q.y * up + q.z * forward);
+    s.flux = kCubeFlux * vec3(0.78, 0.88, 1.0); // the CRT's dots: phosphor white-blue
+    s.radius = params[2].z;
+    return s;
+}
+
 SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
+    if (id < 512u && params[3].y > 0.0) {
+        return cubeStar(id, params);
+    }
     vec3 p;
     float kelvin, weight;
     bool bulge;

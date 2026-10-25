@@ -384,6 +384,24 @@ from the screen to a low, long wide shot in FINALE and PORTAL, a low dolly past 
 from the accent, an orbit round the monitor in STUDIO NIGHT, a push back in in RETURN, a close-up in REBOOT).
 `studio_test --look <dir> [spp] [width height] [name]` renders a still of every shot.
 
+### Planets, a galaxy and a black hole
+
+Act III's sky is one model, `shaders/modern/galaxy.glsl`: 16,777,216 splat stars (bulge, disc, two unequal
+log-spiral arms with a branch and spurs, blackbody colours) and a 256x64x256 dust grid with lanes, feathers
+and HII knots. REBOOT's portal crossing lands in it: from REBOOT's downbeat the director shows GALAXY at
+negative chapter time, the camera already flying, and the 1993 cube's 512 points become stars in exactly the
+directions the CRT drew them, frozen on the accent; the camera flies on through them into the edge-on
+approach. ASCENDANT lifts 2,097,152 particles out of the same galaxy's core in strands, through a waypoint
+formation (a vortex, or a line of text: `waypointTargets`) onto the logo.
+
+PLASMA PLANET is the Nebula scene at planetary scale: an analytic sphere whose sea is the 1993 plasma glowing
+in its palette under plates of basalt (the `PlasmaSea` pattern), and an atmosphere whose single scattering of
+the sun is baked into the grid medium for the frame's eye each frame, so the limb glows blue in forward
+scatter and the sun clears it exactly on the chapter's downbeat. The low pass at the end bakes a 256x128x32
+cloud shell over its stretch of sea instead. SINGULARITY bends every main ray through 48 RK4 steps of the
+null geodesic around a Schwarzschild hole; its disc is white-hot at the innermost orbit and orange at its
+edge, Doppler-beamed on the approaching side.
+
 ### Bloom and the look
 
 Everything after the trace that the direction sets is a pure function of the show time (`post::lookFor`): no

@@ -2,7 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 // The Nebula scene's grid medium (step 5, Task 18; src/modern/scenes/nebula.hpp describes the scene): one
-// voxel per invocation, (density, emission rgb), a pure function of (uvw, seconds, params). Two modes
+// voxel per invocation, (density, emission rgb), a pure function of (uvw, seconds, params). Three modes
 // (params[0].x):
 //
 // 0, NEBULA: a dust ridge with four pillars (bowed, bulging tubes with swollen heads, warped and eroded by
@@ -18,16 +18,26 @@
 //
 // 1, PLASMA: the 1993 plasma (shaders/retro/plasma.comp, here at continuous pixel positions and time) in
 // (x, y) over the slab's mid-plane, its pixel grid kPlasmaPixel wide, warped more the further a voxel lies
-// from the mid-plane; the slab's half thickness follows the field. The emission is the 1993 palette ring at
+// from the mid-plane; the slab's half thickness follows the field. Its faces are a continuous skin; inside,
+// the gas is drawn into strands with hard fronts and dark gaps. The emission is the 1993 palette ring at
 // the voxel's ring position (the field folded three times round the 224 entries, as the 1993 effect indexes
 // it, plus the rotation), linear light.
 //
-// params[0] = (mode, field time (chapter seconds), bass, energy)
-// params[1] = (box lo xyz, 0), params[2] = (box hi xyz, 0)
-// params[3] = NEBULA (ionising opacity per unit density, the grid's density scale, 0, 0); PLASMA (ring shift,
-//             emission gain, 0, 0)
+// 2, PLASMA PLANET: the planet's air and its cumulus (src/modern/scenes/nebula.hpp has the planet). The clouds
+// are density that scatters for real (the grid's albedo and phase are theirs); the air holds only a share of
+// its extinction, and its light is baked as emission: the sun's single scattering (Rayleigh and Mie phase)
+// towards the frame's eye, after the air's extinction on the way in from the sun and the planet's shadow, so
+// the limb glows blue in forward scatter and the terminator burns orange.
+//
+// params[0] = (mode, field time (chapter seconds), bass, energy); PLASMA PLANET (mode, chapter seconds, the
+//             sun's irradiance, 0)
+// params[1] = (box lo xyz, 0; PLASMA PLANET the planet's radius), params[2] = (box hi xyz, 0; PLASMA PLANET 1
+// with the clouds: the low pass's cloud shell; the orbit's grid is too coarse for them); PLASMA PLANET
+// params[3] = (the eye, 0)
+// params[3] = NEBULA (ionising opacity per unit density, the grid's density scale, the eye's z, the shafts'
+//             gain; the eye's x and y are params[1].w and params[2].w); PLASMA (ring shift, emission gain, 0, 0)
 // The tracer emits sigma_t (1 - albedo) Le per unit length, so the emission is stored divided by that factor
-// (NEBULA's albedo is modern::kNebulaAlbedo, PLASMA's grey: kPlasmaAlbedo).
+// (NEBULA's albedo is modern::kNebulaAlbedo, PLASMA's grey: kPlasmaAlbedo, PLASMA PLANET's the clouds').
 
 #include "medium_common.glsl"
 
@@ -115,7 +125,7 @@ const vec3 kPillarBow[4] = vec3[4](vec3(-3.0, 0.0, 2.0), vec3(4.0, 0.0, -2.0), v
 const vec3 kStarCentre[3] = vec3[3](vec3(20.0, 18.0, -90.0), vec3(-27.0, -10.0, -26.0), vec3(35.0, 16.0, -30.0));
 const float kStarRadius[3] = float[3](0.9, 0.8, 0.5);
 // Each star's ionising output (flux at unit distance, before the gas absorbs it).
-const float kStarOutput[3] = float[3](5200.0, 1300.0, 160.0);
+const float kStarOutput[3] = float[3](5200.0, 900.0, 160.0);
 // Star A's bubble: the gas it has blown away (inside kBubbleInner) and the shell it has piled up round it.
 const float kBubbleInner = 16.0;
 const float kBubbleShell = 44.0;
@@ -123,7 +133,7 @@ const float kBubbleShell = 44.0;
 const vec3 kIce = vec3(0.55, 0.75, 1.0);
 const vec3 kGold = vec3(1.0, 0.66, 0.30);
 const vec3 kEmber = vec3(1.0, 0.34, 0.08);
-const vec3 kNebulaAlbedo = vec3(0.78, 0.60, 0.42); // modern::kNebulaAlbedo
+const vec3 kNebulaAlbedo = vec3(0.5, 0.37, 0.26); // modern::kNebulaAlbedo
 
 // modern::nebulaPillarDistance's pieces: pillar i's bent axis and its radius at height fraction h (bowed,
 // wobbling, with bulges and a swollen head).
@@ -191,17 +201,21 @@ float nebulaDust(vec3 p, float t, bool fine) {
     if (d > 5.0) {
         return lanes; // beyond any octave's reach
     }
-    float erosion = fine ? 1.2 * fbm(p * 0.2, 3) + 1.3 * (ridged(vec3(p.x * 0.33, p.y * 0.06, p.z * 0.33), 2) - 0.55) +
-                               0.35 * gradientNoise(p * 0.9)
+    float erosion = fine ? 1.2 * fbm(p * 0.2, 3) + 1.6 * (ridged(vec3(p.x * 0.33, p.y * 0.06, p.z * 0.33), 2) - 0.55) +
+                               0.5 * gradientNoise(p * 0.9)
                          : 0.7 * gradientNoise(p * 0.2);
     float solid = smoothstep(0.7, -1.3, d + erosion);
     float body = solid * (fine ? 0.75 + 0.3 * gradientNoise(p * 0.07 + 3.1) + 0.2 * gradientNoise(p * 0.31) : 0.8);
     return max(body, 0.0) + lanes;
 }
 
-// The structure of the cavity's gas and of its ionised glow (about [0, 1.5]).
+// The structure of the cavity's gas and of its ionised glow (about [0, 1.5]): broad sheets, creased into
+// filaments where they fold.
 float nebulaWisps(vec3 p, float t) {
-    return clamp(0.55 + 0.9 * fbm(p * 0.035 + vec3(0.0, 0.0, 0.01 * t), 3), 0.0, 1.5);
+    vec3 q = p * 0.035 + vec3(0.0, 0.0, 0.01 * t);
+    float sheets = 0.55 + 0.9 * fbm(q, 3);
+    float creases = ridged(q * 2.3 + vec3(1.7, -4.1, 0.6), 3);
+    return clamp(sheets * (0.35 + 0.9 * creases * creases), 0.0, 1.5);
 }
 
 // The cavity's thin gas: evacuated round star A, piled up in a shell at kBubbleShell, in slow sheets.
@@ -231,9 +245,33 @@ float nebulaColumn(vec3 p, vec3 dir, float reach, float t, int steps) {
     return sum;
 }
 
+// The pillars' shadow on the cavity's gas: their optical depth from p towards a star `reach` away, from the
+// analytic pillars alone (no noise: the cavity is most of the grid, and its shafts only need the pillars'
+// silhouettes), sampled at 10 points out to 110 units.
+float nebulaPillarShadow(vec3 p, vec3 dir, float reach, float opacity) {
+    float span = min(reach, 110.0);
+    float ds = span / 10.0;
+    float sum = 0.0;
+    for (int i = 0; i < 10; ++i) {
+        sum += smoothstep(1.5, -2.5, pillarDistance(p + dir * ((float(i) + 0.5) * ds)));
+    }
+    return opacity * 0.9 * sum * ds;
+}
+
+// Henyey-Greenstein's phase function.
+float nebulaPhase(float cosine, float g) {
+    float g2 = g * g;
+    return 0.0795775 * (1.0 - g2) / pow(max(1.0 + g2 - 2.0 * g * cosine, 1e-4), 1.5);
+}
+
 // densityScale: the grid's sigma_t per unit of rho, so that the voxel stores the emission giving the
-// emissivity j it wants (gba = j / (sigma_t (1 - albedo))).
-vec4 nebulaVoxel(vec3 p, float t, float bass, float opacity, float densityScale, vec3 lo, vec3 hi) {
+// emissivity j it wants (gba = j / (sigma_t (1 - albedo))). The cavity's gas also scatters star A's light
+// towards the eye (forward, g kShaftG), after the gas and the pillars between it and A: baked for the frame's
+// eye, so the pillars' edges cut shafts out of A's light that fan towards the camera.
+const float kShaftG = 0.78;
+
+vec4 nebulaVoxel(vec3 p, float t, float bass, float opacity, float densityScale, vec3 lo, vec3 hi, vec3 eye,
+                 float shaft) {
     float fade = boxFade(p, lo, hi, 12.0);
     if (!(fade > 0.0)) {
         return vec4(0.0);
@@ -242,6 +280,9 @@ vec4 nebulaVoxel(vec3 p, float t, float bass, float opacity, float densityScale,
     float wisps = nebulaWisps(p, t);
     float rho = fade * (dust + nebulaCavity(p, wisps));
     float inBubble = smoothstep(0.6 * kBubbleInner, kBubbleShell, length(p - kStarCentre[0]));
+    // The fronts are not lit evenly: photoevaporation carves them into vertical striations and globules, so a
+    // front facing the camera reads as relief, bright ribs over darker grooves.
+    float relief = 0.3 + 1.4 * pow(ridged(vec3(p.x * 0.4, p.y * 0.08, p.z * 0.4) + vec3(3.3, 0.0, -1.7), 2), 2.0);
     vec3 j = vec3(0.0); // the emissivity: radiance emitted per unit length
     for (int k = 0; k < 3; ++k) {
         vec3 toStar = kStarCentre[k] - p;
@@ -254,16 +295,23 @@ vec4 nebulaVoxel(vec3 p, float t, float bass, float opacity, float densityScale,
         if (flux < 0.05) {
             continue; // too far for its light to show against the others'
         }
-        // Thin gas is lit as it stands (the dust's shadows in it come from the path tracer's scattering);
-        // the dust's fronts need the march. C, inside its pillar's head, only needs the head's own gas.
-        float tau = opacity * (dust > 0.02 ? nebulaColumn(p, toStar / r, reach, t, k == 2 ? 4 : 8) : kCavityMean * reach);
+        // The dust's fronts need the march; the cavity's gas towards A takes the pillars' analytic shadow (in
+        // its glow and in A's shafts). Thin gas lit by B and C stands as it is. C, inside its pillar's head,
+        // only needs the head's own gas.
+        float tau = dust > 0.02 ? opacity * nebulaColumn(p, toStar / r, reach, t, k == 2 ? 4 : 8)
+                    : opacity * kCavityMean * reach + (k == 0 ? nebulaPillarShadow(p, toStar / r, reach, opacity) : 0.0);
         float skin = flux * exp(-tau);
         float heated = flux * exp(-tau / 3.0);
         vec3 tint = mix(kGold, kIce, smoothstep(0.6, 8.0, skin));
         // Recombination in the dust's ionised skin (~ density^2), heated dust deeper in (~ density), and the
         // cavity's ionised gas, ice blue, in its wisps.
-        j += densityScale * (tint * skin * dust * (dust + 0.1) + kEmber * (0.08 * heated * dust) +
-                             kIce * (0.006 * skin * wisps * wisps * wisps * wisps * inBubble));
+        j += densityScale * (tint * skin * dust * (dust + 0.1) * relief + kEmber * (0.08 * heated * dust * relief) +
+                             kIce * (0.02 * skin * wisps * wisps * wisps * wisps * inBubble));
+        if (k == 0 && shaft > 0.0) {
+            float cosine = dot(-toStar / r, normalize(eye - p));
+            float gas = rho - dust; // the cavity's, not the dust's (the dust scatters for real)
+            j += densityScale * shaft * vec3(0.72, 0.82, 1.0) * (2.5 * gas * skin * nebulaPhase(cosine, kShaftG));
+        }
     }
     // Knots in the pillar heads, on the sides facing the hero star, pulsing with the bass.
     if (dust > 0.15) {
@@ -280,7 +328,7 @@ vec4 nebulaVoxel(vec3 p, float t, float bass, float opacity, float densityScale,
     }
     // The stored emission, capped so that a thin voxel's never swamps a dense neighbour's when interpolated.
     vec3 le = fade * j / (densityScale * max(rho, 1e-3) * (1.0 - kNebulaAlbedo));
-    return vec4(rho, min(le, vec3(60.0)));
+    return vec4(rho, min(le, vec3(120.0)));
 }
 
 // --- PLASMA ------------------------------------------------------------------------------------------------
@@ -354,8 +402,17 @@ vec4 plasmaVoxel(vec3 p, float t, float shift, float gain, vec3 lo, vec3 hi) {
     float halfThickness = 5.0 + 3.2 * field + 1.0 * gradientNoise(vec3(p.xy * 0.25, 0.25 * t + 3.0));
     float erosion = 1.0 * fbm(p * 0.6 + vec3(0.0, 0.0, 0.1 * t), 4) + 0.3 * (ridged(p * 1.7, 2) - 0.5);
     float surface = abs(p.z) - halfThickness + erosion; // < 0 inside
-    float rho = smoothstep(0.6, -1.0, surface);
-    rho *= 0.6 + 0.6 * ridged(p * 0.35 + vec3(0.2 * t, 0.0, 0.0), 2);
+    float inside = smoothstep(0.6, -1.0, surface);
+    // The faces are a continuous skin (the 1993 picture, so the wipe's seam does not show); behind them the gas
+    // is drawn into strands with hard fronts (the ridges of a warped noise, cut sharp), with dark gaps between,
+    // so the cloud has depth when the camera is inside it.
+    // The skin is the face the 1993 picture is on (the front, +z); behind the strands lies the dark.
+    float skin = exp(-pow((surface + 0.35) / 0.75, 2.0)) * smoothstep(-1.0, 1.0, p.z);
+    vec3 sq = vec3(p.x * 0.17, p.y * 0.17, p.z * 0.3) + vec3(0.05 * t, 0.0, 0.0) +
+              1.4 * vec3(gradientNoise(p * 0.09 + 2.3), gradientNoise(p * 0.09 - 5.1), 0.0);
+    float strands = smoothstep(0.42, 0.78, ridged(sq, 3)) * (0.55 + 0.6 * ridged(sq * 3.1 + vec3(5.2, -1.3, 2.7), 2));
+    float rho = inside * (0.85 * skin + (1.0 - 0.85 * skin) * (0.015 + 1.5 * strands));
+    rho *= 0.7 + 0.5 * ridged(p * 0.35 + vec3(0.2 * t, 0.0, 0.0), 2);
     rho *= boxFade(p, lo, hi, 1.5);
     if (!(rho > 1e-4)) {
         return vec4(0.0);
@@ -364,17 +421,110 @@ vec4 plasmaVoxel(vec3 p, float t, float shift, float gain, vec3 lo, vec3 hi) {
     float position = mod(floor(level * kPlasmaFolds * kRingEntries) + shift, kRingEntries);
     uint entry = uint(position);
     vec3 colour = mix(ringColour(entry), ringColour((entry + 1u) % 224u), fract(position));
-    // The faces glow brightest (a front), the inside dimmer, so the slab's relief reads.
+    // The faces glow brightest (a front), the strands' cores bright, the gaps dim, so the slab's relief reads.
     float front = exp(-pow((surface + 0.3) / 0.9, 2.0));
-    return vec4(rho, gain * (0.45 + 1.4 * front) * srgbToLinear(colour) / (1.0 - kPlasmaAlbedo));
+    return vec4(rho, gain * (0.08 + 1.4 * front * smoothstep(-1.0, 1.0, p.z) + 1.6 * strands) * srgbToLinear(colour) /
+                         (1.0 - kPlasmaAlbedo));
+}
+
+// --- PLASMA PLANET -------------------------------------------------------------------------------------------
+// modern::plasmaPlanetSun, kPlasmaPlanetRadius, kPlasmaPlanetAir, the cloud layer and the clouds' albedo
+// (src/modern/scenes/nebula.hpp).
+
+const vec3 kPlanetSun = vec3(0.95, 0.27, 0.12) / length(vec3(0.95, 0.27, 0.12));
+const float kPlanetAir = 60.0;
+const float kCloudBase = 2.0;
+const float kCloudTop = 5.5;
+const vec3 kCloudAlbedo = vec3(0.9, 0.91, 0.93);
+// The air (per unit length at the sea; 1 unit ~ 1 km): Rayleigh, blue, scale height 8; Mie haze, grey,
+// scale height 1.2, forward scattering.
+const vec3 kRayleigh = vec3(5.8e-3, 13.5e-3, 33.1e-3);
+const float kRayleighHeight = 8.0;
+const float kMie = 4e-3;
+const float kMieHeight = 1.2;
+const float kMieG = 0.8;
+// The share of the air's extinction the grid holds (the rest of its light is the baked emission; the grid's
+// own scattering of the air, with the clouds' albedo, stays small).
+const float kAirHeld = 0.04;
+
+// The air's optical depth from p towards the sun (6 steps, out to the top of the air), per colour.
+vec3 planetSunDepth(vec3 p, float radius) {
+    const float kSteps[6] = float[6](2.0, 6.0, 14.0, 30.0, 60.0, 120.0);
+    vec3 depth = vec3(0.0);
+    float s0 = 0.0;
+    for (int i = 0; i < 6; ++i) {
+        float s1 = kSteps[i];
+        float h = max(length(p + kPlanetSun * (0.5 * (s0 + s1))) - radius, 0.0);
+        depth += (kRayleigh * exp(-h / kRayleighHeight) + 1.1 * kMie * exp(-h / kMieHeight)) * (s1 - s0);
+        s0 = s1;
+    }
+    return depth;
+}
+
+// How much of the sun's disc p sees past the planet: 0 in its shadow, a soft edge as wide as the disc.
+float planetSunVisible(vec3 p, float radius) {
+    float along = dot(p, kPlanetSun);
+    if (along >= 0.0) {
+        return 1.0;
+    }
+    float miss = length(p - kPlanetSun * along) - radius;
+    return smoothstep(-0.0047 * abs(along), 0.0047 * abs(along), miss);
+}
+
+// The cumulus: cells drifting with the wind, flat bases and heaped tops, broken by erosion; sigma_t per unit.
+float planetClouds(vec3 p, float altitude, float t) {
+    float band = smoothstep(kCloudBase - 0.2, kCloudBase + 0.5, altitude) *
+                 (1.0 - smoothstep(kCloudTop - 1.6, kCloudTop, altitude));
+    if (!(band > 0.0)) {
+        return 0.0;
+    }
+    vec3 q = p + vec3(-0.35 * t, 0.0, 0.12 * t);
+    float cells = fbm(q * 0.055, 3);                  // systems, ~20 units
+    float heap = fbm(q * 0.24 + vec3(3.1, 0.0, -7.7), 3); // cumulus, ~4 units
+    // Billows: 3-D detail that grows towards the top, so the towers come out cauliflowered, not as slabs.
+    float h = (altitude - kCloudBase) / (kCloudTop - kCloudBase);
+    float billows = fbm(q * 0.9 + vec3(0.0, -0.2 * t, 0.0), 3);
+    float cover = cells + 0.5 * heap + (0.12 + 0.25 * h) * billows; // about zero-mean (fbm is)
+    // Heaped: the higher, the more cover a column needs to reach it (flat bases, rounded tops).
+    float shape = smoothstep(0.0, 0.08, cover - 0.1 - 0.32 * h);
+    float erosion = 0.3 * gradientNoise(q * 2.3);
+    return 6.0 * band * clamp(shape * (1.0 + erosion), 0.0, 1.0);
+}
+
+vec4 planetVoxel(vec3 p, float t, float sunIrradiance, float radius, vec3 eye, bool withClouds) {
+    float altitude = length(p) - radius;
+    if (altitude < -0.5 || altitude > kPlanetAir) {
+        return vec4(0.0);
+    }
+    float h = max(altitude, 0.0);
+    vec3 rayleigh = kRayleigh * exp(-h / kRayleighHeight);
+    float mie = kMie * exp(-h / kMieHeight);
+    float clouds = withClouds ? planetClouds(p, altitude, t) : 0.0;
+    float air = kAirHeld * (mie * 1.1 + dot(rayleigh, vec3(1.0 / 3.0)));
+    float rho = clouds + air;
+    // The air's single scattering of the sun towards the eye, attenuated on its way in from the sun.
+    // The cosine between the sunlight's travel (-kPlanetSun) and the way on to the eye: 1 looking into the sun.
+    float cosine = dot(-kPlanetSun, normalize(eye - p));
+    float rayleighPhase = 0.0596831 * (1.0 + cosine * cosine); // 3 / (16 pi) (1 + cos^2)
+    float g2 = kMieG * kMieG;                                     // Cornette-Shanks
+    float miePhase = 0.119366 * (1.0 - g2) * (1.0 + cosine * cosine) /
+                     ((2.0 + g2) * pow(max(1.0 + g2 - 2.0 * kMieG * cosine, 1e-4), 1.5));
+    vec3 sun = sunIrradiance * planetSunVisible(p, radius) * exp(-planetSunDepth(p, radius));
+    vec3 j = sun * (rayleigh * rayleighPhase + vec3(mie * miePhase));
+    vec3 le = j / (max(rho, 1e-6) * (1.0 - kCloudAlbedo));
+    return vec4(rho, le);
 }
 
 vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
     vec3 lo = params[1].xyz, hi = params[2].xyz;
     vec3 p = mix(lo, hi, uvw);
     float t = params[0].y;
+    if (params[0].x == 2.0) {
+        return planetVoxel(p, t, params[0].z, params[1].w, params[3].xyz, params[2].w > 0.5);
+    }
     if (params[0].x == 1.0) {
         return plasmaVoxel(p, t, params[3].x, params[3].y, lo, hi);
     }
-    return nebulaVoxel(p, t, params[0].z, params[3].x, params[3].y, lo, hi);
+    return nebulaVoxel(p, t, params[0].z, params[3].x, params[3].y, lo, hi, vec3(params[1].w, params[2].w, params[3].z),
+                       params[3].w);
 }

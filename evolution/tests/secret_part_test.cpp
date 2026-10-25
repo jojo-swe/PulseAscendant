@@ -10,9 +10,9 @@
 #include "gfx/frame_ring.hpp"
 #include "gfx/readback.hpp"
 #include "gfx/sync.hpp"
+#include "modern/scenes/cosmos.hpp"
 #include "modern/scenes/glass.hpp"
 #include "modern/scenes/particles.hpp"
-#include "modern/scenes/ship_asset.hpp"
 #include "render/retro_stage.hpp"
 #include "render/secret_renderer.hpp"
 #include "retro/secret_part.hpp"
@@ -74,7 +74,7 @@ void testText() {
     const evo::retro::SecretStats stats = evo::retro::secretStats();
     // The numbers are the cards' accessors and the show's length, never typed.
     CHECK(stats.photons == evo::modern::glassCard(evo::show::Effect::Cathedral).exportPhotons);
-    CHECK(stats.stars == evo::modern::kShipStars);
+    CHECK(stats.stars == evo::modern::kGalaxyStars && stats.stars == 16777216);
     CHECK(stats.particles == evo::modern::kDotsParticles);
     CHECK(stats.frames == static_cast<std::uint64_t>(std::ceil(60 * evo::show::showDuration() - 1e-9)));
     CHECK(groupDigits(4194304) == "4,194,304" && groupDigits(42670) == "42,670" && groupDigits(7) == "7");
