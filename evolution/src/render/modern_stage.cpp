@@ -263,8 +263,10 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     }
     modern::GBuffer& g = tracer_->gbuffer();
     beginScope(cmd, "denoise");
+    post::DenoiseSettings denoise = denoiseSettingsFor(state);
+    denoise.hasMedium = scene.medium.has_value(); // without one the volume layer is (0, 0, 0, 1): skip it
     denoiser_->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion, g.volume},
-                       denoiseSettingsFor(state), upscales() ? traceHdr_ : hdr_);
+                       denoise, upscales() ? traceHdr_ : hdr_);
     endScope(cmd);
     if (upscales()) {
         post::UpscaleSettings upscale;

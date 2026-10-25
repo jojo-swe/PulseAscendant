@@ -30,9 +30,9 @@ static_assert(sizeof(FireflyPush) == 12);
 struct AccumulatePush {
     std::uint32_t width, height, useHistory, maxHistory;
     float alphaColor, alphaMoments, sigmaDepth, sigmaNormal;
-    std::uint32_t useFirefly;
+    std::uint32_t useFirefly, hasMedium, useVolumeHistory;
 };
-static_assert(sizeof(AccumulatePush) == 36);
+static_assert(sizeof(AccumulatePush) == 44);
 
 struct AtrousPush {
     std::uint32_t width, height, step;
@@ -42,14 +42,15 @@ struct AtrousPush {
 static_assert(sizeof(AtrousPush) == 32);
 
 struct CombinePush {
-    std::uint32_t width, height;
+    std::uint32_t width, height, hasMedium;
 };
-static_assert(sizeof(CombinePush) == 8);
+static_assert(sizeof(CombinePush) == 12);
 
 // AtrousPush::copyAbove: filter every pixel.
 constexpr std::uint32_t kFilterAll = 0xFFFFFFFFu;
-// The history length up to which a pixel gets resetAtrousIterations.
-constexpr std::uint32_t kResetLength = 2;
+// The history length up to which a pixel gets resetAtrousIterations: the window's first three frames after a
+// reset (at 3 iterations frame 3 kept low-frequency blotches in the Studio).
+constexpr std::uint32_t kResetLength = 3;
 
 template <std::size_t N> std::array<gfx::Binding, N> storageImages() {
     std::array<gfx::Binding, N> bindings{};
@@ -58,7 +59,7 @@ template <std::size_t N> std::array<gfx::Binding, N> storageImages() {
     return bindings;
 }
 
-const auto kFireflyBindings = storageImages<3>();
+const auto kFireflyBindings = storageImages<5>();
 const auto kAccumulateBindings = storageImages<15>();
 const auto kAtrousBindings = storageImages<5>();
 const auto kCombineBindings = storageImages<5>();
@@ -170,6 +171,7 @@ void Denoiser::createImages() {
     volume_ = {make("denoiser volume history 0"), make("denoiser volume history 1")};
     current_ = 0;
     historyValid_ = false;
+    volumeHistoryValid_ = false;
 }
 
 void Denoiser::resize(std::uint32_t width, std::uint32_t height) {
@@ -205,11 +207,12 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
     // Exports from 16 spp: clamp lone fireflies first, into an a-trous image that is free until the a-trous.
     gfx::Image& fireflyOut = filtered_[1];
     if (settings.fireflyFilter) {
-        for (gfx::Image* image : {&gbuffer.lighting, &gbuffer.albedo})
+        for (gfx::Image* image : {&gbuffer.lighting, &gbuffer.albedo, &gbuffer.normal, &gbuffer.depth})
             prepareRead(cmd, *image);
         prepareWrite(cmd, fireflyOut);
-        const std::array<VkDescriptorImageInfo, 3> fireflyImages = {
-            storage(gbuffer.lighting), storage(gbuffer.albedo), storage(fireflyOut)};
+        const std::array<VkDescriptorImageInfo, 5> fireflyImages = {
+            storage(gbuffer.lighting), storage(gbuffer.albedo), storage(fireflyOut), storage(gbuffer.normal),
+            storage(gbuffer.depth)};
         firefly_.bind(cmd, ring_, fireflyImages, {});
         const FireflyPush fireflyPush{width_, height_, settings.fireflyK};
         firefly_.push(cmd, &fireflyPush, sizeof(fireflyPush));
@@ -238,10 +241,13 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
                                         settings.alphaMoments,
                                         settings.sigmaDepth,
                                         settings.sigmaNormal,
-                                        settings.fireflyFilter ? 1u : 0u};
+                                        settings.fireflyFilter ? 1u : 0u,
+                                        settings.hasMedium ? 1u : 0u,
+                                        settings.temporal && historyValid_ && volumeHistoryValid_ ? 1u : 0u};
     accumulate_.push(cmd, &accumulatePush, sizeof(accumulatePush));
     accumulate_.dispatch(cmd, width_, height_);
     historyValid_ = true;
+    volumeHistoryValid_ = settings.hasMedium;
 
     const std::uint32_t iterations = settings.atrousIterations;
     const std::uint32_t allIterations =
@@ -283,7 +289,9 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
     // previous frame's volume history, which nothing reads any more this frame.
     gfx::Image* volume = &volume_[current_];
     const std::array<gfx::Image*, 2> volumeTargets = {&filtered_[allIterations % 2], &volume_[previous]};
-    for (std::uint32_t i = 0; i < settings.volumeAtrousIterations; ++i) {
+    // Without a medium the layer is not filtered (nor read by the combine).
+    const std::uint32_t volumeIterations = settings.hasMedium ? settings.volumeAtrousIterations : 0u;
+    for (std::uint32_t i = 0; i < volumeIterations; ++i) {
         gfx::Image& target = *volumeTargets[i % 2];
         atrous(*volume, target, 1u << i, kFilterAll, true);
         volume = &target;
@@ -297,7 +305,7 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
                                                                 storage(gbuffer.emission), storage(*volume),
                                                                 storage(hdrOut)};
     combine_.bind(cmd, ring_, combineImages, {});
-    const CombinePush combinePush{width_, height_};
+    const CombinePush combinePush{width_, height_, settings.hasMedium ? 1u : 0u};
     combine_.push(cmd, &combinePush, sizeof(combinePush));
     combine_.dispatch(cmd, width_, height_);
 }

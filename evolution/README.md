@@ -283,13 +283,19 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   that starts as a plain copy after a reset), then filtered by three à-trous passes guided by depth, normal
   and an edge-robust estimate of the noise, and multiplied by the albedo again. The primary hit's emission,
   the CRT's own picture, is added after all that, so the screen is never smeared by the history or blurred by
-  the filter. A short history (the first two frames after a reset) gets five à-trous passes, and where its
-  lighting is sparse (many samples exactly 0) no luminance edge stop, so first frames come out clean rather
-  than blotchy. Exports keep no history and filter only below 16 spp; from 16 spp an export firefly filter
+  the filter. A short history (the first three frames after a reset) gets five à-trous passes; where its
+  lighting is sparse (many samples exactly 0) the first pass has no luminance edge stop, so first frames come
+  out clean rather than blotchy, at the price of a soft shadow edge there: about 4 pixels wide on a first
+  frame (1 on the lit side, 3 on the dark side; energy-neutral, measured in `denoiser_test`), sharp again
+  once the history has temporal moments (frame 4). On frames 2 and 3 the noise estimate also counts how
+  much the history differs from the frame, so a bright sample of an earlier frame spreads out instead of
+  staying a speck. Exports keep no history and filter only below 16 spp; from 16 spp an export firefly filter
   (on by default) clamps each pixel to 4× the second-brightest of its 3×3 neighbourhood instead, which keeps
-  anything two pixels wide (CRT text, highlights) but removes lone fireflies. A separate volume layer
-  (in-scattered light and transmittance, from the participating media) has its own history and filter and is
-  composed as `transmittance × surface + volume`.
+  anything two pixels wide (CRT text, highlights) and pixels on a geometry edge (a highlight along an edge,
+  such as the window sill's, is one pixel wide) but removes lone fireflies. A separate volume layer
+  (in-scattered light and transmittance, from the participating media) has its own history and filter, which
+  stops at transmittance and depth steps so silhouettes in fog stay sharp, and is composed as
+  `transmittance × surface + volume`; a scene without a medium skips it.
 - **Trace resolution and the temporal upscaler** (`src/post/upscale.*`, `shaders/post/upscale.comp`). The
   window path traces at `--trace-scale` × its size (0.67 by default, at least 16 pixels per axis) and the
   denoised picture is upscaled to the window size in time: from its second frame after a reset the window

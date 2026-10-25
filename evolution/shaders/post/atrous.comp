@@ -9,9 +9,10 @@
 // is copied as well: the extra iterations a short history gets (resetAtrousIterations) leave the others.
 //
 // With `volume` set it filters the volume layer instead (RGB in-scattered radiance, A transmittance): every
-// pixel, every tap inside the image, weighted by luminance alone (a medium has no depth or normal); the
-// luminance stop scales with the standard deviation of the 3x3 neighbourhood at step 1; the transmittance is
-// copied, never blurred, since it carries the silhouettes of the surfaces it multiplies.
+// pixel, every tap inside the image, weighted by luminance (the stop scales with the standard deviation of
+// the 3x3 neighbourhood at each pass), by transmittance and by depth (a silhouette seen through the medium
+// ends a segment of another length: see volumeGeometryWeight); no normal stop (a medium has none). The
+// transmittance is copied, never blurred, since it carries the silhouettes of the surfaces it multiplies.
 
 #extension GL_GOOGLE_include_directive : require
 
@@ -48,8 +49,29 @@ bool inside(ivec2 q) {
     return q.x >= 0 && q.y >= 0 && q.x < int(pc.width) && q.y < int(pc.height);
 }
 
+// The volume layer's geometry stops: the in-scattered light of a segment changes with its length, so a
+// silhouette seen through a medium is an edge of the layer too. A tap counts by its transmittance difference
+// (|T_p - T_q| / kSigmaTransmittance) and by depth as the surface passes do; a hit and a miss never mix (the
+// segment to the sky is another length), two misses count fully.
+const float kSigmaTransmittance = 0.05;
+
+float volumeGeometryWeight(float depth, float transmittance, ivec2 q, float qTransmittance) {
+    float qDepth = imageLoad(depthImage, q).r;
+    float w = exp(-abs(transmittance - qTransmittance) / kSigmaTransmittance);
+    bool hit = isHit(depth), qHit = isHit(qDepth);
+    if (hit != qHit) {
+        return 0.0;
+    }
+    if (hit) {
+        float phiDepth = pc.sigmaDepth * float(pc.step) * 0.01 * max(depth, 1e-3);
+        w *= exp(-abs(depth - qDepth) / phiDepth);
+    }
+    return w;
+}
+
 void filterVolume(ivec2 p) {
     vec4 centre = imageLoad(source, p);
+    float depth = imageLoad(depthImage, p).r;
     float lum = luminance(centre.rgb);
     float mean = 0.0, meanSquare = 0.0;
     for (int dy = -1; dy <= 1; ++dy) {
@@ -70,9 +92,11 @@ void filterVolume(ivec2 p) {
             if (!inside(q)) {
                 continue;
             }
-            vec3 tap = imageLoad(source, q).rgb;
-            float w = kKernel[abs(dx)] * kKernel[abs(dy)] * exp(-abs(lum - luminance(tap)) / phiLuminance);
-            sum += w * (tap - centre.rgb);
+            vec4 tap = imageLoad(source, q);
+            float w = kKernel[abs(dx)] * kKernel[abs(dy)] *
+                      exp(-abs(lum - luminance(tap.rgb)) / phiLuminance) *
+                      (dx == 0 && dy == 0 ? 1.0 : volumeGeometryWeight(depth, centre.a, q, tap.a));
+            sum += w * (tap.rgb - centre.rgb);
             sumWeight += w;
         }
     }
