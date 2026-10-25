@@ -68,8 +68,8 @@ Vec3 transformNormalFree(const rt::Mat34& m, Vec3 v) {
 
 // NEE uses a light's emission, area, kind and facing; a BSDF ray that hits the light's instance uses that
 // instance's material and facing. Multiple importance sampling weighs the two as estimators of one integral,
-// so they must describe the same emitter, or the picture is silently biased (step 4, Task 7 review I1). A
-// camera-only emitter (Task 6 of step 5) is never a light: the integrator ignores its emission after a rough
+// so they must describe the same emitter, or the picture is silently biased. A
+// camera-only emitter is never a light: the integrator ignores its emission after a rough
 // vertex, where NEE would add it. Expects the instances' mesh, material and light indices checked.
 void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& materials) {
     for (std::size_t i = 0; i < frame.lights.size(); ++i) {

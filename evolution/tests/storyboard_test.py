@@ -3,7 +3,7 @@ and no other act, the grid must decode to the documented layout's size, and the 
 each row must differ, which shows that EVO_FORCE_ERA reached the captures. The tool captures at --spp 8 unless
 told otherwise, passes its --spp to every capture, and refuses a value outside 1..4096; the test runs it at
 --spp 2 and --detail 0.004 (the lavapipe detail of the Global Constraints, passed to every capture). It empties <outdir> first, so CTest gives it build-out/storyboard_test, never the build-out/storyboard
-that README and HANDOFF have people fill."""
+that the README's storyboard command fills."""
 
 import os
 import shutil

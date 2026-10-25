@@ -105,8 +105,7 @@ float halfToFloat(std::uint16_t h) {
     return sign ? -magnitude : magnitude;
 }
 
-// Waits for the queue between subtests: synchronization validation credits no host wait on the timeline
-// (Decision 13 of step 4).
+// Waits for the queue between subtests: synchronization validation credits no host wait on the timeline.
 void idle(gfx::Context& ctx) {
     vkQueueWaitIdle(ctx.queue());
 }

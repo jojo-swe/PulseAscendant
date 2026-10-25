@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The 2026 picture's one tonemap and its one display encoding (Review Focus 6): HDR linear light (RGBA16F)
+// The 2026 picture's one tonemap and its one display encoding: HDR linear light (RGBA16F)
 // -> * 2^exposureEV -> max(0) per component -> Khronos PBR Neutral -> clamp [0, 1] -> sRGB OETF
 // -> round(v * 255 + d) with d a static triangular dither in (-0.5, 0.5) from pcg(x, y), the same for all
 // three channels -> RGBA8 UNORM. A non-finite component counts as 0. Must match

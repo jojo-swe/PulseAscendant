@@ -1,7 +1,7 @@
 // Materials and the structs the path tracer shares with GLSL, on the GPU (compute only, no ray tracing), with
 // the validation layer on; fails on any message it reports.
 //
-// Layout (Review Focus 10): the CPU fills two elements of every shared struct with field sentinels (word k of
+// Layout: the CPU fills two elements of every shared struct with field sentinels (word k of
 // element e holds k + 0.5 + 100 e as a float or k + 1 + 100 e as a uint), struct_layout.comp copies every
 // field in declaration order into a word buffer, and the words must come back in order: a field whose C++
 // offset differs from its scalar-layout GLSL offset reads another field's sentinel. The shader also writes
@@ -11,7 +11,7 @@
 // samples each. White furnace (Lambert white 1.0, delta mirror exactly 1, rough metal = a CPU integration of
 // single-scattering GGX, smooth glass reflect + transmit = 1 and reflect = exact Fresnel), no material
 // above 1.01, the sampler's pdf equals bsdfEval's pdf, the sample weight equals f cos / pdf, reflection is
-// reciprocal, and every output is finite (Review Focus 8), also for a stress set (IOR 1 and 1.0001, roughness
+// reciprocal, and every output is finite, also for a stress set (IOR 1 and 1.0001, roughness
 // at the delta threshold and below the alpha clamp, wo in the tangent plane and below the surface, an
 // all-zero material).
 
@@ -626,7 +626,7 @@ std::vector<std::array<double, 3>> runQuadrature(Context& ctx, const std::vector
     return out;
 }
 
-// An independent check of the samplers (the Task 6 review): bsdfSample's mean weight must equal the
+// An independent check of the samplers (independent of the sampling code): bsdfSample's mean weight must equal the
 // quadrature of bsdfEval's f cos over the sphere, which uses no sampling code. A sampler whose pdf is not its
 // true density (rough glass keeping microfacet samples that land in the wrong hemisphere) biases the mean.
 // Rough lobes only (roughness >= 0.3), so the grid resolves them; glass from outside and from inside.
@@ -773,7 +773,7 @@ void testBsdfs(Context& ctx) {
         }
     }
 
-    // Stress (Review Focus 8): only finiteness, unit directions, positive pdfs and energy are required.
+    // Stress: only finiteness, unit directions, positive pdfs and energy are required.
     std::vector<rt::Material> stress{
         glass(1.0001f, 0.f),                                  // smooth, index almost matched
         glass(1.0001f, 0.05f),                                // rough, index almost matched

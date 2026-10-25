@@ -77,7 +77,7 @@ float screenTextureLod(HitPoint h) {
 
 // The CRT's curved glass (Task 14 of step 5): the coat's shading normal bulges towards the viewer like a
 // sphere of kCrtGlassRadius about a point behind the picture's centre, so the glass reflects the room the way
-// a tube's face does, while the quad (and the light's NEE on it) stays flat (Decision 10 of step 4).
+// a tube's face does, while the quad (and the light's NEE on it) stays flat.
 const float kCrtGlassRadius = 0.5;
 
 vec3 crtGlassNormal(HitPoint h) {

@@ -14,8 +14,8 @@
 // (c) a furnace: inside a closed 0.5-albedo sphere emitting 1 the lighting is the geometric series 1, with
 //     Russian roulette off and on;
 // (d) a frame is a pure function of its seed (all six images), and another seed changes it;
-// (e) Review Focus 8: the stress scene stays finite in every value of every image;
-// (f) Review Focus 9: spp 8 records exactly 2 trace dispatches (spp 1: 1, spp 5: 2);
+// (e) the stress scene stays finite in every value of every image;
+// (f) spp 8 records exactly 2 trace dispatches (spp 1: 1, spp 5: 2);
 // (g) the guides: depth, normal and motion of a plane, for a static and a moving camera;
 // (h) the retro screen as a textured light: its picture in the emission image (decoded from sRGB once) and
 //     its colour on the floor in front of it through NEE;
@@ -624,7 +624,7 @@ void testAnalyticMis(gfx::Context& ctx) {
 // A panel lit through a window portal: NEE through the portal (to the sky beyond) and BSDF rays escaping
 // through it, weighted by MIS, sum to the sky's light; so does BSDF sampling alone. A missing or doubled
 // escape weight or a wrong portal density biases the NEE run. With two stacked portals an escaping ray
-// crosses both, so its NEE density, and a portal sample's, is the sum over the two (Review M1).
+// crosses both, so its NEE density, and a portal sample's, is the sum over the two.
 void testPortalMis(gfx::Context& ctx) {
     const auto start = std::chrono::steady_clock::now();
     constexpr std::uint32_t kSize = 32;
@@ -1102,7 +1102,7 @@ void testRefusals(gfx::Context& ctx) {
     }
 }
 
-// Review M2: a second trace in one frame is refused before it writes anything, so the frame's first trace
+// A second trace in one frame is refused before it writes anything, so the frame's first trace
 // still reads its own uniforms, instances and lights when it runs.
 void testSecondTrace(gfx::Context& ctx) {
     std::printf("expecting a refused second trace in one frame:\n");

@@ -37,7 +37,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
 }};
 
 // The scene each effect shows, one row per effect in show::Effect's order. The five Studio chapters show the
-// Studio (Decision 1 of step 4); the 1993-only chapters (BOOT, CREDITS, THE END) never show a 2026 picture
+// Studio; the 1993-only chapters (BOOT, CREDITS, THE END) never show a 2026 picture
 // and stay on the placeholder; each scene task moves its own chapters' rows to its scene (the comment).
 constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEffect{{
     {Effect::Boot, SceneId::Placeholder},

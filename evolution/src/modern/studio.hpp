@@ -1,7 +1,7 @@
 #pragma once
 
 // The Studio (spec 2.1): the 2026 room that frames the show. A dark modern room at night (polished concrete,
-// plaster, an oak desk, a slim black window frame; Decision 13 of step 5) around a 1993 PC, the only 1993
+// plaster, an oak desk, a slim black window frame) around a 1993 PC, the only 1993
 // object in it; the CRT shows the live retro picture and is the room's key light, a desk lamp pools warm
 // light on the desk when the chapter's light rig switches it on (studioRig), and a window in the back wall
 // opens onto the night sky over a skyline. Everything is built in code: the room, the desk, the beige
@@ -23,7 +23,7 @@
 namespace evo::modern {
 
 // The CRT's picture: the RetroScreen light and the emissive quad it is, 0.28 x 0.21 m (4:3, the 320 x 200
-// picture at the 1993 pixel aspect), flat (Decision 10) and facing +z. Corners in picture order: top left,
+// picture at the 1993 pixel aspect), flat and facing +z. Corners in picture order: top left,
 // top right, bottom right, bottom left.
 std::array<Vec3, 4> studioScreenCorners();
 
@@ -51,7 +51,7 @@ Camera studioCamera(const show::TimelineFrame& frame);
 // room reads as a dark room lit by the CRT (and the lamp, where the rig has it on) and the screen's brightest
 // colours stay saturated under PBR Neutral where they matter: the screen's display gain (its emissionScale
 // times the beam profile's mean 0.875 times 2^EV) stays at about 2.4 in the colourful chapters (FINALE,
-// PORTAL; the controller's ruling on Task 5: a pastel CRT is fixed by the screen's level and the exposure,
+// PORTAL; the decision on Task 5: a pastel CRT is fixed by the screen's level and the exposure,
 // not by the tonemap), while the grey DOS text of the others may glow brighter.
 float studioExposureEV(show::Effect effect);
 
@@ -63,9 +63,8 @@ EnvironmentDesc studioEnvironment();
 // A chapter's light rig (Task 14 of step 5): the lamp's level (0 off, 1 full) and the screen's
 // emissionScale. The frame's material table carries them (SceneFrame::materials), and the lights' emissions
 // follow from it.
-//   STUDIO NIGHT    the lamp off, the screen 8: the CRT is the key light, the moonbeam the fill (the plan's
-//                   3.5 left the nearly black DOS screen too weak against the moon)
-//   FINALE, PORTAL  the lamp at 0.2, the screen 2.4: the megamix lights the room (the plan's 3.0 needed an
+//   STUDIO NIGHT    the lamp off, the screen 8: the CRT is the key light, the moonbeam the fill (3.5 left the nearly black DOS screen too weak against the moon)
+//   FINALE, PORTAL  the lamp at 0.2, the screen 2.4: the megamix lights the room (3.0 needed an
 //                   exposure that left the wide shots black once the screen's colours stayed saturated)
 //   RETURN, REBOOT  the lamp on (1), the screen 1.5: the lamp coming back on is a story beat
 // Any other effect gets RETURN's rig.

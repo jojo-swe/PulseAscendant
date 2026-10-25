@@ -9,7 +9,7 @@ namespace evo::retro {
 
 namespace {
 
-// The script, verbatim from the plan. Typing runs at 25 characters a second; the Loading dots come one every
+// The script, verbatim from the design. Typing runs at 25 characters a second; the Loading dots come one every
 // 0.25 s from 6.25 s, up to six, and stop at the flash (see bootFlashFrame).
 constexpr std::uint32_t kTyping = 25;
 constexpr std::array<PromptWrite, 10> kScript = {{

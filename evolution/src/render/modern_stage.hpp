@@ -60,17 +60,17 @@ bool validTraceScale(float scale);
 //
 // Every path-traced scene shares one PathTracer (pipeline, TLAS, G-buffer) and one Denoiser, built on the
 // first prepare; each prepared scene adds only its SceneGpu (geometry, BLASes, materials), so the images do
-// not multiply with the scenes (Review Focus 5 of step 5). The denoiser's history starts over on every
+// not multiply with the scenes. The denoiser's history starts over on every
 // chapter change, so it never carries one scene into another.
 //
 // Path tracing follows the HistoryState the renderer hands over: TraceSettings {spp, maxBounces, frameSeed};
 // the denoiser follows denoiseSettingsFor(state) (stage_plan.hpp): Interactive denoises temporally with 3
 // a-trous iterations; Export has no temporal history and filters with 3 below 16 spp and not at all from 16
-// (Decision 6), where the firefly filter clamps lone fireflies instead (step 5 Decision 16); 5 iterations
+// (the firefly filter clamps lone fireflies instead); 5 iterations
 // at history length <= 3 either way. The denoiser's history starts over
 // whenever state.reset is not None, and the motion guide uses the previous frame's camera only while the
 // history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the history
-// and the filter, so the screen stays sharp and current (Review Focus 5).
+// and the filter, so the screen stays sharp and current.
 //
 // The trace size (Task 4 of step 5): the tracer and the denoiser run at traceSize(width, height, traceScale);
 // below the output size the denoised picture goes through the temporal upscaler (post::Upscaler) into the
@@ -78,7 +78,7 @@ bool validTraceScale(float scale);
 // window jitters the samples within each trace pixel (post::subpixelWindow, from the frames since the
 // history reset) and the upscaler accumulates them; a reset frame and every Export frame trace whole pixels
 // unjittered and upsample spatially, so the window's first frame after a reset equals an Export frame at the
-// same trace scale (Review Focus 3), and the upscaler's history resets with the denoiser's. At scale 1 there
+// same trace scale, and the upscaler's history resets with the denoiser's. At scale 1 there
 // is no upscaler pass at all: the denoiser writes the HDR image, exactly as before.
 //
 // A frame with a particle field (Task 8) first runs its scene's particle shader into the stage's one

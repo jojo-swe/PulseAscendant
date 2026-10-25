@@ -181,7 +181,7 @@ void testRegistry() {
 
     // The credits, verbatim.
     CHECK(evo::retro::kCreditsText ==
-          "   EVOLUTION  ...  CODE: CLAUDE  ...  MUSIC: JOYOLO (SUNO)  ...  CONCEPT: JOHN  ...  GREETINGS TO "
+          "   EVOLUTION  ...  CODE: JOJO  ...  MUSIC: JOYOLO  ...  CONCEPT: JOHN  ...  GREETINGS TO "
           "FUTURE CREW AND EVERYONE WHO WAS THERE IN 1993  ...  REALITY IS WHAT YOU RENDER  ...");
     CHECK(evo::retro::kFlybyText == "WE WERE THERE IN 1993 ...");
 

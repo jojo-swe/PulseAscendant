@@ -105,7 +105,7 @@ const std::filesystem::path kSpirvDir = EVO_TEST_SPIRV_DIR;
 const std::filesystem::path kParticleShader = kSpirvDir / "test_particles_grid.comp.spv";
 
 // Waits for the queue: synchronization validation in layer 1.3.275 credits no host wait on the timeline, so
-// memory reused between subtests would read as a hazard (Decision 13 of step 4).
+// memory reused between subtests would read as a hazard.
 void idle(gfx::Context& ctx) {
     vkQueueWaitIdle(ctx.queue());
 }
