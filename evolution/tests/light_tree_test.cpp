@@ -821,7 +821,7 @@ void testProbe(gfx::Context& ctx) {
             ++picks;
             agree += got[i].light == light ? 1 : 0;
             CHECK(got[i].light < count);
-            // The traversal's pdf is reproducible from the light picked (Review Focus 2).
+            // The traversal's pdf is reproducible from the light picked.
             worstAgain = std::max(worstAgain, std::abs(double(got[i].again) / got[i].pdf - 1));
         }
     }
