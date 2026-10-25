@@ -93,6 +93,9 @@ float studioExposureEV(show::Effect effect);
 // the emitter outside the window, so the sky has no disc) and a brighter, hazier horizon, which gives the
 // room a dim cool fill through the window. Never sampled by NEE (select 0): the window's portal samples it.
 EnvironmentDesc studioEnvironment();
+// The sky a frame uses: studioEnvironment, but in RETURN (and REBOOT, which runs on from it) dawn: the
+// horizon brightening to grey-blue (0.10, 0.14, 0.22) over RETURN, no moon glow (and the frame's moon is off).
+EnvironmentDesc studioEnvironmentAt(const show::TimelineFrame& frame);
 
 // A chapter's light rig (Task 14 of step 5): the lamp's level (0 off, 1 full) and the screen's
 // emissionScale. The frame's material table carries them (SceneFrame::materials), and the lights' emissions
@@ -113,10 +116,14 @@ StudioRig studioRig(show::Effect effect);
 // The rig and the exposure a frame actually uses: its chapter's (studioRig, studioExposureEV), but where a
 // take runs on across a change, eased between them so that nothing pops:
 //   FLYBY         the exposure opens from the picture's own brightness on the glass (D) to the room's by
-//                 A + 0.5 s (and closes down to it over the approach before D, where only crt.comp shows);
+//                 A + 0.25 s (and closes down to it over the approach before D, where only crt.comp shows);
 //   PORTAL        behind the glass (D to the accent) the rig and the exposure ease to STUDIO NIGHT's, which
 //                 the camera lands in on 194.00: the room brightens beyond the glass as the camera turns to
 //                 it;
+//   STUDIO NIGHT  as the dolly reaches the window and tilts up to the sky (D - 6 bars to D - 3 bars), the
+//                 exposure closes from the room's 2 EV to 0.3 EV, so the sky outside stays a night sky;
+//   REBOOT        over the dolly into the screen (D - 3 bars to D - 0.5 s) the exposure closes to the 1993
+//                 picture's own brightness on the glass (the screen's display gain near 1);
 //   RETURN        0.8 EV more open until its cut on D, coming in from the dawn outside; over its last bar the
 //                 exposure eases to REBOOT's, across the act's join.
 StudioRig studioRigAt(const show::TimelineFrame& frame);
@@ -132,17 +139,19 @@ public:
     // The mesh every key cap instances, and how many key caps there are (a 101-key keyboard).
     static constexpr std::uint32_t kKeyCapMesh = 0;
     static constexpr std::uint32_t kKeyCount = 101;
-    // The lights of every frame, in this order: the screen, the lamp, the window (a portal onto the sky) and
-    // the moon outside it. Light selection weighs them per shading point by their power (lights.glsl), so
+    // The lights of every frame, in this order: the screen, the lamp, the window (a portal onto the sky), the
+    // moon outside it and the town's glow. Light selection weighs them per shading point by their power (lights.glsl), so
     // their select weights are all 1; a light the rig switches off has no power and is never chosen.
     enum Light : std::uint32_t {
         kScreenLight = 0,
         kLampLight = 1,
         kWindowLight = 2,
         kMoonLight = 3,
+        kTownLight = 4, // the town's sodium glow outside the window, which lifts the right wall
         kLightCount
     };
-    static constexpr float kScreenWeight = 1.f, kLampWeight = 1.f, kWindowWeight = 1.f, kMoonWeight = 1.f;
+    static constexpr float kScreenWeight = 1.f, kLampWeight = 1.f, kWindowWeight = 1.f, kMoonWeight = 1.f,
+                           kTownWeight = 1.f;
     // Towards the moon (unit length): high (44 degrees) behind the window and a little to its left, so that
     // the moonbeam falls past the desk's left end onto the floor in front of it, where the wide shots see the
     // window's cross in it (Task 14). The Studio's sky (studioEnvironment) centres its glow on it, and the
@@ -162,6 +171,8 @@ public:
     static constexpr Vec3 kChromeAt{0.235f, 0.75f, -0.11f}, kGlassAt{-0.33f, 0.75f, -0.27f};
     // The indices of the rigged and the camera-only materials in the material tables.
     static constexpr std::uint32_t kScreenMaterial = 7, kLampMaterial = 22, kLedMaterial = 12;
+    // The moon's emitter, which RETURN's dawn (and REBOOT) switch off.
+    static constexpr std::uint32_t kMoonMaterial = 26;
     // The screen seen from behind: thin glass with the picture at kScreenBackLevel of the rig's screen level
     // (the phosphor seen through its backing, so the room shows through it).
     static constexpr std::uint32_t kScreenBackMaterial = 34;

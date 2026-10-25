@@ -287,6 +287,10 @@ void main() {
     putU(kPatternCityStreet);
     putU(kPatternCityTrail);
     putU(kPatternCitySign);
+    putU(kPatternSeaBead);
+    putU(kPatternLightRing);
+    putU(kPatternCrtGlass);
+    putU(kPatternKeyCap);
 
     // random.glsl's hash, against the CPU mirror rt::pcgHash (material_test's kHashInputs).
     const uint hashInputs[8] = uint[8](0u, 1u, 2u, 48000u, 0x9E3779B9u, 0x7FFFFFFFu, 0xFFFFFFFFu, 123456789u);

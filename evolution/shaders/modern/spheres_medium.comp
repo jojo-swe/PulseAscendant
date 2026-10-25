@@ -1,0 +1,51 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// RAYTRACE's cirrus (the Spheres scene, src/modern/scenes/spheres.hpp): a thin, high layer of ice cloud baked
+// into the grid medium over the box the scene gives it, as a pure function of (uvw, seconds, params). Long
+// wind-combed streaks: value noise stretched along the wind (x) and sheared, two octaves cut by a soft
+// coverage threshold into fibrous bands, a thin vertical profile, thinning towards the box's rim so the layer
+// has no edge.
+//
+// params[0] = (density at full cover, coverage in [0, 1], drift (box units along x), unused)
+
+#include "medium_common.glsl"
+
+float hash3(ivec3 c, uint seed) {
+    uint h = uint(c.x) * 0x8DA6B343u ^ uint(c.y) * 0xD8163841u ^ uint(c.z) * 0xCB1AB31Fu ^ seed;
+    h ^= h >> 16;
+    h *= 0x7FEB352Du;
+    h ^= h >> 15;
+    h *= 0x846CA68Bu;
+    h ^= h >> 16;
+    return float(h >> 8) * (1.0 / 16777216.0);
+}
+
+float noise3(vec3 p, uint seed) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    vec3 s = f * f * (3.0 - 2.0 * f);
+    ivec3 c = ivec3(i);
+    float n000 = hash3(c, seed), n100 = hash3(c + ivec3(1, 0, 0), seed);
+    float n010 = hash3(c + ivec3(0, 1, 0), seed), n110 = hash3(c + ivec3(1, 1, 0), seed);
+    float n001 = hash3(c + ivec3(0, 0, 1), seed), n101 = hash3(c + ivec3(1, 0, 1), seed);
+    float n011 = hash3(c + ivec3(0, 1, 1), seed), n111 = hash3(c + ivec3(1, 1, 1), seed);
+    return mix(mix(mix(n000, n100, s.x), mix(n010, n110, s.x), s.y),
+               mix(mix(n001, n101, s.x), mix(n011, n111, s.x), s.y), s.z);
+}
+
+vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
+    float density = params[0].x, coverage = params[0].y, drift = params[0].z;
+    // Streaks: few cells along the wind, many across it, sheared so they comb diagonally.
+    vec2 q = vec2(uvw.x + drift + 0.35 * uvw.z, uvw.z);
+    vec3 p = vec3(q.x * 5.0, uvw.y * 1.5, q.y * 46.0);
+    float warp = noise3(vec3(q.x * 3.0, 0.0, q.y * 9.0), 5u);
+    p.z += 2.5 * warp;
+    float n = 0.62 * noise3(p, 11u) + 0.38 * noise3(p * vec3(2.1, 1.0, 2.6) + 7.3, 23u);
+    float fibres = smoothstep(1.0 - coverage, 1.0 - coverage + 0.22, n);
+    // Thin in height, thinning to nothing towards the box's rim.
+    float profile = smoothstep(0.0, 0.35, uvw.y) * (1.0 - smoothstep(0.55, 1.0, uvw.y));
+    vec2 r = abs(uvw.xz - 0.5) * 2.0;
+    float rim = 1.0 - smoothstep(0.6, 1.0, max(r.x, r.y));
+    return vec4(density * fibres * profile * rim, 0.0, 0.0, 0.0);
+}

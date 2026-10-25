@@ -32,6 +32,10 @@ enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Che
 // The City's patterns (Task 23 of step 5, shaders/rt/city_patterns.glsl) start at 16: the facades of its
 // towers (punched windows, a curtain wall, ribbon bands, a round curtain wall), its streets, and on Emissive
 // materials the light trails of its traffic and the lettering of its signs.
+// From 32 (shaders/rt/detail_patterns.glsl): the Particles scene's sea beads (Pbr spheres: a mirror flattened
+// onto the swell's normal, the sea's glitter) and DOTS' floor (Pbr: the landing's ring of light), and the
+// Studio's CRT glass (Emissive with the retro texture: dust and a fingerprint in its coat) and key caps (Pbr:
+// yellowed ABS, darker towards the edges).
 enum class Pattern : std::uint32_t {
     None = 0,
     WoodPlanks = 1,
@@ -47,7 +51,11 @@ enum class Pattern : std::uint32_t {
     CityRound = 19,
     CityStreet = 20,
     CityTrail = 21,
-    CitySign = 22
+    CitySign = 22,
+    SeaBead = 32,
+    LightRing = 33,
+    CrtGlass = 34,
+    KeyCap = 35
 };
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;

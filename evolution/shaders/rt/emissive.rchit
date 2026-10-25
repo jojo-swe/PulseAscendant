@@ -21,6 +21,7 @@
 #include "hit.glsl"
 #include "screen.glsl"
 #include "city_patterns.glsl"
+#include "detail_patterns.glsl"
 
 // The four taps in pixels from the pixel's centre (rotated-grid supersampling, x right, y down).
 const vec2 kScreenTaps[4] = vec2[4](vec2(0.125, -0.375), vec2(0.375, 0.125), vec2(-0.125, 0.375),
@@ -105,6 +106,9 @@ void main() {
         bool primary = payload.coneSpread >= 0.0 && payload.coneWidth == 0.0;
         emission = (primary ? primaryScreenPicture(h, lod) : retroScreenPicture(h.uv, lod)) * m.emissionScale;
         h.normal = crtGlassNormal(h);
+        if (m.pattern == kPatternCrtGlass) {
+            crtGlass(h, h.material, m.baseColor, emission);
+        }
     } else if (m.pattern == kPatternCityTrail) {
         emission *= cityTrail(h.uv); // Task 23: a car's light trail
     } else if (m.pattern == kPatternCitySign && payload.coneSpread >= 0.0) {
@@ -117,5 +121,5 @@ void main() {
     if ((m.flags & kMaterialCameraOnlyEmission) != 0u && payload.coneSpread < 0.0) {
         emission = vec3(0.0);
     }
-    writeSurface(h, m.baseColor, m.roughness, m.transmission, emission);
+    writeSurface(h, m.baseColor, h.material.roughness, m.transmission, emission);
 }
