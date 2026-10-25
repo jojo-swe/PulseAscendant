@@ -461,7 +461,11 @@ void testDescriptions() {
             const modern::SceneFrame f = studio->frame(show::sampleTimeline(
                 show::chapterStart(chapter) +
                 fraction * (show::chapterStart(chapter + 1) - show::chapterStart(chapter))));
-            CHECK(sameWords(modern::packEnvironment(f.environment), studioSky));
+            // The night holds still; RETURN and REBOOT run the dawn (the horizon greys, the moon goes).
+            if (chapter < 19)
+                CHECK(sameWords(modern::packEnvironment(f.environment), studioSky));
+            else
+                CHECK(modern::packEnvironment(f.environment).kind == std::uint32_t(EnvironmentKind::NightSky));
             CHECK(f.environment.select == 0.f);
         }
     const Vec3 studioMoon = modern::normalize(modern::Studio::kMoonDirection);
@@ -862,7 +866,7 @@ double chapterTime(int chapter, double fraction) {
 // Re-measured on the merge of Task 14 with the NEE shadow-ray fix (d91fb09 and later), which lit REBOOT more.
 // Re-measured again with the Studio's takes (STUDIO NIGHT's dolly back to the night wide, REBOOT's close-up)
 // and the per-act grade (Act II's lifted blacks): 0.07627 and 0.13525 before.
-constexpr double kStudioNightBaseline = 0.20728, kRebootBaseline = 0.23459;
+constexpr double kStudioNightBaseline = 0.11457, kRebootBaseline = 0.17955;
 constexpr int kStudioNight = 11, kReboot = 20;
 
 void testStudio(gfx::Context& ctx) {
