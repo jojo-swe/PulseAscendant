@@ -166,7 +166,7 @@ void Upscaler::resetHistory() {
 }
 
 VkDeviceSize Upscaler::imageBytes() const {
-    return identity() ? 0 : 2 * VkDeviceSize{outWidth_} * outHeight_ * 8;
+    return history_[0].bytes() + history_[1].bytes(); // none when identity()
 }
 
 void Upscaler::record(VkCommandBuffer cmd, gfx::Image& hdrIn, gfx::Image& depth, gfx::Image& motion,

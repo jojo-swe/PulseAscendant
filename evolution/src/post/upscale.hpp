@@ -86,7 +86,7 @@ public:
     // After a record(): the history it wrote (RGB the temporal part of the output, A its weight; RGBA16F at
     // the output size, transfer-source usage for tests). Not written when identity().
     gfx::Image& history() { return history_[current_]; }
-    // The bytes of the history images.
+    // The device memory of the history images, as allocated (VMA); 0 when identity().
     VkDeviceSize imageBytes() const;
 
 private:

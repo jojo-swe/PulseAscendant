@@ -18,6 +18,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace evo::modern {
 
@@ -52,6 +53,7 @@ const std::array<gfx::Binding, EVO_BINDING_COUNT> kBindings = {
     gfx::Binding{EVO_BINDING_CAUSTIC_MAPS, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
     gfx::Binding{EVO_BINDING_LENSING, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
     gfx::Binding{EVO_BINDING_VOLUME, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+    gfx::Binding{EVO_BINDING_CAUSTIC_RECEIVERS, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
 };
 
 // pathtrace.rgen's push constants: which of the frame's samples this dispatch traces, and the subpixel
@@ -69,7 +71,8 @@ static_assert(sizeof(rt::MediumUniforms) <= kDummyBufferBytes &&
               sizeof(rt::EnvironmentUniforms) <= kDummyBufferBytes &&
               sizeof(rt::LensingUniforms) <= kDummyBufferBytes && sizeof(rt::Mat34) <= kDummyBufferBytes &&
               sizeof(rt::SphereRecord) <= kDummyBufferBytes && sizeof(rt::TreeLight) <= kDummyBufferBytes &&
-              sizeof(rt::LightTreeNode) <= kDummyBufferBytes);
+              sizeof(rt::LightTreeNode) <= kDummyBufferBytes &&
+              sizeof(rt::CausticReceiver) <= kDummyBufferBytes);
 
 std::atomic<std::uint32_t> gPipelinesCreated{0};
 
@@ -176,20 +179,25 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
             gfx::Buffer(ctx, {sizeof(rt::EnvironmentUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true,
                               "environment uniforms"});
     }
-    createFrameBuffers();
-    tlas_.emplace(ctx_, ring_, capacity_.instances);
+    FrameBuffers buffers = createFrameBuffers(capacity_);
+    instanceRecords_ = std::move(buffers.instanceRecords);
+    lights_ = std::move(buffers.lights);
+    materials_ = std::move(buffers.materials);
+    tlas_ = std::make_unique<rt::Tlas>(ctx_, ring_, capacity_.instances);
     createImages();
 }
 
 PathTracer::~PathTracer() = default;
 
-void PathTracer::createFrameBuffers() {
+PathTracer::FrameBuffers PathTracer::createFrameBuffers(const TracerCapacity& capacity) const {
+    FrameBuffers b;
     for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
-        instanceRecords_[slot] =
-            slotBuffer(ctx_, sizeof(rt::InstanceRecord), capacity_.instances, "instance records");
-        lights_[slot] = slotBuffer(ctx_, sizeof(rt::RectLight), capacity_.lights, "rect lights");
-        materials_[slot] = slotBuffer(ctx_, sizeof(rt::Material), capacity_.materials, "frame materials");
+        b.instanceRecords[slot] =
+            slotBuffer(ctx_, sizeof(rt::InstanceRecord), capacity.instances, "instance records");
+        b.lights[slot] = slotBuffer(ctx_, sizeof(rt::RectLight), capacity.lights, "rect lights");
+        b.materials[slot] = slotBuffer(ctx_, sizeof(rt::Material), capacity.materials, "frame materials");
     }
+    return b;
 }
 
 void PathTracer::reserve(const TracerCapacity& capacity) {
@@ -197,16 +205,21 @@ void PathTracer::reserve(const TracerCapacity& capacity) {
     if (grown.instances == capacity_.instances && grown.lights == capacity_.lights &&
         grown.materials == capacity_.materials)
         return;
-    // The frames in flight may still read the TLAS and this slot's buffers; nothing of the frame being
-    // recorded (if any) uses them before trace().
-    ring_.waitAll(); // setup
-    const bool moreInstances = grown.instances != capacity_.instances;
+    // The frames in flight may still read the TLAS and the slots' buffers; nothing of the frame being
+    // recorded (if any) uses them before trace(). A queue idle, not a timeline wait: synchronization
+    // validation credits only this kind of wait when the old memory is reused (as in resize()).
+    vkQueueWaitIdle(ctx_.queue()); // setup
+    // The new buffers and TLAS first: if one cannot be made, nothing has changed.
+    std::unique_ptr<rt::Tlas> tlas;
+    if (grown.instances != capacity_.instances)
+        tlas = std::make_unique<rt::Tlas>(ctx_, ring_, grown.instances);
+    FrameBuffers buffers = createFrameBuffers(grown);
+    instanceRecords_ = std::move(buffers.instanceRecords);
+    lights_ = std::move(buffers.lights);
+    materials_ = std::move(buffers.materials);
+    if (tlas)
+        tlas_ = std::move(tlas);
     capacity_ = grown;
-    createFrameBuffers();
-    if (moreInstances) {
-        tlas_.reset();
-        tlas_.emplace(ctx_, ring_, capacity_.instances);
-    }
 }
 
 void PathTracer::createImages() {
@@ -225,9 +238,20 @@ void PathTracer::createImages() {
 }
 
 VkDeviceSize PathTracer::imageBytes() const {
-    // lighting 16, emission, albedo, normal, motion and volume 8 each, depth 4 bytes per pixel.
-    constexpr VkDeviceSize kBytesPerPixel = 16 + 8 + 8 + 8 + 4 + 8 + 8;
-    return kBytesPerPixel * width_ * height_;
+    VkDeviceSize bytes = 0;
+    for (const gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo,
+                                    &gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion, &gbuffer_.volume})
+        bytes += image->bytes();
+    return bytes;
+}
+
+VkDeviceSize PathTracer::bufferBytes() const {
+    VkDeviceSize bytes = tlas_->bytes() + pipeline_.sbtBytes() + dummyBuffer_.bytes() + blackScreen_.bytes() +
+                         dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
+    for (const SlotBuffers* buffers : {&uniforms_, &instanceRecords_, &lights_, &materials_, &environments_})
+        for (const gfx::Buffer& buffer : *buffers)
+            bytes += buffer.bytes();
+    return bytes;
 }
 
 void PathTracer::resize(std::uint32_t width, std::uint32_t height) {
@@ -327,6 +351,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
     u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
     u.clampIndirect = settings.clampIndirect;
+    u.seconds = settings.seconds;
     for (const rt::RectLight& light : frame.lights)
         u.lightWeightSum += std::max(light.selectWeight, 0.f);
     // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
@@ -402,6 +427,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
         extraBuffer(EVO_BINDING_LENSING, extras.lensing),
         storageImage(EVO_BINDING_VOLUME, gbuffer_.volume),
+        extraBuffer(EVO_BINDING_CAUSTIC_RECEIVERS, extras.causticReceivers),
     };
     pipeline_.bind(cmd, ring_, writes);
 

@@ -153,8 +153,8 @@ SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)
       blases_(ctx, store_), materials_(materialBuffer(ctx, scene.materials)) {}
 
 VkDeviceSize SceneGpu::bytes() const {
-    return store_.vertices().size() + store_.indices().size() + store_.meshRecords().size() +
-           blases_.compactedBytes() + materials_.size();
+    return store_.vertices().bytes() + store_.indices().bytes() + store_.meshRecords().bytes() +
+           blases_.bytes() + materials_.bytes();
 }
 
 } // namespace evo::modern

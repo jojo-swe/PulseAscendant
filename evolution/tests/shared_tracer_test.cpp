@@ -3,13 +3,16 @@
 // Cornell box (rt_test_scenes.hpp) and the scene map sends FLYBY to it:
 //   (a) STUDIO NIGHT, then a FLYBY frame (the Cornell box, forced to 2026), then STUDIO NIGHT again: the last
 //       frame equals a fresh renderer's STUDIO NIGHT frame byte for byte, in Export and in the window;
-//   (b) both scenes create exactly one ray tracing pipeline between them, and the stage's memory less the two
-//       SceneGpu::bytes() is the images of one scene: the same as with one scene prepared;
+//   (b) both scenes create exactly one ray tracing pipeline between them; memory is measured, not computed:
+//       the allocator's statistics grow by exactly gpuBytes() (less the stage's own two images, which predate
+//       it) on the first prepare and by exactly the Cornell box's SceneGpu::bytes() on the second, so the
+//       images (tracer, denoiser, stage) do not grow with the scene count;
 //   (c) per-frame materials: the Cornell box's left wall overridden from red to blue turns its pixels blue; a
 //       per-frame table equal to the static one gives the static picture byte for byte;
 //   (d) a scene of capacity 4096 instances traces 3000 (after reserve() grew a 1024-instance tracer); 4097
 //       instances throw std::length_error, and so does a frame beyond the tracer's capacity;
-//   (e) shotFor() and samplesRetro() never call a scene's frame(): a counting scene sees 0 calls;
+//   (e) shotFor() and samplesRetro() never call a scene's frame(): a counting scene sees 0 calls, and
+//       shotFor() follows the Studio's camera().shot across STUDIO NIGHT's cut;
 //   (f) the scene fixture's checkChapterPictures passes on the Studio's five chapters (the check every step 5
 //       scene test runs, here on the one scene that exists).
 
@@ -27,6 +30,8 @@
 #include "rt_test_scenes.hpp"
 #include "scene_fixture.hpp"
 #include "test_env.hpp"
+
+#include <vk_mem_alloc.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -176,27 +181,50 @@ void testSceneSwitch(gfx::Context& ctx) {
 
 // --- (b) ---------------------------------------------------------------------------------------------------
 
+// The bytes of every live VMA allocation.
+VkDeviceSize allocatedBytes(gfx::Context& ctx) {
+    VmaTotalStatistics stats{};
+    vmaCalculateStatistics(ctx.allocator(), &stats);
+    return stats.total.statistics.allocationBytes;
+}
+
 void testOnePipelineAndMemory(gfx::Context& ctx) {
     Harness h(ctx, render::RenderMode::Export);
     render::ModernStage& stage = h.renderer().modern();
     const std::uint32_t before = modern::PathTracer::pipelinesCreated();
-    CHECK(stage.tracer() == nullptr && stage.gpuBytes() == 0);
+    CHECK(stage.tracer() == nullptr && stage.gpuBytes() == 0 && stage.imageBytes() == 0);
+    // The stage's HDR and display images exist from its construction on; imageBytes() counts them once a
+    // scene is prepared.
+    const VkDeviceSize stageImages = stage.hdr().bytes() + stage.image().bytes();
+    const VkDeviceSize allocated0 = allocatedBytes(ctx);
     stage.prepare(SceneId::Studio);
+    const VkDeviceSize allocated1 = allocatedBytes(ctx);
     const VkDeviceSize images = stage.imageBytes();
     const VkDeviceSize studioBytes = stage.sceneGpu(SceneId::Studio)->bytes();
-    CHECK(images > 0 && studioBytes > 0);
-    CHECK(stage.gpuBytes() - studioBytes == images);
+    const VkDeviceSize tracerBuffers = stage.tracer()->bufferBytes();
+    CHECK(images > 0 && studioBytes > 0 && tracerBuffers > 0);
+    CHECK(stage.gpuBytes() == images + tracerBuffers + studioBytes);
+    CHECK(allocated1 - allocated0 == stage.gpuBytes() - stageImages);
+    // At least the texels: the G-buffer's 60 bytes per pixel, the denoiser's ten RGBA16F images, the stage's
+    // RGBA16F and RGBA8 images.
+    const VkDeviceSize pixels = VkDeviceSize(kWidth) * kHeight;
+    CHECK(stage.tracer()->imageBytes() >= 60 * pixels);
+    CHECK(images >= (60 + 80 + 12) * pixels);
     stage.prepare(SceneId::Ship);
     stage.prepare(SceneId::Ship); // idempotent
+    const VkDeviceSize allocated2 = allocatedBytes(ctx);
     const VkDeviceSize shipBytes = stage.sceneGpu(SceneId::Ship)->bytes();
-    CHECK(stage.gpuBytes() - studioBytes - shipBytes == images);
-    CHECK(stage.imageBytes() == images);
-    CHECK(images == stage.tracer()->imageBytes() + VkDeviceSize(kWidth) * kHeight * (80 + 12));
+    CHECK(shipBytes > 0);
+    CHECK(allocated2 - allocated1 == shipBytes); // nothing but the scene: no images, no tracer buffers
+    CHECK(stage.imageBytes() == images && stage.tracer()->bufferBytes() == tracerBuffers);
+    CHECK(stage.gpuBytes() == images + tracerBuffers + studioBytes + shipBytes);
     h.render(show::sampleTimeline(chapterTime(kStudioNight, 0.3)));
     h.render(forced2026(chapterTime(kFlyby, 0.3)));
     CHECK(modern::PathTracer::pipelinesCreated() - before == 1);
-    std::printf("(b) one pipeline for two scenes; images %llu bytes, Studio %llu, Cornell %llu\n",
-                (unsigned long long)images, (unsigned long long)studioBytes, (unsigned long long)shipBytes);
+    std::printf("(b) one pipeline for two scenes; allocated: images %llu bytes, tracer buffers %llu, Studio "
+                "%llu, Cornell %llu (the allocator's statistics agree)\n",
+                (unsigned long long)images, (unsigned long long)tracerBuffers,
+                (unsigned long long)studioBytes, (unsigned long long)shipBytes);
 }
 
 // --- (c) ---------------------------------------------------------------------------------------------------
@@ -294,12 +322,18 @@ void testShotWithoutFrame(gfx::Context& ctx) {
     Probe probe;
     gfx::FrameRing ring(ctx);
     render::ModernStage stage(ctx, ring, kWidth, kHeight, {}, cornellFactory(&probe), cornellMap);
+    const std::unique_ptr<modern::ModernScene> studio = modern::makeScene(SceneId::Studio, {});
+    std::uint32_t firstShot = 0, lastShot = 0;
     for (int i = 0; i < 20; ++i) {
         const show::TimelineFrame frame = show::sampleTimeline(chapterTime(kFlyby, i / 20.0));
         CHECK(stage.shotFor(frame) == 0);
         CHECK(!stage.samplesRetro(frame));
-        CHECK(stage.shotFor(show::sampleTimeline(chapterTime(kStudioNight, i / 20.0))) == (i / 20.0 >= 0.73));
+        const show::TimelineFrame night = show::sampleTimeline(chapterTime(kStudioNight, i / 20.0));
+        const std::uint32_t shot = stage.shotFor(night);
+        CHECK(shot == studio->camera(night).shot);
+        (i == 0 ? firstShot : lastShot) = shot;
     }
+    CHECK(lastShot != firstShot); // the samples cross STUDIO NIGHT's cut
     CHECK(probe.frameCalls == 0);
     std::printf("(e) shotFor and samplesRetro: %d frame() calls\n", probe.frameCalls);
 }

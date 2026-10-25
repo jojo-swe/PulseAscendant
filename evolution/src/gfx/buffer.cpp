@@ -81,6 +81,14 @@ Buffer& Buffer::operator=(Buffer&& other) noexcept {
     return *this;
 }
 
+VkDeviceSize Buffer::bytes() const {
+    if (allocation_ == VK_NULL_HANDLE)
+        return 0;
+    VmaAllocationInfo info{};
+    vmaGetAllocationInfo(ctx_->allocator(), allocation_, &info);
+    return info.size;
+}
+
 void Buffer::destroy() noexcept {
     if (ctx_ && buffer_)
         vmaDestroyBuffer(ctx_->allocator(), buffer_, allocation_);

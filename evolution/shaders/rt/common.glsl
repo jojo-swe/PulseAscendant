@@ -39,7 +39,9 @@ layout(set = 0, binding = EVO_BINDING_RETRO_SCREEN) uniform sampler2D retroScree
 
 // The step 5 feature resources (src/rt/bindings.hpp): always bound, to a one-element dummy when the frame
 // lacks the feature. The hook that reads each one (environment.glsl, medium.glsl, lights.glsl, caustics.glsl,
-// lensing.glsl, ...) belongs to the task named in bindings.hpp.
+// lensing.glsl, ...) belongs to the task named in bindings.hpp. The single-struct blocks are named *Data
+// (mediumData, lensingData) so that they do not read like the fields frame.lensing, Material.medium and
+// HitPayload.medium; `environment` keeps its name (no field is called that).
 layout(set = 0, binding = EVO_BINDING_ENVIRONMENT, scalar) readonly buffer EnvironmentBlock {
     EnvironmentUniforms environment;
 };
@@ -49,8 +51,10 @@ layout(set = 0, binding = EVO_BINDING_TREE_NODES, scalar) readonly buffer TreeNo
 layout(set = 0, binding = EVO_BINDING_TREE_LIGHTS, scalar) readonly buffer TreeLightBlock {
     TreeLight treeLights[];
 };
-layout(set = 0, binding = EVO_BINDING_MEDIUM, scalar) readonly buffer MediumBlock { MediumUniforms medium; };
+layout(set = 0, binding = EVO_BINDING_MEDIUM, scalar) readonly buffer MediumBlock { MediumUniforms mediumData; };
 layout(set = 0, binding = EVO_BINDING_DENSITY) uniform sampler3D mediumDensity;
+// The majorant is a per-cell maximum: Task 11 reads it with texelFetch (the bound trilinear sampler is then
+// ignored), since interpolating maxima underestimates them and biases delta tracking.
 layout(set = 0, binding = EVO_BINDING_MAJORANT) uniform sampler3D mediumMajorant;
 layout(set = 0, binding = EVO_BINDING_PREVIOUS_TRANSFORMS, scalar) readonly buffer PreviousTransformBlock {
     Mat34 previousTransforms[];
@@ -62,10 +66,15 @@ layout(set = 0, binding = EVO_BINDING_PARTICLE_SPHERES, scalar) readonly buffer 
     SphereRecord particleSpheres[];
 };
 layout(set = 0, binding = EVO_BINDING_CAUSTIC_MAPS) uniform sampler2DArray causticMaps;
-layout(set = 0, binding = EVO_BINDING_LENSING, scalar) readonly buffer LensingBlock { LensingUniforms lensing; };
+layout(set = 0, binding = EVO_BINDING_LENSING, scalar) readonly buffer LensingBlock {
+    LensingUniforms lensingData;
+};
 // The G-buffer's volume layer: rgb the radiance in-scattered on the primary segment, a its transmittance
 // ((0, 0, 0, 1) without a medium).
 layout(set = 0, binding = EVO_BINDING_VOLUME, rgba16f) uniform image2D volumeImage;
+layout(set = 0, binding = EVO_BINDING_CAUSTIC_RECEIVERS, scalar) readonly buffer CausticReceiverBlock {
+    CausticReceiver receiverTable[]; // Material.receiver indexes it (Task 13)
+};
 
 const uint kMissIndexSky = 0u;
 const uint kMissIndexShadow = 1u;
@@ -73,6 +82,15 @@ const uint kMissIndexShadow = 1u;
 // The main ray's payload (location 0). In: the ray cone at the ray's origin (coneSpread < 0: the path has
 // scattered off a rough surface and textures use kDiffuseTextureLod, as NEE does). Out, on a hit: the
 // surface the closest-hit evaluated, at the hit point; on a miss: t = -1 and emission = the sky's radiance.
+// Every closest-hit fills every field through writeSurface() (hit.glsl). The fields from materialFlags on are
+// step 5's (Task 1b froze them; a task never adds its own): written by every closest-hit now, read by the
+// task that owns each meaning:
+//   materialFlags  Material.flags: camera-only emission (Task 6), caustic receiver (Task 13), thin-walled
+//   abbe           Material.abbe: dispersion (Task 6)
+//   medium         Material.medium: the medium inside the surface, kNoMedium for none (Task 11)
+//   primitive      gl_PrimitiveID: the triangle, or the sphere of a sphere instance's AABB BLAS (Task 8;
+//                  Task 12's tree light index is primitive - firstSphere)
+//   prevPosition   the hit point under the instance's previous transform (Task 9; = position until then)
 struct HitPayload {
     vec3 position;
     float t;
@@ -91,7 +109,11 @@ struct HitPayload {
     float coneSpread;
     uint materialClass;
     vec3 emission; // radiance leaving towards the ray's origin
-    float pad;
+    uint materialFlags;
+    float abbe;
+    uint medium;
+    uint primitive;
+    vec3 prevPosition;
 };
 
 // Texture level for anything seen after a rough bounce, and for NEE towards a textured light.

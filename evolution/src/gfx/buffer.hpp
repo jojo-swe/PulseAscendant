@@ -38,6 +38,9 @@ public:
     void* mapped() const { return mapped_; } // nullptr unless host-visible
     VkBuffer handle() const { return buffer_; }
     VkDeviceSize size() const { return size_; }
+    // The device memory of its allocation (vmaGetAllocationInfo: at least size(), what VMA's statistics
+    // count); 0 for an empty buffer.
+    VkDeviceSize bytes() const;
     void flush() const;
     void invalidate() const;
     // Needs VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; throws std::logic_error otherwise.

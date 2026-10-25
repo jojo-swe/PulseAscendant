@@ -98,16 +98,17 @@ public:
     // Builds a path-traced scene's GPU side now (and the shared tracer and denoiser on the first), instead of
     // in the first frame that shows it (setup: before a frame, not between ring.begin() and submit()). A
     // no-op for the placeholder and for a scene already prepared. Throws std::invalid_argument for a scene
-    // the factory does not make.
+    // the factory does not make; whatever it throws, the stage is left as it was (the scene unprepared).
     void prepare(modern::SceneId id);
     // prepare() for every scene the effects map to (the window).
     void prepareAll();
-    // The device memory of what the stage holds for path tracing: every prepared scene's SceneGpu::bytes(),
-    // plus imageBytes() once one is prepared.
+    // The device memory of what the stage holds for path tracing, as allocated (VMA statistics count the
+    // same): every prepared scene's SceneGpu::bytes(), plus imageBytes() and the tracer's bufferBytes()
+    // (TLAS, per-slot buffers, SBT, dummies) once one is prepared; 0 before.
     VkDeviceSize gpuBytes() const;
-    // The images path tracing adds, whatever the number of scenes: the tracer's G-buffer and the denoiser's
-    // images (at the trace size), below scale 1 the denoised trace-size picture and the upscaler's history,
-    // and the stage's HDR and display images (0 before the first prepare).
+    // The images path tracing adds, whatever the number of scenes, as allocated: the tracer's G-buffer and
+    // the denoiser's images (at the trace size), below scale 1 the denoised trace-size picture and the
+    // upscaler's history, and the stage's HDR and display images (0 before the first prepare).
     VkDeviceSize imageBytes() const;
     // Recreates the images at the new size. The caller makes sure no submitted frame still uses the old ones.
     void resize(std::uint32_t width, std::uint32_t height);

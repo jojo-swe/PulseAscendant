@@ -19,6 +19,10 @@
 // (g) the guides: depth, normal and motion of a plane, for a static and a moving camera;
 // (h) the retro screen as a textured light: its picture in the emission image (decoded from sRGB once) and
 //     its colour on the floor in front of it through NEE;
+// (i) the hit payload (step 5's frozen ABI, Task 1b): every closest-hit (one per material class) writes
+//     materialFlags, abbe and medium from its material, primitive = gl_PrimitiveID within its mesh and
+//     prevPosition = position (until Task 9), seen through a probe raygen (shaders/test/payload_probe.rgen)
+//     in place of pathtrace.rgen, which also sees TraceSettings::seconds as FrameUniforms::seconds;
 // and the seed formula, frameSeedFor, and the refusals (including lights that disagree with the instance
 // that is their surface, and a second trace in one frame).
 //
@@ -1121,6 +1125,113 @@ void testSecondTrace(gfx::Context& ctx) {
     idle(ctx);
 }
 
+// --- (i) ---------------------------------------------------------------------------------------------------
+
+// A shader directory with the path tracer's misses and closest-hits from the build and the payload probe as
+// its raygen (rt_pathtrace.rgen.spv): a PathTracer made while EVO_SHADER_DIR names it traces the probe.
+std::filesystem::path payloadProbeShaders() {
+    const std::filesystem::path dir = std::filesystem::path(EVO_TEST_OUT_DIR) / "payload_probe_shaders";
+    std::filesystem::create_directories(dir);
+    const std::filesystem::path built(EVO_TEST_SHADER_DIR);
+    for (const char* name : {"rt_sky.rmiss.spv", "rt_shadow.rmiss.spv", "rt_pbr.rchit.spv",
+                             "rt_glass.rchit.spv", "rt_emissive.rchit.spv", "rt_checker.rchit.spv"})
+        std::filesystem::copy_file(built / name, dir / name,
+                                   std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(std::filesystem::path(EVO_TEST_SPIRV_DIR) / "test_payload_probe.rgen.spv",
+                               dir / "rt_pathtrace.rgen.spv",
+                               std::filesystem::copy_options::overwrite_existing);
+    return dir;
+}
+
+void testPayload(gfx::Context& ctx) {
+    // One material per class, each with its own flags, Abbe number and medium; a sphere (many triangles), a
+    // box and two quads in a 2 x 2 grid in front of the camera.
+    TestScene scene;
+    scene.statics.meshes = test::basicMeshes();
+    rt::Material pbr = test::lambert({0.5f, 0.5f, 0.5f});
+    pbr.flags = rt::kMaterialCausticReceiver;
+    pbr.abbe = 0.f;
+    pbr.medium = 3;
+    rt::Material glass = test::glass(1.5f, 0.f);
+    glass.flags = rt::kMaterialThinWalled | rt::kMaterialCausticReceiver;
+    glass.abbe = 55.5f;
+    glass.medium = 0;
+    rt::Material emissive = test::emitter({1, 1, 1});
+    emissive.flags = rt::kMaterialCameraOnlyEmission;
+    emissive.abbe = 12.25f; // (a value, not a meaning: the payload carries it whatever the class)
+    rt::Material checker = test::lambert({0.2f, 0.2f, 0.2f});
+    checker.materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Checker);
+    checker.flags = 7;
+    checker.abbe = 30.f;
+    checker.medium = 9;
+    scene.statics.materials = {pbr, glass, emissive, checker};
+    const std::array<std::uint32_t, 4> meshOf{test::kSphereMesh, test::kCubeMesh, test::kQuadMesh,
+                                              test::kQuadMesh};
+    const std::array<Vec3, 4> at{Vec3{-0.6f, 0.6f, -3}, Vec3{0.6f, 0.6f, -3}, Vec3{-0.6f, -0.6f, -3},
+                                 Vec3{0.6f, -0.6f, -3}};
+    for (std::uint32_t i = 0; i < 4; ++i) {
+        const float size = meshOf[i] == test::kSphereMesh ? 0.5f : 1.f;
+        scene.frame.instances.push_back({meshOf[i], i, test::place(at[i], test::kY, 25, {size, size, size})});
+    }
+    scene.frame.camera = {{0, 0, 0}, {0, 0, -1}, {0, 1, 0}, 60.f};
+
+    const std::filesystem::path dir = payloadProbeShaders();
+    gfx::Image unused = unusedImage(ctx);
+    test::setEnv("EVO_SHADER_DIR", dir.string().c_str());
+    std::optional<Tracer> tracer;
+    try {
+        tracer.emplace(ctx, scene, 64, 64);
+    } catch (...) {
+        test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        throw;
+    }
+    test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+    const Frame f = tracer->trace(scene.frame, {.spp = 1, .frameSeed = 1, .seconds = 12.5f}, unused);
+
+    std::array<int, 4> pixels{};
+    std::array<std::vector<bool>, 4> primitives;
+    for (std::uint32_t c = 0; c < 4; ++c)
+        primitives[c].assign(scene.statics.meshes[meshOf[c]].indices.size() / 3, false);
+    int misses = 0;
+    for (std::uint32_t y = 0; y < 64; ++y)
+        for (std::uint32_t x = 0; x < 64; ++x) {
+            CHECK(f.albedo.at(x, y, 0) == 12.5f); // FrameUniforms::seconds
+            if (f.lighting.at(x, y, 0) == -2.f) {
+                ++misses;
+                continue;
+            }
+            const float classPlusOne = f.emission.at(x, y, 3);
+            CHECK(classPlusOne >= 1.f && classPlusOne <= 4.f);
+            const auto c = static_cast<std::uint32_t>(classPlusOne) - 1;
+            const rt::Material& m = scene.statics.materials[c]; // material i has class i
+            CHECK(m.materialClass == c);
+            CHECK(f.lighting.at(x, y, 0) == float(m.flags));
+            CHECK(f.lighting.at(x, y, 1) == m.abbe);
+            CHECK(f.lighting.at(x, y, 2) == (m.medium == rt::kNoMedium ? -1.f : float(m.medium)));
+            const float primitive = f.lighting.at(x, y, 3);
+            CHECK(primitive >= 0.f && primitive < float(primitives[c].size()) &&
+                  primitive == std::floor(primitive));
+            primitives[c][static_cast<std::size_t>(primitive)] = true;
+            for (std::uint32_t k = 0; k < 3; ++k)
+                CHECK(f.emission.at(x, y, k) == 0.f); // prevPosition == position until Task 9
+            ++pixels[c];
+        }
+    for (std::uint32_t c = 0; c < 4; ++c)
+        CHECK(pixels[c] > 50);
+    const auto distinct = [](const std::vector<bool>& seen) {
+        return std::count(seen.begin(), seen.end(), true);
+    };
+    CHECK(distinct(primitives[0]) >= 20); // the sphere: many triangles
+    CHECK(distinct(primitives[1]) >= 2);  // the box: at least two of its faces' triangles
+    CHECK(distinct(primitives[2]) == 2 && distinct(primitives[3]) == 2); // both triangles of each quad
+    CHECK(misses > 0);
+    std::printf("(i) hit payload: 4 closest-hits write flags, abbe, medium, primitive (sphere %ld of %zu "
+                "triangles seen) and prevPosition\n",
+                long(distinct(primitives[0])), primitives[0].size());
+    tracer.reset();
+    idle(ctx);
+}
+
 // --- Look
 // ----------------------------------------------------------------------------------------------------
 
@@ -1164,6 +1275,7 @@ int main(int argc, char** argv) {
             testPortalMis(ctx);
             testTwoToneScreen(ctx);
             testCornellMis(ctx);
+            testPayload(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(gfx::validationMessagesReported() == 0);

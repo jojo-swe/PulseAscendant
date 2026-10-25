@@ -21,7 +21,9 @@ Step 4 (Review Focus 2): the path-traced chapters, with the TLAS rebuilt every f
 pure: no temporal history, the seed from the show time alone. Path tracing is what costs time on lavapipe, so
 the chapters come in two parts that CTest runs in parallel: "studio", the traced part (every chapter whose
 --show-info "scene" is not "Placeholder": the Studio's five, Decision 1 of step 4, and each step 5 scene's
-chapters as they land), and "rest" (every other chapter); "all" runs both. CTest passes --spp 2 at 160x90.
+chapters as they land), and "rest" (every other chapter); "all" runs both. CTest passes --spp 2 and
+--detail 0.004 (the lavapipe detail: the scenes' particle, splat and voxel counts shrink, so a scene task's
+chapters stay quick here) at 160x90.
 All five Studio chapters must report the "Studio" scene and be in the traced part, so it never compares
 placeholders where it means path-traced frames.
 

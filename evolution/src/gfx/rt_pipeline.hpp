@@ -60,6 +60,8 @@ public:
 
     const SbtLayout& sbtLayout() const { return sbtLayout_; }
     VkDeviceAddress sbtAddress() const { return sbtAddress_; }
+    // The device memory of the shader binding table, as allocated.
+    VkDeviceSize sbtBytes() const { return sbt_.bytes(); }
     VkPipeline handle() const { return pipeline_; }
     VkPipelineLayout layout() const { return layout_; }
     const DescriptorLayout& descriptorLayout() const { return setLayout_; }

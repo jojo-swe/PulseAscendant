@@ -1,7 +1,9 @@
 // The scene table (Task 1 of step 5), on the CPU:
 //   - every effect has a row in kSceneOfEffect, and an effect past the last throws;
-//   - the five Studio effects (FINALE, PORTAL, STUDIO NIGHT, RETURN, REBOOT) show the Studio and every other
-//     effect the placeholder (until the scene tasks move their rows);
+//   - the five Studio effects (FINALE, PORTAL, STUDIO NIGHT, RETURN, REBOOT) show the Studio; every other
+//     effect shows the placeholder or its planned scene (the plan's chapter -> scene map, kPlannedScene),
+//     and the effects of one planned scene move together, so a scene task flips its rows in scenes.cpp
+//     without editing this test;
 //   - sceneTable()[id].id == id, names are unique and round-trip through the table, and every scene an
 //     effect shows has a make function (the placeholder none);
 //   - --show-info's "scene" field (showInfoJson(effectSceneName), what main.cpp prints) comes from the table;
@@ -14,6 +16,7 @@
 #include "scene_fixture.hpp"
 #include "show/timeline.hpp"
 
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <set>
@@ -41,16 +44,81 @@ bool isStudio(Effect e) {
            e == Effect::Reboot;
 }
 
+// The scene each effect's 2026 side will show (the step 5 plan's chapter -> scene map, Tasks 16-25): the
+// placeholder for BOOT, CREDITS and THE END, which keep it.
+SceneId plannedScene(Effect e) {
+    switch (e) {
+    case Effect::Flyby:
+        return SceneId::Ship;
+    case Effect::Dots:
+    case Effect::Ocean:
+        return SceneId::Particles;
+    case Effect::Plasma:
+    case Effect::Nebula:
+    case Effect::PlasmaPlanet:
+        return SceneId::Nebula;
+    case Effect::Tunnel:
+    case Effect::Wormhole:
+        return SceneId::Tunnel;
+    case Effect::Glenz:
+    case Effect::Cathedral:
+    case Effect::CrystalCity:
+        return SceneId::Glass;
+    case Effect::Lens:
+    case Effect::LensOfGod:
+        return SceneId::Lens;
+    case Effect::Raytrace:
+    case Effect::SphereStorm:
+    case Effect::RaytraceInfinity:
+        return SceneId::Spheres;
+    case Effect::City:
+    case Effect::Ascent:
+    case Effect::CityNight:
+    case Effect::Metropolis:
+        return SceneId::City;
+    case Effect::Galaxy:
+    case Effect::Ascendant:
+        return SceneId::Cosmos;
+    case Effect::Singularity:
+        return SceneId::Singularity;
+    case Effect::Finale:
+    case Effect::Portal:
+    case Effect::StudioNight:
+    case Effect::Return:
+    case Effect::Reboot:
+        return SceneId::Studio;
+    default:
+        return SceneId::Placeholder;
+    }
+}
+
 void testEffectRows() {
     int studio = 0;
+    std::array<int, modern::kSceneCount> planned{}, moved{};
     for (std::size_t i = 0; i < show::kEffectCount; ++i) {
         const auto effect = static_cast<Effect>(i);
         const SceneId scene = modern::sceneFor(effect);
-        CHECK(scene == (isStudio(effect) ? SceneId::Studio : SceneId::Placeholder));
+        const SceneId target = plannedScene(effect);
+        if (isStudio(effect))
+            CHECK(scene == SceneId::Studio);
+        else
+            CHECK(scene == SceneId::Placeholder || scene == target);
+        ++planned[static_cast<std::size_t>(target)];
+        moved[static_cast<std::size_t>(target)] += scene == target;
         studio += scene == SceneId::Studio;
         CHECK(std::strcmp(modern::effectSceneName(effect), modern::sceneName(scene)) == 0);
     }
     CHECK(studio == 5);
+    // A scene's rows move together: all of them on the scene, or none yet.
+    for (std::size_t s = 1; s < modern::kSceneCount; ++s) {
+        if (moved[s] != 0 && moved[s] != planned[s])
+            std::fprintf(stderr, "%s shows %d of its %d planned effects\n", modern::sceneName(SceneId(s)),
+                         moved[s], planned[s]);
+        CHECK(moved[s] == 0 || moved[s] == planned[s]);
+    }
+    CHECK(planned[static_cast<std::size_t>(SceneId::Studio)] == 5);
+    for (std::size_t s = static_cast<std::size_t>(SceneId::Ship); s < modern::kSceneCount; ++s)
+        CHECK(planned[s] > 0); // every scene has its chapters
     bool threw = false;
     try {
         modern::sceneFor(static_cast<Effect>(show::kEffectCount));
@@ -58,7 +126,12 @@ void testEffectRows() {
         threw = true;
     }
     CHECK(threw);
-    std::printf("effect rows: %zu effects, 5 Studio, the rest Placeholder\n", show::kEffectCount);
+    int scenes = 0;
+    for (std::size_t s = static_cast<std::size_t>(SceneId::Ship); s < modern::kSceneCount; ++s)
+        scenes += moved[s] != 0;
+    std::printf("effect rows: %zu effects, 5 Studio, %d step 5 scenes on their planned rows, the rest "
+                "Placeholder\n",
+                show::kEffectCount, scenes);
 }
 
 SceneId byName(const char* name) {

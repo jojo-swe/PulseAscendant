@@ -152,6 +152,11 @@ void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmissio
     payload.coatRoughness = h.material.coatRoughness;
     payload.materialClass = h.material.materialClass;
     payload.emission = (h.record.light == kNoLight || h.front) ? emission : vec3(0.0);
+    payload.materialFlags = h.material.flags;
+    payload.abbe = h.material.abbe;
+    payload.medium = h.material.medium;
+    payload.primitive = uint(gl_PrimitiveID);
+    payload.prevPosition = h.position; // Task 9: the hit point under the previous transform
 }
 
 vec3 materialEmission(Material m) {

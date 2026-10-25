@@ -84,6 +84,19 @@ The `linux` test preset runs 8 tests at a time; `ctest --preset linux -j 1` runs
 The three that open a window, `windowed`, `windowed_unsupported` and `silent_mode`, are off by default;
 configure with `-DEVO_RUNTIME_TESTS=ON` to run them under `xvfb-run`.
 
+Shaders are listed in `CMakeLists.txt`, except the 2026 scenes' compute shaders: every
+`shaders/modern/*.comp` is globbed (`CONFIGURE_DEPENDS`). Ninja and Makefiles notice a new file there on the
+next build; CMake does not promise that for every generator, so if a new scene shader is not picked up
+(`modern_<scene>_<what>.comp.spv` missing beside the executable), re-run `cmake --preset ...`.
+`evo_add_shader_variants` (`cmake/Shaders.cmake`) compiles a shader again with defines under a suffixed name
+(`rt_pbr_sphere.rchit.spv`).
+
+`tests/baseline/hash_outputs.py` renders a fixed set of captures and `--render-stream` runs (the Studio, the
+placeholder, 1993 effects, a wipe, forced 2026) and prints their SHA-256 sums and the Studio's mean
+luminances; `tests/baseline/SUMS` and `LUMINANCE` are the reference on lavapipe. A change that must not move
+a pixel checks against it (`--check tests/baseline/SUMS`), and a change that moves the picture on purpose
+commits new files (see the script's docstring).
+
 ## Build on Windows
 
 > The Windows preset has not been exercised yet. The steps below are what it is designed for.

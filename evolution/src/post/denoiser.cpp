@@ -150,6 +150,14 @@ Denoiser::~Denoiser() {
     }
 }
 
+VkDeviceSize Denoiser::imageBytes() const {
+    VkDeviceSize bytes = 0;
+    for (const std::array<gfx::Image, 2>* pair : {&color_, &moments_, &guides_, &filtered_, &volume_})
+        for (const gfx::Image& image : *pair)
+            bytes += image.bytes();
+    return bytes;
+}
+
 void Denoiser::createImages() {
     constexpr VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     const auto make = [&](const char* name) {

@@ -39,6 +39,8 @@ public:
     // The bytes of the BLASes as built, and as kept (compactedBytes == builtBytes without compaction).
     VkDeviceSize builtBytes() const { return builtBytes_; }
     VkDeviceSize compactedBytes() const { return compactedBytes_; }
+    // The device memory the kept BLASes' storage buffers hold, as allocated (VMA).
+    VkDeviceSize bytes() const;
 
 private:
     struct Blas {
@@ -101,6 +103,8 @@ public:
     void build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Instance> instances);
     VkAccelerationStructureKHR handle() const { return tlas_; }
     std::uint32_t maxInstances() const { return maxInstances_; }
+    // The device memory of the TLAS's storage, its scratch and the per-slot instance buffers, as allocated.
+    VkDeviceSize bytes() const;
 
 private:
     void destroy() noexcept;

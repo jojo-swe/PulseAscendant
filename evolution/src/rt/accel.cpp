@@ -273,6 +273,13 @@ void BlasSet::destroy() noexcept {
     blases_.clear();
 }
 
+VkDeviceSize BlasSet::bytes() const {
+    VkDeviceSize bytes = 0;
+    for (const Blas& blas : blases_)
+        bytes += blas.storage.bytes();
+    return bytes;
+}
+
 VkDeviceAddress BlasSet::address(std::uint32_t mesh) const {
     if (mesh >= blases_.size())
         throw std::out_of_range("BlasSet: no mesh " + std::to_string(mesh) + " (" +
@@ -356,6 +363,13 @@ void Tlas::destroy() noexcept {
     if (tlas_)
         vkDestroyAccelerationStructureKHR(ctx_.device(), tlas_, nullptr);
     tlas_ = VK_NULL_HANDLE;
+}
+
+VkDeviceSize Tlas::bytes() const {
+    VkDeviceSize bytes = storage_.bytes() + scratch_.bytes();
+    for (const gfx::Buffer& buffer : instanceBuffers_)
+        bytes += buffer.bytes();
+    return bytes;
 }
 
 void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Instance> instances) {

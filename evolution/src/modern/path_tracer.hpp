@@ -20,6 +20,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -44,6 +45,9 @@ struct TraceSettings {
     // for byte. The guides (depth, normal, motion) stay at the pixel centre.
     std::array<float, 2> pixelJitter{0.f, 0.f};
     std::array<float, 2> pixelFootprint{1.f, 1.f};
+    // The frame's chapter-local show time (show::TimelineFrame::localSeconds), FrameUniforms::seconds: what
+    // hit-shader patterns animate with (Tasks 18 and 23) and the export shutter offsets from (Task 9).
+    float seconds = 0.f;
 };
 
 // Samples per trace dispatch: an export at many spp is split so that no dispatch runs long enough to trip a
@@ -82,11 +86,23 @@ TracerCapacity tracerCapacity(const SceneCapacity& scene);
 TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
 
 // The step 5 feature resources a frame binds besides the scene's own (bindings EVO_BINDING_ENVIRONMENT ..
-// EVO_BINDING_LENSING in src/rt/bindings.hpp): one pointer per resource, owned and written by the feature
-// (its task), which must keep it alive and unchanged until the frame completes; a buffer written per frame is
-// one of the feature's per-slot buffers. Null binds a one-element dummy of the tracer's own. An image is
-// sampled in GENERAL; trace() records its barrier. The environment is the exception: trace() packs the
-// frame's own (SceneFrame::environment) into a buffer per slot; a non-null `environment` replaces it.
+// EVO_BINDING_LENSING and EVO_BINDING_CAUSTIC_RECEIVERS in src/rt/bindings.hpp): one pointer per resource,
+// owned and written by the feature (its task), which must keep it alive and unchanged until the frame
+// completes; a buffer written per frame is one of the feature's per-slot buffers. Null binds a one-element
+// dummy of the tracer's own. An image is sampled in GENERAL; trace() records its barrier.
+//
+// Who owns each binding (Task 1b's rule, so that the feature tasks route their data one way):
+// - Small per-frame data derived from the SceneFrame alone is packed by trace() into the tracer's own
+//   per-slot buffers (the TraceExtras pointer then stays null, or replaces the packed data in a test; the
+//   environment does so today: trace() packs SceneFrame::environment, a non-null `environment` replaces it):
+//   15 environment (Task 2), 16/17 the light tree (Task 12), 18 MediumUniforms (Task 11), 21 the previous
+//   transforms (Task 9) and 25 lensing (Task 25).
+// - Resources another object builds and owns come through TraceExtras: 19/20 the density and majorant grids
+//   (Task 11's medium volume, baked once in ModernStage), 22 the static spheres (the SceneGpu's, Task 8),
+//   23 the particle field (ModernStage's, Task 8), 24 the caustic maps and 27 the receiver table (Task 13's
+//   caustic maps object, whose photon pass reads the same table).
+// Per-frame feature resources (particle fields, medium volumes, splat accumulators, caustic maps) live once
+// in ModernStage, sized to the largest prepared scene, not per scene.
 struct TraceExtras {
     const gfx::Buffer* environment = nullptr;        // 15: replaces the frame's packed environment (a hook)
     const gfx::Buffer* treeNodes = nullptr;          // 16: LightTreeNode[] (Task 12)
@@ -99,6 +115,7 @@ struct TraceExtras {
     const gfx::Buffer* particleSpheres = nullptr;    // 23: SphereRecord[] (Task 8)
     gfx::Image* causticMaps = nullptr;               // 24: 2D array RGBA16F irradiance (Task 13)
     const gfx::Buffer* lensing = nullptr;            // 25: LensingUniforms (Task 25)
+    const gfx::Buffer* causticReceivers = nullptr;   // 27: CausticReceiver[] (Task 13)
 };
 
 // The path tracer every 2026 scene shares (step 5, Task 1): the ray tracing pipeline and its SBT (4 hit
@@ -116,8 +133,10 @@ public:
     PathTracer& operator=(const PathTracer&) = delete;
 
     // Grows the TLAS and the per-slot buffers to hold `capacity` (field by field the larger of it and the
-    // current one); waits for the ring's frames first when anything grows. Setup: before a frame, or before
-    // trace() in the frame being recorded (nothing of this frame uses them yet). Never shrinks.
+    // current one); waits for the queue to idle first when anything grows (setup, like resize()). Setup:
+    // before a frame, or before trace() in the frame being recorded (nothing of this frame uses them yet).
+    // Never shrinks. capacity() changes only once the new buffers and TLAS exist: if creating them throws,
+    // the tracer keeps its old capacity and stays usable.
     void reserve(const TracerCapacity& capacity);
     // Recreates the images (waits for the queue first: a resize path).
     void resize(std::uint32_t width, std::uint32_t height);
@@ -144,8 +163,13 @@ public:
     std::uint32_t width() const { return width_; }
     std::uint32_t height() const { return height_; }
     const TracerCapacity& capacity() const { return capacity_; }
-    // The bytes of the G-buffer's images at the current size (texel sizes times pixels).
+    // The device memory of the G-buffer's images at the current size, as allocated (VMA).
     VkDeviceSize imageBytes() const;
+    // The device memory of everything else the tracer allocates, as allocated (VMA): the TLAS (storage,
+    // scratch, instance buffers), the per-slot uniform, environment, instance, light and material buffers,
+    // the shader binding table and the feature dummies. A task that adds a buffer to the tracer adds it here
+    // (shared_tracer_test (b) compares the sum with the allocator's statistics).
+    VkDeviceSize bufferBytes() const;
 
     struct Stats {
         std::uint32_t traceDispatches = 0; // in the last trace()
@@ -157,8 +181,13 @@ public:
     static std::uint32_t pipelinesCreated();
 
 private:
+    using SlotBuffers = std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight>;
     void createImages();
-    void createFrameBuffers();
+    // The per-slot instance, light and material buffers of a capacity.
+    struct FrameBuffers {
+        SlotBuffers instanceRecords, lights, materials;
+    };
+    FrameBuffers createFrameBuffers(const TracerCapacity& capacity) const;
 
     gfx::Context& ctx_;
     gfx::FrameRing& ring_;
@@ -179,7 +208,7 @@ private:
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
     GBuffer gbuffer_;
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
-    std::optional<rt::Tlas> tlas_;
+    std::unique_ptr<rt::Tlas> tlas_;
 };
 
 } // namespace evo::modern
