@@ -116,6 +116,7 @@ public:
     SceneFrame frame(const show::TimelineFrame& frame) const override;
     Camera camera(const show::TimelineFrame& frame) const override { return particlesCamera(frame); }
     bool samplesRetro() const override { return false; }
+    std::string nowCard(show::Effect effect) const override;
     std::uint32_t dotsCount() const { return dotsCount_; }
     std::uint32_t oceanCount() const { return oceanCount_; }
 

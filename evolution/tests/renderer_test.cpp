@@ -375,181 +375,39 @@ void testHudUnit() {
     CHECK(hudUnit(540) == 2 && hudUnit(1080) == 3 && hudUnit(1600) == 4);
 }
 
-// The HUD layout on the CPU: which texts, where, each after its shadow, all inside the margins, at every
-// HUD unit.
+// The HUD's text items on the CPU: the window's chapter title alone (the epoch cards are drawn by
+// EpochCards, tests/epoch_cards_test.cpp), after its shadow, inside the margins, at every HUD unit.
 void testHudItems() {
     using evo::render::hudItems;
 
-    // Boot, era 0: the title at (8u, 8u) at scale u, the 1993 card bottom-left at 2u (16u pixels high), its
-    // shadow's bottom row 8u above the edge. Without the title, only the card.
-    const TimelineFrame boot = evo::show::sampleTimeline(1.0);
+    const TimelineFrame boot = evo::show::sampleTimeline(2.5);
     for (const auto& [width, height, u] : kHudSizes) {
-        auto items = hudItems(boot, width, height, true);
-        CHECK(items.size() == 4 && shadowed(items, u) && insideHudMargins(items, width, height));
+        const auto items = hudItems(boot, width, height, true);
+        CHECK(items.size() == 2 && shadowed(items, u) && insideHudMargins(items, width, height));
         CHECK(items[1].text == "BOOT" && items[1].x == 8 * u && items[1].y == 8 * u && items[1].scale == u);
-        CHECK(items[1].rgba == 0xFFFFFFFFu && items[3].rgba == 0xFFE0E0E0u);
-        CHECK(items[3].text == boot.thenCard && items[3].scale == 2 * u && items[3].x == 8 * u);
-        CHECK(items[3].y + 16 * u + u == static_cast<float>(height) - 8 * u);
-        const auto cardsOnly = hudItems(boot, width, height, false);
-        CHECK(cardsOnly.size() == 2 && shadowed(cardsOnly, u));
-        CHECK(cardsOnly[1].text == boot.thenCard && cardsOnly[1].x == items[3].x &&
-              cardsOnly[1].y == items[3].y && cardsOnly[1].scale == items[3].scale);
+        CHECK(items[1].rgba == 0xFFFFFFFFu);
+        CHECK(hudItems(boot, width, height, false).empty()); // the exports: no title; the cards are no items
     }
-
-    // The 2026 card from era 0.5; an empty card is left out.
-    TimelineFrame frame = retroFrame(2, 1.0);
-    frame.title = "DOTS";
-    frame.thenCard = "1993 THEN";
-    frame.nowCard = "2026 NOW";
-    frame.era = .5f;
-    auto items = hudItems(frame, 640, 360, true);
-    CHECK(items.size() == 4 && items[3].text == "2026 NOW");
-    frame.era = .49f;
-    CHECK(hudItems(frame, 640, 360, true)[3].text == "1993 THEN");
-    frame.thenCard = "";
-    CHECK(hudItems(frame, 640, 360, true).size() == 2);
-    CHECK(hudItems(frame, 640, 360, false).empty());
-
-    // Wipe, while the wipe is under way: 2026 bottom-left, 1993 bottom-right on the same line when they
-    // fit (in an output twice as wide as 16:9)...
-    frame.transition = Transition::Wipe;
-    frame.wipe = .5f;
-    frame.thenCard = "1993 \xC2\xB7 PALETTE CYCLING";
-    frame.nowCard = "2026 \xC2\xB7 VOLUMETRIC NEBULA";
-    for (const auto& [width, height, u] : {HudSize{1280, 360, 1}, HudSize{2560, 720, 2}}) {
-        items = hudItems(frame, width, height, true);
-        CHECK(items.size() == 6 && shadowed(items, u) && insideHudMargins(items, width, height));
-        CHECK(items[3].text == frame.nowCard && items[3].x == 8 * u && items[3].scale == 2 * u);
-        CHECK(items[5].text == frame.thenCard && items[5].y == items[3].y);
-        CHECK(items[5].x + evo::text::textWidth(frame.thenCard, 2 * u) ==
-              static_cast<float>(width) - 8 * u - u);
-    }
-    // ...and the 1993 card a line up when they would meet.
-    items = hudItems(frame, 640, 360, true);
-    CHECK(items.size() == 6 && insideHudMargins(items, 640, 360));
-    CHECK(items[5].y + 16 + 1 < items[3].y);
-    frame.nowCard = "";
-    items = hudItems(frame, 640, 360, true);
-    CHECK(items.size() == 4 && items[3].text == frame.thenCard && items[3].y == 360 - 25);
-
-    // Before the wipe only the 1993 card, after it only the 2026 card, bottom-left like any other chapter,
-    // whatever the era says; both only strictly between.
-    frame.nowCard = "2026 \xC2\xB7 VOLUMETRIC NEBULA";
-    for (float era : {0.f, 1.f}) {
-        frame.era = era;
-        frame.wipe = 0.f;
-        items = hudItems(frame, 640, 360, true);
-        CHECK(items.size() == 4 && shadowed(items, 1) && insideHudMargins(items, 640, 360));
-        CHECK(items[3].text == frame.thenCard && items[3].x == 8 && items[3].y == 360 - 25);
-        frame.wipe = 1.f;
-        items = hudItems(frame, 640, 360, true);
-        CHECK(items.size() == 4 && items[3].text == frame.nowCard && items[3].x == 8 &&
-              items[3].y == 360 - 25);
-    }
-    for (float wipe : {.001f, .999f}) {
-        frame.wipe = wipe;
-        CHECK(hudItems(frame, 640, 360, true).size() == 6);
-    }
-    // The show's Wipe chapters: one card at their start and end, both in the middle of the wipe.
+    TimelineFrame untitled = boot;
+    untitled.title = "";
+    CHECK(hudItems(untitled, 640, 360, true).empty());
+    // Every chapter of the show has a title, and only the title is an item.
     for (int i = 0; i < evo::show::chapterCount(); ++i) {
-        if (evo::show::cues[i].transition != Transition::Wipe)
-            continue;
-        const double start = evo::show::chapterStart(i), end = evo::show::chapterStart(i + 1);
-        const TimelineFrame first = evo::show::sampleTimeline(start + .01);
-        const TimelineFrame last = evo::show::sampleTimeline(end - .01);
-        CHECK(first.wipe == 0.f && hudItems(first, 1280, 720, true).size() == 4);
-        CHECK(hudItems(first, 1280, 720, true)[3].text == std::string(first.thenCard));
-        CHECK(last.wipe == 1.f && hudItems(last, 1280, 720, true).size() == 4);
-        CHECK(hudItems(last, 1280, 720, true)[3].text == std::string(last.nowCard));
-        double t = start;
-        while (t < end && evo::show::sampleTimeline(t).wipe <= 0.f)
-            t += .01;
-        const TimelineFrame during = evo::show::sampleTimeline(t + .05);
-        CHECK(during.wipe > 0.f && during.wipe < 1.f && hudItems(during, 1280, 720, true).size() == 6);
+        const TimelineFrame sample = evo::show::sampleTimeline(evo::show::chapterStart(i) + .5);
         for (const auto& [width, height, u] : kHudSizes) {
-            const auto both = hudItems(during, width, height, false);
-            CHECK(both.size() == 4 && shadowed(both, u) && insideHudMargins(both, width, height));
+            const auto withTitle = hudItems(sample, width, height, true);
+            CHECK(withTitle.size() == 2 && withTitle[1].text == sample.title);
+            CHECK(insideHudMargins(withTitle, width, height) && shadowed(withTitle, u));
         }
     }
-
-    // A card too wide at 2 units is drawn at 1: a 41-glyph card at 640x360 (656 pixels at 2x),
-    // bottom-left with its shadow's bottom row on the margin. A 16:9 output has room for 38 glyphs at 2 units
-    // whatever its size, so at 1280x720 it is drawn at 1 unit (scale 2) too.
-    frame.transition = Transition::BeatSwap;
-    frame.era = 1.f;
-    frame.nowCard = "2026 \xC2\xB7 REFRACTION \xC2\xB7 DISPERSION \xC2\xB7 CAUSTICS";
-    CHECK(evo::text::textWidth(frame.nowCard, 2) == 656);
-    items = hudItems(frame, 640, 360, true);
-    CHECK(items.size() == 4 && shadowed(items, 1) && insideHudMargins(items, 640, 360));
-    CHECK(items[3].text == frame.nowCard && items[3].scale == 1 && items[2].scale == 1);
-    CHECK(items[3].x == 8 && items[3].y == 360 - 8 - 8 - 1);
-    items = hudItems(frame, 1280, 720, true);
-    CHECK(items[3].scale == 2 && shadowed(items, 2) && insideHudMargins(items, 1280, 720));
-    CHECK(items[3].y + 16 + 2 == 720 - 16);
-    // The same during a wipe, for either card.
-    frame.transition = Transition::Wipe;
-    frame.wipe = .5f;
-    frame.thenCard = "1993 \xC2\xB7 24 TRIANGLES \xC2\xB7 TRANSPARENT VECTORS";
-    items = hudItems(frame, 640, 360, true);
-    CHECK(items.size() == 6 && shadowed(items, 1) && insideHudMargins(items, 640, 360));
-    CHECK(items[3].scale == 1 && items[5].scale == 1 && items[5].y + 8 + 1 < items[3].y);
-
-    // The fallback's boundary: a card exactly as wide at 2 units as the room between the margins (the
-    // shadow's unit included) stays at 2 units; one pixel narrower an output and it drops to 1 unit.
-    frame.transition = Transition::Cut;
-    frame.era = 0.f;
-    frame.thenCard = "1993 THEN"; // 9 glyphs
-    for (const auto& [ignored, height, u] : kHudSizes) {
-        const auto limit =
-            static_cast<std::uint32_t>(evo::text::textWidth(frame.thenCard, 2 * u) + 16 * u + u);
-        items = hudItems(frame, limit, height, false);
-        CHECK(items.size() == 2 && items[1].scale == 2 * u && insideHudMargins(items, limit, height));
-        CHECK(items[1].x + evo::text::textWidth(frame.thenCard, 2 * u) + u ==
-              static_cast<float>(limit - 8 * u));
-        items = hudItems(frame, limit - 1, height, false);
-        CHECK(items.size() == 2 && items[1].scale == u && insideHudMargins(items, limit - 1, height));
-        CHECK(items[1].y + 8 * u + u == static_cast<float>(height - 8 * u));
-    }
-
-    // Every card of the show at every HUD unit: at 2 units (16u pixels high) where it fits between the
-    // margins, else at 1 unit; bottom-left on the margins, inside them.
-    for (const evo::show::Cue& cue : evo::show::cues)
-        for (const char* card : {cue.thenCard, cue.nowCard}) {
-            if (*card == '\0')
-                continue;
-            TimelineFrame one = retroFrame(cue.effect == Effect::Boot ? 0 : 2, 1.0);
-            one.thenCard = card;
-            for (const auto& [width, height, u] : kHudSizes) {
-                items = hudItems(one, width, height, false);
-                CHECK(items.size() == 2 && shadowed(items, u) && insideHudMargins(items, width, height));
-                const bool fits = evo::text::textWidth(card, 2 * u) <= static_cast<int>(width) - 17 * u;
-                CHECK(items[1].scale == (fits ? 2 * u : u));
-                CHECK(items[1].x == 8 * u &&
-                      items[1].y + 8 * items[1].scale + u == static_cast<float>(height - 8 * u));
-            }
-        }
-
-    // Every chapter of the show at every HUD unit, at its start and in its middle, with and without the
-    // title.
-    for (int i = 0; i < evo::show::chapterCount(); ++i)
-        for (double into : {.5, (evo::show::chapterStart(i + 1) - evo::show::chapterStart(i)) / 2}) {
-            const TimelineFrame sample = evo::show::sampleTimeline(evo::show::chapterStart(i) + into);
-            for (const auto& [width, height, u] : kHudSizes) {
-                const auto withTitle = hudItems(sample, width, height, true);
-                const auto cardsOnly = hudItems(sample, width, height, false);
-                CHECK(insideHudMargins(withTitle, width, height) && shadowed(withTitle, u));
-                CHECK(withTitle.size() == cardsOnly.size() + 2); // every chapter has a title
-                CHECK(std::none_of(cardsOnly.begin(), cardsOnly.end(),
-                                   [&](const evo::text::Item& item) { return item.text == sample.title; }));
-            }
-        }
 }
 
-// The HUD drawn: only the title and card areas change, at least 8 pixels inside the output; H (setHud)
-// takes it away again without re-rendering the retro frame. Without hudTitle (the exports) only the card.
+// The HUD drawn: only the title and the 1993 card's area (bottom-left in the picture) change, at least 8
+// pixels inside the output; H (setHud) takes it away again without re-rendering the retro frame. Without
+// hudTitle (the exports) only the card.
 void testHud(evo::gfx::Context& ctx) {
     Harness harness(ctx, 640, 360, true, true, true);
-    const TimelineFrame boot = evo::show::sampleTimeline(1.0);
+    const TimelineFrame boot = evo::show::sampleTimeline(2.5); // BOOT with its 1993 card typed
     const Picture with = harness.render(boot);
     save(with, "boot-640x360-hud.png");
     harness.renderer().setHud(false);
@@ -562,6 +420,8 @@ void testHud(evo::gfx::Context& ctx) {
     struct Changes {
         std::size_t changed = 0, title = 0, card = 0;
     };
+    const evo::render::ThenCardLayout card =
+        evo::render::thenCardLayout(evo::render::thenCardText(Effect::Boot), 640, 360);
     const auto changes = [&](const Picture& picture) {
         Changes counted;
         for (std::uint32_t y = 0; y < 360; ++y)
@@ -573,7 +433,8 @@ void testHud(evo::gfx::Context& ctx) {
                 ++counted.changed;
                 CHECK(x >= 8 && y >= 8 && x < 640 - 8 && y < 360 - 8);
                 counted.title += y < 8 + 9;
-                counted.card += y >= 360 - 8 - 17;
+                counted.card += static_cast<int>(x) >= card.x0 && static_cast<int>(x) < card.x1 &&
+                                static_cast<int>(y) >= card.y0 && static_cast<int>(y) < card.y1;
             }
         return counted;
     };
@@ -593,15 +454,16 @@ void testHud(evo::gfx::Context& ctx) {
             }
 }
 
-// The HUD at 1280x720 (unit 2): the title at scale 2 from (16, 16), the card 32 pixels high, nothing within
-// 16 pixels of an edge.
+// The HUD at 1280x720 (unit 2), CRT off: the title at scale 2 from (16, 16); the 1993 card at the 8x8 font's
+// scale 1 (720 / 480), two cells in from the picture's bottom-left corner; nothing within 16 pixels of an
+// edge.
 void testHudScaled(evo::gfx::Context& ctx) {
     Harness withHud(ctx, 1280, 720, false, true, true);
     Harness withoutHud(ctx, 1280, 720, false, false);
-    const TimelineFrame boot = evo::show::sampleTimeline(1.0);
+    const TimelineFrame boot = evo::show::sampleTimeline(2.5);
     const Picture with = withHud.render(boot);
     const Picture without = withoutHud.render(boot);
-    std::uint32_t top = ~0u, bottom = 0;
+    std::uint32_t top = ~0u, bottom = 0, left = ~0u;
     for (std::uint32_t y = 0; y < 720; ++y)
         for (std::uint32_t x = 0; x < 1280; ++x)
             if (std::memcmp(with.at(x, y), without.at(x, y), 3) != 0) {
@@ -609,11 +471,11 @@ void testHudScaled(evo::gfx::Context& ctx) {
                 if (y >= 360) {
                     top = std::min(top, y);
                     bottom = std::max(bottom, y);
+                    left = std::min(left, x);
                 }
             }
-    // The card: 32 rows of glyph cell and 2 of shadow, its last row 16 pixels above the edge (glyph rows may
-    // be empty at the top or bottom, so within the cell).
-    CHECK(top >= 720 - 16 - 34 && bottom <= 720 - 16 - 1 && bottom - top >= 24);
+    // The card: one 8-pixel glyph row 16 pixels above the picture's bottom, from 16 pixels into it.
+    CHECK(top >= 720 - 24 && bottom <= 720 - 17 && left >= 160 + 16 && left < 160 + 24);
     const evo::text::GlyphRows& b = evo::text::glyph('B');
     for (std::uint32_t row = 0; row < 7; ++row)
         for (std::uint32_t col = 0; col < 7; ++col)

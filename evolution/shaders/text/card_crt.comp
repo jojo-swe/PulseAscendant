@@ -1,0 +1,99 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The 1993 epoch card (src/render/epoch_cards.hpp): the 8x8 font at an integer scale, typed into the bottom
+// left of the 4:3 picture and shown through the same CRT as the picture (crt.comp): each output pixel of the
+// card's box finds its point of the unbulged picture through crtBulge, so the card curves with the glass, then
+// takes the scanlines (odd picture rows 25 % darker), the phosphor mask and the vignette. Phosphor white where
+// the font (or the block cursor after the typed glyphs) is set; every other pixel is left alone. Without the
+// CRT the card is plain nearest-neighbour.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform image2D target;
+
+// The 8x8 font (kFontWords words: glyph code c's rows 0..3 in word 2 (c - 32), 4..7 in the next, row r in
+// byte r % 4, the leftmost pixel in a byte's top bit), then the card's glyph codes, one per word.
+layout(set = 0, binding = 1, std430) readonly buffer Glyphs {
+    uint words[];
+} glyphs;
+
+// Must match CrtPush in src/render/epoch_cards.cpp (56 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    int originX; // the card's top-left in the 4:3 rectangle's unbulged pixels
+    int originY;
+    uint scale;  // output pixels per font pixel
+    uint count;  // glyphs typed
+    uint cursor; // 1: the block cursor is lit
+    uint crt;
+    ivec2 boxOrigin;
+    ivec2 boxSize;
+    float fromX; // only pixels right of this (a wipe's line)
+    float pad;
+} pc;
+
+#include "../crt_common.glsl"
+
+const uint kFontWords = 192u;
+const vec3 kPhosphor = vec3(1.0);
+
+bool fontSet(uint code, int x, int y) {
+    uint word = glyphs.words[(code - 32u) * 2u + uint(y) / 4u];
+    uint row = (word >> ((uint(y) % 4u) * 8u)) & 0xffu;
+    return ((row >> uint(7 - x)) & 1u) != 0u;
+}
+
+void main() {
+    ivec2 local = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(local, pc.boxSize))) {
+        return;
+    }
+    ivec2 pixel = pc.boxOrigin + local;
+    if (any(lessThan(pixel, ivec2(0))) || pixel.x >= int(pc.width) || pixel.y >= int(pc.height)) {
+        return;
+    }
+    if (float(pixel.x) + 0.5 < pc.fromX) {
+        return;
+    }
+    uvec4 rect = crtContentRect(pc.width, pc.height);
+    ivec2 origin = ivec2(rect.xy);
+    ivec2 content = ivec2(rect.zw);
+    if (any(lessThan(pixel, origin)) || any(greaterThanEqual(pixel, origin + content))) {
+        return;
+    }
+
+    vec2 uv = (vec2(pixel - origin) + 0.5) / vec2(content); // (0, 1) across the rectangle
+    vec2 centred = uv * 2.0 - 1.0;
+    vec2 source = pc.crt != 0u ? crtBulge(centred) * 0.5 + 0.5 : uv;
+    vec2 at = source * vec2(content) - vec2(pc.originX, pc.originY);
+    ivec2 cell = ivec2(floor(at / float(pc.scale))); // the card's font pixel
+    if (cell.x < 0 || cell.y < 0 || cell.y >= 8) {
+        return;
+    }
+    uint index = uint(cell.x) / 8u;
+    int x = cell.x % 8;
+    bool lit = false;
+    if (index < pc.count) {
+        lit = fontSet(glyphs.words[kFontWords + index], x, cell.y);
+    } else if (index == pc.count && pc.cursor != 0u) {
+        lit = x < 7; // the block cursor fills the cell but its gap column
+    }
+    if (!lit) {
+        return;
+    }
+
+    vec3 color = kPhosphor;
+    if (pc.crt != 0u) {
+        ivec2 row = ivec2(floor(source * vec2(kRetroSize)));
+        if ((row.y & 1) == 1) {
+            color *= kScanline;
+        }
+        vec3 mask = vec3(1.0 - kMask);
+        mask[uint(pixel.x) % 3u] = 1.0;
+        color *= mask;
+        color *= 1.0 - kVignette * 0.5 * dot(centred, centred);
+    }
+    imageStore(target, pixel, vec4(color, 1.0));
+}

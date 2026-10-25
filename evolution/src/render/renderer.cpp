@@ -30,10 +30,7 @@ const RenderSettings& checked(const RenderSettings& settings) {
 }
 
 constexpr std::uint32_t kTitleColor = 0xFFFFFFFFu;
-constexpr std::uint32_t kCardColor = 0xFFE0E0E0u;
 constexpr std::uint32_t kShadowColor = 0xFF000000u;
-// The gap, in units, between the 1993 card raised above the 2026 card and the 2026 card, shadow included.
-constexpr int kCardLineGapUnits = 3;
 // GPU timer scopes per frame: total, retro, fill or tlas and trace, denoise, upscale, tonemap, compositor.
 constexpr std::uint32_t kMaxGpuScopes = 16;
 
@@ -45,53 +42,15 @@ int hudUnit(std::uint32_t height) {
 
 std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height,
                                  bool title) {
+    static_cast<void>(width);
     std::vector<text::Item> items;
-    const auto empty = [](const char* text) { return text == nullptr || *text == '\0'; };
+    if (!title || frame.title == nullptr || *frame.title == '\0')
+        return items;
     const int unit = hudUnit(height);
-    const int margin = kHudMarginUnits * unit;
-    const auto px = [](int pixels) { return static_cast<float>(pixels); };
-
-    // The item after its drop shadow, one unit right and down.
-    const auto addWithShadow = [&](int x, int y, int scale, std::uint32_t rgba, const char* text) {
-        items.push_back({px(x + unit), px(y + unit), px(scale), kShadowColor, text});
-        items.push_back({px(x), px(y), px(scale), rgba, text});
-    };
-    // An epoch card's scale: 2 units, or 1 when at 2 it would cross the right margin (the shadow included).
-    const auto cardScale = [&](const char* card) {
-        const int available = static_cast<int>(width) - 2 * margin - unit;
-        return text::textWidth(card, 2 * unit) <= available ? 2 * unit : unit;
-    };
-    // A card's top row at a scale: its bottom row, shadow included, is the last one inside the margin.
-    const auto cardY = [&](int scale) { return static_cast<int>(height) - margin - 8 * scale - unit; };
-
-    if (title && !empty(frame.title))
-        addWithShadow(margin, margin, unit, kTitleColor, frame.title);
-
-    // Both cards only while the wipe is under way; before it the 1993 card, after it the 2026 card.
-    const bool wiping = frame.transition == show::Transition::Wipe && frame.wipe > 0.f && frame.wipe < 1.f;
-    if (wiping) {
-        const int nowScale = empty(frame.nowCard) ? 0 : cardScale(frame.nowCard);
-        const int nowWidth = nowScale == 0 ? 0 : text::textWidth(frame.nowCard, nowScale);
-        if (nowWidth > 0)
-            addWithShadow(margin, cardY(nowScale), nowScale, kCardColor, frame.nowCard);
-        if (!empty(frame.thenCard)) {
-            const int thenScale = cardScale(frame.thenCard);
-            const int thenWidth = text::textWidth(frame.thenCard, thenScale);
-            const int thenX = static_cast<int>(width) - margin - unit - thenWidth;
-            // Too narrow for both on one line: the 1993 card goes a line up, above the 2026 card.
-            const bool meets = nowWidth > 0 && thenX < margin + nowWidth + 8 * nowScale;
-            const int thenY = meets ? cardY(nowScale) - (8 * thenScale + unit + kCardLineGapUnits * unit)
-                                    : cardY(thenScale);
-            addWithShadow(thenX, thenY, thenScale, kCardColor, frame.thenCard);
-        }
-    } else {
-        const bool now = frame.transition == show::Transition::Wipe ? frame.wipe >= 1.f : frame.era >= .5f;
-        const char* card = now ? frame.nowCard : frame.thenCard;
-        if (!empty(card)) {
-            const int scale = cardScale(card);
-            addWithShadow(margin, cardY(scale), scale, kCardColor, card);
-        }
-    }
+    const auto margin = static_cast<float>(kHudMarginUnits * unit);
+    const auto shadow = static_cast<float>(unit);
+    items.push_back({margin + shadow, margin + shadow, shadow, kShadowColor, frame.title});
+    items.push_back({margin, margin, shadow, kTitleColor, frame.title});
     return items;
 }
 
@@ -102,7 +61,8 @@ Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings
       shutterSeconds_(settings.mode == RenderMode::Export ? settings.shutterSeconds : 0.0), text_(ctx, ring),
       retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height, settings.detail,
                                         settings.sceneFactory, settings.sceneMap, settings.traceScale),
-      compositor_(ctx, ring, text_, settings.width, settings.height) {
+      compositor_(ctx, ring, text_, settings.width, settings.height),
+      cards_(ctx, ring, [this](show::Effect effect) { return modern_.nowCard(effect); }) {
     modern_.setTimers(&timers_);
 }
 
@@ -192,6 +152,8 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         hud_ ? hudItems(frame, size.width, size.height, hudTitle_) : std::vector<text::Item>{};
     timers_.begin(cmd, "compositor");
     compositor_.render(cmd, retro_.image(), modern_.image(), frame, crt_, visible, hud);
+    if (hud_)
+        cards_.record(cmd, compositor_.output(), frame, crt_);
     timers_.end(cmd);
     timers_.end(cmd); // total
 }

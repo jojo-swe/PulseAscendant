@@ -121,6 +121,7 @@ public:
     // studioCamera(frame), without building the frame.
     Camera camera(const show::TimelineFrame& frame) const override { return studioCamera(frame); }
     bool samplesRetro() const override { return true; }
+    std::string nowCard(show::Effect effect) const override;
 
 private:
     SceneStatic static_;

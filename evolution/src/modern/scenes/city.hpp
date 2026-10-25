@@ -145,6 +145,7 @@ public:
     SceneFrame frame(const show::TimelineFrame& frame) const override;
     Camera camera(const show::TimelineFrame& frame) const override { return cityCamera(frame); }
     bool samplesRetro() const override { return false; }
+    std::string nowCard(show::Effect effect) const override;
 
     const CityStats& stats() const { return stats_; }
     // The tree's lights in the order of the static spheres: lamps first (lot by lot), then the avenue's

@@ -666,4 +666,14 @@ SceneFrame Tunnel::tunnelFrame(const show::TimelineFrame& frame) const {
     return f;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string Tunnel::nowCard(show::Effect effect) const {
+    if (effect != show::Effect::Tunnel)
+        return {};
+    return std::string("2026") + kCardDot + "THE POINTS BECAME LIGHTS" + kCardDot + groupThousands(kTunnelLights) +
+           " LIGHTS" + kCardDot + "LIGHT TREE" + kCardDot + "FOG";
+}
+
 } // namespace evo::modern

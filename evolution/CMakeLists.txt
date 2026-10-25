@@ -1213,3 +1213,26 @@ add_dependencies(scene_city_test evo_modern_sphere_shaders evo_modern_intersecti
 # [detail]` renders 480x270 stills of both chapters instead of the tests.
 target_sources(evo_modern PRIVATE src/modern/scenes/nebula.cpp)
 evo_scene_test(nebula)
+
+# --- The epoch cards ---------------------------------------------------------------------------------------------
+
+# The 2026 card face (src/text/stroke_font.cpp: the 8x8 font's skeletons as rounded distance-field strokes, with
+# optical sizing, kerning and tabular figures) and the cards themselves (src/render/epoch_cards.cpp: the texts
+# with their numbers from the configuration, the timing, the layouts, and the pass that draws the 1993 card
+# through the CRT and the 2026 card and the credits layer in the margin; shaders/text/card_{crt,sdf}.comp).
+target_sources(evo_text PRIVATE src/text/stroke_font.cpp)
+target_sources(evo_render PRIVATE src/render/epoch_cards.cpp)
+evo_add_shaders(evo_render shaders/text/card_sdf.comp shaders/text/card_crt.comp)
+
+# The face on the CPU: every glyph the cards use, the skeletons against the 8x8 bitmap, the stroke width, the
+# kerning pairs, tabular figures and the year's size against the body's.
+add_executable(stroke_font_test tests/stroke_font_test.cpp)
+target_link_libraries(stroke_font_test PRIVATE evo_render)
+add_test(NAME stroke_font COMMAND stroke_font_test)
+
+# The cards: the texts against the cue sheet and the configuration, the timing of all 31 chapters, the wipe's
+# split and the BeatSwap's flip, the typing; then on the GPU at 1280x720, the 2026 card's alpha and box and the
+# 1993 card through the CRT. `epoch_cards_test --look <dir>` writes 480x270 stills instead.
+add_executable(epoch_cards_test tests/epoch_cards_test.cpp)
+target_link_libraries(epoch_cards_test PRIVATE evo_render evo_core)
+evo_gpu_test(epoch_cards epoch_cards_test TIMEOUT 300 PROCESSORS 2)

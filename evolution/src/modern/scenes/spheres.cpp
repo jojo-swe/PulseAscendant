@@ -860,4 +860,30 @@ SceneFrame Spheres::infinityFrame(const show::TimelineFrame& frame) const {
     return f;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+} // namespace evo::modern
+
+#include "render/stage_plan.hpp" // kExportMaxBounces: the bounces an export traces
+
+namespace evo::modern {
+
+std::string Spheres::nowCard(show::Effect effect) const {
+    switch (effect) {
+    case show::Effect::Raytrace:
+        return std::string("2026") + kCardDot + "REAL-TIME PATH TRACING" + kCardDot +
+               groupThousands(kRaytraceSphereCount + kRaytraceGiants) + " SPHERES" + kCardDot +
+               groupThousands(kShowFps) + " FPS";
+    case show::Effect::SphereStorm:
+        return std::string("2026") + kCardDot + groupThousands(kStormSpheres) + " SPHERES" + kCardDot +
+               groupThousands(kStormEmissive) + " OF THEM LIGHTS" + kCardDot + "LIGHT TREE" + kCardDot + "MOTION BLUR";
+    case show::Effect::RaytraceInfinity:
+        return std::string("2026") + kCardDot + groupThousands(kInfinitySpheres) + " MIRROR SPHERES" + kCardDot +
+               "INFINITE REFLECTIONS" + kCardDot + groupThousands(render::kExportMaxBounces) + " BOUNCES";
+    default:
+        return {};
+    }
+}
+
 } // namespace evo::modern

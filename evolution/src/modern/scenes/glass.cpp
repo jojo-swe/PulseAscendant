@@ -1576,4 +1576,13 @@ SceneFrame Glass::crystalFrame(const show::TimelineFrame& f) const {
     return out;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string Glass::nowCard(show::Effect effect) const {
+    const bool shown = effect == show::Effect::Glenz || effect == show::Effect::Cathedral ||
+                       effect == show::Effect::CrystalCity;
+    return shown ? glassCard(effect).line : std::string();
+}
+
 } // namespace evo::modern

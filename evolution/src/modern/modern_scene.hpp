@@ -1,5 +1,6 @@
 #pragma once
 
+#include "modern/card_format.hpp"
 #include "show/cues.hpp"
 #include "show/timeline.hpp"
 
@@ -8,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <string>
 
 namespace evo::modern {
 
@@ -39,6 +41,9 @@ public:
     virtual Camera camera(const show::TimelineFrame&) const = 0;
     // Whether the scene shows the retro image (the Studio's CRT), so the retro stage must run with it.
     virtual bool samplesRetro() const = 0;
+    // The 2026 epoch card of an effect the scene shows, its numbers from the full-detail configuration
+    // (whatever detail this object was built at); empty means the cue sheet's line (show::cues).
+    virtual std::string nowCard(show::Effect) const { return {}; }
 };
 
 // The scenes of the 2026 side. Placeholder is the fill.comp gradient and beat circle, through the HDR image

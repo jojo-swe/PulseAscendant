@@ -162,6 +162,7 @@ public:
     SceneFrame frame(const show::TimelineFrame& frame) const override;
     Camera camera(const show::TimelineFrame& frame) const override { return lensCamera(frame); }
     bool samplesRetro() const override { return false; }
+    std::string nowCard(show::Effect effect) const override;
     std::uint32_t photons() const { return photons_; }
 
 private:

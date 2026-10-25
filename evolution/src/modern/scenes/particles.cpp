@@ -504,4 +504,17 @@ SceneFrame Particles::frame(const show::TimelineFrame& frame) const {
     return f;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string Particles::nowCard(show::Effect effect) const {
+    if (effect == show::Effect::Dots)
+        return std::string("2026") + kCardDot + groupThousands(kDotsParticles) + " TRACED PARTICLES" + kCardDot +
+               "MOTION BLUR" + kCardDot + "DEPTH OF FIELD";
+    if (effect == show::Effect::Ocean)
+        return std::string("2026") + kCardDot + groupThousands(kOceanParticles) + " TRACED PARTICLES" + kCardDot +
+               groupThousands(std::size(kWaveAmplitude)) + " GERSTNER WAVES" + kCardDot + "ONE SHOT";
+    return {};
+}
+
 } // namespace evo::modern

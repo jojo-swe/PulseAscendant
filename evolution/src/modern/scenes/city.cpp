@@ -1529,4 +1529,26 @@ SceneFrame City::frame(const show::TimelineFrame& frame) const {
     return f;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string City::nowCard(show::Effect effect) const {
+    // The full city's (kCityCardLights and kCityCardWindows are pinned against the City at detail 1).
+    const std::string lights = groupThousands(kCityCardLights) + " LIGHTS";
+    const std::string windows = groupThousands(kCityCardWindows / 1'000'000) + " MILLION WINDOWS";
+    const std::string year = "2026";
+    switch (effect) {
+    case show::Effect::City:
+        return year + kCardDot + windows + kCardDot + lights + kCardDot + "WET STREETS";
+    case show::Effect::Ascent:
+        return year + kCardDot + "ASCENT" + kCardDot + "VOLUMETRIC CLOUDS" + kCardDot + "MOONLIGHT SHAFTS";
+    case show::Effect::CityNight:
+        return year + kCardDot + "CITY NIGHT" + kCardDot + lights + kCardDot + "LIGHT TREE" + kCardDot + "RAIN";
+    case show::Effect::Metropolis:
+        return year + kCardDot + "METROPOLIS" + kCardDot + lights + kCardDot + windows + kCardDot + "PATH TRACED";
+    default:
+        return {};
+    }
+}
+
 } // namespace evo::modern

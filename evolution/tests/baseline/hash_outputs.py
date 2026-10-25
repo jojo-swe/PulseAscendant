@@ -28,6 +28,8 @@ Then regenerated after merging the Particles and Spheres scenes: only stream_dot
 Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the city, so stream_studio_ascent
 changed; every other output, the Studio's included, stayed byte for byte.
 Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
+Then regenerated for the epoch cards (the 1993 card through the CRT, the 2026 card in the stroke face in the
+left margin, in place of the 8x8 cards with drop shadows): every output changed in its card's area only.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

@@ -732,4 +732,11 @@ SceneFrame Lens::godFrame(const show::TimelineFrame& frame) const {
     return f;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string Lens::nowCard(show::Effect effect) const {
+    return lensEpochCard(effect);
+}
+
 } // namespace evo::modern

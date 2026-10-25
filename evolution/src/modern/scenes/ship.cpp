@@ -558,4 +558,15 @@ SceneFrame Ship::frame(const show::TimelineFrame& f) const {
     return out;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string Ship::nowCard(show::Effect effect) const {
+    if (effect != show::Effect::Wormhole)
+        return {};
+    const auto km = static_cast<std::uint64_t>(std::lround(kWormholeRingSpacing / 1000.f));
+    return std::string("2026") + kCardDot + "WORMHOLE" + kCardDot + groupThousands(km) + " KM RINGS" + kCardDot +
+           "VOLUMETRIC" + kCardDot + "MOTION BLUR";
+}
+
 } // namespace evo::modern

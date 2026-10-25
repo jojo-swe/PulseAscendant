@@ -5,6 +5,7 @@
 #include "gfx/gpu_timers.hpp"
 #include "gfx/image.hpp"
 #include "render/compositor.hpp"
+#include "render/epoch_cards.hpp"
 #include "render/modern_stage.hpp"
 #include "render/retro_stage.hpp"
 #include "render/stage_plan.hpp"
@@ -43,26 +44,21 @@ struct RenderSettings {
     modern::SceneMap sceneMap;
 };
 
-// The HUD scales with the output height in whole steps: unit = max(1, round(height / 360)), so 1 at 640x360,
-// 2 at 1280x720, 4 at 2560x1440 and 6 at 3840x2160. Every margin is kHudMarginUnits units and every drop
-// shadow is the same text in black one unit right and down.
+// The window's chapter title scales with the output height in whole steps: unit = max(1, round(height / 360)),
+// so 1 at 640x360, 2 at 1280x720, 4 at 2560x1440 and 6 at 3840x2160. Its margin is kHudMarginUnits units and
+// its drop shadow is the same text in black one unit right and down.
 inline constexpr int kHudMarginUnits = 8;
 int hudUnit(std::uint32_t height);
 
-// The HUD of a frame at a width x height output, drop shadows included (each text item follows its shadow):
-// the chapter title top-left at scale unit when `title` is set, and the epoch card bottom-left at scale
-// 2 * unit, the 1993 card while era < 0.5 and the 2026 card from 0.5. A Wipe chapter shows the 1993 card
-// before its wipe (wipe = 0) and the 2026 card after it (wipe = 1); while 0 < wipe < 1 it shows both, the
-// 2026 card bottom-left and the 1993 card bottom-right (raised a line when the two would meet). A card that
-// at 2 * unit would cross the right margin is drawn at scale unit. Empty texts are left out. Every pixel,
-// shadows included, stays at least kHudMarginUnits * unit pixels inside the output edges (a card too wide
-// even at scale unit, in a very narrow output, is the exception).
+// The HUD's text items at a width x height output: the chapter title top-left at scale unit after its drop
+// shadow, when `title` is set and the frame has one; nothing otherwise. (The epoch cards are EpochCards'.)
 std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height,
                                  bool title);
 
 // Renders a timeline frame into one R8G8B8A8_UNORM image at the render resolution: the retro stage (only
-// when its retro frame changes), the modern stage, then the compositor's CRT and era passes. Every pass is a
-// compute pass recorded into the caller's command buffer from the given ring, the HUD text last; the window
+// when its retro frame changes), the modern stage, then the compositor's CRT and era passes and, with the HUD
+// on, the epoch cards (EpochCards; the 2026 texts from the modern stage's scenes) and the window's title.
+// Every pass is a compute pass recorded into the caller's command buffer from the given ring; the window
 // blits output() and the exports read it back. The output is a pure function of (settings, frame) in Export
 // mode, and of (settings, the frames since the last history reset) in Interactive mode.
 //
@@ -154,6 +150,7 @@ private:
     RetroStage retro_;
     ModernStage modern_;
     Compositor compositor_;
+    EpochCards cards_;
     Stats stats_;
 };
 

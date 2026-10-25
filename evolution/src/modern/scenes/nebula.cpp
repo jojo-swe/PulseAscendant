@@ -472,4 +472,18 @@ SceneFrame Nebula::frame(const show::TimelineFrame& frame) const {
     return f;
 }
 
+// --- The epoch cards
+// ----------------------------------------------------------------------------------------------
+
+std::string Nebula::nowCard(show::Effect effect) const {
+    if (effect == show::Effect::Plasma)
+        return std::string("2026") + kCardDot + "VOLUMETRIC NEBULA" + kCardDot + "DELTA TRACKING" + kCardDot +
+               "MULTIPLE SCATTERING";
+    if (effect != show::Effect::Nebula)
+        return {};
+    const NebulaStats stats = nebulaStats();
+    return std::string("2026") + kCardDot + "NEBULA" + kCardDot + groupThousands(stats.voxels) + " VOXELS" +
+           kCardDot + "MULTIPLE SCATTERING" + kCardDot + groupThousands(stats.stars) + " STARS";
+}
+
 } // namespace evo::modern
