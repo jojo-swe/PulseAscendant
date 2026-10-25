@@ -1020,3 +1020,11 @@ target_include_directories(splat_test PRIVATE tests)
 target_compile_definitions(splat_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(splat_test splat_test_shaders)
 evo_gpu_test(splat splat_test)
+
+# --- Step 5 Task 16: the Ship (FLYBY) ----------------------------------------------------------------------
+
+# The procedural starship over a planet under a star field of splats (src/modern/scenes/ship.cpp,
+# shaders/modern/ship_*.comp), and its scene test: the standard picture and sweep checks, the card's numbers,
+# the 1993 flight match, the crossing's motion blur and the plumes' volume.
+target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp)
+evo_scene_test(ship)

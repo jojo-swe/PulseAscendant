@@ -215,28 +215,14 @@ struct Rotation {
     }
 };
 
-Rotation multiply(const Rotation& a, const Rotation& b) {
+// The ship's attitude at t seconds into the chapter (retro/flyby_flight.hpp).
+Rotation shipRotation(double t) {
+    const FlybyAttitude a = flybyAttitude(t);
     Rotation r{};
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j)
-            r.m[i][j] = a.m[i][0] * b.m[0][j] + a.m[i][1] * b.m[1][j] + a.m[i][2] * b.m[2][j];
+            r.m[i][j] = a.m[i][j];
     return r;
-}
-
-// The ship's attitude at t seconds into the chapter: a gentle bank (roll about z), with a slower nod
-// (pitch about x) and sway (yaw about y) so it never sits still.
-Rotation shipRotation(double t) {
-    const double tau = 2 * std::numbers::pi;
-    const double roll = radians(13 * std::sin(tau * t / 6.0) + 4 * std::sin(tau * t / 2.9));
-    const double pitch = radians(4 * std::sin(tau * t / 4.7));
-    const double yaw = radians(5 * std::sin(tau * t / 7.3));
-    const double cr = std::cos(roll), sr = std::sin(roll);
-    const double cp = std::cos(pitch), sp = std::sin(pitch);
-    const double cy = std::cos(yaw), sy = std::sin(yaw);
-    const Rotation rz{{{cr, -sr, 0}, {sr, cr, 0}, {0, 0, 1}}};
-    const Rotation rx{{{1, 0, 0}, {0, cp, -sp}, {0, sp, cp}}};
-    const Rotation ry{{{cy, 0, sy}, {0, 1, 0}, {-sy, 0, cy}}};
-    return multiply(ry, multiply(rx, rz));
 }
 
 // A part of the ship ready to draw: its vertices in model space (mirrored for the left side) and faces.
@@ -473,26 +459,12 @@ void ramp(Palette& palette, std::size_t first, std::size_t count, const std::arr
 } // namespace
 
 Camera flybyCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    const double frames = frame.chapterDuration * kFlybyRetroRate;
-    const double progress = frames > 0 ? std::clamp(static_cast<double>(retroFrame) / frames, 0.0, 1.0) : 0.0;
-    const double eased = progress * progress * (3 - 2 * progress);
-    const double t = static_cast<double>(retroFrame) / kFlybyRetroRate;
-
-    // Round the ship from behind (azimuth 0: the camera on the -z side) past its right side to a
-    // three-quarter view from ahead, and from below to above; closer at the end.
-    const double azimuth = radians(lerp(6, 140, eased) + 3 * std::sin(2 * std::numbers::pi * t / 9.0));
-    const double elevation = radians(lerp(-26, 30, eased));
-    const double distance = lerp(7.4, 5.6, eased);
+    const FlybyView view = flybyView(frame.chapterDuration, static_cast<double>(retroFrame));
     Camera camera{};
-    camera.eye[0] = distance * std::cos(elevation) * std::sin(azimuth);
-    camera.eye[1] = distance * std::sin(elevation);
-    camera.eye[2] = -distance * std::cos(elevation) * std::cos(azimuth);
-    // Aimed below the ship, so the ship rides in the upper part of the frame: its lowest vertex reaches about
-    // y = 132 px (flyby_test allows 136), less offset while the camera looks up at it from below, which
-    // already lifts it.
-    camera.target[0] = 0;
-    camera.target[1] = lerp(-0.4, -0.95, eased);
-    camera.target[2] = 0;
+    for (int k = 0; k < 3; ++k) {
+        camera.eye[k] = view.eye[k];
+        camera.target[k] = view.target[k];
+    }
     camera.up[0] = 0;
     camera.up[1] = 1;
     camera.up[2] = 0;
