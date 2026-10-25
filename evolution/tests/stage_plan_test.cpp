@@ -2,7 +2,9 @@
 // when the modern stage's temporal history resets; the samples a frame traces (more on the window's reset
 // frames) and the denoiser settings per mode and spp (the firefly filter in exports from 16 spp only).
 
+#include "modern/modern_scene.hpp"
 #include "render/stage_plan.hpp"
+#include "show/director.hpp"
 #include "show/timeline.hpp"
 
 #include <algorithm>
@@ -134,20 +136,23 @@ void testForcedEra() {
 }
 
 // What composite.comp reads, modelled independently of planStages: the weights the pixel centre x + 0.5 of
-// a width-pixel output gives the 1993 screen and the 2026 image (as in the shader: Wipe by column with a
-// 2-pixel seam, Portal a mix by era, Cut and BeatSwap a select at era 0.5).
+// a width-pixel output gives the 1993 screen and the 2026 image (as in the shader: FINALE the 2026 image
+// whatever the era, Wipe by column with a 4-pixel refractive edge that shows the 1993 screen, Portal a mix by
+// era, Cut and BeatSwap a select at era 0.5).
 struct Weights {
     float then, now;
 };
 
 Weights compositeWeights(const TimelineFrame& frame, std::uint32_t x, std::uint32_t width) {
+    if (frame.effect == Effect::Finale)
+        return {0.f, 1.f};
     const float centre = static_cast<float>(x) + .5f;
     const float edge = frame.wipe * static_cast<float>(width);
     switch (frame.transition) {
     case Transition::Wipe: {
         const float fromEdge = centre - edge;
-        if (frame.wipe > 0.f && frame.wipe < 1.f && fromEdge >= -1.f && fromEdge < 1.f)
-            return {0.f, 0.f}; // the white seam
+        if (frame.wipe > 0.f && frame.wipe < 1.f && fromEdge >= -2.f && fromEdge < 2.f)
+            return {1.03f, 0.f}; // the glass edge: the 1993 side refracted and brightened
         return centre < edge ? Weights{0.f, 1.f} : Weights{1.f, 0.f};
     }
     case Transition::Portal: {
@@ -203,6 +208,36 @@ void testPlanCoversCompositeAcrossTheShow() {
     }
     std::printf("plan sweep: %zu frames\n", frames);
     CHECK(frames > 3 * 60 * 600);
+}
+
+// FINALE shows the 2026 picture whatever its era (the megamix's cuts and the room are both 2026); the retro
+// stage runs only for the Studio's CRT. Across the chapter at 1/60 s: the retro stage runs exactly while the
+// frame shows the Studio (the room), never in a cut to another scene.
+void testFinale() {
+    for (const float era : {0.f, 1.f})
+        for (RenderMode mode : kModes) {
+            const TimelineFrame finale = frameOf(9, Effect::Finale, Transition::BeatSwap, era);
+            CHECK(planIs(planStages(finale, mode, false), false, true, false, true));
+            CHECK(planIs(planStages(finale, mode, true), false, true, true, true));
+        }
+
+    int room = 0, cuts = 0;
+    const double start = evo::show::chapterStart(9), end = evo::show::chapterStart(10);
+    for (double t = start; t < end; t += 1.0 / 60) {
+        const TimelineFrame frame = evo::show::sampleTimeline(t);
+        const TimelineFrame scene = evo::show::sceneFrame(frame);
+        // What the renderer asks the modern stage: whether the scene shown samples the retro image.
+        const bool studio = evo::modern::sceneFor(scene.effect) == evo::modern::SceneId::Studio;
+        CHECK(studio == !evo::show::sceneCut(frame).has_value());
+        for (RenderMode mode : kModes) {
+            const StagePlan plan = planStages(frame, mode, studio);
+            CHECK(plan.modernVisible && plan.modern && !plan.retroVisible);
+            CHECK(plan.retro == studio);
+        }
+        (studio ? room : cuts) += 1;
+    }
+    std::printf("FINALE: %d room frames, %d cut frames\n", room, cuts);
+    CHECK(cuts > 60 * 3 && room > 60 * 7);
 }
 
 void testBounces() {
@@ -411,6 +446,7 @@ int main() {
         testPortal();
         testForcedEra();
         testPlanCoversCompositeAcrossTheShow();
+        testFinale();
         testBounces();
         testHistoryReasons();
         testResetPrecedence();

@@ -5,13 +5,17 @@
 #include "gfx/frame_ring.hpp"
 #include "gfx/readback.hpp"
 #include "image/png.hpp"
+#include "modern/modern_scene.hpp"
+#include "modern/scene.hpp"
 #include "render/renderer.hpp"
 #include "retro/boot.hpp"
 #include "retro/effects.hpp"
 #include "retro/palette.hpp"
+#include "show/director.hpp"
 #include "show/timeline.hpp"
 #include "text/font8x8.hpp"
 
+#include "rt_test_scenes.hpp"
 #include "test_env.hpp"
 
 #include <algorithm>
@@ -19,6 +23,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -125,6 +130,15 @@ public:
     void resize(std::uint32_t width, std::uint32_t height) {
         renderer_.resize(width, height);
         readback_.emplace(ctx_, width, height); // every submit was waited for: the old buffer is idle
+    }
+
+    // Renders the frame and reads back the modern stage's picture (what the compositor shows of 2026).
+    Picture renderModern(const TimelineFrame& frame) {
+        VkCommandBuffer cmd = ring_.begin();
+        renderer_.render(cmd, frame);
+        readback_->record(cmd, renderer_.modern().image());
+        ring_.wait(ring_.submit());
+        return {readback_->width(), readback_->height(), readback_->rgb()};
     }
 
     Renderer& renderer() { return renderer_; }
@@ -289,7 +303,8 @@ void testChapterChangeInvalidates(evo::gfx::Context& ctx) {
     CHECK(first.rgb != second.rgb);
 }
 
-// (f) A Wipe half way: 2026 left of the edge, 1993 right of it, a 2-pixel white seam between.
+// (f) A Wipe half way: 2026 left of the edge, 1993 right of it, a 4-pixel refractive edge between (the 1993
+// side through glass, brightened, never white).
 void testWipe(evo::gfx::Context& ctx) {
     constexpr std::uint32_t kWidth = 160, kHeight = 90;
     Harness harness(ctx, kWidth, kHeight);
@@ -308,27 +323,30 @@ void testWipe(evo::gfx::Context& ctx) {
     save(split, "wipe-160x90.png");
     CHECK(now.rgb != then.rgb);
 
-    // The pixel centres within one pixel of the edge (x = 80) are columns 79 and 80.
-    for (std::uint32_t x = 0; x < 79; ++x)
+    // The pixel centres within two pixels of the edge (x = 80) are columns 78 to 81.
+    for (std::uint32_t x = 0; x < 78; ++x)
         CHECK(split.sameColumn(now, x));
-    for (std::uint32_t x = 81; x < kWidth; ++x)
+    for (std::uint32_t x = 82; x < kWidth; ++x)
         CHECK(split.sameColumn(then, x));
-    for (std::uint32_t y = 0; y < kHeight; ++y)
-        for (std::uint32_t x = 79; x <= 80; ++x)
-            CHECK(split.at(x, y)[0] == 255 && split.at(x, y)[1] == 255 && split.at(x, y)[2] == 255);
+    for (std::uint32_t x = 78; x <= 81; ++x) {
+        CHECK(!split.sameColumn(now, x) && !split.sameColumn(then, x));
+        for (std::uint32_t y = 0; y < kHeight; ++y)
+            CHECK(!(split.at(x, y)[0] == 255 && split.at(x, y)[1] == 255 && split.at(x, y)[2] == 255));
+    }
 }
 
-// (g) eraCut flashes white: +0.6 on every pixel, the black bars included.
+// (g) A BeatSwap's eraCut flashes white: +0.25 on every pixel, the black bars included.
 void testEraCutFlash(evo::gfx::Context& ctx) {
     Harness harness(ctx, 160, 90);
     TimelineFrame frame = retroFrame(2, 1.0);
+    frame.transition = Transition::BeatSwap;
     const Picture plain = harness.render(frame);
     frame.eraCut = 1.0f;
     const Picture flash = harness.render(frame);
     std::printf("eraCut: mean %.1f -> %.1f, bar pixel %d\n", plain.mean(), flash.mean(), flash.at(0, 0)[0]);
-    CHECK(flash.mean() > plain.mean() + 100.0);
+    CHECK(flash.mean() > plain.mean() + 40.0);
     CHECK(plain.black(0, 0));
-    CHECK(flash.at(0, 0)[0] >= 152 && flash.at(0, 0)[0] <= 154); // 0.6 * 255 = 153
+    CHECK(flash.at(0, 0)[0] >= 63 && flash.at(0, 0)[0] <= 65); // 0.25 * 255 = 63.75
 }
 
 // The output sizes the HUD is checked at, with their HUD units.
@@ -886,10 +904,11 @@ void testPreparedEqualsLazy(evo::gfx::Context& ctx) {
 void testPrepareTimes(evo::gfx::Context& ctx) {
     Harness harness(ctx, modeSettings(160, 90, RenderMode::Export));
     evo::render::ModernStage& stage = harness.renderer().modern();
-    const std::vector<double> plasma{evo::show::chapterStart(3) + 1.0, evo::show::chapterStart(4) - 1.0};
-    harness.renderer().prepare(plasma);
+    // BOOT and CREDITS: 1993 only.
+    const std::vector<double> retroOnly{evo::show::chapterStart(0) + 1.0, evo::show::chapterStart(29) + 1.0};
+    harness.renderer().prepare(retroOnly);
     CHECK(stage.tracer() == nullptr && stage.gpuBytes() == 0);
-    const std::vector<double> mixed{plasma[0], studioNight(0.2).showSeconds, studioNight(0.9).showSeconds};
+    const std::vector<double> mixed{retroOnly[0], studioNight(0.2).showSeconds, studioNight(0.9).showSeconds};
     harness.renderer().prepare(mixed);
     CHECK(stage.tracer() != nullptr && stage.sceneGpu(evo::modern::SceneId::Studio) != nullptr);
     for (std::size_t id = 0; id < evo::modern::kSceneCount; ++id) // no other scene
@@ -900,6 +919,185 @@ void testPrepareTimes(evo::gfx::Context& ctx) {
     CHECK(stage.gpuBytes() == bytes);
     harness.renderer().prepareAll(); // every scene of the show: at least the Studio's bytes
     CHECK(stage.gpuBytes() >= bytes);
+}
+
+// --- Scene cuts (show/director.hpp) with a stub factory
+// -------------------------------------------------------
+
+// A Cornell box whose camera drifts with the show time and whose light takes the chapter's colour, so the
+// picture tells both the scene time and the chapter apart. One shot; it never samples the 1993 image.
+class DriftingBox final : public evo::modern::ModernScene {
+public:
+    DriftingBox() : scene_(evo::test::cornellBox()) {}
+    const evo::modern::SceneStatic& staticScene() const override { return scene_.statics; }
+    evo::modern::SceneFrame frame(const TimelineFrame& frame) const override {
+        evo::modern::SceneFrame f = scene_.frame;
+        f.camera = camera(frame);
+        f.materials = scene_.statics.materials;
+        const float hue = static_cast<float>(frame.chapter % 7) / 7.f;
+        f.materials[1].baseColor[2] = hue; // the red wall turns towards magenta with the chapter
+        return f;
+    }
+    evo::modern::Camera camera(const TimelineFrame& frame) const override {
+        evo::modern::Camera c = scene_.frame.camera;
+        const auto drift = static_cast<float>(std::sin(frame.showSeconds * 3.0));
+        c.eye.x += .4f * drift;
+        c.target.x += .2f * drift;
+        return c;
+    }
+    bool samplesRetro() const override { return false; }
+
+private:
+    evo::test::TestScene scene_;
+};
+
+// Every effect the megamix shows (FINALE itself is the room) on its own scene id, all of them drifting boxes;
+// every other effect on the placeholder.
+evo::modern::SceneId stubMap(Effect effect) {
+    using evo::modern::SceneId;
+    switch (effect) {
+    case Effect::Raytrace:
+        return SceneId::Spheres;
+    case Effect::City:
+        return SceneId::City;
+    case Effect::Dots:
+        return SceneId::Particles;
+    case Effect::Lens:
+        return SceneId::Lens;
+    case Effect::Glenz:
+        return SceneId::Glass;
+    case Effect::Tunnel:
+        return SceneId::Tunnel;
+    case Effect::Nebula:
+        return SceneId::Nebula;
+    case Effect::Wormhole:
+        return SceneId::Ship;
+    case Effect::Finale:
+        return SceneId::Studio;
+    case Effect::Galaxy:
+        return SceneId::Cosmos;
+    default:
+        return SceneId::Placeholder;
+    }
+}
+
+RenderSettings stubSettings(RenderMode mode, std::uint32_t spp) {
+    RenderSettings settings{160, 90};
+    settings.hud = false;
+    settings.mode = mode;
+    settings.spp = spp;
+    settings.maxBounces = 4;
+    settings.sceneFactory = [](evo::modern::SceneId id,
+                               evo::modern::SceneDetail) -> std::unique_ptr<evo::modern::ModernScene> {
+        if (id == evo::modern::SceneId::Placeholder)
+            return nullptr;
+        return std::make_unique<DriftingBox>();
+    };
+    settings.sceneMap = stubMap;
+    return settings;
+}
+
+// The middle of megamix row `row`.
+double megamixMiddle(int row) {
+    return (evo::show::megamixStart(row) + evo::show::megamixStart(row + 1)) * .5;
+}
+
+// A cut frame's 2026 picture is the picture of the cut's scene time byte for byte: in an export, every cut
+// row of the megamix (the held drop on two of its frames) against a fresh renderer at the source time, and
+// REBOOT's look ahead at GALAXY against the same frame moved into GALAXY's chapter. The FINALE output is that
+// picture (the director holds 2026 over the whole frame, no flash).
+void testCutEqualsSource(evo::gfx::Context& ctx) {
+    int cuts = 0;
+    for (int row = 0; row < static_cast<int>(evo::show::kMegamixShots.size()); ++row) {
+        const evo::show::MegamixShot& shot = evo::show::kMegamixShots[static_cast<std::size_t>(row)];
+        if (shot.source == Effect::Finale)
+            continue;
+        const TimelineFrame frame = evo::show::sampleTimeline(megamixMiddle(row));
+        const std::optional<evo::show::SceneCut> cut = evo::show::sceneCut(frame);
+        CHECK(cut.has_value());
+        const TimelineFrame source = evo::show::sampleTimeline(cut->showSeconds);
+        CHECK(source.effect == shot.source);
+
+        Harness finale(ctx, stubSettings(RenderMode::Export, 2));
+        Harness original(ctx, stubSettings(RenderMode::Export, 2));
+        const Picture cutPicture = finale.renderModern(frame);
+        CHECK(finale.renderer().lastStats().modernRendered && !finale.renderer().lastStats().retroRendered);
+        CHECK(original.renderModern(source).rgb == cutPicture.rgb);
+        CHECK(finale.render(frame).rgb == cutPicture.rgb); // the output: 2026 only, no flash
+        ++cuts;
+    }
+    CHECK(cuts == 9);
+
+    // The held drop: two frames of its row, the same picture.
+    const double drop = evo::show::megamixStart(static_cast<int>(evo::show::kMegamixShots.size()) - 1);
+    Harness held(ctx, stubSettings(RenderMode::Export, 2));
+    CHECK(held.renderModern(evo::show::sampleTimeline(drop + 1.0 / 60)).rgb ==
+          held.renderModern(evo::show::sampleTimeline(drop + 5.0 / 60)).rgb);
+
+    // REBOOT after D shows GALAXY's scene at its own time.
+    const TimelineFrame reboot = evo::show::sampleTimeline(evo::show::chapterStart(21) - 2.0);
+    CHECK(reboot.effect == Effect::Reboot && evo::show::sceneCut(reboot).has_value());
+    Harness ahead(ctx, stubSettings(RenderMode::Export, 2));
+    Harness moved(ctx, stubSettings(RenderMode::Export, 2));
+    const Picture galaxy = ahead.renderModern(reboot);
+    CHECK(moved.renderModern(evo::show::sceneFrame(reboot)).rgb == galaxy.rgb);
+    TimelineFrame unmoved = reboot; // the Studio stand-in REBOOT shows before D, at the same time
+    unmoved.effect = Effect::Finale;
+    unmoved.chapter = 20;
+    Harness studio(ctx, stubSettings(RenderMode::Export, 2));
+    CHECK(studio.renderModern(unmoved).rgb != galaxy.rgb);
+}
+
+// In the window, each cut resets the history (Chapter) and its first frame equals a 4-spp export of the
+// frame byte for byte; frames within a cut continue it; the room after D continues across frames.
+void testCutHistory(evo::gfx::Context& ctx) {
+    Harness window(ctx, stubSettings(RenderMode::Interactive, 1));
+    const auto stats = [&] { return window.renderer().lastStats(); };
+    const double room = megamixMiddle(5); // the room between GLENZ and TUNNEL
+    window.render(evo::show::sampleTimeline(room));
+    window.render(evo::show::sampleTimeline(room + 1.0 / 60));
+    CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
+
+    const std::vector<int> rows{7, 8, 9, 10}; // TUNNEL, NEBULA, WORMHOLE, the drop
+    for (const int row : rows) {
+        const TimelineFrame first = evo::show::sampleTimeline(evo::show::megamixStart(row) + 1e-4);
+        const Picture shown = window.render(first);
+        CHECK(stats().historyReset == HistoryReset::Chapter);
+        CHECK(stats().framesSinceReset == 0 && stats().spp == 4);
+        Harness exported(ctx, stubSettings(RenderMode::Export, 4));
+        CHECK(exported.render(first).rgb == shown.rgb);
+        window.render(evo::show::sampleTimeline(evo::show::megamixStart(row) + 1e-4 + 1.0 / 120));
+        CHECK(stats().historyReset == HistoryReset::None && stats().framesSinceReset == 1);
+    }
+    // D: back to the room, which then holds.
+    const double d = evo::show::megamixStart(static_cast<int>(evo::show::kMegamixShots.size()));
+    window.render(evo::show::sampleTimeline(d));
+    CHECK(stats().historyReset == HistoryReset::Chapter);
+    for (int i = 1; i <= 3; ++i) {
+        window.render(evo::show::sampleTimeline(d + i / 60.0));
+        CHECK(stats().historyReset == HistoryReset::None &&
+              stats().framesSinceReset == static_cast<std::uint32_t>(i));
+    }
+}
+
+// prepare(times) builds the scenes of the frames' cuts: FINALE's times prepare every source of the megamix
+// and the room, and nothing else; REBOOT's after D prepare GALAXY's.
+void testPrepareCuts(evo::gfx::Context& ctx) {
+    using evo::modern::SceneId;
+    Harness harness(ctx, stubSettings(RenderMode::Export, 1));
+    evo::render::ModernStage& stage = harness.renderer().modern();
+    std::vector<double> finale;
+    for (double t = evo::show::chapterStart(9); t < evo::show::chapterStart(10); t += 1.0 / 60)
+        finale.push_back(t);
+    harness.renderer().prepare(finale);
+    for (const SceneId id :
+         {SceneId::Spheres, SceneId::City, SceneId::Particles, SceneId::Lens, SceneId::Glass, SceneId::Tunnel,
+          SceneId::Nebula, SceneId::Ship, SceneId::Studio})
+        CHECK(stage.sceneGpu(id) != nullptr);
+    CHECK(stage.sceneGpu(SceneId::Cosmos) == nullptr && stage.sceneGpu(SceneId::Singularity) == nullptr);
+    const std::vector<double> reboot{evo::show::chapterStart(21) - 1.0};
+    harness.renderer().prepare(reboot);
+    CHECK(stage.sceneGpu(SceneId::Cosmos) != nullptr);
 }
 
 void testRejectsEmptySize(evo::gfx::Context& ctx) {
@@ -954,6 +1152,9 @@ int main() {
             testStudioResize(ctx);
             testPreparedEqualsLazy(ctx);
             testPrepareTimes(ctx);
+            testCutEqualsSource(ctx);
+            testCutHistory(ctx);
+            testPrepareCuts(ctx);
             testRejectsEmptySize(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }

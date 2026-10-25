@@ -2,11 +2,16 @@
 
 // The era compositor: blends the 1993 screen (the CRT pass's output) and the 2026 image by the frame's era
 // state, both at the output size.
-//   Wipe            2026 left of x = wipe * width, 1993 right of it (2026 sweeps in from the left), with a
-//                   2-pixel white seam while the wipe runs;
-//   Portal          a cross-fade by era (until the Studio exists);
-//   Cut, BeatSwap   era selects the whole frame: 2026 from 0.5, 1993 below.
-// eraCut then flashes the whole frame white: + 0.6 * eraCut.
+//   Wipe            2026 left of x = wipe * width, 1993 right of it (2026 sweeps in from the left). While the
+//                   wipe runs, the line is a strip of glass 4 pixels wide laid over it: the pixel centres within
+//                   [-2, 2) pixels of the line show the 1993 side refracted through it, sampled (linearly
+//                   between columns) refractOffset(u) <= 2 pixels to the right, which stretches the 1993 pixels
+//                   next to the line across the strip and meets the plain 1993 side with no step in position
+//                   or slope, and brightened by kEdgeGain. Every other pixel is untouched.
+//   Portal          a cross-fade by era;
+//   Cut, BeatSwap   era selects the whole frame: 2026 from 0.5, 1993 below (the renderer passes era 1 where
+//                   the director holds the 2026 picture: FINALE).
+// flash then whitens the whole frame: + flash (show::eraFlash, already scaled).
 // An image whose visible bit is clear counts as black and is never read: its stage may not have run this
 // frame, so it can hold a stale picture (or none).
 
@@ -23,7 +28,7 @@ layout(push_constant) uniform PushConstants {
     uint height;
     float era;    // 0 = 1993, 1 = 2026
     float wipe;   // the Wipe edge as a fraction of the width
-    float eraCut; // [0, 1]: the white flash of a cut
+    float flash;  // [0, 1]: the white added over the whole frame (show::eraFlash)
     uint transition;
     uint crt;
     uint visible; // bit 0 the 1993 screen, bit 1 the modern image
@@ -36,7 +41,27 @@ const uint kWipe = 3u;
 const uint kRetroVisible = 1u;
 const uint kModernVisible = 2u;
 
-const float kFlash = 0.6;
+// The refractive wipe edge: its half width in pixels and how much light the glass gathers.
+const float kEdgeHalfWidth = 2.0;
+const float kEdgeGain = 1.03;
+
+// How far right of a pixel centre u pixels from the line (u in [-2, 2)) the glass shows the 1993 side: 2 at
+// the strip's left side (the 1993 picture right at the line), easing to 0 with zero slope at its right side.
+float refractOffset(float u) {
+    float d = kEdgeHalfWidth - u;
+    return d * d / (4.0 * kEdgeHalfWidth);
+}
+
+// The 1993 screen at a horizontal position in pixels (pixel centres at i + 0.5), linear between columns.
+vec3 retroAt(float x, uint y) {
+    float s = x - 0.5;
+    int left = int(floor(s));
+    float f = s - float(left);
+    int last = int(pc.width) - 1;
+    vec3 a = imageLoad(retroScreen, ivec2(clamp(left, 0, last), int(y))).rgb;
+    vec3 b = imageLoad(retroScreen, ivec2(clamp(left + 1, 0, last), int(y))).rgb;
+    return mix(a, b, f);
+}
 
 void main() {
     uvec2 pixel = gl_GlobalInvocationID.xy;
@@ -58,17 +83,21 @@ void main() {
     vec3 color;
     if (pc.transition == kWipe) {
         color = x < wipeEdge ? now : then;
-        // The pixel centres in [edge - 1, edge + 1): exactly two columns wherever the edge falls.
+        // The pixel centres in [edge - 2, edge + 2): exactly four columns wherever the edge falls.
         float fromEdge = x - wipeEdge;
-        if (pc.wipe > 0.0 && pc.wipe < 1.0 && fromEdge >= -1.0 && fromEdge < 1.0) {
-            color = vec3(1.0);
+        if (pc.wipe > 0.0 && pc.wipe < 1.0 && fromEdge >= -kEdgeHalfWidth && fromEdge < kEdgeHalfWidth) {
+            vec3 glass = vec3(0.0);
+            if ((pc.visible & kRetroVisible) != 0u) {
+                glass = retroAt(x + refractOffset(fromEdge), pixel.y);
+            }
+            color = min(glass * kEdgeGain, vec3(1.0));
         }
     } else if (pc.transition == kPortal) {
         color = mix(then, now, clamp(pc.era, 0.0, 1.0));
     } else {
         color = pc.era >= 0.5 ? now : then;
     }
-    color = min(color + kFlash * clamp(pc.eraCut, 0.0, 1.0), vec3(1.0));
+    color = min(color + clamp(pc.flash, 0.0, 1.0), vec3(1.0));
 
     imageStore(outImage, ivec2(pixel), vec4(color, 1.0));
 }

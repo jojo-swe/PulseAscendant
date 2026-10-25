@@ -1,6 +1,7 @@
 #include "render/compositor.hpp"
 
 #include "gfx/paths.hpp"
+#include "show/director.hpp"
 
 #include <array>
 
@@ -12,9 +13,9 @@ namespace {
 struct CompositorPushConstants {
     std::uint32_t width;
     std::uint32_t height;
-    float era;
+    float era; // 1 over the whole frame where the director holds the 2026 picture (show::holdsModern)
     float wipe;
-    float eraCut;
+    float flash; // the white added over the frame: show::eraFlash (crt.comp names the slot eraCut)
     std::uint32_t transition; // a show::Transition value
     std::uint32_t crt;        // 0 = plain pillarbox
     std::uint32_t visible;    // kRetroVisible | kModernVisible
@@ -77,10 +78,14 @@ void Compositor::render(VkCommandBuffer cmd, gfx::Image& retro, gfx::Image& mode
                         const show::TimelineFrame& frame, bool crt, std::uint32_t visible,
                         std::span<const text::Item> overlay) {
     const VkExtent2D size = output_.extent();
-    const CompositorPushConstants push{size.width,    size.height,
-                                       frame.era,     frame.wipe,
-                                       frame.eraCut,  static_cast<std::uint32_t>(frame.transition),
-                                       crt ? 1u : 0u, visible & (kRetroVisible | kModernVisible)};
+    const CompositorPushConstants push{size.width,
+                                       size.height,
+                                       show::holdsModern(frame) ? 1.f : frame.era,
+                                       frame.wipe,
+                                       show::eraFlash(frame),
+                                       static_cast<std::uint32_t>(frame.transition),
+                                       crt ? 1u : 0u,
+                                       visible & (kRetroVisible | kModernVisible)};
 
     // Without the retro bit the screen is never read: no CRT pass (the retro image may be stale).
     if ((visible & kRetroVisible) != 0) {

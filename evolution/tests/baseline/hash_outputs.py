@@ -28,6 +28,8 @@ Then regenerated after merging the Particles and Spheres scenes: only stream_dot
 Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the city, so stream_studio_ascent
 changed; every other output, the Studio's included, stayed byte for byte.
 Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
+Then regenerated for the FINALE megamix's director: after D the room carries the 1993 card, so finale_50 and
+stream_finale changed (mean luminance -0.13 %); no other output moved.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

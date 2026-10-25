@@ -1213,3 +1213,11 @@ add_dependencies(scene_city_test evo_modern_sphere_shaders evo_modern_intersecti
 # [detail]` renders 480x270 stills of both chapters instead of the tests.
 target_sources(evo_modern PRIVATE src/modern/scenes/nebula.cpp)
 evo_scene_test(nebula)
+
+# --- Step 6 B1: the director (scene cuts, the FINALE megamix, REBOOT's look ahead, the wipe edge) ------------
+
+# The cut list on the CPU: the megamix rows on the beat grid ending on D, their sources inside their shots, the
+# room after D, REBOOT's GALAXY frames, the cards' era and the compositor's flash policy.
+add_executable(director_test tests/director_test.cpp)
+target_link_libraries(director_test PRIVATE evo_show)
+add_test(NAME director COMMAND director_test)
