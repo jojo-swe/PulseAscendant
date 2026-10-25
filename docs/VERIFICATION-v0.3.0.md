@@ -83,7 +83,7 @@ ELF behöver libOpenGL.so.0, libstdc++.so.6, libm.so.6, libgcc_s.so.1, libc.so.6
 
 [Alla klipp och förskjutningar](../music/direction.json) är spårbara. Detta stöder klippens anslagstajmning tekniskt; musikaliska fraser och upplevd synk behöver fortfarande bedömas genom lyssning.
 
-Akt I:s första 299 s jämfördes sample för sample med bevarad full WAV. Därefter följer en sekunds likaeffektsuttoning. Den gemensamma WAV:en jämfördes bit för bit med de tre separata aktfilerna. Båda nya låtarna används i sin helhet, utan tillagda toningar eller hastighetsändring. Källa, Suno-ID, sampleantal och SHA-256 finns i music/asset-receipt*.json och music/show-audio.json.
+Akt I:s första 299 s jämfördes sample för sample med bevarad full WAV. Därefter följer en sekunds likaeffektsuttoning. Den gemensamma WAV:en jämfördes bit för bit med de tre separata aktfilerna. Båda nya låtarna används i sin helhet, utan tillagda toningar eller hastighetsändring. Källa, sampleantal och SHA-256 finns i music/asset-receipt*.json och music/show-audio.json.
 
 ## Videoexport och kvalitetsbedömning
 
