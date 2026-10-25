@@ -1140,3 +1140,11 @@ target_include_directories(medium_test PRIVATE tests)
 target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(medium_test medium_test_shaders)
 evo_gpu_test(medium medium_test)
+
+# --- Step 5 Task 18: Nebula (PLASMA, NEBULA) ------------------------------------------------------------------
+
+# The scene (src/modern/scenes/nebula.cpp) and its bake, star and splat shaders (shaders/modern/nebula_*.comp,
+# compiled by the shaders/modern glob as modern_nebula_*.comp.spv). `scene_nebula_test --look <dir> [spp]
+# [detail]` renders 480x270 stills of both chapters instead of the tests.
+target_sources(evo_modern PRIVATE src/modern/scenes/nebula.cpp)
+evo_scene_test(nebula)

@@ -13,15 +13,23 @@
 //   offset by kMediumBounceOffset), whose radiance goes to the volume layer. One loop serves both paths: the
 //   ray tracing code is inlined once (lavapipe compiles a pipeline as one function).
 //
-// The primary segment (camera to the first surface, or to infinity) is estimated twice:
+// The primary segment (camera to the first surface, or to infinity) is estimated three ways:
 // - T: the fog's closed form times the grid's residual ratio tracking, a continuous estimate;
-// - L_v: kPrimaryScatterSamples points sampled along the segment from a mixture of the fog's collision
-//   density (truncated to the segment) and the grid's majorant (piecewise constant over its cells), chosen in
-//   proportion to each medium's chance of a collision. Every point adds its emission and a next-event estimate
-//   weighted T(t) / (pdf(t) * kPrimaryScatterSamples), with T(t) from the same ratio-tracking walk, so every
-//   pixel gets a dense estimate (which the denoiser's volume history clamp needs). One of the points, chosen
-//   uniformly, continues as a full path (weight T(t) / pdf(t)), which counts multiple scattering; its
-//   bounces use another range of the per-bounce random dimensions than the surface path's.
+// - the grid's emission: integrated along the same ratio-tracking walk, sub-step by sub-step (about one voxel
+//   each), as the integral of T(t) S(t) with the control's exponential and S (= sigma_a Le) linear between
+//   the sub-step's ends. That is a quadrature at the grid's own resolution rather than a few random points,
+//   so a glowing nebula's emission (fine fronts, knots) carries no sampling noise of its own; only the
+//   walk's residual factors vary between samples, and they are nearly 1 where the density is smooth over a
+//   voxel;
+// - the in-scattered light: kPrimaryScatterSamples points sampled along the segment from a mixture of the
+//   fog's collision density (truncated to the segment), the grid's majorant (piecewise constant over its
+//   cells) and, when the frame has only a few tree lights (kEquiangularMaxLights; a star field's), equiangular
+//   sampling towards one of them (Kulla and Fajardo 2012), which follows the 1 / r^2 of a light inside the
+//   medium. Every point adds a next-event estimate weighted T(t) / (pdf(t) * kPrimaryScatterSamples), pdf
+//   the mixture's density, with T(t) from the same ratio-tracking walk, so every pixel gets a dense estimate
+//   (which the denoiser's volume history clamp needs). One of the points, chosen uniformly, continues as a
+//   full path (weight T(t) / pdf(t)), which counts multiple scattering; its bounces use another range of the
+//   per-bounce random dimensions than the surface path's.
 // The surface path is traced unattenuated; the denoiser's combine pass computes T * surface + L_v.
 
 const uint kMediumSegmentSurface = 0u;   // no collision: the surface (or the sky) the ray found
@@ -31,6 +39,10 @@ const uint kMediumSegmentEnd = 2u;       // the path ends in the medium
 // stay below it).
 const uint kMediumBounceOffset = 64u;
 const uint kPrimaryScatterSamples = 4u; // modern::kPrimaryScatterSamples
+// Equiangular sampling of the primary segment's points serves frames with 1 to this many tree lights (stars
+// in a nebula); a city's thousands of lamps leave it to the majorant. The share of the points it draws:
+const uint kEquiangularMaxLights = 64u;   // modern::kEquiangularMaxLights
+const float kEquiangularShare = 0.5;
 
 // The scattering at a point in the media: a mixture of up to two Henyey-Greenstein lobes. value(cos) =
 // weight0 HG(g0) + weight1 HG(g1) (what a direction contributes), pdf(cos) = select0 HG(g0) + (1 - select0)
@@ -292,10 +304,28 @@ float majorantAt(GridRay r, float t, float ta, float tb) {
     return mediumData.densityScale * texelFetch(mediumMajorant, cell, 0).r;
 }
 
+// The integral of exp(-tau s) over s in [0, 1] (E0) and of s exp(-tau s) (E1), accurate for small tau: the
+// weights of a sub-step's two ends when a linear source is integrated against the control's exponential.
+float expMoment0(float tau) {
+    return tau < 1e-3 ? 1.0 - tau * (0.5 - tau / 6.0) : (1.0 - exp(-tau)) / tau;
+}
+float expMoment1(float tau) {
+    return tau < 0.05 ? 0.5 - tau * (1.0 / 3.0 - tau * 0.125) : (1.0 - (1.0 + tau) * exp(-tau)) / (tau * tau);
+}
+
+// The grid's emitted radiance per unit length at a baked voxel value: sigma_a Le.
+vec3 gridSource(vec4 voxel) {
+    float sigma = mediumData.densityScale * max(voxel.r, 0.0);
+    return sigma * (1.0 - mediumData.gridAlbedo) * mediumData.emissionScale * max(voxel.gba, vec3(0.0));
+}
+
 // Residual ratio tracking (as gridTransmittance) over the walk, which also estimates the transmittance at
-// each of the sorted points ts (each estimate unbiased on its own); returns the walk's whole transmittance.
-float gridTransmittanceAt(GridRay r, GridWalk w, float ts[kPrimaryScatterSamples],
-                          out float transmittances[kPrimaryScatterSamples]) {
+// each of the sorted points ts (each estimate unbiased on its own) and adds the grid's emission seen along
+// the walk into `emitted` (each sub-step's integral of T S, the control's exponential against S linear
+// between the sub-step's ends, times the walk's transmittance at the sub-step's start and the fog's there);
+// returns the walk's whole transmittance. o, d: the world ray (for the fog).
+float gridTransmittanceAt(GridRay r, GridWalk w, vec3 o, vec3 d, float ts[kPrimaryScatterSamples],
+                          out float transmittances[kPrimaryScatterSamples], inout vec3 emitted) {
     uint next = 0u;
     for (uint k = 0u; k < kPrimaryScatterSamples; ++k) {
         transmittances[k] = 1.0;
@@ -303,6 +333,7 @@ float gridTransmittanceAt(GridRay r, GridWalk w, float ts[kPrimaryScatterSamples
     while (next < kPrimaryScatterSamples && ts[next] <= w.t) {
         next += 1u; // before the box
     }
+    bool emits = mediumData.emissionScale > 0.0 && maxComponent(1.0 - mediumData.gridAlbedo) > 0.0;
     float transmittance = 1.0;
     uint steps = 0u;
     float s0;
@@ -312,12 +343,22 @@ float gridTransmittanceAt(GridRay r, GridWalk w, float ts[kPrimaryScatterSamples
         bool dense = majorant > 0.0;
         uint n = dense ? gridSubsteps(r, s0, s1) : 1u;
         float h = (s1 - s0) / float(n);
-        float sigmaA = dense ? min(gridSigma(r.origin + r.direction * s0), majorant) : 0.0;
+        vec4 voxelA = dense ? gridVoxel(r.origin + r.direction * s0) : vec4(0.0);
+        float sigmaA = min(mediumData.densityScale * max(voxelA.r, 0.0), majorant);
+        vec3 sourceA = emits ? gridSource(voxelA) : vec3(0.0);
         for (uint i = 0u; i < n; ++i) {
             float a = s0 + float(i) * h;
             float b = i + 1u == n ? s1 : a + h;
-            float sigmaB = dense ? min(gridSigma(r.origin + r.direction * b), majorant) : 0.0;
+            vec4 voxelB = dense ? gridVoxel(r.origin + r.direction * b) : vec4(0.0);
+            float sigmaB = min(mediumData.densityScale * max(voxelB.r, 0.0), majorant);
+            vec3 sourceB = emits ? gridSource(voxelB) : vec3(0.0);
             float slope = (sigmaB - sigmaA) / max(b - a, 1e-30);
+            if (emits && maxComponent(sourceA + sourceB) > 0.0) {
+                float tau = 0.5 * (sigmaA + sigmaB) * (b - a);
+                float m0 = expMoment0(tau), m1 = expMoment1(tau);
+                float fog = fogActive() ? exp(-fogDepth(o, d, 0.0, a)) : 1.0;
+                emitted += transmittance * fog * (b - a) * (sourceA * (m0 - m1) + sourceB * m1);
+            }
             float here = a;
             float controlHere = sigmaA;
             for (;;) {
@@ -348,6 +389,7 @@ float gridTransmittanceAt(GridRay r, GridWalk w, float ts[kPrimaryScatterSamples
                 break;
             }
             sigmaA = sigmaB;
+            sourceA = sourceB;
         }
     }
     while (next < kPrimaryScatterSamples) {
@@ -355,6 +397,47 @@ float gridTransmittanceAt(GridRay r, GridWalk w, float ts[kPrimaryScatterSamples
         next += 1u;
     }
     return transmittance;
+}
+
+// Equiangular sampling towards tree light k over [ta, tb] of the ray o + t d: the light's centre projects
+// to t = delta at distance D from the ray, and the angles thetaA, thetaB bound the interval as seen from it.
+struct Equiangular {
+    float delta;
+    float distance;
+    float thetaA;
+    float thetaB;
+};
+
+Equiangular equiangularFor(vec3 o, vec3 d, uint k, float ta, float tb) {
+    TreeLight light = treeLights[k];
+    Equiangular e;
+    vec3 toCentre = light.center - o;
+    e.delta = dot(toCentre, d);
+    // Never closer than half the light's radius: a ray through the sphere ends on it anyway.
+    e.distance = max(length(toCentre - e.delta * d), max(0.5 * light.radius, 1e-4));
+    e.thetaA = atan(ta - e.delta, e.distance);
+    e.thetaB = atan(tb - e.delta, e.distance);
+    return e;
+}
+
+float equiangularPdf(Equiangular e, float t) {
+    float span = e.thetaB - e.thetaA;
+    if (!(span > 0.0)) {
+        return 0.0;
+    }
+    float x = t - e.delta;
+    return e.distance / (span * (e.distance * e.distance + x * x));
+}
+
+// How much of the primary segment's equiangular share light k gets, before normalising: its power over the
+// square of its distance from the ray (a light near the ray lights more of the segment brightly).
+float equiangularWeight(vec3 o, vec3 d, uint k) {
+    TreeLight light = treeLights[k];
+    vec3 toCentre = light.center - o;
+    float along = dot(toCentre, d);
+    float d2 = max(dot(toCentre, toCentre) - along * along, light.radius * light.radius);
+    float power = luminance(light.emission) * light.radius * light.radius;
+    return isFinite(power) && power > 0.0 ? power / max(d2, 1e-8) : 0.0;
 }
 
 // The primary segment from o along d to tHit (< 0: a miss): sets gMediumVolume (its next-event estimates
@@ -383,14 +466,38 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
     }
     float pickFog = fogMass / total;
 
-    // The points: a mixture of the fog's collision density over [0, tEnd] and the grid's majorant.
+    // Equiangular sampling towards the frame's few tree lights, over the grid's part of the segment: one
+    // light per point, chosen by equiangularWeight.
+    uint equiangularLights = gridMass > 0.0 && frame.treeLightCount <= kEquiangularMaxLights
+                                 ? frame.treeLightCount : 0u;
+    float weightSum = 0.0;
+    for (uint k = 0u; k < equiangularLights; ++k) {
+        weightSum += equiangularWeight(o, d, k);
+    }
+    float equiangularShare = weightSum > 0.0 && isFinite(weightSum) ? kEquiangularShare : 0.0;
+
+    // The points: a mixture of the fog's collision density over [0, tEnd], the grid's majorant and the
+    // equiangular densities.
     float ts[kPrimaryScatterSamples];
     float pdfs[kPrimaryScatterSamples];
     for (uint k = 0u; k < kPrimaryScatterSamples; ++k) {
         float strategy = mediumRand();
         float u = (float(k) + mediumRand()) / float(kPrimaryScatterSamples);
         float t;
-        if (strategy < pickFog) {
+        if (strategy < equiangularShare) {
+            float pick = mediumRand() * weightSum;
+            uint light = equiangularLights - 1u;
+            for (uint j = 0u; j < equiangularLights; ++j) {
+                float w = equiangularWeight(o, d, j);
+                if (pick < w) {
+                    light = j;
+                    break;
+                }
+                pick -= w;
+            }
+            Equiangular e = equiangularFor(o, d, light, start.t, start.tEnd);
+            t = clamp(e.delta + e.distance * tan(mix(e.thetaA, e.thetaB, u)), start.t, start.tEnd);
+        } else if ((strategy - equiangularShare) < pickFog * (1.0 - equiangularShare)) {
             float x = u * fogMass; // the depth -ln(1 - x)
             float tau = x < 1e-3 ? x * (1.0 + 0.5 * x) : -log(1.0 - x);
             t = min(fogInvert(o, d, 0.0, tau), tEnd);
@@ -403,6 +510,17 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
         }
         if (gridMass > 0.0 && gridDepth > 0.0) {
             pdf += (1.0 - pickFog) * majorantAt(gr, t, start.t, start.tEnd) / gridDepth;
+        }
+        pdf *= 1.0 - equiangularShare;
+        if (equiangularShare > 0.0) {
+            float mixed = 0.0;
+            for (uint j = 0u; j < equiangularLights; ++j) {
+                float w = equiangularWeight(o, d, j);
+                if (w > 0.0) {
+                    mixed += w * equiangularPdf(equiangularFor(o, d, j, start.t, start.tEnd), t);
+                }
+            }
+            pdf += equiangularShare * mixed / weightSum;
         }
         ts[k] = t;
         pdfs[k] = pdf;
@@ -420,8 +538,9 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
     }
     float gridT[kPrimaryScatterSamples];
     float gridEnd = 1.0;
+    vec3 radiance = vec3(0.0); // the grid's emission, integrated along the walk
     if (inGrid) {
-        gridEnd = gridTransmittanceAt(gr, start, ts, gridT);
+        gridEnd = gridTransmittanceAt(gr, start, o, d, ts, gridT, radiance);
     } else {
         for (uint k = 0u; k < kPrimaryScatterSamples; ++k) {
             gridT[k] = 1.0;
@@ -430,7 +549,6 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
 
     bool lit = nee && frame.maxBounces >= 1u && (frame.lightCount > 0u || frame.environmentSelect > 0.0);
     uint chosen = min(uint(mediumRand() * float(kPrimaryScatterSamples)), kPrimaryScatterSamples - 1u);
-    vec3 radiance = vec3(0.0);
     for (uint k = 0u; k < kPrimaryScatterSamples; ++k) {
         float transmittance = exp(-fogDepth(o, d, 0.0, ts[k])) * gridT[k];
         if (!(pdfs[k] > 0.0) || !(transmittance > 0.0)) {
@@ -442,15 +560,10 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
             fogScatter = fogSigma(x) * mediumData.fogAlbedo;
         }
         vec3 gridScatter = vec3(0.0);
-        vec3 emission = vec3(0.0);
         if (inGrid) {
-            vec4 voxel = gridVoxel(gr.origin + gr.direction * ts[k]);
-            float sigma = mediumData.densityScale * max(voxel.r, 0.0);
-            gridScatter = sigma * mediumData.gridAlbedo;
-            emission = sigma * (1.0 - mediumData.gridAlbedo) * mediumData.emissionScale * max(voxel.gba, vec3(0.0));
+            gridScatter = gridSigma(gr.origin + gr.direction * ts[k]) * mediumData.gridAlbedo;
         }
         float weight = transmittance / (pdfs[k] * float(kPrimaryScatterSamples));
-        radiance += weight * emission;
         float fogShare = luminance(fogScatter), gridShare = luminance(gridScatter);
         if (!(fogShare + gridShare > 0.0)) {
             continue;
