@@ -579,6 +579,8 @@ Studio::Studio(SceneDetail) {
         add(kMoonMesh, kMoonGlow, moon, kMoonLight);
         lights[kMoonLight] = rectLightForQuad(moon, kMoonSize, kMoonSize, rt::LightKind::Emitter,
                                               emitted(static_.materials[kMoonGlow]), kMoonWeight);
+        // Seen only through the window: light selection gives it no weight where the window hides it.
+        lights[kMoonLight].gate = kWindowLight;
     }
 
     // --- The desk: a coated wooden top on brushed steel legs with a rail at the back.

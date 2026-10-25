@@ -305,7 +305,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     u.spp = settings.spp; // spp and instanceCount: not read by the shaders (for a debugger's eyes)
     u.maxBounces = settings.maxBounces;
     u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
-              (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u);
+              (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
+              (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u);
     u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
     u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
     u.clampIndirect = settings.clampIndirect;

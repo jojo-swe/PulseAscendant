@@ -68,8 +68,7 @@ public:
         kMoonLight = 3,
         kLightCount
     };
-    static constexpr float kScreenWeight = 0.3f, kLampWeight = 0.45f, kWindowWeight = 0.1f,
-                           kMoonWeight = 0.15f;
+    static constexpr float kScreenWeight = 1.f, kLampWeight = 1.f, kWindowWeight = 1.f, kMoonWeight = 1.f;
     // Towards the moon (normalised): rt::kMoonDirection (rt/sky_constants.hpp), the direction
     // shaders/rt/sky.glsl centres the moon's glow on. The moon's emitter stands 4 m out from the window along
     // it.
