@@ -253,7 +253,7 @@ Camera makeCamera(Vec3 eye, Vec3 target, Vec3 up, float fov, std::uint32_t shot,
     return c;
 }
 
-// The bible's lenses as vertical fields of view at 16:9.
+// The show's lenses (24, 35 and 50 mm, 36 mm equivalent) as vertical fields of view at 16:9.
 constexpr float kLens24 = 45.2f, kLens35 = 31.6f, kLens50 = 23.1f;
 
 float chapterLength(const show::TimelineFrame& frame) {
