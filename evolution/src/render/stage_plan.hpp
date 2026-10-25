@@ -27,7 +27,7 @@ struct StagePlan {
 // 2026 while era > 0 and 1993 while era < 1; Wipe shows 2026 while wipe > 0 and 1993 while wipe < 1.
 // Runs: the retro stage when it is visible or the modern stage samples it (the Studio's CRT); the modern
 // stage when it is visible, and in the window also through a BeatSwap, Portal or Wipe chapter while it is
-// hidden, so its history stays warm for the next swap (Decision 7). Exports skip it strictly.
+// hidden, so its history stays warm for the next swap. Exports skip it strictly.
 StagePlan planStages(const show::TimelineFrame& frame, RenderMode mode, bool modernSamplesRetro);
 
 // The path tracer's bounce limit: `requested`, or the mode's default for 0.
@@ -114,7 +114,7 @@ inline constexpr std::uint32_t kExportFilterSpp = 16;
 
 // The denoiser settings of a frame: the window keeps history and always runs 3 a-trous iterations; exports
 // keep none, run 3 below kExportFilterSpp and 0 from it, where the firefly filter (k = 4) takes over
-// (Decision 16; never in the window). Both: 5 iterations at history length <= 3 and 4 on the volume layer.
+// (never in the window). Both: 5 iterations at history length <= 3 and 4 on the volume layer.
 post::DenoiseSettings denoiseSettingsFor(const HistoryState& state);
 
 } // namespace evo::render

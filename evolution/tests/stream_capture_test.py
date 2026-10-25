@@ -1,4 +1,4 @@
-"""Seeking and export see the same show (Review Focus 4): for one time T in every chapter, frame 5 of a
+"""Seeking and export see the same show: for one time T in every chapter, frame 5 of a
 --render-stream that starts 5 frames before T must equal a fresh --capture-dir at T, byte for byte, at
 160x90. The stream renders frames T - 5/fps .. T in one process, so its retro stage has rendered (and cached)
 the retro frames before T; the capture renders T from nothing. Any effect state carried over from earlier
@@ -17,10 +17,10 @@ The stream runs at 64 fps, faster than every retro rate (35 and 10 Hz), so conse
 retro cache inside one retro frame; every time compared is a multiple of 1/64 s, so
 T - 5/64 + 5/64 is exactly T in double precision.
 
-Step 4 (Review Focus 2): the path-traced chapters, with the TLAS rebuilt every frame, and the export stays
+Step 4: the path-traced chapters, with the TLAS rebuilt every frame, and the export stays
 pure: no temporal history, the seed from the show time alone. Path tracing is what costs time on lavapipe, so
 the chapters come in two parts that CTest runs in parallel: "studio", the traced part (every chapter whose
---show-info "scene" is not "Placeholder": the Studio's five, Decision 1 of step 4, and each step 5 scene's
+--show-info "scene" is not "Placeholder": the Studio's five and each step 5 scene's
 chapters as they land), and "rest" (every other chapter); "all" runs both. CTest passes --spp 2 and
 --detail 0.004 (the lavapipe detail: the scenes' particle, splat and voxel counts shrink, so a scene task's
 chapters stay quick here) at 160x90.
@@ -45,7 +45,7 @@ LEAD = 5  # frames before T
 FRACTION = 0.5  # where in a chapter T lies
 NATURAL_EXTRA = 0.3  # where a chapter that shows both eras is compared unforced a second time
 ERA_VALUE = {1993: "0", 2026: "1"}  # EVO_FORCE_ERA
-# The chapters that show the Studio in step 4 (Decision 1): the "studio" part, path traced.
+# The chapters that show the Studio in step 4: the "studio" part, path traced.
 STUDIO_CHAPTERS = ("FINALE", "PORTAL", "STUDIO NIGHT", "RETURN", "REBOOT")
 PARTS = ("studio", "rest", "all")
 
@@ -150,7 +150,7 @@ def main(exe, tmpdir, part, extra):
     titles = [chapter["title"] for chapter in info["chapters"]]
     if any(title not in titles for title in STUDIO_CHAPTERS):
         sys.exit(f"--show-info lacks a Studio chapter: expected {STUDIO_CHAPTERS} among {titles}")
-    # Every Studio chapter path traces the Studio (Decision 1), or this part would compare placeholders where
+    # Every Studio chapter path traces the Studio, or this part would compare placeholders where
     # it means to compare path-traced frames.
     studio_scenes = {chapter["title"]: chapter["scene"] for chapter in info["chapters"]
                      if chapter["title"] in STUDIO_CHAPTERS}

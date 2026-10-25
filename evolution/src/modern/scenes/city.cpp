@@ -22,11 +22,12 @@ using show::Effect;
 constexpr float kPi = std::numbers::pi_v<float>;
 constexpr float kCell = static_cast<float>(retro::kCityCell);
 constexpr float kStreet = static_cast<float>(retro::kCityStreet);
-constexpr float kKerb = 0.5f * kStreet;  // a street's half width: the kerb's distance from its centre line
-constexpr float kPavement = 0.15f;       // the lots' paving stands this high over the street
-constexpr float kFarReach = 9000.f;      // the ground reaches this far from the origin
-constexpr float kFarCity = 3800.f;       // and the far city's blocks this far
+constexpr float kKerb = 0.5f * kStreet;   // a street's half width: the kerb's distance from its centre line
+constexpr float kPavement = 0.15f;        // the lots' paving stands this high over the street
+constexpr float kFarReach = 9000.f;       // the ground reaches this far from the origin
+constexpr float kFarCity = 3800.f;        // and the far city's blocks this far
 constexpr std::uint32_t kSalt = 0x23C17u; // this scene's own hash salts start here
+constexpr std::array<std::uint32_t, 3> kCloudGrid = {192, 48, 192}; // ASCENT's cloud deck, voxels
 
 // --- Small helpers -----------------------------------------------------------------------------------------
 
@@ -134,8 +135,9 @@ enum Material : std::uint32_t {
     kWindowFrame,
     kMaterialCount
 };
-constexpr std::uint32_t kFacadeMaterials[] = {kBrick,      kStone,      kConcreteFacade, kDarkConcrete, kWhiteBands,
-                                              kGlassBlue,  kGlassBronze, kGlassGreen,    kRoundGlass};
+constexpr std::uint32_t kFacadeMaterials[] = {kBrick,        kStone,      kConcreteFacade,
+                                              kDarkConcrete, kWhiteBands, kGlassBlue,
+                                              kGlassBronze,  kGlassGreen, kRoundGlass};
 
 // A car's pair of light trails, 1.3 m apart, each 0.16 m wide and 0.1 m high, one unit long along z with
 // uv.x = z + 0.5 (the tail 0, the head 1).
@@ -240,7 +242,8 @@ rt::Mesh carBody() {
 }
 
 rt::Mesh carCabin() {
-    const std::array<Vec2, 5> profile = {{{0.85f, 0.97f}, {0.15f, 1.42f}, {-1.05f, 1.44f}, {-1.75f, 0.99f}, {-0.4f, 0.95f}}};
+    const std::array<Vec2, 5> profile = {
+        {{0.85f, 0.97f}, {0.15f, 1.42f}, {-1.05f, 1.44f}, {-1.75f, 0.99f}, {-0.4f, 0.95f}}};
     return extrude(profile, 0.8f);
 }
 
@@ -307,7 +310,6 @@ rt::Material emitter(Vec3 color, float scale) {
 // radiance scale).
 struct Weather {
     float wetness = 0.85f;
-    float rooms = 1.f;
     float signs = 1.f;     // every sign's level
     float farSign = 1.f;   // CITY NIGHT's red sign
     float windowsOn = 0.f; // METROPOLIS's flip: the share of dark windows switched on
@@ -344,14 +346,16 @@ std::vector<rt::Material> buildMaterials(const Weather& w) {
 
     // Facades: wall, its roughness, the glass, a lit room's radiance, the floor height.
     const Vec3 warmRoom{1.5f, 1.4f, 1.3f}, officeRoom{1.3f, 1.35f, 1.4f};
-    m[kBrick] = facade(rt::Pattern::CityPunched, {0.24f, 0.11f, 0.07f}, 0.85f, {0.02f, 0.022f, 0.025f}, warmRoom, 3.3f);
-    m[kStone] = facade(rt::Pattern::CityPunched, {0.34f, 0.31f, 0.26f}, 0.8f, {0.02f, 0.022f, 0.025f}, warmRoom, 3.6f);
-    m[kConcreteFacade] =
-        facade(rt::Pattern::CityBands, {0.27f, 0.27f, 0.26f}, 0.85f, {0.015f, 0.02f, 0.025f}, officeRoom, 3.5f);
-    m[kDarkConcrete] =
-        facade(rt::Pattern::CityPunched, {0.13f, 0.13f, 0.135f}, 0.75f, {0.02f, 0.02f, 0.022f}, warmRoom, 3.2f);
-    m[kWhiteBands] =
-        facade(rt::Pattern::CityBands, {0.42f, 0.41f, 0.39f}, 0.6f, {0.012f, 0.018f, 0.024f}, officeRoom, 3.7f);
+    m[kBrick] = facade(rt::Pattern::CityPunched, {0.24f, 0.11f, 0.07f}, 0.85f, {0.02f, 0.022f, 0.025f},
+                       warmRoom, 3.3f);
+    m[kStone] = facade(rt::Pattern::CityPunched, {0.34f, 0.31f, 0.26f}, 0.8f, {0.02f, 0.022f, 0.025f},
+                       warmRoom, 3.6f);
+    m[kConcreteFacade] = facade(rt::Pattern::CityBands, {0.27f, 0.27f, 0.26f}, 0.85f, {0.015f, 0.02f, 0.025f},
+                                officeRoom, 3.5f);
+    m[kDarkConcrete] = facade(rt::Pattern::CityPunched, {0.13f, 0.13f, 0.135f}, 0.75f, {0.02f, 0.02f, 0.022f},
+                              warmRoom, 3.2f);
+    m[kWhiteBands] = facade(rt::Pattern::CityBands, {0.42f, 0.41f, 0.39f}, 0.6f, {0.012f, 0.018f, 0.024f},
+                            officeRoom, 3.7f);
     m[kGlassBlue] = facade(rt::Pattern::CityCurtain, {0.16f, 0.17f, 0.19f}, 0.35f, {0.012f, 0.022f, 0.038f},
                            officeRoom, 3.9f, 1.f);
     m[kGlassBronze] = facade(rt::Pattern::CityCurtain, {0.28f, 0.2f, 0.13f}, 0.3f, {0.03f, 0.022f, 0.014f},
@@ -360,8 +364,6 @@ std::vector<rt::Material> buildMaterials(const Weather& w) {
                             officeRoom, 3.8f, 1.f);
     m[kRoundGlass] = facade(rt::Pattern::CityRound, {0.55f, 0.56f, 0.58f}, 0.3f, {0.014f, 0.02f, 0.03f},
                             officeRoom, 4.1f, 1.f);
-    for (std::uint32_t f : kFacadeMaterials)
-        m[f].emissionScale = w.rooms;
 
     m[kRooftop] = pbr({0.2f, 0.2f, 0.2f}, 0.85f);
     m[kRooftop].pattern = static_cast<std::uint32_t>(rt::Pattern::Concrete);
@@ -421,11 +423,11 @@ float segmentDistance(float px, float pz, float ax, float az, float bx, float bz
 
 // The chapters' camera paths on the ground, as segments (what a lower detail keeps the city around).
 constexpr std::array<std::array<float, 4>, 7> kPaths = {{
-    {0.f, -60.f, 0.f, 160.f},                  // VECTOR CITY down the main street
-    {0.f, 160.f, 330.f, 470.f},                // and its turn
-    {525.f, 525.f, 760.f, 820.f},              // ASCENT
+    {0.f, -60.f, 0.f, 160.f},                     // VECTOR CITY down the main street
+    {0.f, 160.f, 330.f, 470.f},                   // and its turn
+    {525.f, 525.f, 760.f, 820.f},                 // ASCENT
     {kNightStreetX, 180.f, kNightStreetX, 560.f}, // CITY NIGHT
-    {kAvenueX, 200.f, kAvenueX, 1500.f},       // METROPOLIS
+    {kAvenueX, 200.f, kAvenueX, 1500.f},          // METROPOLIS
     {kAvenueX, 1500.f, kAvenueX, 1900.f},
     {kDowntownX - 200.f, kDowntownZ - 200.f, kDowntownX + 200.f, kDowntownZ + 200.f},
 }};
@@ -486,7 +488,8 @@ float cityLampScale(bool switching, float seconds, float start, float wave, std:
         const float at = start + wave / kWaveSpeed + 0.25f * unitHash(hash);
         const float strike = std::clamp((seconds - at) / 0.35f, 0.f, 1.f);
         const bool flickering = strike > 0.f && strike < 1.f;
-        const float flicker = flickering && std::sin(90.f * seconds + 7.f * draw(hash, 1)) <= 0.f ? 0.3f : 1.f;
+        const float flicker =
+            flickering && std::sin(90.f * seconds + 7.f * draw(hash, 1)) <= 0.f ? 0.3f : 1.f;
         on = draw(hash, 2) < 0.12f ? 1.f : strike * flicker;
     }
     return draw(hash, 3) < 0.015f ? 0.f : on; // a dead lamp
@@ -527,12 +530,14 @@ void City::buildCity(SceneDetail detail) {
         for (int i = kCityMinLotI; i < kCityMaxLotI; ++i) {
             if (!cityLotKept(i, m, detail))
                 continue;
-            const float cx = kCell * (static_cast<float>(i) + 0.5f), cz = kCell * (static_cast<float>(m) + 0.5f);
+            const float cx = kCell * (static_cast<float>(i) + 0.5f),
+                        cz = kCell * (static_cast<float>(m) + 0.5f);
             const float lift = downtownLift(cx, cz);
             // The lot's paving and its lamp posts.
             add(kRoundedBox, kPaving,
                 place({cx, 0.5f * kPavement, cz}, {kCell - kStreet, kPavement, kCell - kStreet}));
-            add(kLampKit, kDarkMetal, translate({kCell * static_cast<float>(i), 0.f, kCell * static_cast<float>(m)}));
+            add(kLampKit, kDarkMetal,
+                translate({kCell * static_cast<float>(i), 0.f, kCell * static_cast<float>(m)}));
             for (std::uint32_t k = 0; k < kCityLampsPerLot; ++k) {
                 const std::uint32_t h = lotHash(i, m, 100 + k);
                 const bool modern = lift > 1.4f || unitHash(h) < 0.15f;
@@ -564,11 +569,17 @@ void City::buildCity(SceneDetail detail) {
                 const float s = unitHash(lotHash(i, m, salt + 2));
                 std::uint32_t material;
                 if (height > 60.f)
-                    material = s < 0.3f ? kGlassBlue : s < 0.5f ? kGlassBronze : s < 0.65f ? kGlassGreen
-                                                     : s < 0.85f ? kWhiteBands : kConcreteFacade;
+                    material = s < 0.3f    ? kGlassBlue
+                               : s < 0.5f  ? kGlassBronze
+                               : s < 0.65f ? kGlassGreen
+                               : s < 0.85f ? kWhiteBands
+                                           : kConcreteFacade;
                 else
-                    material = s < 0.35f ? kBrick : s < 0.55f ? kStone : s < 0.72f ? kConcreteFacade
-                                                  : s < 0.86f ? kDarkConcrete : kWhiteBands;
+                    material = s < 0.35f   ? kBrick
+                               : s < 0.55f ? kStone
+                               : s < 0.72f ? kConcreteFacade
+                               : s < 0.86f ? kDarkConcrete
+                                           : kWhiteBands;
                 if (height <= 60.f) {
                     // A 1993 building: its box, its set-back tower, plant on the roof.
                     add(kUnitBox, material, place({bx, 0.5f * height, bz}, {w, height, d}));
@@ -576,7 +587,8 @@ void City::buildCity(SceneDetail detail) {
                     if (bd.tower) {
                         const float tx0 = static_cast<float>(bd.top.x0), tx1 = static_cast<float>(bd.top.x1);
                         const float tz0 = static_cast<float>(bd.top.z0), tz1 = static_cast<float>(bd.top.z1);
-                        const float top = static_cast<float>(bd.top.y1) * (lift > 1.05f ? height / static_cast<float>(bd.base.y1) : 1.f);
+                        const float top = static_cast<float>(bd.top.y1) *
+                                          (lift > 1.05f ? height / static_cast<float>(bd.base.y1) : 1.f);
                         add(kUnitBox, material,
                             place({0.5f * (tx0 + tx1), 0.5f * (height + top), 0.5f * (tz0 + tz1)},
                                   {tx1 - tx0, top - height, tz1 - tz0}));
@@ -587,10 +599,12 @@ void City::buildCity(SceneDetail detail) {
                         // A water tank (brick and stone) or a plant room.
                         if (material == kBrick || material == kStone)
                             add(kUnitCylinder, kRooftop,
-                                place({bx + 0.2f * w * (plant - 0.2f), height + 2.f, bz - 0.15f * d}, {3.2f, 4.f, 3.2f}));
+                                place({bx + 0.2f * w * (plant - 0.2f), height + 2.f, bz - 0.15f * d},
+                                      {3.2f, 4.f, 3.2f}));
                         else
                             add(kRoundedBox, kRooftop,
-                                place({bx - 0.1f * w, height + 1.4f, bz + 0.1f * d}, {0.35f * w, 2.8f, 0.3f * d}));
+                                place({bx - 0.1f * w, height + 1.4f, bz + 0.1f * d},
+                                      {0.35f * w, 2.8f, 0.3f * d}));
                     }
                     if (roof >= kBeaconHeight)
                         beacons.push_back({{bx, roof + 0.6f, bz}, unitHash(lotHash(i, m, salt + 4))});
@@ -599,7 +613,8 @@ void City::buildCity(SceneDetail detail) {
 
                 // A tower: a podium, a shaft in up to three set-back tiers (or a round shaft), a crown.
                 const float podium = 9.f + 6.f * unitHash(lotHash(i, m, salt + 5));
-                add(kUnitBox, s < 0.5f ? kStone : kDarkConcrete, place({bx, 0.5f * podium, bz}, {w, podium, d}));
+                add(kUnitBox, s < 0.5f ? kStone : kDarkConcrete,
+                    place({bx, 0.5f * podium, bz}, {w, podium, d}));
                 const bool roundShaft = unitHash(lotHash(i, m, salt + 6)) < 0.22f && std::min(w, d) > 18.f;
                 float sw = 0.82f * w, sd = 0.82f * d;
                 float base = podium;
@@ -611,8 +626,11 @@ void City::buildCity(SceneDetail detail) {
                 } else {
                     const int tiers = 1 + static_cast<int>(unitHash(lotHash(i, m, salt + 7)) * 3.f);
                     for (int t = 0; t < tiers; ++t) {
-                        const float tierTop = t + 1 == tiers ? height : base + (height - base) * (0.5f + 0.2f * static_cast<float>(t));
-                        add(kUnitBox, material, place({bx, 0.5f * (base + tierTop), bz}, {sw, tierTop - base, sd}));
+                        const float tierTop =
+                            t + 1 == tiers ? height
+                                           : base + (height - base) * (0.5f + 0.2f * static_cast<float>(t));
+                        add(kUnitBox, material,
+                            place({bx, 0.5f * (base + tierTop), bz}, {sw, tierTop - base, sd}));
                         base = tierTop;
                         sw *= 0.78f;
                         sd *= 0.78f;
@@ -628,10 +646,12 @@ void City::buildCity(SceneDetail detail) {
                 } else if (crown < 0.7f) {
                     const float mast = 18.f + 40.f * unitHash(lotHash(i, m, salt + 9));
                     add(kRoundedBox, kRooftop, place({bx, top + 2.f, bz}, {0.5f * sw, 4.f, 0.5f * sd}));
-                    add(kUnitCylinder, kDarkMetal, place({bx, top + 4.f + 0.5f * mast, bz}, {0.9f, mast, 0.9f}));
+                    add(kUnitCylinder, kDarkMetal,
+                        place({bx, top + 4.f + 0.5f * mast, bz}, {0.9f, mast, 0.9f}));
                     beaconAt = top + 4.f + mast + 0.6f;
                 } else {
-                    add(kRoundedBox, kRooftop, place({bx + 0.1f * sw, top + 3.f, bz}, {0.45f * sw, 6.f, 0.4f * sd}));
+                    add(kRoundedBox, kRooftop,
+                        place({bx + 0.1f * sw, top + 3.f, bz}, {0.45f * sw, 6.f, 0.4f * sd}));
                     beaconAt = top + 6.6f;
                 }
                 beacons.push_back({{bx, beaconAt, bz}, unitHash(lotHash(i, m, salt + 10))});
@@ -648,17 +668,20 @@ void City::buildCity(SceneDetail detail) {
         const int i1 = static_cast<int>(std::ceil((midX + kFarCity) / kCell));
         const int m0 = static_cast<int>(std::floor((midZ - kFarCity) / kCell));
         const int m1 = static_cast<int>(std::ceil((midZ + kFarCity) / kCell));
-        constexpr std::uint32_t kFarStyles[] = {kBrick, kStone, kConcreteFacade, kDarkConcrete, kWhiteBands, kGlassBlue};
+        constexpr std::uint32_t kFarStyles[] = {kBrick,        kStone,      kConcreteFacade,
+                                                kDarkConcrete, kWhiteBands, kGlassBlue};
         for (int m = m0; m < m1; ++m)
             for (int i = i0; i < i1; ++i) {
                 if (i >= kCityMinLotI && i < kCityMaxLotI && m >= kCityMinLotM && m < kCityMaxLotM)
                     continue;
                 const std::uint32_t h = lotHash(i, m, 900);
                 const float inset = 1.5f + 5.f * unitHash(h * 3u);
-                const float w = kCell - kStreet - 2.f * inset, d = kCell - kStreet - 2.f * (1.5f + 5.f * unitHash(h * 5u));
+                const float w = kCell - kStreet - 2.f * inset,
+                            d = kCell - kStreet - 2.f * (1.5f + 5.f * unitHash(h * 5u));
                 const float u = unitHash(h * 7u);
                 const float height = 6.f + 30.f * u * u * u + 8.f * unitHash(h * 11u);
-                const float cx = kCell * (static_cast<float>(i) + 0.5f), cz = kCell * (static_cast<float>(m) + 0.5f);
+                const float cx = kCell * (static_cast<float>(i) + 0.5f),
+                            cz = kCell * (static_cast<float>(m) + 0.5f);
                 add(kUnitBox, kFarStyles[(h >> 9) % 6], place({cx, 0.5f * height, cz}, {w, height, d}));
                 ++stats_.buildings;
             }
@@ -673,11 +696,13 @@ void City::buildCity(SceneDetail detail) {
         const float roomX0 = kRoomWindowX - 2.5f, roomX1 = kRoomWindowX + 2.5f, roomZ0 = z1 - 4.6f;
         const float wall = 0.3f;
         const std::uint32_t mat = kBrick;
-        auto boxFrom = [&](float ax, float ay, float az, float bx, float by, float bz, std::uint32_t material) {
-            add(kUnitBox, material, place({0.5f * (ax + bx), 0.5f * (ay + by), 0.5f * (az + bz)}, {bx - ax, by - ay, bz - az}));
+        auto boxFrom = [&](float ax, float ay, float az, float bx, float by, float bz,
+                           std::uint32_t material) {
+            add(kUnitBox, material,
+                place({0.5f * (ax + bx), 0.5f * (ay + by), 0.5f * (az + bz)}, {bx - ax, by - ay, bz - az}));
         };
-        boxFrom(x0, 0.f, z0, x1, floorY, z1, mat);       // below the room's floor
-        boxFrom(x0, ceilingY, z0, x1, h, z1, mat);       // above its ceiling
+        boxFrom(x0, 0.f, z0, x1, floorY, z1, mat);          // below the room's floor
+        boxFrom(x0, ceilingY, z0, x1, h, z1, mat);          // above its ceiling
         boxFrom(x0, floorY, z0, roomX0, ceilingY, z1, mat); // beside it
         boxFrom(roomX1, floorY, z0, x1, ceilingY, z1, mat);
         boxFrom(roomX0, floorY, z0, roomX1, ceilingY, roomZ0, kPlaster); // the room's back
@@ -731,7 +756,8 @@ void City::buildCity(SceneDetail detail) {
             for (int side = -1; side <= 1; side += 2) {
                 const float sx = kAvenueX + static_cast<float>(side) * 6.9f;
                 add(kUnitBox, kDarkMetal, place({sx, deck + 3.6f, z}, {0.14f, 7.2f, 0.14f}));
-                add(kUnitBox, kDarkMetal, place({sx - static_cast<float>(side) * 1.f, deck + 7.15f, z}, {2.f, 0.1f, 0.1f}));
+                add(kUnitBox, kDarkMetal,
+                    place({sx - static_cast<float>(side) * 1.f, deck + 7.15f, z}, {2.f, 0.1f, 0.1f}));
                 sphere({sx - static_cast<float>(side) * 1.9f, deck + 6.85f, z}, kCityLampRadius, led, kLed);
                 lampWave_.push_back(0.f);
                 lampHash_.push_back(rt::pcgHash(0xA7E0u + avenueLamps));
@@ -777,8 +803,8 @@ struct Sign {
 // standing out from the facades, from the lots' hashes.
 std::vector<Sign> citySigns() {
     std::vector<Sign> signs;
-    auto street = [&](float facadeLeft, float facadeRight, float from, float to, std::uint32_t salt, int maxCount,
-                      std::vector<std::uint32_t> palette) {
+    auto street = [&](float facadeLeft, float facadeRight, float from, float to, std::uint32_t salt,
+                      int maxCount, std::vector<std::uint32_t> palette) {
         int count = 0;
         for (float z = from; z < to && count < maxCount; ++count) {
             const std::uint32_t h = rt::pcgHash(salt + static_cast<std::uint32_t>(count) * 0x9E3779B9u);
@@ -808,7 +834,8 @@ std::vector<Sign> citySigns() {
     };
     // CITY NIGHT's street: few signs, sodium and white; VECTOR CITY's: the 1993 city's gold, ember, white and
     // one red.
-    street(kNightStreetX - kKerb - 1.5f, kNightStreetX + kKerb + 1.5f, 400.f, 545.f, 0x51A1u, 14, {0, 1, 2, 7});
+    street(kNightStreetX - kKerb - 1.5f, kNightStreetX + kKerb + 1.5f, 400.f, 545.f, 0x51A1u, 14,
+           {0, 1, 2, 7});
     street(-kKerb - 1.5f, kKerb + 1.5f, 172.f, 330.f, 0x51B7u, 14, {5, 4, 1, 3, 5});
     // The red sign at the far end of CITY NIGHT's street, a blade read from down the street.
     Sign far;
@@ -829,13 +856,16 @@ std::vector<Sign> citySigns() {
 City::City(SceneDetail detail) : detail_(detail) {
     static_.meshes = buildMeshes();
     static_.splatShader = "modern_city_splats.comp.spv";
+    static_.mediumShader = "modern_city_clouds.comp.spv";
+    static_.capacity.mediumGrid = {kCloudGrid[0], kCloudGrid[1], kCloudGrid[2]};
     static_.materials = buildMaterials({});
     buildCity(detail);
 
     // Signs: a quad (two for a blade) per sign, each a rect light; a blade's housing between its faces.
     for (const Sign& s : citySigns()) {
         const std::uint32_t material = s.material;
-        const Vec3 e = colorOf(static_.materials[material].emission) * static_.materials[material].emissionScale;
+        const Vec3 e =
+            colorOf(static_.materials[material].emission) * static_.materials[material].emissionScale;
         auto face = [&](Vec3 centre, float yaw) {
             const rt::Mat34 t = place(centre, yaw, {s.width, s.height, 1.f});
             SceneInstance in{kSignQuad, material, t};
@@ -845,7 +875,8 @@ City::City(SceneDetail detail) : detail_(detail) {
             signMaterial_.push_back(material);
         };
         if (s.blade) {
-            instances_.push_back({kUnitBox, kDarkMetal, place(s.centre, {0.12f, s.height + 0.1f, s.width + 0.1f})});
+            instances_.push_back(
+                {kUnitBox, kDarkMetal, place(s.centre, {0.12f, s.height + 0.1f, s.width + 0.1f})});
             // Faces along +z and -z (the blade stands out across x, read from up and down the street).
             face(s.centre + Vec3{0.f, 0.f, 0.065f}, 0.f);
             face(s.centre - Vec3{0.f, 0.f, 0.065f}, kPi);
@@ -904,52 +935,36 @@ City::City(SceneDetail detail) : detail_(detail) {
     static_.capacity.materials = kMaterialCount;
     static_.capacity.spheres = n;
     static_.capacity.treeLights = n;
-    std::uint32_t splats = 0;
-    for (Effect e : {Effect::City, Effect::Ascent, Effect::CityNight, Effect::Metropolis}) {
-        show::TimelineFrame probe;
-        probe.effect = e;
-        splats = std::max(splats, splatsFor(probe).count);
-    }
-    static_.capacity.splats = splats;
+    show::TimelineFrame probe;
+    probe.effect = Effect::CityNight;
+    static_.capacity.splats = splatsFor(probe)->count;
 }
 
 // --- Splats ------------------------------------------------------------------------------------------------
 
 namespace {
 
-// shaders/modern/city_splats.comp's layout: the near lamps' glow (the lots within 2 of the camera's), the
-// farther lamps' (within kGlowWindow lots), the rain's kRainPoints points per drop.
-constexpr std::uint32_t kNearLotsSide = 5, kGlowWindow = 20, kRainPoints = 8;
-constexpr std::uint32_t kFullNearPoints = 1024, kFullRainDrops = 60000;
+// shaders/modern/city_splats.comp's layout: kRainPoints points per drop.
+constexpr std::uint32_t kRainPoints = 8;
+constexpr std::uint32_t kFullRainDrops = 60000;
 
 } // namespace
 
-SplatFrame City::splatsFor(const show::TimelineFrame& frame) const {
+std::optional<SplatFrame> City::splatsFor(const show::TimelineFrame& frame) const {
+    // The rain: CITY NIGHT only (the capacity probe, a frame without a duration, asks for the most).
+    if (frame.effect != Effect::CityNight)
+        return std::nullopt;
     const float detail = std::clamp(detail_.scale, 0.f, 1.f);
-    const auto nearPoints = std::max(16u, static_cast<std::uint32_t>(std::lround(kFullNearPoints * detail)));
-    const bool rain = frame.effect == Effect::CityNight;
     const auto baseDrops = std::max(2000u, static_cast<std::uint32_t>(std::lround(kFullRainDrops * detail)));
-    std::uint32_t drops = 0;
-    if (rain) {
+    std::uint32_t drops = 2 * baseDrops;
+    Vec3 velocity{};
+    if (frame.chapterDuration > 0.0) {
         // The rain doubles over the bar after the accent.
         const float bar = std::max(cityBar(frame, 1) - cityBar(frame, 0), 0.5f);
-        const float more = smooth((static_cast<float>(frame.localSeconds - frame.accentSeconds)) / bar);
-        drops = static_cast<std::uint32_t>(std::lround(baseDrops * (1.f + more)));
-    }
-    float sigma = 0.006f; // the night air's in-scattering, per metre
-    if (frame.effect == Effect::City)
-        sigma = 0.004f;
-    else if (rain)
-        sigma = 0.02f;
-    const std::uint32_t farSide = 2 * kGlowWindow + 1;
-    SplatFrame s;
-    s.count = kNearLotsSide * kNearLotsSide * kCityLampsPerLot * nearPoints + farSide * farSide * kCityLampsPerLot +
-              kRainPoints * drops;
-    if (frame.effect == Effect::CityNight && frame.chapterDuration <= 0.0)
-        s.count += kRainPoints * 2 * baseDrops; // the capacity: twice the rain
-    // The camera's velocity over the last 1/60 s (the rain streaks along the drops' velocity relative to it).
-    Vec3 velocity{};
-    if (rain) {
+        const float more = smooth(static_cast<float>(frame.localSeconds - frame.accentSeconds) / bar);
+        drops = static_cast<std::uint32_t>(std::lround(static_cast<float>(baseDrops) * (1.f + more)));
+        // The camera's velocity over the last 1/60 s: the streaks run along the drops' velocity relative to
+        // it.
         show::TimelineFrame before = frame;
         constexpr double kStep = 1.0 / 60.0;
         before.localSeconds -= kStep;
@@ -959,11 +974,25 @@ SplatFrame City::splatsFor(const show::TimelineFrame& frame) const {
         if (length(velocity) > 20.f)
             velocity = Vec3{}; // a cut
     }
+    SplatFrame s;
+    s.count = kRainPoints * drops;
     const float kept = detail >= 1.f ? 0.f : std::max(260.f, 2200.f * std::sqrt(detail));
-    s.params = {sigma, static_cast<float>(nearPoints), static_cast<float>(drops), kept,
-                velocity.x, velocity.y, velocity.z, frame.effect == Effect::City ? 1.f : 0.f,
-                frame.chapterDuration > 0.0 ? cityBar(frame, 0) : 0.f, 16.f, 22.f, 1.f,
-                static_cast<float>(kGlowWindow), 0.f, 0.f, 0.f};
+    s.params = {static_cast<float>(drops),
+                kept,
+                16.f,
+                22.f,
+                velocity.x,
+                velocity.y,
+                velocity.z,
+                1.f,
+                0.f,
+                0.f,
+                0.f,
+                0.f,
+                0.f,
+                0.f,
+                0.f,
+                0.f};
     return s;
 }
 
@@ -978,7 +1007,8 @@ std::vector<City::Lane> City::lanesFor(Effect effect) const {
         for (int lane = 0; lane < 4; ++lane) {
             if (inner && (lane == 1 || lane == 3))
                 continue; // two lanes only, the kerb lanes left free (where the camera walks)
-            const float offset = lane < 2 ? -1.6f - 2.8f * static_cast<float>(lane) : 1.6f + 2.8f * static_cast<float>(lane - 2);
+            const float offset = lane < 2 ? -1.6f - 2.8f * static_cast<float>(lane)
+                                          : 1.6f + 2.8f * static_cast<float>(lane - 2);
             // Right-hand traffic: lanes on +x of a z street run +z.
             const float dir = offset > 0.f ? 1.f : -1.f;
             Lane l;
@@ -990,6 +1020,7 @@ std::vector<City::Lane> City::lanesFor(Effect effect) const {
             l.cars = std::max(1u, static_cast<std::uint32_t>(l.length / spacing));
             l.seed = rt::pcgHash(salt * 31u + static_cast<std::uint32_t>(lane));
             l.head = dot(l.direction, view) < 0.f;
+            l.avenue = alongZ && at == kAvenueX && y > 0.f;
             lanes.push_back(l);
         }
     };
@@ -1046,20 +1077,29 @@ void City::addTraffic(SceneFrame& f, Effect effect, float seconds) const {
             const float slot = (static_cast<float>(c) + 0.35f * unitHash(h)) / static_cast<float>(l.cars);
             float s = slot * l.length + l.speed * seconds;
             s = s - l.length * std::floor(s / l.length);
-            const Vec3 at = l.origin + l.direction * s;
+            Vec3 at = l.origin + l.direction * s;
             const float yaw = std::atan2(l.direction.x, l.direction.z);
+            // On the elevated avenue the car follows its climb (pitched along the slope it drives).
+            float pitch = 0.f;
+            if (l.avenue) {
+                at.y = cityAvenueHeight(at.z);
+                const float rise = cityAvenueHeight(at.z + 0.5f * l.direction.z) -
+                                   cityAvenueHeight(at.z - 0.5f * l.direction.z);
+                pitch = -std::atan(rise);
+            }
+            const rt::Mat34 car =
+                compose(translate(at), compose(rotate({0, 1, 0}, yaw), rotate({1, 0, 0}, pitch)));
             const std::uint32_t paint = kCarPaint0 + (h >> 7) % 4;
             if (bodies) {
-                const rt::Mat34 car = place(at, yaw, {1.f, 1.f, 1.f});
                 f.instances.push_back({kCarBody, paint, car});
                 f.instances.push_back({kCarCabin, kCarGlass, car});
                 f.instances.push_back({kCarWheels, kTyre, car});
             }
+            // The trail runs back from the head lights (or from the tail), in the car's frame.
             const float trail = std::max(0.6f, l.speed * exposure);
-            const float back = l.head ? -2.25f : -2.3f; // trails run back from the head lights or the tail
-            const Vec3 front = l.head ? at + l.direction * 2.26f : at + l.direction * back;
-            const Vec3 centre = front - l.direction * (0.5f * trail) + Vec3{0.f, 0.68f, 0.f};
-            f.instances.push_back({kTrail, l.head ? kHeadTrail : kTailTrail, place(centre, yaw, {1.f, 1.f, trail})});
+            const float front = l.head ? 2.26f : -2.3f;
+            f.instances.push_back({kTrail, l.head ? kHeadTrail : kTailTrail,
+                                   compose(car, place({0.f, 0.68f, front - 0.5f * trail}, {1.f, 1.f, trail}))});
         }
     }
 }
@@ -1123,7 +1163,9 @@ constexpr float kLens24 = 45.2f, kLens35 = 32.f, kLens50 = 23.1f, kLens85 = 13.6
 // ASCENT's crane: out of the window, over the roofs, up to where the cloud deck lies (its top at
 // kAscentCloudTop, burst through on D), level on the accent, the city a floor of light below.
 constexpr float kAscentWindowZ = kCell * (kStudioLotM + 1) - kKerb - 1.5f; // the tower's +z face
-constexpr float kAscentCloudTop = 380.f;
+constexpr float kAscentCloudTop = 380.f, kAscentCloudBase = 255.f;
+// The deck's box (world) and voxels.
+constexpr Vec3 kCloudLo{200.f, kAscentCloudBase, 250.f}, kCloudHi{1400.f, kAscentCloudTop + 30.f, 1450.f};
 
 } // namespace
 
@@ -1165,8 +1207,8 @@ Weather cityWeather(const show::TimelineFrame& frame) {
         break;
     }
     case Effect::CityNight: {
-        // Sleet: every street wet, the puddles rippling on the kick; the red sign at the far end strikes on the
-        // accent (a fluorescent flicker for 0.4 s).
+        // Sleet: every street wet, the puddles rippling on the kick; the red sign at the far end strikes on
+        // the accent (a fluorescent flicker for 0.4 s).
         w.wetness = 1.f;
         w.ripples = 0.012f + 0.05f * frame.kick;
         const float t = local - accent;
@@ -1190,6 +1232,66 @@ Weather cityWeather(const show::TimelineFrame& frame) {
 }
 
 } // namespace
+
+MediumFrame cityMedium(const show::TimelineFrame& frame) {
+    MediumFrame m;
+    const auto local = static_cast<float>(frame.localSeconds);
+    FogDesc fog;
+    fog.albedo = {0.93f, 0.94f, 0.96f};
+    fog.phaseG = 0.72f; // forward scattering: the halos round the lamps, the shafts under the moon
+    switch (frame.effect) {
+    case Effect::City:
+        fog.density = 0.0028f * (0.75f + 0.5f * frame.energy); // thickening with the music
+        fog.falloff = 1.f / 45.f;
+        break;
+    case Effect::CityNight:
+        fog.density = 0.011f; // sleet: wet air, sodium halos
+        fog.falloff = 1.f / 35.f;
+        break;
+    case Effect::Ascent:
+        fog.density = 0.003f;
+        fog.falloff = 1.f / 60.f;
+        break;
+    default: // METROPOLIS: hazy low down, thinning as the avenue climbs
+        fog.density = 0.0045f;
+        fog.falloff = 1.f / 70.f;
+        break;
+    }
+    m.fog = fog;
+    if (frame.effect == Effect::Ascent) {
+        // The cloud deck: the camera climbs into it and bursts out of its top on D; over the last two bars
+        // before D the deck opens round the climb on each kick.
+        const float d = cityBar(frame, 0), before = cityBar(frame, -2);
+        const float progress = std::clamp((local - before) / std::max(d - before, 0.1f), 0.f, 1.f);
+        GridMediumDesc grid;
+        grid.size = kCloudGrid;
+        grid.worldToMedium = mediumBox(kCloudLo, kCloudHi);
+        grid.densityScale = 1.f;
+        grid.albedo = {0.97f, 0.97f, 0.98f};
+        grid.phaseG = 0.7f; // silver edges towards the moon
+        const Vec3 size = kCloudHi - kCloudLo;
+        const float wind = 0.004f * local;
+        const Vec3 climb{kRoomWindowX + 50.f, 0.f, kAscentWindowZ + 80.f}; // where the camera bursts out
+        grid.params = {0.5f,
+                       0.014f,
+                       0.8f * progress * (0.55f + 0.45f * frame.kick),
+                       0.f,
+                       wind,
+                       0.3f * wind,
+                       (climb.x - kCloudLo.x) / size.x,
+                       (climb.z - kCloudLo.z) / size.z,
+                       0.025f,
+                       0.f,
+                       0.f,
+                       0.f,
+                       0.f,
+                       0.f,
+                       0.f,
+                       0.f};
+        m.grid = grid;
+    }
+    return m;
+}
 
 std::vector<CityShot> cityShots(const show::TimelineFrame& frame) {
     const auto duration = static_cast<float>(frame.chapterDuration);
@@ -1230,7 +1332,8 @@ Camera cityCamera(const show::TimelineFrame& frame) {
             const retro::CityPose p = retro::cityPoseAt(frame, static_cast<double>(local));
             const auto yaw = static_cast<float>(p.yaw), pitch = static_cast<float>(p.pitch),
                        roll = static_cast<float>(p.roll);
-            const Vec3 forward{std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)};
+            const Vec3 forward{std::sin(yaw) * std::cos(pitch), std::sin(pitch),
+                               std::cos(yaw) * std::cos(pitch)};
             const Vec3 right{std::cos(yaw), 0.f, -std::sin(yaw)};
             const Vec3 level = cross(forward, right);
             const Vec3 up = level * std::cos(roll) + right * std::sin(roll);
@@ -1255,8 +1358,8 @@ Camera cityCamera(const show::TimelineFrame& frame) {
         return c;
     }
     case Effect::Ascent: {
-        // One crane, 35 mm: out of the window, over the roofs, up through the cloud deck to burst out on D, and
-        // level on the accent with the city a floor of light below.
+        // One crane, 35 mm: out of the window, over the roofs, up through the cloud deck to burst out on D,
+        // and level on the accent with the city a floor of light below.
         const float W = kRoomWindowX, Y = kRoomWindowY, Z = kAscentWindowZ;
         const float below = cityBar(frame, -2);
         const std::array<Key, 7> keys = {{
@@ -1264,9 +1367,13 @@ Camera cityCamera(const show::TimelineFrame& frame) {
             {3.4f, {W, Y, Z - 0.5f}, {W, Y - 0.6f, Z + 12.f}},
             {6.5f, {W - 0.5f, Y + 5.f, Z + 9.f}, {W + 30.f, Y - 12.f, Z + 60.f}},
             {below, {W + 20.f, 150.f, Z + 40.f}, {kDowntownX - 300.f, 40.f, kDowntownZ - 300.f}},
-            {d, {W + 50.f, kAscentCloudTop - 40.f, Z + 80.f}, {kDowntownX - 150.f, 60.f, kDowntownZ - 150.f}},
-            {accent, {W + 60.f, kAscentCloudTop - 25.f, Z + 95.f}, {kDowntownX, 160.f, kDowntownZ}},
-            {duration + 0.5f, {W + 150.f, kAscentCloudTop + 70.f, Z + 210.f}, {kDowntownX, 120.f, kDowntownZ}},
+            {d, {W + 50.f, kAscentCloudTop + 12.f, Z + 80.f}, {W + 120.f, kAscentCloudTop + 40.f, Z + 180.f}},
+            {accent,
+             {W + 60.f, kAscentCloudTop + 22.f, Z + 95.f},
+             {kDowntownX, kAscentCloudTop - 40.f, kDowntownZ}},
+            {duration + 0.5f,
+             {W + 150.f, kAscentCloudTop + 70.f, Z + 210.f},
+             {kDowntownX, 120.f, kDowntownZ}},
         }};
         const auto [eye, target] = alongTimed(keys, local);
         return makeCamera(eye, target, kLens35, shot);
@@ -1321,7 +1428,8 @@ Camera cityCamera(const show::TimelineFrame& frame) {
                     return z0 + kSpeed * (t - 0.5f * ease);
                 const float slow = 3.4f, u = std::min(t - d, slow);
                 const float v1 = 12.f;
-                const float z = z0 + kSpeed * (d - 0.5f * ease) + kSpeed * u - (kSpeed - v1) * u * u / (2.f * slow);
+                const float z =
+                    z0 + kSpeed * (d - 0.5f * ease) + kSpeed * u - (kSpeed - v1) * u * u / (2.f * slow);
                 return z + v1 * std::max(0.f, t - d - slow);
             };
             const float z = avenueZ(local);
@@ -1336,7 +1444,8 @@ Camera cityCamera(const show::TimelineFrame& frame) {
         // A slow 85 mm pan across the downtown's skyline, rising towards the stars for the hand-off.
         const float s = smooth(into / length);
         const Vec3 eye{kDowntownX - 760.f, 180.f + 140.f * s, kDowntownZ - 380.f + 60.f * s};
-        const Vec3 target{kDowntownX - 60.f + 120.f * s, 140.f + 260.f * s * s, kDowntownZ - 220.f + 520.f * s};
+        const Vec3 target{kDowntownX - 60.f + 120.f * s, 140.f + 260.f * s * s,
+                          kDowntownZ - 220.f + 520.f * s};
         return makeCamera(eye, target, kLens85, shot);
     }
     }
@@ -1404,7 +1513,8 @@ SceneFrame City::frame(const show::TimelineFrame& frame) const {
             // accent in ASCENT, and on the beat in METROPOLIS after its accent.
             const float phase = lampWave_[k];
             float cycle = local / 1.1f + phase;
-            if ((effect == Effect::Ascent && local >= accent) || (effect == Effect::Metropolis && local >= accent))
+            if ((effect == Effect::Ascent && local >= accent) ||
+                (effect == Effect::Metropolis && local >= accent))
                 cycle = effect == Effect::Metropolis ? frame.beatPhase : (local - accent) / 1.1f;
             const float c = cycle - std::floor(cycle);
             l.scale = std::exp(-c * 9.f) + 0.02f;
@@ -1413,6 +1523,9 @@ SceneFrame City::frame(const show::TimelineFrame& frame) const {
 
     addTraffic(f, effect, local);
     f.splats = splatsFor(frame);
+    f.medium = cityMedium(frame);
+    if (effect == Effect::Ascent)
+        f.environment.discRadiance = {150.f, 165.f, 185.f}; // above the clouds the moon is the key
     return f;
 }
 

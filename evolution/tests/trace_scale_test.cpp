@@ -6,10 +6,10 @@
 //   plus
 //     the jitter (an emitter quad's edge pixels flip between lit and unlit), and the default window is the
 //     step 4 box filter; refusals;
-//   - Review Focus 3 below scale 1: the window's first frame after a reset at a trace scale equals an Export
+//   - below scale 1: the window's first frame after a reset at a trace scale equals an Export
 //     frame at that scale and spp 4 byte for byte (both trace the whole pixel unjittered and upsample
 //     spatially; the CLI's exports always trace at scale 1, where export_mode_test pins the same equality);
-//   - Review Focus 1 below scale 1: after seeks (another chapter, back within a shot) the window's frames,
+//   - below scale 1: after seeks (another chapter, back within a shot) the window's frames,
 //     jittered and upscaled in time, equal a fresh renderer's from the same point byte for byte;
 //   - a trace scale change resets the history (Resize) and gives a fresh renderer's frame; refusals;
 //   - the GPU timers: Renderer::Stats::gpuMs names every pass of a traced frame, upscale only below scale 1.

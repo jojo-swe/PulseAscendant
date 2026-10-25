@@ -48,7 +48,6 @@ inline constexpr std::uint8_t kCityWindow = 200;  // 200..215
 inline constexpr std::uint8_t kCityGroundShades = 16;
 inline constexpr std::uint8_t kCityMarkingShades = 8;
 
-
 // The camera at a retro frame (see the flight in retro/city_plan.hpp): cityPoseAt(frame, retroFrame / 35).
 CityPose cityPose(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 Camera cityCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame);

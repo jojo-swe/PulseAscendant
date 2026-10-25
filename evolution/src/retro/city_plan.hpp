@@ -63,7 +63,6 @@ inline std::uint32_t cityHash(std::int32_t i, std::int32_t m, std::uint32_t salt
     return h;
 }
 
-
 // One box of a building: x0 < x1, y0 < y1, z0 < z1; ramp 0 (A) or 1 (B).
 struct CityBox {
     double x0, x1, y0, y1, z0, z1;
@@ -196,6 +195,5 @@ inline CityPose cityPoseAt(const show::TimelineFrame& frame, double t) {
                 radians(1.5) * std::sin(1.1 * t) * (1 - climb);
     return pose;
 }
-
 
 } // namespace evo::retro

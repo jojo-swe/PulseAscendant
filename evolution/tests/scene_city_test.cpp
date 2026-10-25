@@ -1,11 +1,13 @@
 // The City scene (VECTOR CITY, ASCENT, CITY NIGHT and METROPOLIS: step 5 Task 23), with synchronization
 // validation:
-//   - the card's numbers at full detail: the light tree's lights (every lamp and beacon), the windows, and the
+//   - the card's numbers at full detail: the light tree's lights (every lamp and beacon), the windows, and
+//   the
 //     instances, lights and splats of every chapter within the scene's capacity;
 //   - the CPU sweep over every 1/60 s (cameras, shots, capacities, transforms, lights);
 //   - VECTOR CITY flies the 1993 flight (retro::cityPoseAt) until its accent and stands on its streets
 //     (retro::cityLot);
-//   - the light tree in CITY NIGHT and METROPOLIS: the frame's light 0 stands for the tree, nearly every lamp is
+//   - the light tree in CITY NIGHT and METROPOLIS: the frame's light 0 stands for the tree, nearly every lamp
+//   is
 //     lit, and on the GPU the picture with the tree's lights off is far darker;
 //   - the wet street: where the street mirrors a sign, the wet street is at least twice as bright as the same
 //     street dry;
@@ -95,7 +97,8 @@ show::TimelineFrame forced2026(double seconds) {
     return frame;
 }
 
-// --- The card and the plan (CPU) -----------------------------------------------------------------------------
+// --- The card and the plan (CPU)
+// -----------------------------------------------------------------------------
 
 void testCard() {
     const auto start = std::chrono::steady_clock::now();
@@ -114,8 +117,8 @@ void testCard() {
     CHECK(statics.capacity.treeLights == s.treeLights && statics.capacity.spheres == s.treeLights);
     CHECK(statics.capacity.instances <= 200000); // the plan's per-scene TLAS capacity
     CHECK(statics.capacity.lights <= 64);
-    // Every chapter's frames at full detail stay within the capacity (a few frames each; the sweep runs at the
-    // test detail), and refit the tree only: the lights' centres, radii and emissions never change.
+    // Every chapter's frames at full detail stay within the capacity (a few frames each; the sweep runs at
+    // the test detail), and refit the tree only: the lights' centres, radii and emissions never change.
     std::uint32_t mostInstances = 0;
     for (show::Effect e : kChapters) {
         for (double f : {0.1, 0.5, 0.9}) {
@@ -124,16 +127,20 @@ void testCard() {
             mostInstances = std::max(mostInstances, std::uint32_t(frame.instances.size()));
             CHECK(frame.instances.size() <= statics.capacity.instances);
             CHECK(frame.treeLights.size() == s.treeLights);
-            CHECK(frame.splats && frame.splats->count <= statics.capacity.splats);
+            CHECK(frame.splats.has_value() == (e == show::Effect::CityNight)); // the rain
+            CHECK(!frame.splats || frame.splats->count <= statics.capacity.splats);
+            CHECK(frame.medium && frame.medium->fog &&
+                  frame.medium->grid.has_value() == (e == show::Effect::Ascent));
             modern::checkSceneFrame(statics, frame);
         }
     }
     const modern::City small(kTestDetail);
     CHECK(small.stats().treeLights < s.treeLights);
-    std::printf("card: \"%s\"; at most %u instances in a frame (capacity %u); test detail: %u tree lights, %u "
-                "static instances\n",
-                modern::kCityCardLine, mostInstances, statics.capacity.instances, small.stats().treeLights,
-                small.staticInstanceCount());
+    std::printf(
+        "card: \"%s\"; at most %u instances in a frame (capacity %u); test detail: %u tree lights, %u "
+        "static instances\n",
+        modern::kCityCardLine, mostInstances, statics.capacity.instances, small.stats().treeLights,
+        small.staticInstanceCount());
 }
 
 void testSweep() {
@@ -177,7 +184,8 @@ void testFlightMatches1993() {
         for (int i = -1; i <= 0; ++i)
             for (const retro::CityBuilding& b : retro::cityLot(i, m)) {
                 ++boxes;
-                const float cx = float(0.5 * (b.base.x0 + b.base.x1)), cz = float(0.5 * (b.base.z0 + b.base.z1));
+                const float cx = float(0.5 * (b.base.x0 + b.base.x1)),
+                            cz = float(0.5 * (b.base.z0 + b.base.z1));
                 const float w = float(b.base.x1 - b.base.x0), d = float(b.base.z1 - b.base.z0);
                 for (const modern::SceneInstance& in : frame.instances) {
                     const auto& t = in.transform.m;
@@ -189,9 +197,10 @@ void testFlightMatches1993() {
                 }
             }
     CHECK(found == boxes);
-    std::printf("flight: the camera is 1993's on %d retro frames to the accent; %d of %d 1993 boxes along the "
-                "main street stand in 2026\n",
-                matched, found, boxes);
+    std::printf(
+        "flight: the camera is 1993's on %d retro frames to the accent; %d of %d 1993 boxes along the "
+        "main street stand in 2026\n",
+        matched, found, boxes);
 }
 
 // The light tree in CITY NIGHT and METROPOLIS: light 0 is the tree, its sphere instance is there, nearly all
@@ -217,7 +226,8 @@ void testTreeLightsActive() {
     }
     const show::TimelineFrame vc = head(show::Effect::City);
     auto litShare = [&](double local) {
-        const modern::SceneFrame frame = city.frame(show::sampleTimeline(secondsInto(show::Effect::City, local)));
+        const modern::SceneFrame frame =
+            city.frame(show::sampleTimeline(secondsInto(show::Effect::City, local)));
         std::uint32_t lit = 0;
         for (std::uint32_t k = 0; k < city.lampCount(); ++k)
             lit += frame.treeLights[k].scale > 0.5f;
@@ -225,12 +235,13 @@ void testTreeLightsActive() {
     };
     const double d = modern::cityBar(show::sampleTimeline(secondsInto(show::Effect::City, 1.0)), 0);
     const double before = litShare(d - 1.0), after = litShare(vc.accentSeconds + 7.0);
-    std::printf("tree: VECTOR CITY lamps lit %.2f a second before D (%.2f s), %.2f after the accent\n", before, d,
-                after);
+    std::printf("tree: VECTOR CITY lamps lit %.2f a second before D (%.2f s), %.2f after the accent\n",
+                before, d, after);
     CHECK(before < 0.2 && after > 0.9);
 }
 
-// --- GPU ------------------------------------------------------------------------------------------------------
+// --- GPU
+// ------------------------------------------------------------------------------------------------------
 
 constexpr std::uint32_t kW = 160, kH = 90;
 
@@ -266,14 +277,15 @@ gfx::Buffer recordRead(gfx::Context& ctx, VkCommandBuffer cmd, gfx::Image& image
     if (image.format() != VK_FORMAT_R16G16B16A16_SFLOAT)
         throw std::logic_error("recordRead: expected RGBA16F");
     const VkExtent2D extent = image.extent();
-    gfx::Buffer buffer(ctx, {VkDeviceSize(extent.width) * extent.height * 8, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true,
-                             "city test readback"});
+    gfx::Buffer buffer(ctx, {VkDeviceSize(extent.width) * extent.height * 8, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                             true, "city test readback"});
     image.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
                      VK_ACCESS_2_TRANSFER_READ_BIT);
     VkBufferImageCopy region{};
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     region.imageExtent = {extent.width, extent.height, 1};
-    vkCmdCopyImageToBuffer(cmd, image.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer.handle(), 1, &region);
+    vkCmdCopyImageToBuffer(cmd, image.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer.handle(), 1,
+                           &region);
     gfx::bufferBarrier2(cmd, buffer.handle(), VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                         VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
     return buffer;
@@ -341,7 +353,8 @@ class Lab {
 public:
     Lab(gfx::Context& ctx, std::uint32_t spp)
         : ctx_(ctx), ring_(ctx),
-          renderer_(ctx, ring_, exportSettings(spp, editedFactory([this](modern::SceneFrame& f) { apply(f); }))) {}
+          renderer_(ctx, ring_,
+                    exportSettings(spp, editedFactory([this](modern::SceneFrame& f) { apply(f); }))) {}
 
     Plane render(double seconds, Edit edit) {
         edit_ = edit;
@@ -402,7 +415,8 @@ Pixel project(const modern::Camera& c, Vec3 p) {
     return {x, y, x >= 1 && y >= 1 && x < kW - 1 && y < kH - 1};
 }
 
-// The tree's lights off: CITY NIGHT and METROPOLIS go far darker (the lamps light the streets through the tree).
+// The tree's lights off: CITY NIGHT and METROPOLIS go far darker (the lamps light the streets through the
+// tree).
 void testTreeLightsLight(Lab& lab) {
     for (show::Effect e : {show::Effect::CityNight, show::Effect::Metropolis}) {
         const double seconds = secondsInto(e, 0.5 * head(e).chapterDuration);
@@ -448,8 +462,8 @@ void testWetStreet(Lab& lab) {
             const Pixel p = project(frame.camera, onStreet);
             if (!p.visible)
                 continue;
-            // The reflection's brightest pixel within one of the projected point (it is a small mirror image),
-            // against the same pixels dry.
+            // The reflection's brightest pixel within one of the projected point (it is a small mirror
+            // image), against the same pixels dry.
             const int x = int(p.x), y = int(p.y);
             float a = 0.f, b = 0.f;
             for (int dy = -1; dy <= 1; ++dy)
@@ -459,8 +473,8 @@ void testWetStreet(Lab& lab) {
                 }
             ++tested;
             passed += a >= 2.f * b && a > 0.f;
-            std::printf("wet street at %.2f s: sign light %zu mirrored at (%d, %d): wet %.4f, dry %.4f\n", local, k,
-                        x, y, a, b);
+            std::printf("wet street at %.2f s: sign light %zu mirrored at (%d, %d): wet %.4f, dry %.4f\n",
+                        local, k, x, y, a, b);
         }
     }
     CHECK(tested >= 2);
@@ -483,12 +497,14 @@ void testWindows(Lab& lab) {
             const float a = fresh.luminance(int(x), int(y)), b = later.luminance(int(x), int(y));
             switched += std::abs(a - b) > 0.1f + 0.5f * std::min(a, b);
         }
-    std::printf("windows: the same picture at %.2f s by two seek paths; %zu of %u pixels switched 21 s later\n",
-                t0 + 9.0, switched, kW * kH);
+    std::printf(
+        "windows: the same picture at %.2f s by two seek paths; %zu of %u pixels switched 21 s later\n",
+        t0 + 9.0, switched, kW * kH);
     CHECK(switched > 20);
 }
 
-// --- Probe ---------------------------------------------------------------------------------------------------
+// --- Probe
+// ---------------------------------------------------------------------------------------------------
 
 void probe(double seconds, float detail) {
     const modern::City city({detail});
@@ -533,7 +549,8 @@ int main(int argc, char** argv) {
         const auto start = std::chrono::steady_clock::now();
         auto stamp = [&](const char* what) {
             std::printf("[%6.1f s] %s\n",
-                        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(), what);
+                        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(),
+                        what);
         };
         testCard();
         stamp("card");

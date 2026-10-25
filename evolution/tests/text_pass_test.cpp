@@ -173,7 +173,7 @@ void testSingleGlyph(evo::gfx::Context& ctx, Fixture& fixture) {
     CHECK(countNonZero(pixels) == set);
 }
 
-// Review Focus 3: text running off the 320x200 frame on the right (x = 300), the left (x = -5) and the bottom
+// text running off the 320x200 frame on the right (x = 300), the left (x = -5) and the bottom
 // (y = 195) is clipped per pixel: the image equals the clipped CPU rendering, nothing else changed.
 void testClipping(evo::gfx::Context& ctx, Fixture& fixture) {
     Target target(ctx, 320, 200, VK_FORMAT_R8_UINT);

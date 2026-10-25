@@ -39,7 +39,7 @@ std::vector<text::Item> scrollerItems(std::string_view text, std::uint32_t retro
 // CREDITS (chapter 29): a 1993 sine scroller on deep blue under a static EVOLUTION title. A text-only
 // effect at 35 retro frames per second.
 inline constexpr std::string_view kCreditsText =
-    "   EVOLUTION  ...  CODE: CLAUDE  ...  MUSIC: JOYOLO (SUNO)  ...  CONCEPT: JOHN  ...  GREETINGS TO "
+    "   EVOLUTION  ...  CODE: JOJO  ...  MUSIC: JOYOLO  ...  CONCEPT: JOHN  ...  GREETINGS TO "
     "FUTURE CREW AND EVERYONE WHO WAS THERE IN 1993  ...  REALITY IS WHAT YOU RENDER  ...";
 inline constexpr std::string_view kCreditsTitle = "EVOLUTION";
 inline constexpr float kCreditsTitleY = 24;

@@ -26,11 +26,11 @@
 // tar.
 //
 // Streets (kPatternCityStreet, world xz): the asphalt between the lots of the grid (streets kCityStreet wide
-// every kCityCell, the 1993 city's; with patternScale > 0 an avenue along z with no junctions), with lane dashes, a double centre line, zebra crossings before every
-// junction, manhole covers and patched repairs. Wet asphalt is a water film (the coat, smooth) over a darker
-// rougher base: `coat` is the street's wetness (0 dry, 1 after rain), which fills puddles from a noise field
-// (and `coatRoughness` the ripples on the standing water)
-// and the wheel ruts first.
+// every kCityCell, the 1993 city's; with patternScale > 0 an avenue along z with no junctions), with lane
+// dashes, a double centre line, zebra crossings before every junction, manhole covers and patched repairs.
+// Wet asphalt is a water film (the coat, smooth) over a darker rougher base: `coat` is the street's wetness
+// (0 dry, 1 after rain), which fills puddles from a noise field and the wheel ruts first, and `coatRoughness`
+// the ripples on the standing water.
 //
 // Trails (kPatternCityTrail, Emissive): a car's light seen through a long exposure, a stretched box whose
 // emission fades from its head (uv.x = 1) to its tail (uv.x = 0).
@@ -97,7 +97,10 @@ uint cityBuildingSeed() {
 // fluorescent; from the room's hash.
 vec3 cityRoomTint(uint h, vec3 tint) {
     float u = cityUnit(h);
-    vec3 k = u < 0.45 ? vec3(1.0, 0.72, 0.45) : (u < 0.75 ? vec3(1.0, 0.88, 0.72) : (u < 0.93 ? vec3(0.82, 0.9, 1.0) : vec3(0.85, 1.0, 0.86)));
+    vec3 k = u < 0.5    ? vec3(1.0, 0.72, 0.45)
+             : u < 0.84 ? vec3(1.0, 0.88, 0.72)
+             : u < 0.96 ? vec3(0.82, 0.9, 1.0) * 0.8
+                        : vec3(0.85, 1.0, 0.86) * 0.8;
     return tint * k;
 }
 
@@ -235,11 +238,12 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
     // Lit or dark. Homes (punched windows) switch room by room; offices (glass, bands) by runs of bays on a
     // floor, so their floors light up in bands. A slow clock per run keeps a state for 25 to 220 s, then
     // draws again; the building sets how many are lit.
-    float litShare = shop ? 0.55 : 0.12 + 0.3 * cityDraw(building, 17u);
+    float litShare = shop ? 0.4 : 0.12 + 0.3 * cityDraw(building, 17u);
     litShare = mix(litShare, 1.0, clamp(m.coat, 0.0, 1.0)); // the material's coat: dark windows switched on
-    uint run = style == kPatternCityPunched || shop ? cellId
-                                                    : cityHash(building ^ (face * 0x51ED27u),
-                                                               uint(floor(bay / 5.0)) * 0x1000193u + uint(storey) * 0x9E3779B1u);
+    uint run = cellId;
+    if (!(style == kPatternCityPunched || shop)) {
+        run = cityHash(building ^ (face * 0x51ED27u), uint(floor(bay / 5.0)) * 0x1000193u + uint(storey) * 0x9E3779B1u);
+    }
     float period = 25.0 + 195.0 * cityDraw(run, 3u);
     float epoch = floor((seconds + period * cityDraw(run, 5u)) / period);
     uint state = cityHash(run, uint(int(epoch)) + 0x2545F491u);
@@ -312,7 +316,8 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
                 float x = u / unitLength + 0.5 * mod(row, 2.0);
                 float joint = min(min(fract(y / course), 1.0 - fract(y / course)) * course,
                                   min(fract(x), 1.0 - fract(x)) * unitLength);
-                float shadeUnit = 0.85 + 0.3 * cityUnit(cityHash(uint(int(floor(x))) * 0x632BE5ABu, uint(int(row)) + building));
+                uint unitId = cityHash(uint(int(floor(x))) * 0x632BE5ABu, uint(int(row)) + building);
+                float shadeUnit = 0.85 + 0.3 * cityUnit(unitId);
                 vec3 mortar = vec3(0.32, 0.31, 0.29);
                 vec3 unitColor = joint < 0.006 ? mortar : cellColor * shadeUnit;
                 cellColor = mix(cellColor, unitColor, courseDetail);
@@ -341,7 +346,12 @@ void cityFacade(inout HitPoint h, uint style, out vec3 baseColor, out float roug
             }
             if (shop) {
                 // A shop after hours: its room dimly lit, a display brighter near the glass.
-                shade = 0.45 * shade + 0.25 * smoothstep(0.55, 0.0, inWindow.y);
+                shade = 0.12 * shade + 0.1 * smoothstep(0.55, 0.0, inWindow.y);
+                // The shopfront's mullions: three panes and a transom.
+                float pane = fract(inWindow.x * 3.0);
+                if (min(pane, 1.0 - pane) < 0.03 || abs(inWindow.y - 0.78) < 0.02) {
+                    shade = 0.0;
+                }
             } else if (kind < 0.2) {
                 // Blinds: slats across the window, the room glowing through.
                 shade = 0.5 * (0.35 + 0.65 * step(0.42, fract(inWindow.y * 16.0)));

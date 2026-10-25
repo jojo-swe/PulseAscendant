@@ -21,7 +21,12 @@ Then, merging step 5 Task 9, its export shutter changed one more: studio_night_a
 180 degree shutter at the default 60 fps; mean luminance +0.13 %). Every capture at spp 4 or fewer and every
 stream (spp 1-2) has a single slice and stayed byte for byte the same.
 Then regenerated after merging step 5 Task 6 (the integrator v2: path regularisation, the clamp after a rough
-vertex, the Studio's camera-only LEDs), which changed the Studio outputs again.
+vertex, the Studio's camera-only LEDs), which changed the same seven Studio outputs (mean luminance within
++-0.1 %); the caustic photon maps (Task 13) and the light tree (Task 12) changed nothing, and no non-Studio
+output moved.
+Then regenerated after merging the Particles and Spheres scenes: only stream_dots and raytrace_2026 changed.
+Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the city, so stream_studio_ascent
+changed; every other output, the Studio's included, stayed byte for byte.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
@@ -34,7 +39,7 @@ How later tasks use it (run from evolution/ after building the linux preset):
 - A task that changes the picture on purpose (Task 2's environments, Task 6's integrator, Task 14's Studio
   polish, ...) checks the luminance instead: --luminance prints each Studio capture's change against the
   committed value (Task 2 (e): within 5 %), and the task commits a new SUMS/LUMINANCE in the same commit,
-  saying so in its report, so the next task compares against the new reference.
+  saying so in its commit message, so the next change compares against the new reference.
 
 Usage: hash_outputs.py <Evolution> <outdir> [--check SUMS] [--luminance LUMINANCE] [--write]
   --write   also writes <outdir>/SUMS and <outdir>/LUMINANCE (copy them here to update the reference).

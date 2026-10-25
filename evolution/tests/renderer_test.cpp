@@ -207,7 +207,7 @@ void testPillarbox(evo::gfx::Context& ctx) {
     CHECK(harness.renderer().lastStats().retroFrame == 35);
 }
 
-// (b) Review Focus 1: a tall 400x600 output letterboxes the 4:3 picture to 400x300, centred: rows 0..149
+// (b) a tall 400x600 output letterboxes the 4:3 picture to 400x300, centred: rows 0..149
 // and 450..599 black. Reached through resize(), as a window dragged tall would.
 void testTallOutput(evo::gfx::Context& ctx) {
     Harness harness(ctx, 640, 360);
@@ -231,7 +231,7 @@ void testTallOutput(evo::gfx::Context& ctx) {
     CHECK(contentBounds(picture) == expectedBounds(400, 600));
 }
 
-// (c) Review Focus 4: the CRT changes the look, never the content rectangle, at any output shape. Odd sizes
+// (c) the CRT changes the look, never the content rectangle, at any output shape. Odd sizes
 // also exercise the partial 8x8 workgroups at the right and bottom edges.
 void testCrtKeepsGeometry(evo::gfx::Context& ctx) {
     const std::array<std::array<std::uint32_t, 2>, 3> sizes = {{{640, 360}, {400, 600}, {333, 187}}};
@@ -279,7 +279,7 @@ void testRetroFrameLock(evo::gfx::Context& ctx) {
     CHECK(harness.render(pattern(1.000)).rgb == a.rgb);
 }
 
-// (e) Review Focus 2: a chapter change at an equal retro frame must not reuse the cached image.
+// (e) a chapter change at an equal retro frame must not reuse the cached image.
 void testChapterChangeInvalidates(evo::gfx::Context& ctx) {
     Harness harness(ctx, 320, 240, false);
     const Picture first = harness.render(retroFrame(2, 1.0));
@@ -746,7 +746,7 @@ void testStagesSkipped(evo::gfx::Context& ctx) {
     }
 }
 
-// (b) Review Focus 7: a skipped stage's stale image never reaches the output. A colourful 2026 frame, then
+// (b) a skipped stage's stale image never reaches the output. A colourful 2026 frame, then
 // BOOT at t = 1, equals a fresh renderer's BOOT at t = 1 byte for byte; BOOT, then ASCENT with the
 // retro stage skipped, equals a fresh ASCENT. With the CRT and the HUD on, as an export draws.
 void testSkippedStageNeverShows(evo::gfx::Context& ctx) {
@@ -770,7 +770,7 @@ void testSkippedStageNeverShows(evo::gfx::Context& ctx) {
     CHECK(!retroFirst.renderer().lastStats().retroRendered);
 }
 
-// The window keeps the hidden 2026 side of a BeatSwap warm (Decision 7), an export skips it; both show the
+// The window keeps the hidden 2026 side of a BeatSwap warm, an export skips it; both show the
 // same 1993 picture.
 void testInteractiveKeepsHiddenModernWarm(evo::gfx::Context& ctx) {
     TimelineFrame dots = evo::show::sampleTimeline(evo::show::chapterStart(2) + 1.0);
@@ -892,9 +892,14 @@ void testPrepareTimes(evo::gfx::Context& ctx) {
     const std::vector<double> mixed{plasma[0], studioNight(0.2).showSeconds, studioNight(0.9).showSeconds};
     harness.renderer().prepare(mixed);
     CHECK(stage.tracer() != nullptr && stage.sceneGpu(evo::modern::SceneId::Studio) != nullptr);
+    for (std::size_t id = 0; id < evo::modern::kSceneCount; ++id) // no other scene
+        if (static_cast<evo::modern::SceneId>(id) != evo::modern::SceneId::Studio)
+            CHECK(stage.sceneGpu(static_cast<evo::modern::SceneId>(id)) == nullptr);
     const VkDeviceSize bytes = stage.gpuBytes();
-    harness.renderer().prepareAll(); // the Studio is every scene the show has so far
+    harness.renderer().prepare(mixed); // once
     CHECK(stage.gpuBytes() == bytes);
+    harness.renderer().prepareAll(); // every scene of the show: at least the Studio's bytes
+    CHECK(stage.gpuBytes() >= bytes);
 }
 
 void testRejectsEmptySize(evo::gfx::Context& ctx) {

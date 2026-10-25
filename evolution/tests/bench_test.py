@@ -1,5 +1,5 @@
-"""Run Evolution --bench at a tiny size: one JSON object per chapter on stdout, with every key the owner's RTX
-checkpoint reads (step 5 Task 4), sane values, and the exit code 0. Arguments after the executable (e.g.
+"""Run Evolution --bench at a tiny size: one JSON object per chapter on stdout, with every key the RTX
+hardware checkpoint reads (step 5 Task 4), sane values, and the exit code 0. Arguments after the executable (e.g.
 --validation) are passed to every run."""
 
 import json
@@ -46,7 +46,7 @@ def check(record, chapter, frames, scale, trace_size):
 
 
 def main(exe, extra):
-    # The plan's case: STUDIO NIGHT, 3 frames, at the window's default trace scale 0.67.
+    # The reference case: STUDIO NIGHT, 3 frames, at the window's default trace scale 0.67.
     records = bench(exe, extra, ["--chapters", "11", "--bench-frames", "3"])
     if len(records) != 1:
         sys.exit(f"expected one JSON line, got {len(records)}")

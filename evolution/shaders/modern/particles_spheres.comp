@@ -1,0 +1,156 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The Spheres scene's particle field (step 5, Task 22), in two modes (params[0].w):
+//
+// 0, SPHERE STORM: a vortex of chrome spheres, its first `emissive` particles glowing.
+//   params[0] = (count, emissive count, radius scale, 0)
+//   params[1] = (energy, kick, rise, unused)
+//   A particle is a funnel particle (72 %, on six ribbons wound round it) or one of the skirt's, a flat spiral on the floor round the
+//   funnel's foot. Each turns about +y at a speed that falls with its radius (faster inside); energy swells
+//   the funnel and kick throws everything outwards for a moment.
+//
+// 1, RAYTRACE INFINITY: the lattice of chrome spheres at every multiple of the spacing, the n x n x n of
+//   them round the camera's cell (particle id = i + n (j + n k)); one in 26 is a glowing lantern, one in 11
+//   gold. Each shrinks to nothing between fadeStart and fadeEnd from the camera, so the lattice dissolves
+//   into the sky with distance and never shows the cube's edge. The lattice is fixed in the world: the
+//   camera's cell only says which lattice point an id holds, so prevCenter = center.
+//   params[0] = (count, unused, unused, 1)
+//   params[2] = (camera x, y, z, spacing)
+//   params[3] = (n, radius, fadeStart, fadeEnd)
+//   params[1].x = seconds since the drop: the lanterns light up in a wave that leaves the camera then.
+//
+// modern::spheresParticle (src/modern/scenes/spheres.cpp) mirrors particle() operation for operation; change
+// both together (spheres_scene_test compares them). Nothing integrates the music, so the field is a pure
+// function of (id, seconds, params).
+
+#include "particles_common.glsl"
+
+const float kTau = 6.28318530718;
+
+uint stormHash(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+float stormUnit(uint x) {
+    return float(x >> 8) * (1.0 / 16777216.0);
+}
+
+// An angle reduced to [-pi, pi) before sin and cos, as retro raytrace.comp does.
+float stormPhase(float x) {
+    float turns = x / kTau + 0.5;
+    return kTau * (turns - floor(turns) - 0.5);
+}
+
+SphereRecord stormParticle(uint id, float seconds, vec4 params[4]) {
+    uint emissiveCount = uint(params[0].y);
+    float radiusScale = params[0].z;
+    float energy = params[1].x;
+    float kick = params[1].y;
+    float rise = params[1].z;
+
+    uint h0 = stormHash(id * 0x9E3779B9u + 0x5bd1e995u);
+    uint h1 = stormHash(h0);
+    uint h2 = stormHash(h1);
+    uint h3 = stormHash(h2);
+    uint h4 = stormHash(h3);
+    uint h5 = stormHash(h4);
+    float u1 = stormUnit(h1), u2 = stormUnit(h2), u3 = stormUnit(h3), u4 = stormUnit(h4), u5 = stormUnit(h5);
+
+    float r;
+    float y;
+    float angle;
+    if (u1 < 0.72) { // the funnel: 10 high, widening upwards
+        float f = u2 * u2 * (1.6 - 0.6 * u2);
+        y = 0.35 + 11.0 * f;
+        r = 0.5 + 5.2 * f * f + (u3 - 0.5) * (0.2 + 0.6 * f);
+        // Before it rises the funnel lies flat, a spiral on the floor.
+        y = mix(0.12 + 0.3 * u3, y, rise);
+        r = mix(2.0 + 8.0 * f, r, rise);
+        float omega = 2.4 / (0.7 + r);
+        float ribbon = floor(6.0 * u4) / 6.0;
+        angle = stormPhase(kTau * (ribbon + 1.3 * f) + 0.24 * (u5 - 0.5) + omega * seconds);
+        r *= 1.0 + 0.16 * energy + 0.3 * kick * f;
+        y += 0.22 * sin(stormPhase(3.0 * angle + 1.3 * seconds + kTau * u5));
+    } else { // the skirt: two spiral arms on the floor
+        float s = sqrt(u2);
+        r = 1.6 + 9.4 * s;
+        float arm = u5 < 0.5 ? 0.0 : 0.5 * kTau;
+        float spread = (u4 - 0.5) * 1.1;
+        float omega = 1.7 / (0.8 + 0.25 * r);
+        angle = stormPhase(arm + 1.9 * log(r) + spread + omega * seconds);
+        y = 0.1 + 0.55 * u3 * (1.0 - 0.8 * s);
+        r *= 1.0 + 0.12 * kick;
+    }
+
+    SphereRecord p;
+    p.center = vec3(r * cos(angle), y, r * sin(angle));
+    bool glows = id < emissiveCount;
+    float size = glows ? 0.05 + 0.05 * u5 : 0.035 + 0.11 * u3 * u3;
+    p.radius = size * radiusScale;
+    vec3 colour = vec3(1.0);
+    float emission = 0.0;
+    uint pick = h5 % 8u;
+    if (glows) {
+        colour = pick < 4u ? vec3(1.0, 0.42, 0.1)   // ember
+                 : pick < 7u ? vec3(1.0, 0.82, 0.55) // white-hot
+                             : vec3(0.45, 0.72, 1.0); // ice
+        emission = (2.5 + 3.5 * u4) * (1.0 + 1.5 * kick);
+    } else if (pick == 0u) {
+        colour = vec3(1.0, 0.8, 0.42); // gold
+    } else if (pick == 1u) {
+        colour = vec3(0.98, 0.7, 0.62); // rose copper
+    }
+    p.color = colour;
+    p.material = 0u;
+    p.prevCenter = p.center;
+    p.emission = emission;
+    return p;
+}
+
+uint latticeHash(ivec3 c) {
+    return stormHash(uint(c.x) * 0x8da6b343u ^ uint(c.y) * 0xd8163841u ^ uint(c.z) * 0xcb1ab31fu);
+}
+
+SphereRecord latticeParticle(uint id, vec4 params[4]) {
+    vec3 camera = params[2].xyz;
+    float spacing = params[2].w;
+    uint n = uint(params[3].x);
+    float radius = params[3].y;
+    float fadeStart = params[3].z;
+    float fadeEnd = params[3].w;
+    ivec3 local = ivec3(int(id % n), int((id / n) % n), int(id / (n * n)));
+    ivec3 cell = ivec3(floor(camera / spacing)) + local - ivec3(int(n / 2u));
+    vec3 centre = vec3(cell) * spacing;
+    uint h = latticeHash(cell);
+    float d = length(centre - camera);
+    float fade = clamp((d - fadeStart) / (fadeEnd - fadeStart), 0.0, 1.0);
+    fade = fade * fade * (3.0 - 2.0 * fade);
+    SphereRecord p;
+    p.center = centre;
+    p.color = vec3(1.0);
+    p.emission = 0.0;
+    float size = radius;
+    uint pick = h % 26u;
+    if (pick == 0u) { // a lantern
+        uint hue = (h >> 8) % 4u;
+        p.color = hue < 2u ? vec3(1.0, 0.42, 0.1) : hue == 2u ? vec3(1.0, 0.82, 0.55) : vec3(0.45, 0.72, 1.0);
+        p.emission = 18.0 * clamp((30.0 * params[1].x - d) * 0.25, 0.0, 1.0);
+        size = 0.32 * radius;
+    } else if (h % 11u == 0u) {
+        p.color = vec3(1.0, 0.8, 0.42); // gold
+    }
+    p.radius = size * (1.0 - fade);
+    p.material = 0u;
+    p.prevCenter = centre;
+    return p;
+}
+
+SphereRecord particle(uint id, float seconds, vec4 params[4]) {
+    return params[0].w > 0.5 ? latticeParticle(id, params) : stormParticle(id, seconds, params);
+}

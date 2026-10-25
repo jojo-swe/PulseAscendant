@@ -14,6 +14,7 @@
 #include "rt/gpu_types.hpp"
 #include "rt/spheres.hpp"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -41,6 +42,8 @@ struct SceneCapacity {
     // modern stage sizes its one CausticMaps to the largest prepared.
     std::uint32_t causticResolution = 0;
     std::uint32_t treeLights = 0; // the light tree's lights (Task 12), at most rt::kMaxTreeLights
+    // The largest grid medium a frame bakes, voxels per axis (Task 11; all 0: the scene has none).
+    std::array<std::uint32_t, 3> mediumGrid{0, 0, 0};
 };
 
 // The meshes (BLAS per mesh) and materials of a scene, and what its frames may hold. An instance's hit group

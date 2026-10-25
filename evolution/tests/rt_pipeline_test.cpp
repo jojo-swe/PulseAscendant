@@ -1,5 +1,5 @@
 // The ray tracing pipeline and its shader binding table. computeSbtLayout is checked against hand-computed
-// layouts for lavapipe's properties and for RTX's (Review Focus 4: a layout that is aligned on lavapipe can
+// layouts for lavapipe's properties and for RTX's (a layout that is aligned on lavapipe can
 // be misaligned on RTX), including the vkCmdTraceRaysKHR rules it must keep. A probe pipeline (one raygen,
 // two misses, four closest-hit groups) then traces a 64x64 launch over a TLAS of four quads, one per quadrant
 // with hit group 0-3, and a gap column: every pixel must hold its hit group + 1, or 100 + the miss index it

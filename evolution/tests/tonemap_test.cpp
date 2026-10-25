@@ -1,4 +1,4 @@
-// The tonemap, Khronos PBR Neutral (Review Focus 6: one tonemap, display encoding exactly once): HDR RGBA16F
+// The tonemap, Khronos PBR Neutral (one tonemap, display encoding exactly once): HDR RGBA16F
 // ramps and colour patches uploaded from the CPU, tone mapped on the GPU into RGBA8 and compared with
 // tonemapReference, the CPU mirror (within 1 per channel); black stays 0 at every pixel whatever the dither
 // and white 255 once it is bright enough for the curve's asymptote (64 rounds to 255, 16384 is 255 at every
@@ -306,8 +306,7 @@ void testExposure(Gpu& gpu) {
     CHECK(gpu.run(picture, -1.f) == gpu.run(picture.scaled(.5f), 0.f));
 }
 
-// (h) Golden anchors, independent of this code: computed in float64 with numpy (golden.py, in the Task 5
-// report) from the Khronos PBR Neutral specification (KhronosGroup/ToneMapping, PBR_Neutral/README.md: F90 =
+// (h) Golden anchors, independent of this code: computed in float64 with numpy (golden.py) from the Khronos PBR Neutral specification (KhronosGroup/ToneMapping, PBR_Neutral/README.md: F90 =
 // 0.04, Ks = 0.8 - F90, Kd = 0.15, the offset f = x - x^2 / (4 F90) for x <= 2 F90) and the sRGB OETF,
 // rounded to bytes without dither. The reference's linear and display values must be within 1e-4, the GPU's
 // dithered bytes (of the half-rounded inputs) within 1 of the literal byte, at every pixel.
@@ -492,7 +491,7 @@ void testHueKept() {
 // level before the tonemap (emission 1.2 x 2^2.5 EV). Under ACES (step 4) it came out as (255, 204, 195): the
 // green byte 9 above the blue, a hue shift of 8 degrees towards orange, as well as washed out. Under PBR
 // Neutral green and blue stay equal at every pixel (the hue stays exactly red) and the red leads green by at
-// least 70 (golden: 254, 181, 181). The plan asked for r >= 2 g here: PBR Neutral's desaturation (Kd = 0.15)
+// least 70 (golden: 254, 181, 181). An earlier draft asked for r >= 2 g here: PBR Neutral's desaturation (Kd = 0.15)
 // cannot give that at 6.8 (r >= 2 g in bytes holds up to 2.4x, under ACES up to 2.1x), so the test pins the
 // hue and the margin over ACES's washed-out green instead.
 void testCrtRed(Gpu& gpu) {
@@ -581,16 +580,15 @@ void testRejectsWrongImages(Context& ctx, Gpu& gpu) {
     CHECK(thrown == 3);
 }
 
-// (f) The scene registry: FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the Studio (Task 10), every
-// other effect the placeholder (studio_test pins the mapping in full).
+// (f) The scene registry: FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the Studio (Task 10), and no
+// other effect does (scene_table_test pins the mapping in full).
 void testSceneRegistry() {
     using evo::show::Effect;
     for (std::size_t effect = 0; effect < evo::show::kEffectCount; ++effect) {
         const auto e = static_cast<Effect>(effect);
         const bool studio = e == Effect::Finale || e == Effect::Portal || e == Effect::StudioNight ||
                             e == Effect::Return || e == Effect::Reboot;
-        CHECK(evo::modern::sceneFor(e) ==
-              (studio ? evo::modern::SceneId::Studio : evo::modern::SceneId::Placeholder));
+        CHECK((evo::modern::sceneFor(e) == evo::modern::SceneId::Studio) == studio);
     }
 }
 
@@ -628,6 +626,10 @@ void testPlaceholderUnchanged(Context& ctx) {
     int worst = 0, worstBelowKnee = 0, off = 0, channels = 0, frames = 0;
     for (const int chapter : {12, 13, 14, 17, 18, 21, 27})
         for (const double fraction : {.1, .45, .8}) {
+            // Only the chapters that still show the placeholder.
+            if (evo::modern::sceneFor(evo::show::sampleTimeline(evo::show::chapterStart(chapter)).effect) !=
+                evo::modern::SceneId::Placeholder)
+                continue;
             const double t =
                 evo::show::chapterStart(chapter) +
                 fraction * (evo::show::chapterStart(chapter + 1) - evo::show::chapterStart(chapter));

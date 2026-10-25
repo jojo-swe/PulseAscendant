@@ -1,7 +1,7 @@
 // Materials and the structs the path tracer shares with GLSL, on the GPU (compute only, no ray tracing), with
 // the validation layer on; fails on any message it reports.
 //
-// Layout (Review Focus 10): the CPU fills two elements of every shared struct with field sentinels (word k of
+// Layout: the CPU fills two elements of every shared struct with field sentinels (word k of
 // element e holds k + 0.5 + 100 e as a float or k + 1 + 100 e as a uint), struct_layout.comp copies every
 // field in declaration order into a word buffer, and the words must come back in order: a field whose C++
 // offset differs from its scalar-layout GLSL offset reads another field's sentinel. The shader also writes
@@ -11,7 +11,7 @@
 // samples each. White furnace (Lambert white 1.0, delta mirror exactly 1, rough metal = a CPU integration of
 // single-scattering GGX, smooth glass reflect + transmit = 1 and reflect = exact Fresnel), no material
 // above 1.01, the sampler's pdf equals bsdfEval's pdf, the sample weight equals f cos / pdf, reflection is
-// reciprocal, and every output is finite (Review Focus 8), also for a stress set (IOR 1 and 1.0001, roughness
+// reciprocal, and every output is finite, also for a stress set (IOR 1 and 1.0001, roughness
 // at the delta threshold and below the alpha clamp, wo in the tangent plane and below the surface, an
 // all-zero material).
 
@@ -20,6 +20,7 @@
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/sync.hpp"
+#include "modern/medium.hpp"
 #include "rt/geometry.hpp"
 #include "rt/gpu_types.hpp"
 #include "rt/random.hpp"
@@ -41,6 +42,7 @@ namespace {
 
 using namespace evo::gfx;
 namespace rt = evo::rt;
+namespace modern = evo::modern;
 
 int checksPassed = 0;
 
@@ -290,7 +292,7 @@ template <std::size_t N> constexpr std::array<bool, N> allUints() {
 }
 constexpr std::array<bool, 12> kMat34IsUint{};
 constexpr auto kEnvironmentIsUint = uintsAt<28>({0});
-constexpr auto kMediumIsUint = allUints<32>();
+constexpr auto kMediumIsUint = uintsAt<32>({12, 13, 14, 20, 21, 22, 31}); // gridSize, majorantSize, pad
 constexpr auto kSphereIsUint = uintsAt<12>({7});
 constexpr auto kTreeLightIsUint = uintsAt<12>({7, 8, 9, 10, 11});
 constexpr auto kTreeNodeIsUint = uintsAt<8>({7});
@@ -399,6 +401,8 @@ void testStructLayout(Context& ctx) {
                                                static_cast<std::uint32_t>(rt::GeometryKind::Spheres),
                                                rt::kHitGroupsPerKind,
                                                rt::kNoReceiver,
+                                               modern::kMediumFog,
+                                               modern::kMediumGrid,
                                                static_cast<std::uint32_t>(rt::Pattern::CityPunched),
                                                static_cast<std::uint32_t>(rt::Pattern::CityCurtain),
                                                static_cast<std::uint32_t>(rt::Pattern::CityBands),
@@ -410,7 +414,7 @@ void testStructLayout(Context& ctx) {
     for (std::uint32_t input : kHashInputs)
         expected.push_back(rt::pcgHash(input));
     CHECK(expected.size() == kElements * (24 + 16 + 4 + 8 + 4 + 52 + 12 + 28 + 32 + 12 + 12 + 8 + 8 + 16) +
-                                 34 + kHashInputs.size());
+                                 36 + kHashInputs.size());
     // The step 5 ABI (Tasks 1 and 1b): sizes and the hit group of each geometry kind.
     static_assert(sizeof(rt::Material) == 96 && sizeof(rt::FrameUniforms) == 208 &&
                   sizeof(rt::EnvironmentUniforms) == 112 && sizeof(rt::MediumUniforms) == 128 &&
@@ -629,7 +633,7 @@ std::vector<std::array<double, 3>> runQuadrature(Context& ctx, const std::vector
     return out;
 }
 
-// An independent check of the samplers (the Task 6 review): bsdfSample's mean weight must equal the
+// An independent check of the samplers (independent of the sampling code): bsdfSample's mean weight must equal the
 // quadrature of bsdfEval's f cos over the sphere, which uses no sampling code. A sampler whose pdf is not its
 // true density (rough glass keeping microfacet samples that land in the wrong hemisphere) biases the mean.
 // Rough lobes only (roughness >= 0.3), so the grid resolves them; glass from outside and from inside.
@@ -776,7 +780,7 @@ void testBsdfs(Context& ctx) {
         }
     }
 
-    // Stress (Review Focus 8): only finiteness, unit directions, positive pdfs and energy are required.
+    // Stress: only finiteness, unit directions, positive pdfs and energy are required.
     std::vector<rt::Material> stress{
         glass(1.0001f, 0.f),                                  // smooth, index almost matched
         glass(1.0001f, 0.05f),                                // rough, index almost matched
