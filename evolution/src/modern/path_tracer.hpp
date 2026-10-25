@@ -137,6 +137,10 @@ struct TraceExtras {
     gfx::Image* causticMaps = nullptr;             // 24: 2D array RGBA16F irradiance (Task 13)
     const gfx::Buffer* lensing = nullptr;          // 25: LensingUniforms (Task 25)
     const gfx::Buffer* causticReceivers = nullptr; // 27: CausticReceiver[] (Task 13)
+    // Task 13: recorded after the TLAS build and before the trace dispatches, with the frame's TLAS and the
+    // buffers the trace binds (modern::CausticMaps::record shoots the photons there). Required, with
+    // causticMaps and causticReceivers, by a frame with caustics.
+    std::function<void(VkCommandBuffer, const PhotonScene&)> photons;
 };
 
 // The path tracer every 2026 scene shares (step 5, Task 1): the ray tracing pipeline and its SBT (8 hit

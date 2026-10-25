@@ -37,7 +37,9 @@
 // Step 5's hooks, each with a stub that keeps step 4's picture byte for byte until its task fills it:
 // environment.glsl (the sky a miss sees, and environment sampling: Task 2), lights.glsl (per-point light
 // selection: Task 3; the light tree: Task 12), medium.glsl (participating media and the volume layer: Task
-// 11), caustics.glsl (Task 13) and lensing.glsl (bent main rays: Task 25).
+// 11), caustics.glsl (Task 13) and lensing.glsl (bent main rays: Task 25). Task 13's caustic photon maps
+// also exclude, in caustic_paths.glsl, the light the maps already hold (a receiver's non-delta bounce, then
+// only delta surfaces, then the photons' light): without caustics in the frame that changes nothing.
 //
 // Every random number is randomFloat(frameSeed, pixel, sampleIndex, dimension) (random.glsl). Only this
 // shader traces rays (recursion depth 1).
@@ -271,6 +273,9 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
     return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, tMax);
 }
 
+// Task 13: the caustic photon maps' double-count exclusion (every use below is marked "Task 13").
+#include "caustic_paths.glsl"
+
 struct SampleResult {
     vec3 lighting;
     vec3 emission;
@@ -307,6 +312,7 @@ SampleResult tracePath() {
     bool prevTransmissive = false;
     bool rough = false;   // the path has scattered off a non-delta lobe (else: a delta chain from the camera)
     float lambda = -1.0;  // the hero wavelength in nm, once the path has met dispersive glass
+    CausticPath caustic = causticPathStart(); // Task 13
 
     for (uint bounce = 0u;; ++bounce) {
         traceScene(origin, direction, coneWidth, coneSpread);
@@ -319,7 +325,9 @@ SampleResult tracePath() {
                 if (nee && !previousDelta) {
                     w = powerHeuristic(previousPdf, escapePdf(origin, direction, prevP, prevN, prevTransmissive));
                 }
-                addContribution(r.lighting, throughput * sky * w, rough);
+                // Task 13: the photon map's share of the source disc is excluded.
+                addContribution(r.lighting, throughput * causticEscape(caustic, prevP, direction, sky) * w,
+                                rough);
             }
             break;
         }
@@ -329,6 +337,7 @@ SampleResult tracePath() {
         vec3 n = payload.normal;
         vec3 ng = payload.geometricNormal;
         vec3 wo = -direction;
+        causticPathHit(caustic, payloadSurface(), payload.materialFlags); // Task 13
         if (bounce == 0u) {
             r.emission = s.emission;
             r.albedo = demodulationAlbedo(s);
@@ -345,7 +354,9 @@ SampleResult tracePath() {
                 }
                 w = powerHeuristic(previousPdf, lightPdf);
             }
-            addContribution(r.lighting, throughput * s.emission * w, rough);
+            // Task 13: the photon map's share of the source light is excluded.
+            vec3 keep = causticEmissionKeep(caustic, payload.light, prevP, p);
+            addContribution(r.lighting, throughput * s.emission * w * keep, rough);
         }
         if (bounce >= frame.maxBounces) {
             break;
@@ -363,7 +374,10 @@ SampleResult tracePath() {
         }
 
         if (nee && (frame.lightCount > 0u || frame.environmentSelect > 0.0) && bsdfHasNonDeltaLobe(s)) {
-            addContribution(r.lighting, throughput * sampleLight(s, p, n, ng, wo, bounce), rough);
+            addContribution(r.lighting,
+                            throughput * sampleLight(s, p, n, ng, wo, bounce) *
+                                causticNeeKeep(caustic, s, p, n, wo, bounce), // Task 13
+                            rough);
         }
 
         vec3 u = vec3(bounceRand(bounce, 0u), bounceRand(bounce, 1u), bounceRand(bounce, 2u));
@@ -374,6 +388,7 @@ SampleResult tracePath() {
         if (!bsdfSample(s, n, wo, u, wi, weight, pdf, delta) || !sidesAgree(n, ng, wo, wi)) {
             break;
         }
+        causticPathScatter(caustic, s, n, wo, wi, delta); // Task 13
         throughput *= weight;
         rough = rough || !delta;
         if (roulette && bounce >= 3u) {

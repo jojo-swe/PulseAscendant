@@ -1045,3 +1045,19 @@ target_include_directories(integrator_test PRIVATE tests)
 target_compile_definitions(integrator_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(integrator_test integrator_test_shaders)
 evo_gpu_test(integrator integrator_test)
+
+# --- Step 5 Task 13: caustic photon maps ------------------------------------------------------------------
+
+# The caustic maps (photons.comp and caustic_resolve.comp come with the shaders/modern glob above).
+target_sources(evo_modern PRIVATE src/modern/caustics.cpp)
+
+# Caustics on lavapipe with synchronization validation: a glass sphere over a receiver floor under an
+# overhead disc (or a rect light): energy against the cross-section, dispersion, determinism in any photon
+# order, the double-count exclusion, the photon-mapped caustic against the converged path-traced one,
+# byte-identity without caustics, refusals and the modern stage. `caustics_test --look <dir> [spp]` renders
+# a still to look at.
+add_executable(caustics_test tests/caustics_test.cpp)
+target_link_libraries(caustics_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(caustics_test PRIVATE tests)
+add_dependencies(caustics_test evo_modern_sphere_shaders evo_modern_intersection_shaders)
+evo_gpu_test(caustics caustics_test)

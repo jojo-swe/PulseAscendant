@@ -373,6 +373,14 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             throw std::invalid_argument(
                 "PathTracer::trace(): the frame places its particle field, but no particle "
                 "spheres and BLAS come with it (TraceExtras)");
+        // Task 13: caustics need the maps' image, receiver table and photon pass (the maps check the frame in
+        // detail; the receivers' materials are checked here too, since the closest-hits read their table).
+        if (frame.caustics &&
+            (extras.causticMaps == nullptr || extras.causticReceivers == nullptr || !extras.photons))
+            throw std::invalid_argument(
+                "PathTracer::trace(): the frame has caustics, but no caustic maps, receiver "
+                "table and photon pass come with it (TraceExtras)");
+        checkCausticFrame(scene.source(), frame, ~0u);
     }
 
     // Each slice's tables, written to its region of this slot's buffers: the ring's begin() waited for the
@@ -456,9 +464,11 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         u.seconds = settings.seconds;
         for (const rt::RectLight& light : frame.lights)
             u.lightWeightSum += std::max(light.selectWeight, 0.f);
-        // Step 5's fields, each set by the task that reads it: no regularisation, no tree lights, medium,
-        // caustics or lensing.
+        // Step 5's fields, each set by the task that reads it: no tree lights, medium or lensing; the caustic
+        // receivers (Task 13).
         u.environmentSelect = frame.environment.select;
+        u.causticReceivers =
+            frame.caustics ? static_cast<std::uint32_t>(frame.caustics->receivers.size()) : 0u;
         u.shutterOffset = settings.sliceOffsets[k];
         u.sliceIndex = k;
         u.sliceCount = sliceCount;
@@ -505,6 +515,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
     auto regionBuffer = [](std::uint32_t binding, const VkDescriptorBufferInfo& info) {
         return gfx::DescriptorWrite::buffer(binding, info);
     };
+    const gfx::Buffer& staticSpheres = extras.staticSpheres ? *extras.staticSpheres
+                                       : scene.spheres()    ? scene.spheres()->records()
+                                                            : dummyBuffer_;
     // The descriptor set of slice k: its regions of this slot's per-slice buffers, the rest shared.
     auto writesFor = [&](std::uint32_t k) {
         const SceneFrame& frame = slices[k];
@@ -546,9 +559,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                 : regionBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS,
                                regionInfo(previousTransforms_[slot], previousStride, k, sizeof(rt::Mat34),
                                           capacity_.instances)),
-            storageBuffer(EVO_BINDING_STATIC_SPHERES, extras.staticSpheres ? *extras.staticSpheres
-                                                      : scene.spheres()    ? scene.spheres()->records()
-                                                                           : dummyBuffer_),
+            storageBuffer(EVO_BINDING_STATIC_SPHERES, staticSpheres),
             extraBuffer(EVO_BINDING_PARTICLE_SPHERES, extras.particleSpheres),
             sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
             extraBuffer(EVO_BINDING_LENSING, extras.lensing),
@@ -585,6 +596,24 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             if (singleSlice && timers_)
                 timers_->begin(cmd, "tlas");
             tlas_->build(cmd, scene.blases(), sliceInstances[k]);
+            // Task 13: the photon pass, once, against the first slice's TLAS and tables (region 0 of this
+            // slot's per-slice buffers), before any trace dispatch: the maps are a function of the frame's
+            // time, shared by every slice.
+            if (d == 0 && slices[0].caustics) {
+                const SceneFrame& first = slices[0];
+                PhotonScene photons;
+                photons.tlas = tlas_->handle();
+                photons.instances = &instanceRecords_[slot];
+                photons.materials = first.materials.empty() ? &scene.staticMaterials() : &materials_[slot];
+                photons.vertices = &scene.geometry().vertices();
+                photons.indices = &scene.geometry().indices();
+                photons.meshRecords = &scene.geometry().meshRecords();
+                photons.staticSpheres = &staticSpheres;
+                photons.particleSpheres = extras.particleSpheres ? extras.particleSpheres : &dummyBuffer_;
+                photons.lights = &lights_[slot];
+                photons.environment = extras.environment ? extras.environment : &environments_[slot];
+                extras.photons(cmd, photons);
+            }
             if (singleSlice && timers_) {
                 timers_->end(cmd);
                 timers_->begin(cmd, "trace");

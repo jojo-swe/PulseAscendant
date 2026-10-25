@@ -209,6 +209,8 @@ vec3 checkerColor(Material m, vec3 p, vec3 ng) {
     return odd ? m.baseColor2 : m.baseColor;
 }
 
+#include "caustics.glsl" // causticRadiance(HitPoint), Task 13's hook
+
 // --- The payload -------------------------------------------------------------------------------------------
 
 // Fills the payload with the hit and the surface (baseColor and roughness after any pattern; emission is
@@ -233,6 +235,11 @@ void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmissio
     payload.coatRoughness = h.material.coatRoughness;
     payload.materialClass = h.material.materialClass;
     payload.emission = (h.record.light == kNoLight || h.front) ? emission : vec3(0.0);
+    // Task 13: a caustic receiver reflects its photon map (0 without caustics in the frame).
+    if ((h.material.flags & kMaterialCausticReceiver) != 0u) {
+        h.material.baseColor = baseColor; // after the pattern
+        payload.emission += causticRadiance(h);
+    }
     payload.materialFlags = h.material.flags;
     payload.abbe = h.material.abbe;
     payload.medium = h.material.medium;
@@ -243,7 +250,5 @@ void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmissio
 vec3 materialEmission(Material m) {
     return m.emission * m.emissionScale;
 }
-
-#include "caustics.glsl" // causticRadiance(HitPoint), Task 13's hook
 
 #endif

@@ -1,6 +1,7 @@
 #include "render/modern_stage.hpp"
 
 #include "gfx/gpu_timers.hpp"
+#include "modern/caustics.hpp"
 #include "modern/path_tracer.hpp"
 #include "modern/scene_gpu.hpp"
 #include "modern/shutter.hpp"
@@ -8,6 +9,7 @@
 #include "post/denoiser.hpp"
 #include "post/upscale.hpp"
 #include "rt/particles.hpp"
+#include "rt/random.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -126,6 +128,11 @@ void ModernStage::prepare(modern::SceneId id) {
             splats = std::make_unique<modern::SplatPass>(ctx_, ring_, traceWidth_, traceHeight_);
         (splats ? *splats : *splats_).prepare(statics.splatShader);
     }
+    // The one CausticMaps, made for the first scene with caustics (grown below for a later one; Task 13).
+    const std::uint32_t causticResolution = statics.capacity.causticResolution;
+    std::unique_ptr<modern::CausticMaps> caustics;
+    if (causticResolution > 0 && !caustics_)
+        caustics = std::make_unique<modern::CausticMaps>(ctx_, ring_, causticResolution);
     if (!tracer_) {
         auto tracer = std::make_unique<modern::PathTracer>(ctx_, ring_, traceWidth_, traceHeight_, capacity);
         tracer->setTimers(timers_);
@@ -149,6 +156,10 @@ void ModernStage::prepare(modern::SceneId id) {
         particles_ = std::move(particles);
     if (splats)
         splats_ = std::move(splats);
+    if (causticResolution > 0 && caustics_)
+        caustics_->reserve(causticResolution); // keeps the old maps if it throws
+    if (caustics)
+        caustics_ = std::move(caustics);
     gpus_[index] = std::move(gpu);
 }
 
@@ -167,7 +178,8 @@ VkDeviceSize ModernStage::imageBytes() const {
 VkDeviceSize ModernStage::gpuBytes() const {
     if (!tracer_)
         return 0;
-    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0);
+    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0) +
+                         (caustics_ ? caustics_->bytes() : 0);
     for (const auto& gpu : gpus_)
         if (gpu)
             bytes += gpu->bytes();
@@ -338,6 +350,23 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         if (sliceCount == 1)
             endScope(commands);
     };
+    if (slices[0].caustics) {
+        // Task 13: this frame's photon maps (the first slice's), a pure function of the show time (the seed
+        // does not follow the frames since a reset), with kExportPhotonFactor times the photons in an export
+        // of many samples.
+        if (!caustics_)
+            throw std::invalid_argument("ModernStage: a frame with caustics from a scene whose "
+                                        "capacity.causticResolution is 0");
+        const std::uint32_t photons = slices[0].caustics->photons *
+                                      (state.mode == RenderMode::Export && state.spp >= modern::kExportPhotonSpp
+                                           ? modern::kExportPhotonFactor
+                                           : 1u);
+        caustics_->prepare(object.staticScene(), slices[0], photons,
+                           rt::pcgHash(modern::frameSeedFor(frame.showSeconds, 0) ^ 0x43415553u));
+        extras.causticMaps = &caustics_->maps();
+        extras.causticReceivers = &caustics_->receiverTable();
+        extras.photons = [this](VkCommandBuffer c, const modern::PhotonScene& p) { caustics_->record(c, p); };
+    }
     tracer_->trace(cmd, *gpus_[indexOf(id)], slices, continues ? previousCamera_ : std::nullopt, trace,
                    retroImage, extras,
                    particles ? modern::PathTracer::SliceCallback(recordParticles) : nullptr);

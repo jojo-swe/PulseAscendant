@@ -37,6 +37,9 @@ struct Camera {
 // scene's capacity (std::length_error). Every scene task sweeps its chapters against it (checkSceneSweep).
 struct SceneCapacity {
     std::uint32_t instances = 1024, lights = 64, materials = 256, spheres = 0, particles = 0, splats = 0;
+    // The largest caustic receiver resolution of any frame (Task 13; 0: the scene has no caustics). The
+    // modern stage sizes its one CausticMaps to the largest prepared.
+    std::uint32_t causticResolution = 0;
 };
 
 // The meshes (BLAS per mesh) and materials of a scene, and what its frames may hold. An instance's hit group
