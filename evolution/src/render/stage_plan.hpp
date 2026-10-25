@@ -80,6 +80,10 @@ struct HistoryState {
     // the stage traces up to modern::kMaxShutterSlices time slices of it in Export mode only. The window has
     // no shutter, whatever this says.
     double shutterSeconds = 0;
+    // Export only: the stage submits the frame's GPU work so far before each time slice (FrameRing::split),
+    // so no single submit traces the whole frame. The same commands run in the same order, so the frame's
+    // bytes do not change. The window never splits, whatever this says.
+    bool submitPerSlice = false;
 };
 
 // Decides, frame by frame, whether the temporal history continues. A reset on the first frame (and after

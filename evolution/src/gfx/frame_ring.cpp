@@ -170,6 +170,21 @@ std::uint64_t FrameRing::submit(VkSemaphore waitBinary, VkPipelineStageFlags2 wa
     return value;
 }
 
+void FrameRing::split() {
+    if (!recording_)
+        throw std::logic_error("FrameRing::split() without begin()");
+    const std::uint32_t slot = slot_;
+    const std::uint64_t done = submit(); // moves on to the next slot: back to this one below
+    slot_ = slot;
+    wait(done);
+    Frame& frame = frames_[slot_];
+    vkCheck(vkResetCommandPool(ctx_.device(), frame.pool, 0), "vkResetCommandPool(frame split)");
+    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkCheck(vkBeginCommandBuffer(frame.cmd, &beginInfo), "vkBeginCommandBuffer(frame split)");
+    recording_ = true;
+}
+
 void FrameRing::wait(std::uint64_t value) {
     if (value > lastSubmitted_)
         throw std::logic_error("FrameRing::wait(" + std::to_string(value) +
