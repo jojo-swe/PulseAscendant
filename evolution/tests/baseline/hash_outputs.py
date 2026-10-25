@@ -48,6 +48,7 @@ else moved.
 Then regenerated after the polish merges (the city's ASCENT, the nebula, GALAXY and REBOOT's cube of stars, and the
 Studio's DOS listing): galaxy_20, nebula_40, plasma_wipe, reboot_10, reboot_60, stream_studio_ascent and
 studio_night_40 changed; the Studio's luminance moved by 0.05 % or less.
+Then regenerated for NEBULA's darker pillar faces and star A's fronts: only nebula_40 changed.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How a change uses it (run from evolution/ after building the linux preset):
