@@ -970,6 +970,45 @@ add_dependencies(spheres_test spheres_test_shaders path_tracer_test_shaders evo_
                  evo_modern_intersection_shaders)
 evo_gpu_test(spheres spheres_test)
 
+# --- Step 5 Task 10: emissive splats -------------------------------------------------------------------------
+
+# SplatPass (src/modern/splats.cpp) and its shaders (shaders/modern/splat_common.glsl, splat_resolve.comp, which
+# the shaders/modern glob compiles as modern_splat_resolve.comp.spv).
+target_sources(evo_modern PRIVATE src/modern/splats.cpp)
+
+# The splats with synchronization validation, through a test splat shader (shaders/test/splat_grid.comp, built
+# twice: plain and with SPLAT_PERMUTE_IDS): energy across resolutions against a CPU reference, the depth test,
+# order independence of 2^18 points, the fixed-point overflow, refusals, the splats through ModernStage
+# (occlusion by the traced scene, projection, energy, seeks, memory) and a picture of a spiral galaxy.
+set(splatGridSpirv "")
+foreach(variant IN ITEMS plain permuted)
+    if(variant STREQUAL "plain")
+        set(spirv "${EVO_TEST_SPIRV_DIR}/test_splat_grid.comp.spv")
+        set(defines "")
+    else()
+        set(spirv "${EVO_TEST_SPIRV_DIR}/test_splat_grid_permuted.comp.spv")
+        set(defines "-DSPLAT_PERMUTE_IDS")
+    endif()
+    add_custom_command(
+        OUTPUT "${spirv}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+        COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 ${defines} --depfile
+                "${CMAKE_BINARY_DIR}/shader-deps/test_splat_grid_${variant}.comp.d" -o "${spirv}"
+                "${CMAKE_SOURCE_DIR}/shaders/test/splat_grid.comp"
+        DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/splat_grid.comp"
+        DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_splat_grid_${variant}.comp.d"
+        COMMENT "Compiling test shader test_splat_grid.comp (${variant})"
+        VERBATIM)
+    list(APPEND splatGridSpirv "${spirv}")
+endforeach()
+add_custom_target(splat_test_shaders DEPENDS ${splatGridSpirv})
+add_executable(splat_test tests/splat_test.cpp)
+target_link_libraries(splat_test PRIVATE evo_render evo_modern)
+target_include_directories(splat_test PRIVATE tests)
+target_compile_definitions(splat_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(splat_test splat_test_shaders)
+evo_gpu_test(splat splat_test)
+
 # --- Step 5 Task 12: the light tree ---------------------------------------------------------------------------
 
 # Next-event estimation over up to 65,536 emissive sphere lights: the tree is built (or refit) on the CPU per
