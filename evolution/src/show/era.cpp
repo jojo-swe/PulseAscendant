@@ -50,15 +50,17 @@ Window window(const TimelineFrame& f, const BeatGridView& grid) {
     return w;
 }
 
-float smoothstep(double from, double to, double t) {
-    const double x = std::clamp((t - from) / (to - from), 0.0, 1.0);
-    return float(x * x * (3 - 2 * x));
-}
-
+// The camera crosses the CRT's glass on D (show/director.hpp). FLYBY and TUNNEL show the 1993 picture full
+// frame until then and the 2026 scene from D on: the era steps from 0 to 1 on D with no flash, since the
+// glass itself hides the switch. PORTAL and REBOOT hold 2026 throughout: their 1993 picture is the one on the
+// Studio's CRT, inside the 2026 frame.
 void portal(TimelineFrame& f, const Window& w) {
-    const double t = f.trackSeconds;
-    f.era = smoothstep(w.accent - 1, w.accent + 1, t);
-    f.eraCut = t >= w.accent ? float(std::exp(-8 * (t - w.accent))) : 0.f;
+    f.eraCut = 0.f;
+    if (f.effect == Effect::Portal || f.effect == Effect::Reboot) {
+        f.era = 1.f;
+        return;
+    }
+    f.era = f.trackSeconds >= w.downbeat - onBeat ? 1.f : 0.f;
 }
 
 void wipe(TimelineFrame& f, const Window& w) {

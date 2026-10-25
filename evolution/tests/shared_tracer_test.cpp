@@ -12,8 +12,8 @@
 //   (d) a scene of capacity 4096 instances traces 3000 (after reserve() grew a 1024-instance tracer); 4097
 //       instances throw std::length_error, and so does a frame beyond the tracer's capacity;
 //   (e) shotFor() and samplesRetro() never call a scene's frame(): a counting scene sees 0 calls, and
-//       shotFor() follows the Studio's camera().shot across STUDIO NIGHT's cut;
-//   (f) the scene fixture's checkChapterPictures passes on the Studio's five chapters (the check every step 5
+//       shotFor() follows the Studio's camera().shot across PORTAL's glass crossings;
+//   (f) the scene fixture's checkChapterPictures passes on the Studio's six chapters (the check every step 5
 //       scene test runs, here on the one scene that exists).
 
 #include "gfx/context.hpp"
@@ -60,7 +60,7 @@ int checksPassed = 0;
     } while (false)
 
 constexpr std::uint32_t kWidth = 160, kHeight = 90;
-constexpr int kFlyby = 1, kStudioNight = 11;
+constexpr int kFlyby = 1, kPortal = 10, kStudioNight = 11;
 
 // Waits for the queue: synchronization validation in layer 1.3.275 credits no host wait on the timeline, so
 // memory reused between subtests would read as a hazard.
@@ -328,12 +328,12 @@ void testShotWithoutFrame(gfx::Context& ctx) {
         const show::TimelineFrame frame = show::sampleTimeline(chapterTime(kFlyby, i / 20.0));
         CHECK(stage.shotFor(frame) == 0);
         CHECK(!stage.samplesRetro(frame));
-        const show::TimelineFrame night = show::sampleTimeline(chapterTime(kStudioNight, i / 20.0));
+        const show::TimelineFrame night = show::sampleTimeline(chapterTime(kPortal, i / 20.0));
         const std::uint32_t shot = stage.shotFor(night);
         CHECK(shot == studio->camera(night).shot);
         (i == 0 ? firstShot : lastShot) = shot;
     }
-    CHECK(lastShot != firstShot); // the samples cross STUDIO NIGHT's cut
+    CHECK(lastShot != firstShot); // the samples cross PORTAL's glass
     CHECK(probe.frameCalls == 0);
     std::printf("(e) shotFor and samplesRetro: %d frame() calls\n", probe.frameCalls);
 }
@@ -342,7 +342,7 @@ void testShotWithoutFrame(gfx::Context& ctx) {
 
 void testChapterPictures(gfx::Context& ctx) {
     evo::test::checkChapterPictures(ctx, SceneId::Studio);
-    std::printf("(f) checkChapterPictures: the Studio's 5 chapters pass\n");
+    std::printf("(f) checkChapterPictures: the Studio's 6 chapters pass\n");
 }
 
 } // namespace

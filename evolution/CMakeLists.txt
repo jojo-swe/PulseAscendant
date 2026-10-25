@@ -1184,3 +1184,15 @@ evo_scene_test(glass)
 # volume. `scene_ship_test --look <dir> [spp] [width height]` renders stills.
 target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
 evo_scene_test(ship)
+
+# --- Step 6: the Portal crossings and the Studio's camera --------------------------------------------------
+
+# crt.comp's view of the 1993 picture as a Portal chapter's camera nears the CRT's glass (src/render/crt_view.cpp),
+# and the act joins' test: the Studio's camera runs on across 194.00 and 412.40 without a seam, and crt.comp's
+# FLYBY and TUNNEL views reach their framing on the glass. CPU only.
+target_sources(evo_render PRIVATE src/render/crt_view.cpp)
+add_executable(act_join_test tests/act_join_test.cpp)
+target_link_libraries(act_join_test PRIVATE evo_render)
+add_test(NAME act_join COMMAND act_join_test)
+# The Studio's test checks every Studio chapter's pictures with the scene fixture.
+target_link_libraries(studio_test PRIVATE evo_scene_fixture)
