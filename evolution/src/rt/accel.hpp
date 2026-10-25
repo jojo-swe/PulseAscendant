@@ -16,11 +16,18 @@ namespace evo::rt {
 
 static_assert(sizeof(VkAccelerationStructureInstanceKHR) == 64);
 
-// One bottom-level acceleration structure per mesh of a GeometryStore, all built in one immediate submit at
-// setup, opaque geometry, PREFER_FAST_TRACE | ALLOW_COMPACTION. With `compact` the compacted sizes are
-// queried, compacted copies made in a second immediate submit, and only once that copy completed are the
-// originals and the scratch buffer destroyed. The store may go once this is built as far as the BLASes are
-// concerned, but shaders that fetch vertices read its buffers.
+// The input of one bottom-level acceleration structure: one geometry (triangles or AABBs, whose buffers live
+// until the BlasSet's constructor returns) and its primitive count.
+struct BlasInput {
+    VkAccelerationStructureGeometryKHR geometry;
+    std::uint32_t primitiveCount;
+};
+
+// One bottom-level acceleration structure per mesh of a GeometryStore (or per BlasInput), all built in one
+// immediate submit at setup, opaque geometry, PREFER_FAST_TRACE | ALLOW_COMPACTION. With `compact` the
+// compacted sizes are queried, compacted copies made in a second immediate submit, and only once that copy
+// completed are the originals and the scratch buffer destroyed. The store may go once this is built as far as
+// the BLASes are concerned, but shaders that fetch vertices read its buffers.
 //
 // Lifetime, for scene owners: declare the GeometryStore and the BlasSet before the FrameRing and the Tlas
 // (members are destroyed in reverse order), so they outlive both: the ring's destructor and the Tlas's wait
@@ -29,6 +36,9 @@ static_assert(sizeof(VkAccelerationStructureInstanceKHR) == 64);
 class BlasSet {
 public:
     BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact = true);
+    // One BLAS per input, in order (address(i) is input i's): the analytic spheres' AABBs (rt/spheres.hpp).
+    // Throws std::invalid_argument for no inputs.
+    BlasSet(gfx::Context& ctx, std::span<const BlasInput> inputs, bool compact = true);
     ~BlasSet();
     BlasSet(const BlasSet&) = delete;
     BlasSet& operator=(const BlasSet&) = delete;
@@ -48,6 +58,7 @@ private:
         VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
         VkDeviceAddress address = 0;
     };
+    void build(std::span<const BlasInput> inputs, bool compact);
     void destroy() noexcept;
 
     gfx::Context& ctx_;
@@ -56,14 +67,16 @@ private:
     VkDeviceSize compactedBytes_ = 0;
 };
 
-// One TLAS instance: mesh `mesh` of a BlasSet placed by `transform`. customIndex (gl_InstanceCustomIndexEXT)
-// and hitGroup (the SBT record offset) have 24 bits.
+// One TLAS instance: mesh `mesh` of a BlasSet placed by `transform`, or, when `blas` is not 0, the BLAS at
+// that device address (an analytic sphere BLAS, rt/spheres.hpp and rt/particles.hpp; `mesh` is then
+// ignored). customIndex (gl_InstanceCustomIndexEXT) and hitGroup (the SBT record offset) have 24 bits.
 struct Instance {
     std::uint32_t mesh;
     Mat34 transform;
     std::uint32_t customIndex;
     std::uint32_t hitGroup;
     std::uint8_t mask = 0xFF;
+    VkDeviceAddress blas = 0;
 };
 
 // A top-level acceleration structure rebuilt every frame. Owns one TLAS and one scratch buffer sized for
@@ -98,7 +111,8 @@ public:
 
     // Throws, before recording anything, std::logic_error outside ring.begin()/submit() or for a second build
     // in the frame (a refused build does not count), std::length_error
-    // for more than maxInstances instances, std::out_of_range for a mesh not in `blases` and
+    // for more than maxInstances instances, std::out_of_range for a mesh not in `blases` (an instance without
+    // its own `blas`) and
     // std::invalid_argument for a customIndex or hitGroup over 24 bits.
     void build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Instance> instances);
     VkAccelerationStructureKHR handle() const { return tlas_; }

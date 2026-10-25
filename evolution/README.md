@@ -66,7 +66,9 @@ validation.
   quadrature of their own evaluation), `path_tracer` (emitters, MIS against analytic and quadrature references
   with several lights, a portal and a two-tone screen, the furnace, determinism, finiteness under stress, the
   guides, batched dispatches), `denoiser` (accumulation, resets, reprojection, edges, the emission bypass,
-  NaN/Inf) and `tonemap` (the GPU against the CPU reference and golden values).
+  NaN/Inf), `tonemap` (the GPU against the CPU reference and golden values) and `spheres` (the sphere
+  intersection against a CPU reference, depth and normals, glass against a sphere mesh, 4096 particles over 32
+  frames two in flight against their analytic positions; `spheres_test --look <dir> [spp]` renders a picture).
 - The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT lighting the room, the screen following
   the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS prompt) and
   `seek_determinism` (in the window, after any seek, chapter change, camera cut or step back in time, the
@@ -268,6 +270,15 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   aliasing at 1 spp); next-event estimation, portals and rays after a rough bounce see a smooth lighting sky
   (gradient, glow, disc). Outdoor scenes sample the environment directly, the disc uniformly in its cone and
   the dome by cosine, weighed against the BSDF by multiple importance sampling.
+- **Analytic spheres and particles** (`src/rt/spheres.*`, `src/rt/particles.*`, `shaders/rt/sphere.*`). A
+  scene may hold exact spheres besides meshes: each sphere is an AABB in a bottom-level acceleration
+  structure and an intersection shader solves the ray against it (a robust quadratic and a Newton step, so a
+  2 mm sphere a kilometre away is still hit; a ray inside a glass sphere leaves through it). The closest-hit
+  shaders are compiled a second time for spheres, so hit groups 4–7 shade spheres with the same four material
+  classes; a sphere's colour tints its material and its own emission adds to it. Static spheres are built
+  once per scene, one BLAS per range an instance places. The particle field is up to millions of spheres that
+  a scene's compute shader makes every frame as a pure function of (particle, time), into a per-frame BLAS
+  rebuilt per frame in flight: nothing carries over from one frame to the next, so seeking needs nothing.
 - **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
   after the first bounce clamped to a luminance limit (64, the Studio 2) against fireflies; a non-finite
   sample counts as 0 (checked from the float's bits, so a fast-math compiler cannot fold the check away).

@@ -1,0 +1,61 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Test fixture for spheres_test (compiled for the test only): a particle function of (id, seconds, params)
+// in two modes (params[3].w).
+//
+// Mode 0, the grid (test (c); spheres_test.cpp's gridParticle() mirrors it): particle id sits at column
+// i = id % 64, row j = id / 64 of a 64-wide grid in the z = 0 plane, `spacing` apart and centred on the
+// origin, and moves with time: x by drift sin(w t + 0.37 id), z by depth sin(1.3 w t + 0.74 id).
+//   params[0] = (spacing, radius, depth, -), params[1] = (w, drift, -, -).
+// Mode 1, a vortex to look at (spheres_test --look): params[0].w particles on a swirling disc of radius
+// params[2].x around +y, 8 % of them emissive.
+
+#include "../modern/particles_common.glsl"
+
+float hashUnit(uint v) {
+    v ^= v >> 16;
+    v *= 0x7FEB352Du;
+    v ^= v >> 15;
+    v *= 0x846CA68Bu;
+    v ^= v >> 16;
+    return float(v >> 8) * (1.0 / 16777216.0);
+}
+
+SphereRecord gridParticle(uint id, float seconds, vec4 params[4]) {
+    float spacing = params[0].x;
+    float i = float(id % 64u), j = float(id / 64u);
+    float w = params[1].x;
+    float phase = 0.37 * float(id);
+    SphereRecord s;
+    s.center = vec3((i - 31.5) * spacing + params[1].y * sin(w * seconds + phase), (j - 31.5) * spacing,
+                    params[0].z * sin(1.3 * w * seconds + 2.0 * phase));
+    s.radius = params[0].y;
+    s.color = vec3(0.9);
+    s.material = 0u;
+    s.prevCenter = vec3(0.0);
+    s.emission = 0.0;
+    return s;
+}
+
+SphereRecord vortexParticle(uint id, float seconds, vec4 params[4]) {
+    float count = max(params[0].w, 1.0);
+    float u = (float(id) + 0.5) / count;
+    float radius = params[2].x * sqrt(u);
+    float angle = float(id) * 2.39996323 + seconds * 1.5 / (0.2 + radius);
+    float height = 0.25 * sin(3.0 * radius - 2.0 * seconds) * (1.0 - u) + 0.08 * (hashUnit(id) - 0.5);
+    SphereRecord s;
+    s.center = vec3(radius * cos(angle), params[2].y + height, radius * sin(angle));
+    s.radius = params[2].z * (0.6 + 0.8 * hashUnit(id * 7u + 1u));
+    float pick = hashUnit(id * 13u + 5u);
+    bool glow = pick < 0.08;
+    s.color = glow ? mix(vec3(1.0, 0.35, 0.08), vec3(0.2, 0.6, 1.0), hashUnit(id * 3u + 2u)) : vec3(0.95);
+    s.material = 0u;
+    s.prevCenter = vec3(0.0);
+    s.emission = glow ? params[2].w : 0.0;
+    return s;
+}
+
+SphereRecord particle(uint id, float seconds, vec4 params[4]) {
+    return params[3].w > 0.5 ? vortexParticle(id, seconds, params) : gridParticle(id, seconds, params);
+}

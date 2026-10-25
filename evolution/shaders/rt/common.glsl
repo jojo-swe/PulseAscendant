@@ -88,9 +88,11 @@ const uint kMissIndexShadow = 1u;
 //   materialFlags  Material.flags: camera-only emission (Task 6), caustic receiver (Task 13), thin-walled
 //   abbe           Material.abbe: dispersion (Task 6)
 //   medium         Material.medium: the medium inside the surface, kNoMedium for none (Task 11)
-//   primitive      gl_PrimitiveID: the triangle, or the sphere of a sphere instance's AABB BLAS (Task 8;
-//                  Task 12's tree light index is primitive - firstSphere)
-//   prevPosition   the hit point under the instance's previous transform (Task 9; = position until then)
+//   primitive      the triangle (gl_PrimitiveID), or for a sphere instance the sphere's index in its buffer
+//                  (static spheres or particle field): its first sphere + gl_PrimitiveID (Task 8; Task 12's
+//                  tree light index is primitive - firstSphere)
+//   prevPosition   the hit point under the instance's previous transform (Task 9; = position until then; a
+//                  sphere's: the same point of it around its prevCenter, Task 8)
 struct HitPayload {
     vec3 position;
     float t;

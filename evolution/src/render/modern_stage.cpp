@@ -5,6 +5,7 @@
 #include "modern/scene_gpu.hpp"
 #include "post/denoiser.hpp"
 #include "post/upscale.hpp"
+#include "rt/particles.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -102,6 +103,13 @@ void ModernStage::prepare(modern::SceneId id) {
     // memory) leaves the stage as it was: never a prepared scene without a tracer, or a denoiser without one.
     auto gpu = std::make_unique<modern::SceneGpu>(ctx_, statics);
     const modern::TracerCapacity capacity = modern::tracerCapacity(statics.capacity);
+    // The one particle field, made for the first scene with a particle shader (grown below for a later one).
+    const bool hasParticles = !statics.particleShader.empty();
+    const std::uint32_t particleCapacity = std::max(statics.capacity.particles, 1u);
+    std::unique_ptr<rt::ParticleField> particles;
+    if (hasParticles && !particles_)
+        particles =
+            std::make_unique<rt::ParticleField>(ctx_, ring_, particleCapacity, statics.particleShader);
     if (!tracer_) {
         auto tracer = std::make_unique<modern::PathTracer>(ctx_, ring_, traceWidth_, traceHeight_, capacity);
         tracer->setTimers(timers_);
@@ -117,6 +125,12 @@ void ModernStage::prepare(modern::SceneId id) {
     } else {
         tracer_->reserve(capacity); // keeps the old capacity if it throws
     }
+    if (hasParticles && particles_) {
+        particles_->setShader(statics.particleShader);
+        particles_->reserve(particleCapacity); // keeps the old slots if it throws
+    }
+    if (particles)
+        particles_ = std::move(particles);
     gpus_[index] = std::move(gpu);
 }
 
@@ -135,7 +149,7 @@ VkDeviceSize ModernStage::imageBytes() const {
 VkDeviceSize ModernStage::gpuBytes() const {
     if (!tracer_)
         return 0;
-    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes();
+    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes() + (particles_ ? particles_->bytes() : 0);
     for (const auto& gpu : gpus_)
         if (gpu)
             bytes += gpu->bytes();
@@ -254,8 +268,22 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     trace.pixelJitter = window.jitter;
     trace.pixelFootprint = window.footprint;
     lastJitter_ = window.jitter;
+    modern::TraceExtras extras;
+    if (scene.particles) {
+        // The particle field first (checked with the rest of the frame before anything is recorded).
+        const modern::SceneStatic& statics = object.staticScene();
+        modern::checkSceneFrame(statics, scene);
+        const modern::ParticleFrame& p = *scene.particles;
+        particles_->setShader(statics.particleShader);
+        beginScope(cmd, "particles");
+        particles_->record(cmd, p.count, frame.localSeconds,
+                           continues ? previousSeconds_ : frame.localSeconds, p.params, p.material);
+        endScope(cmd);
+        extras.particleSpheres = &particles_->records();
+        extras.particleBlas = particles_->blasAddress();
+    }
     tracer_->trace(cmd, *gpus_[indexOf(id)], scene, continues ? previousCamera_ : std::nullopt, trace,
-                   retroImage);
+                   retroImage, extras);
 
     if (state.reset != HistoryReset::None) {
         denoiser_->resetHistory();
@@ -280,6 +308,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     tonemap_.record(cmd, hdr_, image_, scene.exposureEV);
     endScope(cmd);
     previousCamera_ = scene.camera;
+    previousSeconds_ = frame.localSeconds;
 }
 
 } // namespace evo::render

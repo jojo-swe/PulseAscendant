@@ -14,8 +14,9 @@ namespace evo::gfx {
 
 namespace {
 
-constexpr VkShaderStageFlags kRtStages =
-    VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+constexpr VkShaderStageFlags kRtStages = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR |
+                                         VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                                         VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
 
 // Checked before anything is created.
 std::uint32_t checkedPushConstantBytes(const RtShaders& shaders, std::uint32_t bytes) {
@@ -63,6 +64,22 @@ VkRayTracingShaderGroupCreateInfoKHR triangleHitGroup(std::uint32_t closestHitSt
     return group;
 }
 
+// An AABB hit group: the intersection shader reports hits, the closest-hit shades them.
+VkRayTracingShaderGroupCreateInfoKHR proceduralHitGroup(std::uint32_t closestHitStage,
+                                                        std::uint32_t intersectionStage) {
+    VkRayTracingShaderGroupCreateInfoKHR group{VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR};
+    group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
+    group.generalShader = VK_SHADER_UNUSED_KHR;
+    group.closestHitShader = closestHitStage;
+    group.anyHitShader = VK_SHADER_UNUSED_KHR; // opaque geometry: no any-hit
+    group.intersectionShader = intersectionStage;
+    return group;
+}
+
+std::uint32_t hitGroupCount(const RtShaders& shaders) {
+    return static_cast<std::uint32_t>(shaders.closestHits.size() + shaders.proceduralHits.size());
+}
+
 VkStridedDeviceAddressRegionKHR region(VkDeviceAddress base, const SbtRegion& r) {
     return {base + r.offset, r.stride, r.size};
 }
@@ -74,8 +91,7 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
     : ctx_(ctx), pushConstantBytes_(checkedPushConstantBytes(shaders, pushConstantBytes)),
       setLayout_(ctx, bindings, kRtStages),
       sbtLayout_(computeSbtLayout(ctx.rayTracingProperties(),
-                                  static_cast<std::uint32_t>(shaders.misses.size()),
-                                  static_cast<std::uint32_t>(shaders.closestHits.size()))),
+                                  static_cast<std::uint32_t>(shaders.misses.size()), hitGroupCount(shaders))),
       descriptors_(ctx) {
     const VkDevice device = ctx.device();
     const RayTracingProperties& properties = ctx.rayTracingProperties();
@@ -90,7 +106,8 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         layoutInfo.pPushConstantRanges = pushConstantBytes > 0 ? &pushRange : nullptr;
         vkCheck(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &layout_), "vkCreatePipelineLayout");
 
-        // Stages and groups: raygen, the misses, one triangle hit group per closest-hit.
+        // Stages and groups: raygen, the misses, one triangle hit group per closest-hit, the procedural hit
+        // groups.
         Modules modules(device);
         std::vector<VkPipelineShaderStageCreateInfo> stages;
         std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups;
@@ -120,6 +137,11 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
             groups.push_back(generalGroup(addStage(miss, VK_SHADER_STAGE_MISS_BIT_KHR)));
         for (const auto& closestHit : shaders.closestHits)
             groups.push_back(triangleHitGroup(addStage(closestHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)));
+        for (const ProceduralHitGroup& hit : shaders.proceduralHits) {
+            const std::uint32_t closestHit = addStage(hit.closestHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+            groups.push_back(proceduralHitGroup(
+                closestHit, addStage(hit.intersection, VK_SHADER_STAGE_INTERSECTION_BIT_KHR)));
+        }
 
         VkRayTracingPipelineCreateInfoKHR pipelineInfo{
             VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
@@ -147,7 +169,7 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         const std::size_t missCount = shaders.misses.size();
         for (std::size_t i = 0; i < missCount; ++i)
             place(1 + i, sbtLayout_.miss.offset + i * sbtLayout_.miss.stride);
-        for (std::size_t k = 0; k < shaders.closestHits.size(); ++k)
+        for (std::size_t k = 0; k < hitGroupCount(shaders); ++k)
             place(1 + missCount + k, sbtLayout_.hit.offset + k * sbtLayout_.hit.stride);
 
         BufferDesc sbtDesc{};

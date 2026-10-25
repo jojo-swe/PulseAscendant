@@ -5,6 +5,8 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace evo::modern {
 
@@ -26,8 +28,8 @@ const SceneStatic& checked(const SceneStatic& scene) {
         throw std::invalid_argument("SceneGpu: " + std::to_string(scene.spheres.size()) +
                                     " static spheres, more than the scene's capacity of " +
                                     std::to_string(scene.capacity.spheres));
-    if (!scene.spheres.empty())
-        throw std::invalid_argument("SceneGpu: static spheres need the sphere BLAS (step 5, Task 8)");
+    if (scene.spheres.empty() && !scene.sphereRanges.empty())
+        throw std::invalid_argument("SceneGpu: sphere ranges, but no static spheres");
     return scene;
 }
 
@@ -35,6 +37,12 @@ gfx::Buffer materialBuffer(gfx::Context& ctx, const std::vector<rt::Material>& m
     const auto bytes = std::as_bytes(std::span(materials));
     return gfx::createDeviceBuffer(
         ctx, {bytes.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "static materials"}, bytes);
+}
+
+std::unique_ptr<rt::SphereBlas> sphereBlas(gfx::Context& ctx, const SceneStatic& scene) {
+    if (scene.spheres.empty())
+        return nullptr;
+    return std::make_unique<rt::SphereBlas>(ctx, scene.spheres, scene.sphereRanges);
 }
 
 bool usesRetroScreen(const std::vector<rt::Material>& materials) {
@@ -108,6 +116,65 @@ void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& mater
     }
 }
 
+// A sphere instance: one of the scene's ranges of static spheres, or the frame's whole particle field with
+// its material; never a light.
+void checkSphereInstance(const SceneStatic& scene, const SceneFrame& frame,
+                         const std::vector<rt::Material>& materials, std::size_t i) {
+    const SceneInstance& in = frame.instances[i];
+    const std::string what = "instance " + std::to_string(i) + " ";
+    if (in.material >= materials.size())
+        throw std::out_of_range(what + "names a material that does not exist");
+    if (in.light != rt::kNoLight)
+        throw std::invalid_argument(what + "is a set of spheres, which is no light");
+    const std::string range =
+        "(" + std::to_string(in.firstSphere) + ", " + std::to_string(in.sphereCount) + ")";
+    if (in.dynamicSpheres) {
+        if (!frame.particles)
+            throw std::invalid_argument(what + "places the particle field, but the frame has none");
+        if (in.firstSphere != 0 || in.sphereCount != frame.particles->count)
+            throw std::invalid_argument(what + "places particles " + range + ", not the whole field of " +
+                                        std::to_string(frame.particles->count) + " (its one BLAS)");
+        if (in.material != frame.particles->material)
+            throw std::invalid_argument(what + "places the particle field with material " +
+                                        std::to_string(in.material) + ", not the field's " +
+                                        std::to_string(frame.particles->material));
+        return;
+    }
+    const std::vector<rt::SphereRange> ranges =
+        rt::sphereRangesOf(scene.sphereRanges, static_cast<std::uint32_t>(scene.spheres.size()));
+    if (scene.spheres.empty() || std::find(ranges.begin(), ranges.end(),
+                                           rt::SphereRange{in.firstSphere, in.sphereCount}) == ranges.end())
+        throw std::invalid_argument(what + "places static spheres " + range +
+                                    ", which is no sphere range of the scene (one AABB BLAS each)");
+}
+
+// Every static sphere a sphere instance places exists in the material table with that instance's class (its
+// hit group shades every sphere of the instance). Each (range, class) once per frame.
+void checkStaticSphereClasses(const SceneStatic& scene, const SceneFrame& frame,
+                              const std::vector<rt::Material>& materials) {
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> checked; // (first sphere, class)
+    for (std::size_t i = 0; i < frame.instances.size(); ++i) {
+        const SceneInstance& in = frame.instances[i];
+        if (in.kind != rt::GeometryKind::Spheres || in.dynamicSpheres)
+            continue;
+        const std::uint32_t materialClass = materials[in.material].materialClass;
+        const std::pair<std::uint32_t, std::uint32_t> key{in.firstSphere, materialClass};
+        if (std::find(checked.begin(), checked.end(), key) != checked.end())
+            continue;
+        checked.push_back(key);
+        for (std::uint32_t k = in.firstSphere; k < in.firstSphere + in.sphereCount; ++k) {
+            const std::uint32_t m = scene.spheres[k].material;
+            if (m >= materials.size())
+                throw std::out_of_range("static sphere " + std::to_string(k) + " names material " +
+                                        std::to_string(m) + ", which does not exist");
+            if (materials[m].materialClass != materialClass)
+                throw std::invalid_argument(
+                    "static sphere " + std::to_string(k) + " has material " + std::to_string(m) +
+                    " of class " + std::to_string(materials[m].materialClass) + ", but instance " +
+                    std::to_string(i) + " places it with class " + std::to_string(materialClass));
+        }
+    }
+}
 } // namespace
 
 void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
@@ -134,27 +201,44 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
                                         " shows the retro screen, but the scene's static table does not "
                                         "(the scene is traced without the retro image)");
     }
+    if (frame.particles) {
+        const ParticleFrame& p = *frame.particles;
+        if (p.count > capacity.particles)
+            throw tooMany("particles", p.count, capacity.particles);
+        if (scene.particleShader.empty())
+            throw std::invalid_argument("the frame has a particle field, but the scene no particle shader");
+        if (p.material >= materials.size())
+            throw std::out_of_range("the particle field's material " + std::to_string(p.material) +
+                                    " does not exist");
+    }
     for (std::size_t i = 0; i < frame.instances.size(); ++i) {
         const SceneInstance& in = frame.instances[i];
+        if (in.kind == rt::GeometryKind::Spheres) {
+            checkSphereInstance(scene, frame, materials, i);
+            continue;
+        }
         if (in.kind != rt::GeometryKind::Triangles)
-            throw std::invalid_argument("instance " + std::to_string(i) +
-                                        " is a set of spheres, which needs step 5's Task 8");
+            throw std::invalid_argument("instance " + std::to_string(i) + " has kind " +
+                                        std::to_string(static_cast<std::uint32_t>(in.kind)) +
+                                        ", which is no GeometryKind");
         if (in.mesh >= scene.meshes.size() || in.material >= materials.size() ||
             (in.light != rt::kNoLight && in.light >= frame.lights.size()))
             throw std::out_of_range("instance " + std::to_string(i) +
                                     " names a mesh, material or light that does not exist");
     }
+    checkStaticSphereClasses(scene, frame, materials);
     checkLights(frame, materials);
     packEnvironment(frame.environment); // throws for an invalid environment
 }
 
 SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)
     : source_(&checked(scene)), samplesRetro_(usesRetroScreen(scene.materials)), store_(ctx, scene.meshes),
-      blases_(ctx, store_), materials_(materialBuffer(ctx, scene.materials)) {}
+      blases_(ctx, store_), spheres_(sphereBlas(ctx, scene)),
+      materials_(materialBuffer(ctx, scene.materials)) {}
 
 VkDeviceSize SceneGpu::bytes() const {
     return store_.vertices().bytes() + store_.indices().bytes() + store_.meshRecords().bytes() +
-           blases_.bytes() + materials_.bytes();
+           blases_.bytes() + (spheres_ ? spheres_->bytes() : 0) + materials_.bytes();
 }
 
 } // namespace evo::modern

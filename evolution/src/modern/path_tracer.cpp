@@ -83,6 +83,13 @@ gfx::RtShaders shaders() {
     s.misses = {dir / "rt_sky.rmiss.spv", dir / "rt_shadow.rmiss.spv"}; // miss 0: sky, miss 1: shadow
     s.closestHits = {dir / "rt_pbr.rchit.spv", dir / "rt_glass.rchit.spv", dir / "rt_emissive.rchit.spv",
                      dir / "rt_checker.rchit.spv"}; // in MaterialClass order
+    // Hit groups kHitGroupsPerKind.. (hitGroupFor(class, Spheres)): the same closest-hits built for analytic
+    // spheres (-DGEOMETRY_SPHERES), behind the sphere intersection shader (Task 8).
+    const std::filesystem::path intersection = dir / "rt_sphere.rint.spv";
+    s.proceduralHits = {{dir / "rt_pbr_sphere.rchit.spv", intersection},
+                        {dir / "rt_glass_sphere.rchit.spv", intersection},
+                        {dir / "rt_emissive_sphere.rchit.spv", intersection},
+                        {dir / "rt_checker_sphere.rchit.spv", intersection}};
     return s;
 }
 
@@ -301,6 +308,14 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     if (frame.materials.size() > capacity_.materials)
         throw tooMany("materials", frame.materials.size(), capacity_.materials);
     checkSceneFrame(scene.source(), frame);
+    const bool dynamicSpheres =
+        std::any_of(frame.instances.begin(), frame.instances.end(), [](const SceneInstance& in) {
+            return in.kind == rt::GeometryKind::Spheres && in.dynamicSpheres;
+        });
+    if (dynamicSpheres && (extras.particleSpheres == nullptr || extras.particleBlas == 0))
+        throw std::invalid_argument(
+            "PathTracer::trace(): the frame places its particle field, but no particle "
+            "spheres and BLAS come with it (TraceExtras)");
     const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
     const std::vector<rt::Material>& materials =
         frame.materials.empty() ? scene.source().materials : frame.materials;
@@ -312,8 +327,17 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         const SceneInstance& in = frame.instances[i];
         const auto index = static_cast<std::uint32_t>(i);
         const auto materialClass = static_cast<rt::MaterialClass>(materials[in.material].materialClass);
-        instances.push_back({in.mesh, in.transform, index, rt::hitGroupFor(materialClass, in.kind)});
         const bool spheres = in.kind == rt::GeometryKind::Spheres;
+        // A sphere instance's BLAS: the particle field's this frame, or its range's of the static spheres
+        // (checkSceneFrame found the range).
+        VkDeviceAddress blas = 0;
+        if (spheres)
+            blas =
+                in.dynamicSpheres
+                    ? extras.particleBlas
+                    : scene.spheres()->address(*scene.spheres()->findRange({in.firstSphere, in.sphereCount}));
+        instances.push_back(
+            {in.mesh, in.transform, index, rt::hitGroupFor(materialClass, in.kind), 0xFF, blas});
         const std::uint32_t flags = (spheres ? rt::kInstanceSpheres : 0u) |
                                     (spheres && in.dynamicSpheres ? rt::kInstanceDynamicSpheres : 0u);
         records.push_back({spheres ? in.firstSphere : in.mesh, in.material, in.light, flags});
@@ -422,7 +446,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         sampledImage(EVO_BINDING_DENSITY, density),
         sampledImage(EVO_BINDING_MAJORANT, majorant),
         extraBuffer(EVO_BINDING_PREVIOUS_TRANSFORMS, extras.previousTransforms),
-        extraBuffer(EVO_BINDING_STATIC_SPHERES, extras.staticSpheres),
+        storageBuffer(EVO_BINDING_STATIC_SPHERES, extras.staticSpheres ? *extras.staticSpheres
+                                                  : scene.spheres()    ? scene.spheres()->records()
+                                                                       : dummyBuffer_),
         extraBuffer(EVO_BINDING_PARTICLE_SPHERES, extras.particleSpheres),
         sampledImage(EVO_BINDING_CAUSTIC_MAPS, caustics),
         extraBuffer(EVO_BINDING_LENSING, extras.lensing),

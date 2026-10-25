@@ -112,22 +112,17 @@ private:
 
 // --- BlasSet ---------------------------------------------------------------------------------------------
 
-BlasSet::BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact) : ctx_(ctx) {
+namespace {
+
+// A store's meshes as BLAS inputs: one opaque triangle geometry each.
+std::vector<BlasInput> meshInputs(const GeometryStore& store) {
     const auto records = store.records();
-    const auto count = static_cast<std::uint32_t>(records.size());
     const VkDeviceAddress vertexBase = store.vertices().address();
     const VkDeviceAddress indexBase = store.indices().address();
-    const VkDeviceSize scratchAlignment = ctx.rayTracingProperties().minScratchOffsetAlignment;
-
-    std::vector<VkAccelerationStructureGeometryKHR> geometries(count);
-    std::vector<VkAccelerationStructureBuildGeometryInfoKHR> builds(count);
-    std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges(count);
-    std::vector<VkDeviceSize> scratchOffsets(count);
-    std::vector<VkDeviceSize> asSizes(count);
-    VkDeviceSize scratchBytes = 0;
-    for (std::uint32_t i = 0; i < count; ++i) {
+    std::vector<BlasInput> inputs(records.size());
+    for (std::size_t i = 0; i < records.size(); ++i) {
         const MeshRecord& record = records[i];
-        VkAccelerationStructureGeometryKHR& geometry = geometries[i];
+        VkAccelerationStructureGeometryKHR& geometry = inputs[i].geometry;
         geometry = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
         geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
         geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
@@ -140,6 +135,37 @@ BlasSet::BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact) : 
         triangles.indexType = VK_INDEX_TYPE_UINT32; // local to the mesh, so relative to its first vertex
         triangles.indexData.deviceAddress =
             indexBase + VkDeviceSize{record.firstIndex} * sizeof(std::uint32_t);
+        inputs[i].primitiveCount = record.indexCount / 3;
+    }
+    return inputs;
+}
+
+} // namespace
+
+BlasSet::BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact) : ctx_(ctx) {
+    build(meshInputs(store), compact);
+}
+
+BlasSet::BlasSet(gfx::Context& ctx, std::span<const BlasInput> inputs, bool compact) : ctx_(ctx) {
+    if (inputs.empty())
+        throw std::invalid_argument("BlasSet: no inputs");
+    build(inputs, compact);
+}
+
+void BlasSet::build(std::span<const BlasInput> inputs, bool compact) {
+    gfx::Context& ctx = ctx_;
+    const auto count = static_cast<std::uint32_t>(inputs.size());
+    const VkDeviceSize scratchAlignment = ctx.rayTracingProperties().minScratchOffsetAlignment;
+
+    std::vector<VkAccelerationStructureGeometryKHR> geometries(count);
+    std::vector<VkAccelerationStructureBuildGeometryInfoKHR> builds(count);
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges(count);
+    std::vector<VkDeviceSize> scratchOffsets(count);
+    std::vector<VkDeviceSize> asSizes(count);
+    VkDeviceSize scratchBytes = 0;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        VkAccelerationStructureGeometryKHR& geometry = geometries[i];
+        geometry = inputs[i].geometry;
 
         VkAccelerationStructureBuildGeometryInfoKHR& build = builds[i];
         build = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
@@ -150,7 +176,7 @@ BlasSet::BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact) : 
         build.geometryCount = 1;
         build.pGeometries = &geometry;
 
-        ranges[i] = {record.indexCount / 3, 0, 0, 0};
+        ranges[i] = {inputs[i].primitiveCount, 0, 0, 0};
         VkAccelerationStructureBuildSizesInfoKHR sizes{
             VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
         vkGetAccelerationStructureBuildSizesKHR(ctx.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
@@ -393,7 +419,8 @@ void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Ins
         record.mask = instance.mask;
         record.instanceShaderBindingTableRecordOffset = instance.hitGroup;
         record.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-        record.accelerationStructureReference = blases.address(instance.mesh);
+        record.accelerationStructureReference =
+            instance.blas != 0 ? instance.blas : blases.address(instance.mesh);
     }
 
     // Nothing below throws: from here on the frame has its build.

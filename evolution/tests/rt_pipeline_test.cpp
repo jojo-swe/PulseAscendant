@@ -15,6 +15,7 @@
 #include "gfx/sync.hpp"
 #include "rt/accel.hpp"
 #include "rt/geometry.hpp"
+#include "rt/gpu_types.hpp"
 
 #include <array>
 #include <chrono>
@@ -112,6 +113,25 @@ void testSbtLayouts() {
     CHECK(sameRegion(rtx.hit, {128, 32, 128}, "rtx hit"));
     CHECK(rtx.totalBytes == 256);
     checkTraceRaysRules(rtx, kRtx, 2, 4);
+
+    // Step 5's path tracer (Task 8): 2 misses and 8 hit groups, hitGroupFor(class, kind) = the 4 triangle
+    // groups then the 4 sphere groups. RTX: the hit region at 128, 8 records of 32 = 256 bytes; group 7 (the
+    // spheres' Checker) is its last record. lavapipe: at 96, the same 256.
+    static_assert(rt::hitGroupFor(rt::MaterialClass::Pbr, rt::GeometryKind::Spheres) == 4 &&
+                  rt::hitGroupFor(rt::MaterialClass::Checker, rt::GeometryKind::Spheres) == 7 &&
+                  rt::hitGroupFor(rt::MaterialClass::Checker, rt::GeometryKind::Triangles) == 3);
+    const gfx::SbtLayout rtx8 = gfx::computeSbtLayout(kRtx, 2, 2 * rt::kHitGroupsPerKind);
+    CHECK(sameRegion(rtx8.raygen, {0, 64, 64}, "rtx 8 groups raygen"));
+    CHECK(sameRegion(rtx8.miss, {64, 32, 64}, "rtx 8 groups miss"));
+    CHECK(sameRegion(rtx8.hit, {128, 32, 256}, "rtx 8 groups hit"));
+    CHECK(rtx8.totalBytes == 384);
+    CHECK(rtx8.hit.offset + 7 * rtx8.hit.stride + kRtx.shaderGroupHandleSize <=
+          rtx8.hit.offset + rtx8.hit.size);
+    checkTraceRaysRules(rtx8, kRtx, 2, 8);
+    const gfx::SbtLayout lavapipe8 = gfx::computeSbtLayout(kLavapipe, 2, 8);
+    CHECK(sameRegion(lavapipe8.hit, {96, 32, 256}, "lavapipe 8 groups hit"));
+    CHECK(lavapipe8.totalBytes == 352);
+    checkTraceRaysRules(lavapipe8, kLavapipe, 2, 8);
 
     // Base alignment 128: one miss and one hit group each get a whole 128-byte block.
     const gfx::SbtLayout base128 = gfx::computeSbtLayout(kBase128, 1, 1);
