@@ -434,7 +434,8 @@ void testScenes() {
         static_cast<double>(detailTotal) / 2 / frameCount(), cityFacesMax / 2, crossingFrames, crossingTotal,
         streetCrossing, streetFrames);
     const std::string card = evo::show::cues[kCityChapter].thenCard;
-    CHECK(card.find("300 POLYGONS") != std::string::npos && polygons > 250 && polygons < 350);
+    CHECK(card.find(std::to_string(kCityPolygons) + " POLYGONS") != std::string::npos);
+    CHECK(polygons > kCityPolygons - 50.0 && polygons < kCityPolygons + 50.0);
     CHECK(maxTriangles <= kTriangleBudget);
     CHECK(minTriangles >= 100);
     CHECK(crossingFrames >= 100 && streetCrossing * 3 >= streetFrames * 2);

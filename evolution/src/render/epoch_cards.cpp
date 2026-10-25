@@ -2,6 +2,7 @@
 
 #include "gfx/paths.hpp"
 #include "modern/card_format.hpp"
+#include "retro/city.hpp"
 #include "retro/dots.hpp"
 #include "retro/dots_schedule.hpp"
 #include "retro/effects.hpp"
@@ -158,9 +159,10 @@ std::string thenCardText(Effect effect) {
         return year + dot + n(retro::kGlenzTriangles) + " TRIANGLES" + dot + "TRANSPARENT VECTORS";
     case Effect::Raytrace:
         return year + dot + "PRECALCULATED" + dot + n(retro::kRaytraceRetroRate) + " FPS";
+    case Effect::City:
+        return year + dot + n(retro::kCityPolygons) + " POLYGONS" + dot + "GOURAUD";
     default:
-        // The rest state no number of the retro configuration but VECTOR CITY's polygons, which city_test
-        // measures from the 1993 city's frames against this line.
+        // The rest state no number of the retro configuration.
         return cueOf(effect).thenCard;
     }
 }

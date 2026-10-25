@@ -48,6 +48,10 @@ inline constexpr std::uint8_t kCityWindow = 200;  // 200..215
 inline constexpr std::uint8_t kCityGroundShades = 16;
 inline constexpr std::uint8_t kCityMarkingShades = 8;
 
+// The polygons the city draws a frame on average (walls, roofs, the ground, markings and windows, counted as
+// cityFaces pairs), as city_test measures it over the chapter; the 1993 card states it.
+inline constexpr std::uint32_t kCityPolygons = 300;
+
 // The camera at a retro frame (see the flight in retro/city_plan.hpp): cityPoseAt(frame, retroFrame / 35).
 CityPose cityPose(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 Camera cityCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame);
