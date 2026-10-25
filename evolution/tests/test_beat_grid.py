@@ -1,7 +1,5 @@
 """Synthetic tests for beat tracking: a drifting click track and its downbeats, and the tempo
-disambiguation against dotted-eighth delays (without over-correcting a plain slow track).
-
-Ported from PulseAscendant tests/test_beat_grid.py (MIT)."""
+disambiguation against dotted-eighth delays (without over-correcting a plain slow track)."""
 import sys
 import unittest
 from pathlib import Path

@@ -4,9 +4,7 @@ The existing 20 Hz analysis remains the editorial/cue source. This second layer
 separates sustained loudness from attacks, so a mastered loud song does not pin
 every animation at its maximum. No synthetic metronome or assumed BPM is used.
 
-Ported from PulseAscendant tools/analyze_reactivity.py (MIT). The extraction and constants are unchanged;
-only the I/O differs: any number of tracks on the command line, output in the evo::show::generated
-namespace.
+Any number of tracks on the command line, output in the evo::show::generated namespace.
 
 Usage: python3 tools/analyze_reactivity.py [--header H] [--receipt R] <track1.wav> [<track2.wav> ...]
 """

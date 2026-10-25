@@ -1,8 +1,7 @@
 """Generate deterministic 20 Hz envelopes and 24 log-spaced FFT bands. No BPM assumption.
 
-Ported from PulseAscendant tools/analyze_music.py (MIT). The analysis and constants are unchanged; only
-the I/O differs: any number of tracks on the command line, one header for all of them in the
-evo::show::generated namespace with per-track offsets, and one receipt.
+Any number of tracks on the command line: one header for all of them in the evo::show::generated namespace,
+with per-track offsets, and one receipt.
 
 Usage: python3 tools/analyze_music.py [--header H] [--receipt R] <track1.wav> [<track2.wav> ...]
 """

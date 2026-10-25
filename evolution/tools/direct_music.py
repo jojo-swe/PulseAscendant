@@ -1,11 +1,10 @@
 """Place editorial scene changes on tracked beats, preferring strong attacks, bar lines and phrase changes.
 
-Ported from PulseAscendant tools/direct_music.py (MIT). direct() is the parent's algorithm with two
-changes: the maximum chapter length is a parameter (default 18 s, the parent's value; EVOLUTION's
-targets are ~24 s apart, so tools/show_targets.json sets it), and starts are reported as exact tracked
-beat times rather than rounded to 1/400 s. The I/O is new: the chapter targets come from
-tools/show_targets.json (show seconds, each with a track index), any number of tracks are directed in
-show order, and the result is cue_data.hpp in evo::show::generated plus music/direction.json.
+The maximum chapter length is a parameter (default 18 s; EVOLUTION's targets are ~24 s apart, so
+tools/show_targets.json sets it), and starts are reported as exact tracked beat times. The chapter
+targets come from tools/show_targets.json (show seconds, each with a track index), any number of tracks
+are directed in show order, and the result is cue_data.hpp in evo::show::generated plus
+music/direction.json.
 
 With a beat grid (tools/beat_grid.py) every chapter cut lands exactly on a tracked beat, preferring
 strong attacks, bar lines and 4-bar phrase starts. Without one, the original attack-only direction is
@@ -138,7 +137,7 @@ def write_outputs(chapters, starts, chapter_reports, track_reports, max_chapter,
     method = ('Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes '
               f'with bar-line and 4-bar phrase bonuses; +/-{WINDOW_SECONDS} s; {MIN_CHAPTER_SECONDS}-{max_chapter:g} s '
               f'chapter bounds (max_chapter_seconds = {max_chapter:g} from tools/show_targets.json; '
-              'the parent used 18); '
+              'the default is 18); '
               'each track\'s first chapter pinned to the track start; starts are exact tracked beat times')
     report = dict(method=method, window_seconds=WINDOW_SECONDS, min_chapter_seconds=MIN_CHAPTER_SECONDS,
                   max_chapter_seconds=max_chapter, source_sha256=show_sha256, chapters=chapter_reports,

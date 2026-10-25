@@ -1,8 +1,7 @@
 """Measure each track's beat grid (tempo, beat phase and downbeat) from the actual PCM.
 
-Ported from PulseAscendant tools/beat_grid.py (MIT). The tracker, smoothing and bar-position code and their
-constants are unchanged; the I/O differs (any number of tracks on the command line, output in the
-evo::show::generated namespace) and the tempo estimate gains a disambiguation step.
+Any number of tracks on the command line, output in the evo::show::generated namespace. The tempo
+estimate is disambiguated before the beats are tracked (see Method below).
 
 Songs drift slowly in tempo (tens of milliseconds over a minute), so a single constant grid would slide
 off the music. Every beat is tracked and then smoothed locally, which keeps cuts on the actual pulse.

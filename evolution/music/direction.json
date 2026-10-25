@@ -1,5 +1,5 @@
 {
-  "method": "Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes with bar-line and 4-bar phrase bonuses; +/-2.5 s; 5-40 s chapter bounds (max_chapter_seconds = 40 from tools/show_targets.json; the parent used 18); each track's first chapter pinned to the track start; starts are exact tracked beat times",
+  "method": "Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes with bar-line and 4-bar phrase bonuses; +/-2.5 s; 5-40 s chapter bounds (max_chapter_seconds = 40 from tools/show_targets.json; the default is 18); each track's first chapter pinned to the track start; starts are exact tracked beat times",
   "window_seconds": 2.5,
   "min_chapter_seconds": 5,
   "max_chapter_seconds": 40.0,

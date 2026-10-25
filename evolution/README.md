@@ -5,13 +5,14 @@ it looked on a 486 and then as modern hardware can render it, with Vulkan 1.3 an
 as a hard requirement. The architecture, the determinism rules and the RTX hardware checklist are in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the licence is in [Licence](#licence) at the end.
 
-> **Status:** steps 0–4 are done. The music drives a timeline of 31 chapters in three acts, and
-> every chapter with a 1993 side (act I, REBOOT, CREDITS and THE END) shows its 1993 effect through its own
-> pipeline (below). The act II and act III planetary chapters are 2026 only (forced into 1993 they show a grey
-> test pattern; STUDIO NIGHT and RETURN show the DOS prompt the demo exited to). The 2026 side is a path
-> tracer with a denoiser and a PBR Neutral tonemap (below), and it renders the Studio in FINALE, PORTAL, STUDIO
-> NIGHT, RETURN and REBOOT; the other 2026 chapters show a placeholder gradient until step 5 brings the
-> modern scenes.
+> **Status:** finished (v1.0). The music, three tracks and 11:51 long, drives a timeline of 31 chapters in
+> three acts. Act I sets every 1993 effect, on its own 320×200 palette pipeline behind a CRT, against its 2026
+> counterpart; act II is 2026 only, from the Studio at night out to the city, a nebula, glass, particles and a
+> black hole and back; act III boots the 1993 PC again, takes every effect to planetary scale and ends on the
+> credits and the 1993 end screen. Every 2026 picture comes from one shared path tracer (eleven scenes, the
+> Studio among them), denoised, graded and tone mapped. Every exported frame is a pure function of the show
+> time (a capture and the stream give the same frame at the same settings); `tools/render_video.py` renders
+> the 4K60 video and `tools/package_release.py` packs the release (below).
 
 ## Requirements
 
@@ -200,9 +201,9 @@ visible, so a skipped stage's stale image never reaches the output:
 2. **CRT.** The 320×200 picture fills a centred 4:3 rectangle (its pixels are 1.2 times taller than wide),
    black around it. With the CRT look on it also gets a 2 % barrel, a little bloom, darker odd scanlines, a
    phosphor mask and a vignette. Key C or `--no-crt` turns the look off; the rectangle stays the same.
-3. **Modern stage.** The 2026 side, in HDR light (RGBA16F) tone mapped once. FINALE, PORTAL, STUDIO NIGHT,
-   RETURN and REBOOT path trace the Studio (below) and denoise it; every other 2026 chapter shows a
-   placeholder gradient in the chapter's hue with a circle on kick and beat until step 5.
+3. **Modern stage.** The 2026 side, in HDR light (RGBA16F) tone mapped once. FLYBY, FINALE, PORTAL, STUDIO
+   NIGHT, RETURN and REBOOT path trace the Studio (below), every other 2026 chapter its own scene, and the
+   stage denoises them; the 1993-only chapters (BOOT, CREDITS, THE END) never show a 2026 picture.
 4. **Era compositor.** Blends the two by the timeline's era: a Cut or BeatSwap chapter shows one era whole,
    a Wipe sweeps 2026 in from the left behind a 4-pixel refractive glass edge, a Portal cross-fades for now,
    and a BeatSwap flip flashes a quarter of white (not in FINALE or a Portal chapter).
@@ -523,9 +524,7 @@ dark before, 5 % now).
   TDR note under "Release and the 4K video".
 - PBR Neutral still desaturates the brightest colours towards white (a 1993 red at a display gain above
   about 2.4 comes out pink, hue intact), so the Studio keeps its colourful chapters below that. Its moonlit
-  wide shots are lit mostly by light bounced off the moonbeam, which keeps a fine grain at export spp; the
-  lights are picked by fixed weights (no spatial importance); the glass sphere's caustic is subtle:
-  regularisation blurs it (sharp caustics await the photon maps of step 5's Task 13).
+  wide shots are lit mostly by light bounced off the moonbeam, which keeps a fine grain at export spp.
 
 ## Storyboard
 
@@ -723,7 +722,11 @@ tools/render_4k.sh                       # Linux
 tools\render_4k.ps1                      # Windows (PowerShell; picks the newest Visual Studio's preset)
 tools\render_4k.ps1 -Preset windows-vs2022
 tools/render_4k.sh --bench               # estimate first
+tools/render_4k.sh --spp 64              # maximum quality
 ```
+
+`-Spp 16` / `--spp 16` (default, about 0.25 of the 64-spp time); `-Spp 64` / `--spp 64` for maximum quality.
+Exports from 16 spp run the à-trous filter; `--bench` times frames at the same sample count.
 
 At the export budget (2.5 s a frame at 4K and 64 spp on an RTX 4090) the 42,670 frames take about 30 hours. A
 software Vulkan driver (lavapipe) is far too slow for the full video; use it for short ranges and checks.

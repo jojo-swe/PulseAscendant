@@ -71,9 +71,9 @@ constexpr Vec3 kTownColor{1.f, 0.52f, 0.2f};
 constexpr float kTownIntensity = 2.4f;
 
 // Contributions after a rough vertex above this luminance are clamped (TraceSettings::clampIndirect; the
-// integrator's own default is 16, the Studio keeps the tighter value its look was tuned with); at the
-// Studio's exposures (EV 0.3 to 2) step 4's 2 left lamp-lit surfaces sparkling at export spp (no a-trous from
-// 16 spp), while 0.5 barely moves their mean (0.143 -> 0.142 in RETURN's close-up).
+// integrator's own default is 16, the Studio keeps the tighter value its look was tuned with). At the Studio's
+// exposures (EV 0.3 to 2) a clamp of 2 left lamp-lit surfaces sparkling at export spp, where from 16 spp the
+// a-trous runs only its two light iterations; 0.5 barely moves their mean (0.143 -> 0.142, RETURN's close-up).
 constexpr float kClampIndirect = 0.5f;
 
 // --- Small helpers -----------------------------------------------------------------------------------------

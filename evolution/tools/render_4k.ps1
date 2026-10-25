@@ -1,4 +1,4 @@
-# Renders EVOLUTION at 3840x2160, 60 fps and 64 samples per pixel into dist\render\EVOLUTION-2160p60.mp4 (H.264
+# Renders EVOLUTION at 3840x2160, 60 fps and -Spp samples per pixel into dist\render\EVOLUTION-2160p60.mp4 (H.264
 # High, BT.709, AAC 384 kb/s): configures and builds the Release preset, checks for ffmpeg, then runs
 # tools\render_video.py, which renders in 10-second chunks. Interrupted? Run the same command again: finished
 # chunks are kept and the render carries on from the first missing one.
@@ -6,6 +6,8 @@
 #   powershell -ExecutionPolicy Bypass -File tools\render_4k.ps1
 #   tools\render_4k.ps1 -Codec hevc_nvenc        (NVENC instead of x264)
 #   tools\render_4k.ps1 -Bench                   (time a frame per chapter and estimate the render first)
+#   tools\render_4k.ps1 -Spp 64                  (-Spp 16 (default, about 0.25 of the 64-spp time); -Spp 64 for
+#                                                maximum quality; -Bench times frames at the same -Spp)
 #   tools\render_4k.ps1 -Preset windows-vs2022   (pick the CMake preset; by default the newest Visual Studio)
 #
 # Presets: "windows" (Visual Studio 2026, CMake 4.2 or newer), "windows-vs2022" (Visual Studio 2022) and
@@ -13,6 +15,7 @@
 param(
     [ValidateSet("x264", "hevc_nvenc", "ffv1")] [string] $Codec = "x264",
     [ValidateSet("auto", "windows", "windows-vs2022", "windows-ninja")] [string] $Preset = "auto",
+    [int] $Spp = 16,
     [switch] $Coda,
     [switch] $Bench
 )
@@ -62,7 +65,7 @@ New-Item -ItemType Directory -Force "dist\render" | Out-Null
 $out = if ($Codec -eq "ffv1") { "dist\render\EVOLUTION-2160p60.mkv" } else { "dist\render\EVOLUTION-2160p60.mp4" }
 [string[]] $arguments = @("tools\render_video.py", "--exe", "build\$Preset\bin\Evolution.exe",
                           "--music", "assets\music\show.wav", "--out", $out, "--width", "3840",
-                          "--height", "2160", "--fps", "60", "--spp", "64", "--codec", $Codec)
+                          "--height", "2160", "--fps", "60", "--spp", "$Spp", "--codec", $Codec)
 if ($Coda) { $arguments += "--coda" }
 if ($Bench) { $arguments += "--bench" }
 & $pythonExe @pythonArgs @arguments

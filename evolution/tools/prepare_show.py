@@ -1,8 +1,7 @@
 """Turn one or more soundtrack files into the show audio, the generated headers and the receipts.
 
-Ported from PulseAscendant tools/prepare_show.py (MIT), generalised from three fixed, hash-checked acts
-to any number of tracks given on the command line. Requires numpy; ffmpeg only for inputs that are not
-already stereo 48 kHz PCM16 WAV (e.g. MP3).
+Any number of tracks, given on the command line in show order. Requires numpy; ffmpeg only for inputs
+that are not already stereo 48 kHz PCM16 WAV (e.g. MP3).
 
     python3 tools/prepare_show.py [--root DIR] <track1.(wav|mp3)> [<track2> ...]
 
