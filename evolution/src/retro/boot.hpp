@@ -31,9 +31,8 @@ namespace evo::retro {
 //   b4 .. b6    `EVOLUTION.EXE`, one key every (b6 - b4) / 12, the first on b4 and the last on b6;
 //   accent      Enter (3.05 s);
 //   b7          `Sound Blaster 16 at 220h IRQ 5 DMA 1`, its ` ...` typed at 30 characters a second, ` found`
-//   on b8; b9          `Ray tracing hardware`, its dots typed at 30 a second, ` not yet` on b11; b12
-//   kBootReservedRows empty rows: the slot of one more detection line of the same shape, so a
-//               line added there leaves every other row where it is;
+//   on b8; b9          `Ray tracing hardware`, its dots typed at 30 a second, ` not yet` on b11;
+//   b12         `Applause device`, its dots typed at 30 a second, ` not found` on b14 (kBootReservedRows rows);
 //   b15         `LOADING` and its three dots at 30 a second;
 // then the flash (bootFlashFrame) cuts to FLYBY. Every write shows from the retro frame its beat falls in.
 inline constexpr std::uint32_t kBootRetroRate = 35;
@@ -54,6 +53,7 @@ inline constexpr const char* kBootCommand = "EVOLUTION.EXE";
 // The detection lines, each a label, a dot leader typed at kBootDetectRate and a result, exactly these.
 inline constexpr const char* kBootSoundCard = "Sound Blaster 16 at 220h IRQ 5 DMA 1 ... found";
 inline constexpr const char* kBootRayTracing = "Ray tracing hardware .................. not yet";
+inline constexpr const char* kBootApplause = "Applause device ....................... not found";
 inline constexpr std::uint32_t kBootDetectRate = 30;
 inline constexpr std::size_t kBootReservedRows = 2;
 

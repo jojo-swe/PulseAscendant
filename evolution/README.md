@@ -185,10 +185,14 @@ visible, so a skipped stage's stale image never reaches the output:
 4. **Era compositor.** Blends the two by the timeline's era: a Cut or BeatSwap chapter shows one era whole,
    a Wipe sweeps 2026 in from the left behind a 4-pixel refractive glass edge, a Portal cross-fades for now,
    and a BeatSwap flip flashes a quarter of white (not in FINALE or a Portal chapter).
-5. **HUD.** The epoch card bottom-left (both cards during a wipe), in the demo's own 8×8 font with a drop
-   shadow, scaled with the output in whole steps (one step per 360 lines: 2× at 640×360, 4× at 1280×720,
-   8× at 2560×1440, at 1× of the step when a card would not fit). The window also shows the chapter title
-   top-left as a development aid; captures and `--render-stream` never do. Key H or `--no-hud` hides it.
+5. **Epoch cards.** The 1993 card types in at 30 characters a second in the demo's 8×8 font, bottom-left
+   inside the 4:3 picture, so the CRT bends and masks it like the rest of the 1993 side; a block cursor
+   blinks on the beat. The 2026 card sets the same glyph skeletons as rounded strokes with kerning and
+   tabular figures: the year large, the feat small, bottom-left in the 16:9 margin in white at 0.85 alpha,
+   behind a hairline rule that draws in over one beat. Their numbers come from the configuration. Cards
+   appear one bar into a chapter and go one bar after its accent, never later than two bars before its end;
+   during a wipe the line splits them. The window also shows the chapter title top-left as a development
+   aid; captures and `--render-stream` never do. Key H or `--no-hud` hides the HUD.
 
 ### Scene cuts and the megamix
 

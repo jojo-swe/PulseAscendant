@@ -183,8 +183,8 @@ void testScript() {
     CHECK(row(screenAt(label + 5), 5) == "Ray tracing hardware ...");
 }
 
-// The detection lines exactly as written, each wrapped at its result like a 40-column screen; the reserved
-// rows stay empty all through, and the screen just before the flash is the whole script.
+// The detection lines exactly as written, each wrapped at its result like a 40-column screen; the applause
+// line fills the slot of rows 7 and 8, and the screen just before the flash is the whole script.
 void testDetection() {
     CHECK(std::string(evo::retro::kBootSoundCard) == "Sound Blaster 16 at 220h IRQ 5 DMA 1 ... found");
     CHECK(std::string(evo::retro::kBootRayTracing) == "Ray tracing hardware .................. not yet");
@@ -193,16 +193,16 @@ void testDetection() {
     const Lines full = evo::retro::bootScreen(frame, flash - 1);
     CHECK(full == (Lines{evo::retro::kBootBiosLine, "", "C:\\DEMO>EVOLUTION.EXE",
                          "Sound Blaster 16 at 220h IRQ 5 DMA 1", "... found",
-                         "Ray tracing hardware ..................", "not yet", "", "", "LOADING..."}));
+                         "Ray tracing hardware ..................", "not yet",
+                         "Applause device .......................", "not found", "LOADING..."}));
     CHECK(full[3] + " " + full[4] == evo::retro::kBootSoundCard);
     CHECK(full[5] + " " + full[6] == evo::retro::kBootRayTracing);
+    CHECK(full[7] + " " + full[8] == evo::retro::kBootApplause);
     CHECK(evo::retro::kBootReservedRows == 2);
     for (std::uint32_t retroFrame = 0; retroFrame < flash; ++retroFrame) {
         const Lines screen = evo::retro::bootScreen(frame, retroFrame);
         for (const std::string& line : screen)
             CHECK(line.size() <= evo::retro::kBootColumns);
-        for (std::size_t r : {7u, 8u})
-            CHECK(screen.size() <= r || screen[r].empty());
     }
 }
 
