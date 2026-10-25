@@ -132,6 +132,10 @@ struct SceneFrame {
     std::vector<TreeLightFrame> treeLights;
     std::optional<CausticFrame> caustics;
     std::optional<LensingFrame> lensing;
+    // The lens, after the trace (post::Bloom, the tonemap): anamorphic in [0, 1] adds one horizontal streak to
+    // the bloom (WORMHOLE's white-out only); vignette (at most 0.15, 2026 wide shots only) darkens the corners
+    // by that share of their light.
+    float anamorphic = 0, vignette = 0;
 };
 
 // The light of a quad(width, height) mesh placed by `transform`: corner = the quad's bottom-left corner,

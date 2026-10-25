@@ -6,16 +6,24 @@
 // lighting-only edges at length 1 and removes noise from flat regions; a firefly decays at the stated rate;
 // non-finite guides never match; the emission never enters history or filtering; NaN, Inf
 // and huge samples never reach the output or the history; the same inputs give the same
-// bytes. Frames run with two in flight, with the validation layer and its synchronization validation on;
-// fails on any message.
+// bytes; heavy-tailed first frames keep their brightness, and so do the Studio's dark walls on STUDIO NIGHT's
+// first frame against 256 spp (`denoiser_test --studio [spp] [size factor]` runs that alone). Frames run with
+// two in flight, with the validation layer and its synchronization validation on; fails on any message.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
 #include "gfx/sync.hpp"
+#include "gfx/readback.hpp"
+#include "modern/path_tracer.hpp"
 #include "post/denoiser.hpp"
+#include "render/modern_stage.hpp"
+#include "render/retro_stage.hpp"
+#include "render/stage_plan.hpp"
+#include "show/timeline.hpp"
 #include "test_env.hpp"
+#include "text/text_pass.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1059,6 +1067,108 @@ void testSparseFirstFrames(gfx::Context& ctx) {
     CHECK(reset3.runOne(noisyFrame(901, 0.5f, 0.2f), step4).hdrBits == unchanged.hdrBits);
 }
 
+// Dense, heavy-tailed first frames (the Studio's dark walls at 4 spp: no sample is 0, but the light that
+// counts arrives on few paths): every sample is 0.02, or 1 with p = 0.05, 4 per pixel (mean 0.069; 81 % of
+// the pixels hold 0.02 alone). An edge-robust minimum variance calls most neighbourhoods noise-free, and a
+// luminance stop on such samples weights the bright ones down: the frame comes out dark.
+Frame heavyTailFrame(std::uint32_t index, std::uint32_t width = kSize, std::uint32_t height = kSize) {
+    Frame frame = flatFrame(width, height);
+    for (std::uint32_t y = 0; y < height; ++y)
+        for (std::uint32_t x = 0; x < width; ++x) {
+            float sum = 0.0f;
+            for (std::uint32_t s = 0; s < 4; ++s)
+                sum += noise(index, x, y, 16 * s) + 0.5f < 0.05f ? 1.0f : 0.02f;
+            float* l = frame.at(frame.lighting, x, y);
+            l[0] = l[1] = l[2] = sum / 4.0f;
+        }
+    return frame;
+}
+
+// Within 8 % of the samples' mean (20 % dark before isolated bright samples counted as sparse).
+void testHeavyTailFirstFrame(gfx::Context& ctx) {
+    std::printf("heavy-tailed first frames keep their brightness\n");
+    for (std::uint32_t index : {1500u, 1501u, 1502u}) {
+        const Frame frame = heavyTailFrame(index, 128, 128);
+        Harness harness(ctx, 128, 128);
+        post::DenoiseSettings settings;
+        settings.temporal = false;
+        const Output out = harness.runOne(frame, settings);
+        const double samples = imageMean(frame), result = hdrMean(out);
+        std::printf("  frame %u: mean %.4f, samples %.4f (%+.1f %%)\n", index, result, samples,
+                    100 * (result / samples - 1));
+        CHECK(std::abs(result / samples - 1) <= 0.08);
+    }
+}
+
+// The Studio's dark walls on the first frame after a cut (STUDIO NIGHT's wide, its first 4-spp frame, which
+// the window's first frame equals) against a 256 spp reference (unfiltered: exports filter nothing from 16
+// spp): the left wall's mean HDR luminance within 15 % (measured at 160x90: -6.2 %, -7.5 % before isolated
+// bright samples counted as sparse; at 320x180 against 64 spp -2.8 %, -5.3 % before).
+struct StudioStages {
+    StudioStages(gfx::Context& ctx, std::uint32_t width, std::uint32_t height)
+        : ring(ctx), text(ctx, ring), retro(ctx, ring, text), modern(ctx, ring, width, height),
+          readback(ctx, {VkDeviceSize(width) * height * 8, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true,
+                         "studio hdr readback"}) {}
+
+    // The HDR picture's luminance, top-down rows.
+    std::vector<float> render(const show::TimelineFrame& frame, const render::HistoryState& state) {
+        VkCommandBuffer cmd = ring.begin();
+        retro.render(cmd, frame);
+        modern.render(cmd, frame, state, &retro.image());
+        gfx::Image& hdr = modern.hdr();
+        hdr.transition(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_READ_BIT);
+        gfx::bufferBarrier2(cmd, readback.handle(), VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        VkBufferImageCopy region{};
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageExtent = {hdr.extent().width, hdr.extent().height, 1};
+        vkCmdCopyImageToBuffer(cmd, hdr.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback.handle(), 1,
+                               &region);
+        ring.wait(ring.submit());
+        readback.invalidate();
+        const auto* halves = static_cast<const std::uint16_t*>(readback.mapped());
+        std::vector<float> luminance(std::size_t{hdr.extent().width} * hdr.extent().height);
+        for (std::size_t i = 0; i < luminance.size(); ++i)
+            luminance[i] = 0.2126f * halfToFloat(halves[i * 4]) + 0.7152f * halfToFloat(halves[i * 4 + 1]) +
+                           0.0722f * halfToFloat(halves[i * 4 + 2]);
+        return luminance;
+    }
+
+    gfx::FrameRing ring;
+    text::TextPass text;
+    render::RetroStage retro;
+    render::ModernStage modern;
+    gfx::Buffer readback;
+};
+
+void testStudioFirstFrame(gfx::Context& ctx, std::uint32_t referenceSpp = 256, std::uint32_t scale = 1) {
+    const std::uint32_t kWidth = 160 * scale, kHeight = 90 * scale;
+    constexpr int kStudioNight = 11;
+    const double start = show::chapterStart(kStudioNight), end = show::chapterStart(kStudioNight + 1);
+    const show::TimelineFrame frame = show::sampleTimeline(start + 0.08 * (end - start)); // the night wide
+    const auto state = [&](std::uint32_t spp) {
+        return render::HistoryState{render::HistoryReset::FirstFrame, 0, render::RenderMode::Export, spp,
+                                    render::kExportMaxBounces, modern::frameSeedFor(frame.showSeconds, 0)};
+    };
+    StudioStages stages(ctx, kWidth, kHeight);
+    const std::vector<float> first = stages.render(frame, state(4));
+    const std::vector<float> reference = stages.render(frame, state(referenceSpp));
+    // The left wall, beside the window: columns 2-27, rows 12-59 of the 160x90 wide.
+    const auto wall = [&](const std::vector<float>& l) {
+        double sum = 0;
+        int n = 0;
+        for (std::uint32_t y = 12 * scale; y < 60 * scale; ++y)
+            for (std::uint32_t x = 2 * scale; x < 28 * scale; ++x, ++n)
+                sum += l[std::size_t{y} * kWidth + x];
+        return sum / n;
+    };
+    const double a = wall(first), b = wall(reference);
+    std::printf("STUDIO NIGHT's left wall, HDR luminance: first frame (4 spp) %.5f, %u spp %.5f (%+.1f %%)\n", a,
+                referenceSpp, b, 100 * (a / b - 1));
+    CHECK(std::abs(a / b - 1) <= 0.15);
+}
+
 // A lit | sparse-dark edge on one surface (one depth, one normal: a shadow edge at 1 spp): dense light of
 // mean 1 (+-0.1) left of column 32, sparse light right of it (on with p = 0.1 at 0.5: mean 0.05, 90 % of the
 // pixels 0). The sparse side's first a-trous pass has no luminance stop; the later ones must stop at the
@@ -1590,7 +1700,7 @@ void testRefusalsAndResize(gfx::Context& ctx) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     const auto start = std::chrono::steady_clock::now();
     try {
         test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
@@ -1604,6 +1714,11 @@ int main() {
             // credit host waits on the timeline semaphore, so memory VMA hands from one test's images to the
             // next would look like a hazard. Within a test nothing a frame uses is freed.
             const auto settle = [&] { vkQueueWaitIdle(ctx.queue()); };
+            if (argc >= 2 && std::string(argv[1]) == "--studio") { // [reference spp] [size factor]
+                testStudioFirstFrame(ctx, argc >= 3 ? std::uint32_t(std::stoul(argv[2])) : 256u,
+                                     argc >= 4 ? std::uint32_t(std::stoul(argv[3])) : 1u);
+                return 0;
+            }
             testNoiseConverges(ctx);
             settle();
             testResetMatchesFreshAndStateless(ctx);
@@ -1638,6 +1753,8 @@ int main() {
             settle();
             testSparseEdge(ctx);
             settle();
+            testHeavyTailFirstFrame(ctx);
+            settle();
             testHistoryOutliers(ctx);
             settle();
             testNoMediumKeepsStep4Output(ctx);
@@ -1649,6 +1766,8 @@ int main() {
             testVolumeEdge(ctx);
             settle();
             testNonFiniteVolume(ctx);
+            settle();
+            testStudioFirstFrame(ctx);
             settle();
             CHECK(ctx.validationMessageCount() == 0);
         }

@@ -369,6 +369,43 @@ from the screen to a low, long wide shot in FINALE and PORTAL, a low dolly past 
 from the accent, an orbit round the monitor in STUDIO NIGHT, a push back in in RETURN, a close-up in REBOOT).
 `studio_test --look <dir> [spp] [width height] [name]` renders a still of every shot.
 
+### Bloom and the look
+
+Everything after the trace that the direction sets is a pure function of the show time (`post::lookFor`): no
+measured exposure anywhere.
+
+- **Bloom and glare** (`post::Bloom`). The HDR picture is convolved with a lens's point spread function and
+  mixed in before the tonemap as (1 − w) I + w (I ⊛ PSF): no threshold, so every pixel spreads in proportion to
+  its light, and no energy gained or lost (a constant picture comes through unchanged, a point keeps its
+  energy within 0.2 %). The PSF is a soft halo of six Gaussians (a downsample chain to 1/64 of the size and a
+  weighted upsample; 97 % of the light within 64 pixels at 1080p) and a faint six-blade diffraction, three line
+  blurs at 0°, 60° and 120° carrying 5 % of the bloom; no starburst. A scene's `SceneFrame::anamorphic` adds one
+  long horizontal streak (WORMHOLE's white-out only). w is 0.020, 0.025 and 0.035 in Acts I, II and III; on a
+  CRT crossing it gives way to the CRT's own glow at the glass and returns by D + 1 bar. Twelve compute passes,
+  all but the first at half size or less: an estimated 0.3 ms at 4K on an RTX 4090 (lavapipe: 360 ms at 1080p).
+- **The grade per act**, in linear display light after PBR Neutral: Act I a ±2 % warm-shadow/cool-highlight
+  split tone and true blacks; Act II an S-curve of slope 1.05 at mid grey and blacks lifted to 0.004 in night
+  blue (0.6, 0.8, 1.0); Act III shadows 8 % less saturated and highlights left to clip into the glare. Film
+  grain on top: triangular, hashed from the pixel and the 60 fps frame, 0.4 %, 0.6 % and 0.3 % of the
+  luminance. STUDIO NIGHT and REBOOT ease from the previous act over two bars (both joins are continuous
+  shots); CREDITS and THE END are 1993 only and get none. `SceneFrame::vignette` (at most 0.15, wide shots)
+  darkens the corners.
+- **Authored exposure** (`post::exposureKeys`): EV offsets on top of each scene's own exposure, eased with zero
+  slope at every key and at most 0.05 EV per frame except on a cut: RAYTRACE's last two bars down a stop,
+  STUDIO NIGHT up 0.7 from D to the pane, SINGULARITY, WORMHOLE and ASCENDANT into white (+6), RETURN and
+  CRYSTAL CITY back out of it, RETURN's rebalance to the screen, METROPOLIS's one bright beat.
+- **The palette grade after a crossing.** From the glass of FLYBY, TUNNEL, PORTAL (inward) and REBOOT the 2026
+  picture is mixed toward its nearest Oklab entry of the 1993 effect's palette at D: all palette at D, back to
+  physically based colour by D + 1 bar.
+
+The tonemap pins all of it against a CPU reference (`tonemapGraded`): the same bytes, except where float
+rounding of `pow` decides a tie (about 1 channel in 10⁵).
+
+The denoiser's first frame after a cut treats a neighbourhood whose bright samples stand alone (dim surfaces
+lit by few bright paths, like the Studio's walls at night) as sparse, so its first à-trous pass does not weight
+them down: STUDIO NIGHT's left wall on that frame is within 6 % of 256 spp (a heavy-tailed test frame was 20 %
+dark before, 5 % now).
+
 ### Limits worth knowing
 
 - **lavapipe.** The tests and the storyboard run the path tracer in software, which is far too slow for the
