@@ -1,7 +1,7 @@
 #ifndef EVO_RT_CITY_PATTERNS_GLSL
 #define EVO_RT_CITY_PATTERNS_GLSL
 
-// The City's procedural surfaces (step 5, Task 23; src/modern/scenes/city.hpp): the facades of its towers with
+// The City's procedural surfaces (src/modern/scenes/city.hpp): the facades of its towers with
 // millions of windows at no geometry cost, its wet streets, and the light trails of its traffic. Included by
 // pbr.rchit (facades and streets) and emissive.rchit (trails) after hit.glsl. Everything is a pure function of
 // the hit point, the instance's placement and the frame's time (frame.seconds + frame.shutterOffset), with

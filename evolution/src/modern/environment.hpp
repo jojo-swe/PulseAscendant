@@ -1,6 +1,6 @@
 #pragma once
 
-// A scene's environment (step 5, Task 2): the sky a ray sees when it leaves the scene, and how next-event
+// A scene's environment: the sky a ray sees when it leaves the scene, and how next-event
 // estimation samples it. SceneFrame::environment carries it; the path tracer packs it into
 // rt::EnvironmentUniforms (src/rt/gpu_types.hpp) at binding EVO_BINDING_ENVIRONMENT every frame, and
 // shaders/rt/environment.glsl (with the sky models of shaders/rt/sky.glsl) reads it:
@@ -20,7 +20,7 @@
 
 namespace evo::modern {
 
-// The sky models of shaders/rt/sky.glsl. NightSky is step 4's night sky (gradient, moon glow, stars, a town
+// The sky models of shaders/rt/sky.glsl. NightSky is the original night sky (gradient, moon glow, stars, a town
 // under the horizon); Space is black with dense stars; Dusk and Day have a sun.
 enum class EnvironmentKind : std::uint32_t { NightSky = 0, Space = 1, Dusk = 2, Day = 3 };
 

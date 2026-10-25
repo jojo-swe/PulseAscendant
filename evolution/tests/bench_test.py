@@ -1,5 +1,5 @@
 """Run Evolution --bench at a tiny size: one JSON object per chapter on stdout, with every key the RTX
-hardware checkpoint reads (step 5 Task 4), sane values, and the exit code 0. Arguments after the executable (e.g.
+hardware checkpoint reads, sane values, and the exit code 0. Arguments after the executable (e.g.
 --validation) are passed to every run."""
 
 import json

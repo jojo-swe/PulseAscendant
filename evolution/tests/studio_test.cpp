@@ -1,4 +1,4 @@
-// The Studio (Task 10 of step 4, polished by Task 14 of step 5): the path-traced room around a 1993 PC whose
+// The Studio (polished by Task 14 of step 5): the path-traced room around a 1993 PC whose
 // CRT shows the retro picture and lights the room. At 320x180 in Export with 4 spp unless a test says
 // otherwise, with the validation layer on; fails on any message it reports. Captures go to
 // <EVO_TEST_OUT_DIR>/step4.
@@ -6,8 +6,8 @@
 //       screen brighter than the room's mean, each frame under 30 s;
 //   (b) the CRT is STUDIO NIGHT's key light (Task 14 (a)): a white retro picture against a black one
 //   brightens
-//       the screen, and the desk in front of it by at least 40 % (step 4: 10 % in RETURN), and changes a wall
-//       patch the screen cannot see by under 0.002 in linear display light (step 4's bound
+//       the screen, and the desk in front of it by at least 40 % (originally 10 % in RETURN), and changes a wall
+//       patch the screen cannot see by under 0.002 in linear display light (the original bound
 //       of 0.02 was written for encoded values);
 //   (c) in the window: a red picture on frame N, a green one on frame N + 1 -> the screen on
 //       frame N + 1 is green (its emission bypasses the temporal history and the filter);
@@ -27,7 +27,7 @@
 //       in every chapter the frame's material table carries studioRig's levels and every light's emission is
 //       its material's (the screen's (s, s, s));
 //   (k) [c] speckle: the STUDIO NIGHT wide shot at 160x90 and 32 spp has under 1 % of its pixels more than 10
-//       levels above their 3x3 neighbourhood's median (step 4: 3-5 % at 192 spp);
+//       levels above their 3x3 neighbourhood's median (originally 3-5 % at 192 spp);
 //   (l) [d] the chrome sphere reflects the screen: with an all-red picture its projected disc holds at least
 //       20 red-dominant pixels;
 //   (m) [e] the power LEDs are camera-only emitters: the lighting of the desk beside the case's LED is byte

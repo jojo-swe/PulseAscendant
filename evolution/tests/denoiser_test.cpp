@@ -960,7 +960,7 @@ void testDeterministic(gfx::Context& ctx) {
     }
 }
 
-// --- Task 7 of step 5: clean first frames, the export firefly filter, the volume layer
+// --- clean first frames, the export firefly filter, the volume layer
 // ---------------------------------------------------------------------------------------------------------
 
 // FNV-1a over the output and history bits of every frame.
@@ -1008,7 +1008,7 @@ double hdrMean(const Output& out) {
 }
 
 // (a) Sparse first frames: Bernoulli lighting (on with p = 0.3 at 1 / 0.3, else 0: mean 1) on one plane at
-// length 1. The edge-robust variance sees all-zero quadrants and claims no noise, so step 4's denoiser left
+// length 1. The edge-robust variance sees all-zero quadrants and claims no noise, so the original denoiser left
 // holes (RMSE 0.1833 at length 1 and 0.1346 at length 2 on this input, 3 iterations; an earlier estimate was
 // ~0.063). Now sparse neighbourhoods get the plain variance with a first pass by geometry alone, and 5
 // iterations at length <= 3: RMSE below 0.045, and no darker than the samples. Very bright sparse samples
@@ -1022,7 +1022,7 @@ void testSparseFirstFrames(gfx::Context& ctx) {
     const auto out = harness.run({bernoulli(900), bernoulli(901)}, {});
     CHECK(allLengths(out[0], 1.0f) && allLengths(out[1], 2.0f));
     const double first = rmse(out[0], 1.0f), second = rmse(out[1], 1.0f);
-    std::printf("  RMSE after denoising: length 1 %.4f, length 2 %.4f (step 4: 0.1833, 0.1346)\n", first,
+    std::printf("  RMSE after denoising: length 1 %.4f, length 2 %.4f (originally 0.1833, 0.1346)\n", first,
                 second);
     CHECK(first < 0.045);
     CHECK(second < 0.045);
@@ -1056,7 +1056,7 @@ void testSparseFirstFrames(gfx::Context& ctx) {
         CHECK(allFinite(o.historyBits));
     }
 
-    // resetAtrousIterations at or below atrousIterations, on input that is not sparse, is step 4's denoiser:
+    // resetAtrousIterations at or below atrousIterations, on input that is not sparse, is the original denoiser:
     // case (a) is then where the improvement comes from.
     post::DenoiseSettings step4;
     step4.resetAtrousIterations = 0;

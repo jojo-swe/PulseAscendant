@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The Nebula scene's background stars (step 5, Task 18): points far behind and around the cloud (2,500 to
+// The Nebula scene's background stars: points far behind and around the cloud (2,500 to
 // 4,500 units away, so they barely move against it), dimmed by it through the combine pass's T. Two in five
 // crowd towards a galactic band. Colours follow a stellar population (mostly sun-like, some red giants, a
 // few hot blue stars) through an approximate blackbody; brightness follows a power law, so a few stars are

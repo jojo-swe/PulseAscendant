@@ -1,6 +1,6 @@
 #pragma once
 
-// The Ship scene (step 5, Task 16): the starship of scenes/ship_asset.hpp at its hero shot, WORMHOLE
+// The Ship scene: the starship of scenes/ship_asset.hpp at its hero shot, WORMHOLE
 // (chapter 23): over an ocean planet, through a gate into a wormhole, a tube of luminous gas spiralling round
 // the flight path with basalt rings 1 km apart inside it, each ring a circle of gold lamps that light the ship
 // as it passes. The ship, its plumes, its stars and its motion blur are the asset any scene can fly.

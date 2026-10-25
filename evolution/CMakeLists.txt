@@ -631,7 +631,7 @@ target_compile_definitions(tonemap_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADE
 add_dependencies(tonemap_test Evolution_shaders)
 add_test(NAME tonemap COMMAND tonemap_test)
 
-# The path tracer (Task 7 of step 4) at 64x64 on lavapipe with validation and synchronization validation:
+# The path tracer at 64x64 on lavapipe with validation and synchronization validation:
 # emission and guides, MIS against analytic and NEE-off references, the furnace, determinism per seed, the
 # stress scene staying finite, dispatch batching (Windows TDR) and the retro screen as a textured light. Writes
 # its pictures to build-out/step4. `path_tracer_test --look <dir> [spp]` renders a larger scene to look at.
@@ -762,7 +762,7 @@ add_test(NAME image COMMAND image_test)
 # A machine without the layer's synchronization validation reports the test as skipped, not passed.
 set_tests_properties(image PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
 
-# Export mode (Task 11 of step 4) at 160x90 in STUDIO NIGHT: the seeds the renderer hands the modern stage,
+# Export mode at 160x90 in STUDIO NIGHT: the seeds the renderer hands the modern stage,
 # the window's first frame after a reset equal to an export frame at equal spp and bounces,
 # and export frames a pure function of the show time. With the validation layer on; fails on any message.
 add_executable(export_mode_test tests/export_mode_test.cpp)
@@ -772,7 +772,7 @@ add_dependencies(export_mode_test Evolution_shaders evo_modern_shaders)
 add_test(NAME export_mode COMMAND export_mode_test)
 set_tests_properties(export_mode PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
-# The Studio (Task 10 of step 4) at 320x180 in Export, 4 spp, with the validation layer on: STUDIO NIGHT lit
+# The Studio at 320x180 in Export, 4 spp, with the validation layer on: STUDIO NIGHT lit
 # but not blown out, the CRT lighting the room, the screen following the retro picture on the next window frame,
 # the cameras and their cuts, the scene's instances and lights, the scene registry and the
 # DOS idle screen. Writes its captures to build-out/step4. `studio_test --look <dir> [spp] [w h] [name]`
@@ -786,7 +786,7 @@ add_dependencies(studio_test Evolution_shaders evo_modern_shaders)
 add_test(NAME studio COMMAND studio_test)
 set_tests_properties(studio PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
-# Seeking with temporal accumulation on (Task 12 of step 4) at 160x90, 1 spp, Interactive:
+# Seeking with temporal accumulation on at 160x90, 1 spp, Interactive:
 # after any reset (a seek forwards or backwards, a chapter change, a camera cut, time running backwards) the
 # window's frames equal a fresh renderer's from the same point byte for byte, in the Studio chapters, a
 # 1993 chapter and across BeatSwap. With the validation layer on; fails on any message.
@@ -821,7 +821,7 @@ function(evo_gpu_test name exe)
 endfunction()
 
 # The scene test fixture (tests/scene_fixture.hpp): checkChapterPictures and checkSceneSweep, the standard
-# checks every step 5 scene test runs.
+# checks every scene test runs.
 add_library(evo_scene_fixture STATIC tests/scene_fixture.cpp)
 target_link_libraries(evo_scene_fixture PUBLIC evo_render evo_modern)
 target_include_directories(evo_scene_fixture PUBLIC tests)
@@ -840,7 +840,7 @@ add_executable(scene_table_test tests/scene_table_test.cpp)
 target_link_libraries(scene_table_test PRIVATE evo_scene_fixture)
 add_test(NAME scene_table COMMAND scene_table_test)
 
-# One path tracer and one denoiser across scenes (Task 1 of step 5), with synchronization validation: a Studio
+# One path tracer and one denoiser across scenes, with synchronization validation: a Studio
 # frame after another scene equals a fresh one, one pipeline for two scenes, image memory independent of the
 # scene count, per-frame materials, instance capacities, shotFor without frame(), and the fixture's picture
 # checks on the Studio.
@@ -848,7 +848,7 @@ add_executable(shared_tracer_test tests/shared_tracer_test.cpp)
 target_link_libraries(shared_tracer_test PRIVATE evo_scene_fixture)
 evo_gpu_test(shared_tracer shared_tracer_test)
 
-# Scene environments (Task 2 of step 5): EnvironmentDesc, its defaults per kind and its packing into
+# Scene environments: EnvironmentDesc, its defaults per kind and its packing into
 # rt::EnvironmentUniforms (binding EVO_BINDING_ENVIRONMENT, which the path tracer uploads per frame).
 target_sources(evo_modern PRIVATE src/modern/environment.cpp)
 
@@ -875,7 +875,7 @@ target_compile_definitions(environment_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TE
 add_dependencies(environment_test environment_test_shaders)
 evo_gpu_test(environment environment_test)
 
-# Per-point light selection (Task 3 of step 5): the CPU reference in evo_modern, and a test that holds
+# Per-point light selection: the CPU reference in evo_modern, and a test that holds
 # shaders/rt/lights.glsl to it through a compute probe (with the path tracer's own bindings), checks pickLight's
 # frequencies, MIS against BSDF sampling with three lights of very different power, and the Studio's screen and
 # moon. `light_selection_test --measure <dir>` prints the Studio's 1 spp noise with per-point and fixed
@@ -899,7 +899,7 @@ target_compile_definitions(light_selection_test PRIVATE EVO_TEST_SPIRV_DIR="${EV
 add_dependencies(light_selection_test light_selection_test_shaders)
 evo_gpu_test(light_selection light_selection_test)
 
-# --- Step 5 Task 4: trace resolution, temporal upscaler, GPU timers and --bench ----------------------------
+# --- Trace resolution, temporal upscaler, GPU timers and --bench --------------------------------------
 
 # GPU timestamp scopes per ring slot: nesting and order, non-negative times, reading on slot reuse and after
 # waitAll(), the disabled path (a queue without timestamps), misuse; with the validation layer on.
@@ -934,7 +934,7 @@ set_tests_properties(bench PROPERTIES TIMEOUT 300 PROCESSORS 2)
 add_test(NAME seek_determinism_scaled COMMAND seek_determinism_test 0.67)
 set_tests_properties(seek_determinism_scaled PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
-# --- Step 5 Task 8: analytic spheres and the particle field -------------------------------------------------
+# --- Analytic spheres and the particle field -----------------------------------------------------------
 
 # Static sphere BLASes (one AABB BLAS per sphere range) and the per-frame particle field (a stateless compute
 # pass and a BLAS rebuilt per ring slot).
@@ -978,7 +978,7 @@ add_dependencies(spheres_test spheres_test_shaders path_tracer_test_shaders evo_
                  evo_modern_intersection_shaders)
 evo_gpu_test(spheres spheres_test)
 
-# --- Step 5 Task 9: object motion vectors and the export shutter --------------------------------------------
+# --- Object motion vectors and the export shutter ------------------------------------------------------
 
 # The shutter's slice counts, offsets and chapter-clamped slice times (CPU), and the per-object motion vectors
 # and shutter on lavapipe with synchronization validation (tests/motion_test.cpp).
@@ -990,7 +990,7 @@ target_compile_definitions(motion_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SP
 add_dependencies(motion_test spheres_test_shaders evo_modern_sphere_shaders evo_modern_intersection_shaders)
 evo_gpu_test(motion motion_test)
 
-# --- Step 5 Task 10: emissive splats -------------------------------------------------------------------------
+# --- Emissive splats -----------------------------------------------------------------------------------
 
 # SplatPass (src/modern/splats.cpp) and its shaders (shaders/modern/splat_common.glsl, splat_resolve.comp, which
 # the shaders/modern glob compiles as modern_splat_resolve.comp.spv).
@@ -1029,7 +1029,7 @@ target_compile_definitions(splat_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPI
 add_dependencies(splat_test splat_test_shaders)
 evo_gpu_test(splat splat_test)
 
-# --- Step 5 Task 6: the integrator v2 -----------------------------------------------------------------------
+# --- The integrator v2 ---------------------------------------------------------------------------------
 
 # Path regularisation, the clamp after a rough vertex, camera-only emitters and hero-wavelength dispersion on
 # lavapipe at 64x64 with the validation layer on (a mirror caustic box, chrome and a glass slab before a
@@ -1054,7 +1054,7 @@ target_compile_definitions(integrator_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TES
 add_dependencies(integrator_test integrator_test_shaders)
 evo_gpu_test(integrator integrator_test)
 
-# --- Step 5 Task 13: caustic photon maps ------------------------------------------------------------------
+# --- Caustic photon maps ----------------------------------------------------------------------------
 
 # The caustic maps (photons.comp and caustic_resolve.comp come with the shaders/modern glob above).
 target_sources(evo_modern PRIVATE src/modern/caustics.cpp)
@@ -1070,7 +1070,7 @@ target_include_directories(caustics_test PRIVATE tests)
 add_dependencies(caustics_test evo_modern_sphere_shaders evo_modern_intersection_shaders)
 evo_gpu_test(caustics caustics_test)
 
-# --- Step 5 Task 12: the light tree ---------------------------------------------------------------------------
+# --- The light tree -------------------------------------------------------------------------------------
 
 # Next-event estimation over up to 65,536 emissive sphere lights: the tree is built (or refit) on the CPU per
 # frame and walked in shaders/rt/light_tree.glsl.
@@ -1101,13 +1101,13 @@ add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders ev
                  evo_modern_intersection_shaders)
 evo_gpu_test(light_tree light_tree_test)
 
-# Step 5, Task 17: the Particles scene (DOTS, PARTICLE OCEAN; its particle shader
+# The Particles scene (DOTS, PARTICLE OCEAN; its particle shader
 # shaders/modern/particles_particles.comp is globbed above) and its test (`scene_particles_test --look <dir>
 # [spp] [detail]` renders 480x270 stills of both chapters; `--memory [detail]` prints the measured bytes).
 target_sources(evo_modern PRIVATE src/modern/scenes/particles.cpp)
 evo_scene_test(particles)
 
-# --- Step 5 Task 22: Spheres (RAYTRACE, SPHERE STORM, RAYTRACE INFINITY) ---------------------------------------
+# --- Spheres (RAYTRACE, SPHERE STORM, RAYTRACE INFINITY) -------------------------------------------------
 
 # The scene (src/modern/scenes/spheres.cpp) and its particle shader (shaders/modern/particles_spheres.comp,
 # compiled by the shaders/modern glob as modern_particles_spheres.comp.spv).
@@ -1120,7 +1120,7 @@ add_executable(spheres_scene_test tests/spheres_scene_test.cpp)
 target_link_libraries(spheres_scene_test PRIVATE evo_scene_fixture)
 evo_gpu_test(scene_spheres spheres_scene_test)
 
-# --- Step 5 Task 19: Tunnel (TUNNEL) -----------------------------------------------------------------------------
+# --- Tunnel (TUNNEL) ---------------------------------------------------------------------------------------
 
 # The scene (src/modern/scenes/tunnel.cpp) and its beads' particle shader (shaders/modern/particles_tunnel.comp,
 # compiled by the shaders/modern glob). The test adds the 1993 mirror, the beads against the GPU, the camera
@@ -1129,7 +1129,7 @@ evo_gpu_test(scene_spheres spheres_scene_test)
 target_sources(evo_modern PRIVATE src/modern/scenes/tunnel.cpp)
 evo_scene_test(tunnel)
 
-# --- Step 5 Task 11: participating media ---------------------------------------------------------------------
+# --- Participating media -------------------------------------------------------------------------------
 
 # Height fog and baked density grids: the CPU side (packing, the HG and fog references) and the grid's GPU
 # side (MediumVolume: the bake into a 3D image and the majorant pass, shaders/modern/medium_majorant.comp).
@@ -1158,7 +1158,7 @@ target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SP
 add_dependencies(medium_test medium_test_shaders)
 evo_gpu_test(medium medium_test)
 
-# Step 5, Task 21: the Lens scene (LENS, LENS OF GOD: a glass ball and a colossal lens over the 1993 rotozoom's
+# The Lens scene (LENS, LENS OF GOD: a glass ball and a colossal lens over the 1993 rotozoom's
 # texture laid as a stone mosaic, the Checker hit group's Tesserae patterns) and its test, with a compute probe
 # of shaders/rt/tesserae.glsl against the 1993 texture (`scene_lens_test --look <dir> [spp] [detail]` renders
 # 480x270 stills of both chapters).
@@ -1179,7 +1179,7 @@ add_custom_target(scene_lens_test_shaders DEPENDS "${tesseraeProbeSpirv}")
 target_compile_definitions(scene_lens_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(scene_lens_test scene_lens_test_shaders)
 
-# --- Step 5 Task 20: Glass (GLENZ, GLASS CATHEDRAL, CRYSTAL CITY) -------------------------------------------
+# --- Glass (GLENZ, GLASS CATHEDRAL, CRYSTAL CITY) -----------------------------------------------------
 
 # The glenz star in flint glass over rainbow caustics, a stained-glass cathedral and a city of quartz towers
 # (src/modern/scenes/glass.cpp), and its scene test: the standard picture and sweep checks, the cards' numbers,
@@ -1188,7 +1188,7 @@ add_dependencies(scene_lens_test scene_lens_test_shaders)
 target_sources(evo_modern PRIVATE src/modern/scenes/glass.cpp)
 evo_scene_test(glass)
 
-# --- Step 5 Task 16: the Ship (WORMHOLE) -------------------------------------------------------------------
+# --- The Ship (WORMHOLE) -----------------------------------------------------------------------------
 
 # The starship as an asset any scene can fly (src/modern/scenes/ship_asset.cpp: the hull, its plumes as a grid
 # medium, the star splats; shaders/modern/ship_{plumes,splats}.comp) and the Ship scene that stages it in
@@ -1227,7 +1227,7 @@ add_test(NAME act_join COMMAND act_join_test)
 # The Studio's test checks every Studio chapter's pictures with the scene fixture.
 target_link_libraries(studio_test PRIVATE evo_scene_fixture)
 
-# --- Step 5 Task 23: the City (VECTOR CITY, ASCENT, CITY NIGHT, METROPOLIS) ----------------------------------
+# --- The City (VECTOR CITY, ASCENT, CITY NIGHT, METROPOLIS) --------------------------------------------
 
 # A night city on the 1993 city's grid: towers under procedural facades with millions of windows, wet
 # streets, tens of thousands of street lamps and beacons in the light tree, signs as rect lights, traffic
@@ -1239,14 +1239,14 @@ target_sources(evo_modern PRIVATE src/modern/scenes/city.cpp)
 evo_scene_test(city)
 add_dependencies(scene_city_test evo_modern_sphere_shaders evo_modern_intersection_shaders)
 
-# --- Step 5 Task 18: Nebula (PLASMA, NEBULA) ------------------------------------------------------------------
+# --- Nebula (PLASMA, NEBULA) ----------------------------------------------------------------------------
 
 # The scene (src/modern/scenes/nebula.cpp) and its bake, star and splat shaders (shaders/modern/nebula_*.comp,
 # compiled by the shaders/modern glob as modern_nebula_*.comp.spv). `scene_nebula_test --look <dir> [spp]
 # [detail]` renders 480x270 stills of both chapters instead of the tests.
 target_sources(evo_modern PRIVATE src/modern/scenes/nebula.cpp)
 evo_scene_test(nebula)
-# --- Step 5 Task 24: Cosmos (GALAXY, ASCENDANT) ------------------------------------------------------------
+# --- Cosmos (GALAXY, ASCENDANT) ----------------------------------------------------------------------
 
 # A sixteen-million-star galaxy as splats with its dust as a grid medium, and two million particles rising from
 # its core into the logo (src/modern/scenes/cosmos.cpp; shaders/modern/{galaxy.glsl, cosmos_splats.comp,
@@ -1256,7 +1256,7 @@ evo_scene_test(nebula)
 target_sources(evo_modern PRIVATE src/modern/scenes/cosmos.cpp)
 evo_scene_test(cosmos)
 
-# --- Step 5 Task 25: Singularity (SINGULARITY) -------------------------------------------------------------
+# --- Singularity (SINGULARITY) -----------------------------------------------------------------------
 
 # The gravitational lens (src/modern/lensing.cpp packs LensingFrame; shaders/rt/lensing.glsl bends main rays
 # along the null geodesic and marches the accretion disc) and the black hole's scene

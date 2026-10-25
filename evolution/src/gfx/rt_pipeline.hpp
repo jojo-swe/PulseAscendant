@@ -21,7 +21,7 @@ struct ProceduralHitGroup {
 };
 
 // The SPIR-V of a ray tracing pipeline: one raygen, the miss shaders in miss-index order, one closest-hit per
-// triangle hit group, then the procedural hit groups (analytic spheres, step 5's Task 8), in SBT order: hit
+// triangle hit group, then the procedural hit groups (analytic spheres), in SBT order: hit
 // group k = an instance's hitGroup k, the triangle groups first. No any-hit shaders: all geometry is opaque.
 struct RtShaders {
     std::filesystem::path raygen;

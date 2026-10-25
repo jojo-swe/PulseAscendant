@@ -95,7 +95,7 @@ endfunction()
 
 # evo_add_shader_variants(<target> SUFFIX <suffix> [DEFINES <NAME[=VALUE]>...] SHADERS <shader>...)
 # Compiles each shader a second time with the defines, as <name>_<suffix>.<stage>.spv beside its plain build
-# (Task 8 of step 5: evo_add_shader_variants(evo_modern SUFFIX sphere DEFINES GEOMETRY_SPHERES SHADERS
+# (evo_add_shader_variants(evo_modern SUFFIX sphere DEFINES GEOMETRY_SPHERES SHADERS
 # shaders/rt/pbr.rchit ...) -> rt_pbr_sphere.rchit.spv). Builds <target>_<suffix>_shaders. Call it once per
 # suffix and target.
 function(evo_add_shader_variants target)

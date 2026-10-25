@@ -38,16 +38,16 @@ struct Camera {
 // scene's capacity (std::length_error). Every scene task sweeps its chapters against it (checkSceneSweep).
 struct SceneCapacity {
     std::uint32_t instances = 1024, lights = 64, materials = 256, spheres = 0, particles = 0, splats = 0;
-    // The largest caustic receiver resolution of any frame (Task 13; 0: the scene has no caustics). The
+    // The largest caustic receiver resolution of any frame (0: the scene has no caustics). The
     // modern stage sizes its one CausticMaps to the largest prepared.
     std::uint32_t causticResolution = 0;
-    std::uint32_t treeLights = 0; // the light tree's lights (Task 12), at most rt::kMaxTreeLights
-    // The largest grid medium a frame bakes, voxels per axis (Task 11; all 0: the scene has none).
+    std::uint32_t treeLights = 0; // the light tree's lights, at most rt::kMaxTreeLights
+    // The largest grid medium a frame bakes, voxels per axis (all 0: the scene has none).
     std::array<std::uint32_t, 3> mediumGrid{0, 0, 0};
 };
 
 // The meshes (BLAS per mesh) and materials of a scene, and what its frames may hold. An instance's hit group
-// is its material's materialClass. `spheres` are its static analytic spheres (Task 8, at most
+// is its material's materialClass. `spheres` are its static analytic spheres (at most
 // capacity.spheres), built into one AABB BLAS per range of `sphereRanges` (empty: one range of them all); a
 // static sphere instance places exactly one of those ranges. A sphere's `material` indexes the material
 // table (the frame's, when it has one) and must have its instance's class. The shader paths name its
@@ -71,11 +71,11 @@ struct SceneStatic {
 // material of class Emissive; and the transform must not mirror. The instance should be the very quad(w, h)
 // that rectLightForQuad(transform, w, h, ...) describes (not checked).
 //
-// A sphere instance (kind Spheres, Task 8) places spheres firstSphere .. firstSphere + sphereCount - 1 of the
+// A sphere instance (kind Spheres) places spheres firstSphere .. firstSphere + sphereCount - 1 of the
 // scene's static spheres (one of SceneStatic's sphere ranges), or the whole particle field (firstSphere 0,
 // sphereCount = ParticleFrame::count, the field's material) when dynamicSpheres is set, instead of a mesh
 // (`mesh` is then ignored). Its transform places the spheres (scale it uniformly: a sphere stays a sphere
-// only then); it is no light (kNoLight), or the light tree's RectLight of kind Tree (Task 12: its spheres
+// only then); it is no light (kNoLight), or the light tree's RectLight of kind Tree (its spheres
 // are the tree's lights, see TreeLightFrame).
 struct SceneInstance {
     std::uint32_t mesh, material;
@@ -86,7 +86,7 @@ struct SceneInstance {
     bool dynamicSpheres = false;
 };
 
-// One light of the frame's light tree (Task 12): an emissive sphere, in world space. SceneFrame::treeLights
+// One light of the frame's light tree: an emissive sphere, in world space. SceneFrame::treeLights
 // holds the tree's lights in order: light k is sphere firstSphere + k (`sphere`, its index in its buffer) of
 // the one sphere instance whose `light` is the frame's one RectLight of kind Tree, which stands for the whole
 // tree in light selection (its selectWeight scales the tree's importance; its other fields are 0). Static
@@ -107,21 +107,21 @@ struct TreeLightFrame {
     std::uint32_t sphere = 0;
 };
 
-// What one frame shows. Beyond step 4's camera, instances, lights and exposure, step 5's features each have
+// What one frame shows. Beyond the original camera, instances, lights and exposure, the features each have
 // a member that is absent (empty, nullopt) in a frame without the feature; the path tracer then binds that
 // feature's resources to dummies:
 //   materials    empty: the scene's static table; else the whole table for this frame (a per-chapter light
 //                rig, blinking windows), at most the scene's capacity.materials entries
-//   environment  the sky (Task 2; default: step 4's night sky, never sampled by NEE)
-//   particles    the particle field (Task 8); splats (Task 10); medium (Task 11); treeLights (Task 12);
-//   caustics     (Task 13); lensing (Task 25)
+//   environment  the sky (default: the original night sky, never sampled by NEE)
+//   particles    the particle field; splats; medium; treeLights;
+//   caustics    ; lensing
 struct SceneFrame {
     Camera camera;
     std::vector<SceneInstance> instances;
     std::vector<rt::RectLight> lights;
     float exposureEV = 0;
     // The luminance limit of a contribution after a rough vertex (TraceSettings::clampIndirect), in the
-    // scene's own units: 16 by default (Task 6 of step 5), with path regularisation taking the rest of the
+    // scene's own units: 16 by default, with path regularisation taking the rest of the
     // caustic noise.
     float clampIndirect = 16.f;
     std::vector<rt::Material> materials;

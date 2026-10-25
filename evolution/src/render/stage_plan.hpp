@@ -111,7 +111,7 @@ private:
 };
 
 // The window traces more samples on the first frames of a history, so a seek, a cut or a resize starts clean
-// (Task 7 of step 5): max(spp, kResetSpp[framesSinceReset]) while framesSinceReset < 2, then spp. Exports
+//: max(spp, kResetSpp[framesSinceReset]) while framesSinceReset < 2, then spp. Exports
 // always trace spp. The HistoryKey keeps the configured spp, so the extra samples never reset anything.
 inline constexpr std::array<std::uint32_t, 2> kResetSpp{4, 2};
 std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset);

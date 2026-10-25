@@ -1,6 +1,6 @@
 #pragma once
 
-// The CPU reference of the path tracer's per-point light selection (shaders/rt/lights.glsl, Task 3 of step
+// The CPU reference of the path tracer's per-point light selection (shaders/rt/lights.glsl of step
 // 5): the weight with which next-event estimation chooses a rect light at a shading point, and the resulting
 // selection probabilities. Tests hold the shader to it; nothing at run time uses it.
 

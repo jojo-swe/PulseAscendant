@@ -97,7 +97,7 @@ EnvironmentDesc studioEnvironment();
 // horizon brightening to grey-blue (0.10, 0.14, 0.22) over RETURN, no moon glow (and the frame's moon is off).
 EnvironmentDesc studioEnvironmentAt(const show::TimelineFrame& frame);
 
-// A chapter's light rig (Task 14 of step 5): the lamp's level (0 off, 1 full) and the screen's
+// A chapter's light rig: the lamp's level (0 off, 1 full) and the screen's
 // emissionScale. The frame's material table carries them (SceneFrame::materials), and the lights' emissions
 // follow from it.
 //   FLYBY           the lamp off, the screen 2.4: the room is revealed lit by phosphor and moon
@@ -154,7 +154,7 @@ public:
                            kTownWeight = 1.f;
     // Towards the moon (unit length): high (44 degrees) behind the window and a little to its left, so that
     // the moonbeam falls past the desk's left end onto the floor in front of it, where the wide shots see the
-    // window's cross in it (Task 14). The Studio's sky (studioEnvironment) centres its glow on it, and the
+    // window's cross in it. The Studio's sky (studioEnvironment) centres its glow on it, and the
     // moon's emitter stands 4 m out from the window along it.
     static constexpr Vec3 kMoonDirection{-0.2104f, 0.6913f, -0.6913f};
     // The lamp's emitter: a warm 8 cm square diffuser recessed 3.5 cm into the shade, colour times intensity

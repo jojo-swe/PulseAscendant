@@ -1,4 +1,4 @@
-// The integrator v2 (Task 6 of step 5) on lavapipe, with the validation layer on; fails on any message.
+// The integrator v2 on lavapipe, with the validation layer on; fails on any message.
 // 64x64 unless noted.
 //
 // (a) path regularisation: in a mirror caustic box (diffuse floor, small lamp, smooth mirror) roughening

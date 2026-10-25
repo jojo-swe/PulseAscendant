@@ -1,7 +1,7 @@
 #ifndef EVO_RT_CAUSTIC_PATHS_GLSL
 #define EVO_RT_CAUSTIC_PATHS_GLSL
 
-// The double-count exclusion of the caustic photon maps (step 5, Task 13), for pathtrace.rgen (included
+// The double-count exclusion of the caustic photon maps, for pathtrace.rgen (included
 // after sampleLight(); needs its payload, bounceRand, pickLight and the environment).
 //
 // The map holds every light path from its source light (CausticFrame::light) that leaves the light inside

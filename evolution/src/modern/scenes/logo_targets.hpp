@@ -1,6 +1,6 @@
 #pragma once
 
-// The "EVOLUTION" logo as particle targets (step 5, Task 17; ASCENDANT reuses them, Task 24): the 8x8 font's
+// The "EVOLUTION" logo as particle targets (ASCENDANT reuses them): the 8x8 font's
 // lit pixels of the word (text/font8x8.cpp, copied here so the GPU twin, shaders/modern/logo_targets.glsl,
 // can hold the very same table; scene_particles_test checks it against text::glyph), extruded kLogoDepth
 // voxels deep and filled by jittered sampling.

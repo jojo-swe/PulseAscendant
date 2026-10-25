@@ -1,7 +1,7 @@
 #pragma once
 
-// Spheres (step 5, Task 22): the 2026 side of RAYTRACE, SPHERE STORM and RAYTRACE INFINITY, all analytic
-// spheres (Task 8), one scene object for the three chapters.
+// Spheres: the 2026 side of RAYTRACE, SPHERE STORM and RAYTRACE INFINITY, all analytic
+// spheres, one scene object for the three chapters.
 //
 // - RAYTRACE: the 1993 "precalculated" raytrace (retro/raytrace.*) path traced: its six spheres at the same
 //   places at the same time (retro::raytraceSpheres), the central chrome one, four chrome ones and the

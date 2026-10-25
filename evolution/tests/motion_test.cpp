@@ -1,4 +1,4 @@
-// Per-object motion vectors and the export shutter (step 5, Task 9) on lavapipe, with the validation layer
+// Per-object motion vectors and the export shutter on lavapipe, with the validation layer
 // and its synchronization validation on; fails on any message.
 //
 // (a) a quad moving 2 px per frame under a static camera: the motion guide is (-2, 0) on it and (0, 0) on the
@@ -10,7 +10,7 @@
 //     point;
 // (d) the denoiser follows a moving object: a slanted quad moving 2 px per frame keeps its history (length
 //     8 after 8 frames), and has none (length 1: the depth moves under the pixel) without the previous
-//     transforms, which is step 4's behaviour;
+//     transforms, which is the original behaviour;
 // (e) the shutter in the tracer: a bright quad moving 8 px per 1/60 s, exported at spp 8 and 32 with a
 // shutter
 //     of 1/120 s, has an edge that is a ramp of 4 +- 1 px (without a shutter at most 1 px), its streak holds

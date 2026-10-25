@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The City's splats (step 5, Task 23; src/modern/scenes/city.hpp): CITY NIGHT's rain. Every point is a pure
+// The City's splats (src/modern/scenes/city.hpp): CITY NIGHT's rain. Every point is a pure
 // function of (id, seconds, params) and the frame's camera; the lamps that light the drops are found from the
 // grid as the C++ side builds them (cityLampHead, the lamp's colour and radiance: mirrored here).
 //

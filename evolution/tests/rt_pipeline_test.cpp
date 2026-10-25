@@ -114,7 +114,7 @@ void testSbtLayouts() {
     CHECK(rtx.totalBytes == 256);
     checkTraceRaysRules(rtx, kRtx, 2, 4);
 
-    // Step 5's path tracer (Task 8): 2 misses and 8 hit groups, hitGroupFor(class, kind) = the 4 triangle
+    // the path tracer: 2 misses and 8 hit groups, hitGroupFor(class, kind) = the 4 triangle
     // groups then the 4 sphere groups. RTX: the hit region at 128, 8 records of 32 = 256 bytes; group 7 (the
     // spheres' Checker) is its last record. lavapipe: at 96, the same 256.
     static_assert(rt::hitGroupFor(rt::MaterialClass::Pbr, rt::GeometryKind::Spheres) == 4 &&

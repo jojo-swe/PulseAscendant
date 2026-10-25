@@ -1,6 +1,6 @@
 #pragma once
 
-// Emissive splats (step 5, Task 10): millions of points added into the path tracer's emission guide after
+// Emissive splats: millions of points added into the path tracer's emission guide after
 // the trace and before the denoiser, so they bypass its history and filter (like the CRT's picture). A scene
 // names its splat shader (SceneStatic::splatShader) and sets SceneFrame::splats in the frames that show them.
 //
@@ -91,7 +91,7 @@ void checkSplats(const std::optional<SplatFrame>& splats, std::uint32_t capacity
 
 // The splat pass: the accumulators (three R32_UINT images and the overflow image, at the trace size), a
 // compute pipeline per scene shader and the resolve. One in ModernStage, made when the first scene with a
-// splat shader is prepared, whatever the number of such scenes (Task 1b's decision: per-frame feature resources
+// splat shader is prepared, whatever the number of such scenes (the feature ABI's decision: per-frame feature resources
 // live once in ModernStage).
 class SplatPass {
 public:

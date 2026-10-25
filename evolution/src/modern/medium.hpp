@@ -1,6 +1,6 @@
 #pragma once
 
-// A frame's participating media (step 5, Task 11): height fog and a baked density grid. The GPU side of the
+// A frame's participating media: height fog and a baked density grid. The GPU side of the
 // grid is MediumVolume (modern/medium_volume.hpp), which ModernStage keeps once for every scene.
 //
 // - Fog: sigma_t(y) = density * exp(-falloff * (y - baseHeight)) everywhere (falloff 0: homogeneous), with an

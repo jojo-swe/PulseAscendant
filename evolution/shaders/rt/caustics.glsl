@@ -1,7 +1,7 @@
 #ifndef EVO_RT_CAUSTICS_GLSL
 #define EVO_RT_CAUSTICS_GLSL
 
-// Caustics from the photon map (step 5, Task 13): a kMaterialCausticReceiver surface reflects the
+// Caustics from the photon map: a kMaterialCausticReceiver surface reflects the
 // irradiance its receiver's map holds (binding EVO_BINDING_CAUSTIC_MAPS, layer = the receiver; filled by
 // shaders/modern/photons.comp and caustic_resolve.comp) through its Lambert lobe. writeSurface() adds it to
 // the payload's emission, so the primary hit's caustic goes to the emission image, past the denoiser, and a

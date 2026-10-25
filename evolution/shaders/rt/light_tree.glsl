@@ -1,7 +1,7 @@
 #ifndef EVO_RT_LIGHT_TREE_GLSL
 #define EVO_RT_LIGHT_TREE_GLSL
 
-// The light tree (step 5, Task 12): next-event estimation's walk down a binary tree of emissive sphere
+// The light tree: next-event estimation's walk down a binary tree of emissive sphere
 // lights, choosing a child with probability proportional to its importance at the shading point, and the
 // probability of any one light, walked again along its trail (the child bits from the root). The CPU builds
 // the tree (src/rt/light_tree.cpp, whose reference functions this file mirrors in its order of operations).

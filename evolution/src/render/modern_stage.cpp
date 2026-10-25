@@ -123,19 +123,19 @@ void ModernStage::prepare(modern::SceneId id) {
     if (hasParticles && !particles_)
         particles =
             std::make_unique<rt::ParticleField>(ctx_, ring_, particleCapacity, statics.particleShader);
-    // The splat pass with the first scene that has a splat shader, which it loads now (Task 10).
+    // The splat pass with the first scene that has a splat shader, which it loads now.
     std::unique_ptr<modern::SplatPass> splats;
     if (!statics.splatShader.empty()) {
         if (!splats_)
             splats = std::make_unique<modern::SplatPass>(ctx_, ring_, traceWidth_, traceHeight_);
         (splats ? *splats : *splats_).prepare(statics.splatShader);
     }
-    // The one CausticMaps, made for the first scene with caustics (grown below for a later one; Task 13).
+    // The one CausticMaps, made for the first scene with caustics (grown below for a later one).
     const std::uint32_t causticResolution = statics.capacity.causticResolution;
     std::unique_ptr<modern::CausticMaps> caustics;
     if (causticResolution > 0 && !caustics_)
         caustics = std::make_unique<modern::CausticMaps>(ctx_, ring_, causticResolution);
-    // The one medium volume (Task 11), made for the first scene with a medium shader, grown for a later one.
+    // The one medium volume, made for the first scene with a medium shader, grown for a later one.
     const bool hasMedium = !statics.mediumShader.empty();
     std::array<std::uint32_t, 3> mediumCapacity = statics.capacity.mediumGrid;
     for (std::uint32_t& n : mediumCapacity)
@@ -372,7 +372,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
             endScope(commands);
     };
     if (slices[0].caustics) {
-        // Task 13: this frame's photon maps (the first slice's), a pure function of the show time (the seed
+        // Caustics: this frame's photon maps (the first slice's), a pure function of the show time (the seed
         // does not follow the frames since a reset), with kExportPhotonFactor times the photons in an export
         // of many samples.
         if (!caustics_)
@@ -397,7 +397,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     }
     const modern::SceneFrame& middle = slices[sliceCount / 2];
     if (middle.medium && middle.medium->grid) {
-        // Task 11: the grid medium's bake, once per frame at the middle slice's time (a pure function of it:
+        // Media: the grid medium's bake, once per frame at the middle slice's time (a pure function of it:
         // nothing carries over from another frame), checked with the rest of that slice first. Every slice
         // samples it.
         const modern::SceneStatic& statics = object.staticScene();

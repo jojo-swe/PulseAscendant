@@ -1,6 +1,6 @@
 #pragma once
 
-// The light tree (step 5, Task 12): next-event estimation over up to 65,536 emissive sphere lights (a night
+// The light tree: next-event estimation over up to 65,536 emissive sphere lights (a night
 // city's lamps and windows) picks one by walking down a binary tree of their bounds and powers, choosing a
 // child with probability proportional to its importance at the shading point, instead of looking at every
 // light (Decision 14: deterministic, no temporal reuse, unlike ReSTIR).

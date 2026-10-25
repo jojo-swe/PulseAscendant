@@ -1,7 +1,7 @@
 #ifndef EVO_MODERN_MEDIUM_COMMON_GLSL
 #define EVO_MODERN_MEDIUM_COMMON_GLSL
 
-// The grid medium's bake (step 5, Task 11; modern::MediumVolume records it). A scene's
+// The grid medium's bake (modern::MediumVolume records it). A scene's
 // shaders/modern/medium_<scene>.comp defines the pure function
 //
 //     vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]);   // (density, emission rgb)

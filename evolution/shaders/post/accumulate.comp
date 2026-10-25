@@ -149,7 +149,7 @@ float neighbourhoodTemporalVariance(ivec2 p, vec2 motion, float alpha) {
 // direction counts only with a total weight of kMinSpatialWeight (a quadrant cut off by the image border or
 // by other geometry would hold one or two pixels and claim no noise); with none left the variance is 0.
 //
-// Sparse first frames (step 5): at 1-4 spp much of the lighting is exactly 0 (a light sample that missed, a
+// Sparse first frames: at 1-4 spp much of the lighting is exactly 0 (a light sample that missed, a
 // shadow ray that hit). Then an all-zero quadrant makes the minimum claim no noise, so holes survive the
 // filter; and any luminance stop on such skewed raw samples weights the rare bright ones down, which darkens
 // the frame (a plain 3x3 variance: 9 % in denoiser_test at p = 0.3, more for sparser light). So

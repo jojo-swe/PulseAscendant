@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The Nebula scene's grid medium (step 5, Task 18; src/modern/scenes/nebula.hpp describes the scene): one
+// The Nebula scene's grid medium (src/modern/scenes/nebula.hpp describes the scene): one
 // voxel per invocation, (density, emission rgb), a pure function of (uvw, seconds, params). Three modes
 // (params[0].x):
 //

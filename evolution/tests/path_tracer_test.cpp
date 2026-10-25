@@ -19,7 +19,7 @@
 // (g) the guides: depth, normal and motion of a plane, for a static and a moving camera;
 // (h) the retro screen as a textured light: its picture in the emission image (decoded from sRGB once) and
 //     its colour on the floor in front of it through NEE;
-// (i) the hit payload (step 5's frozen ABI, Task 1b): every closest-hit (one per material class) writes
+// (i) the hit payload (the frozen ABI): every closest-hit (one per material class) writes
 //     materialFlags, abbe and medium from its material, primitive = gl_PrimitiveID within its mesh and
 //     prevPosition = position (until Task 9), seen through a probe raygen (shaders/test/payload_probe.rgen)
 //     in place of pathtrace.rgen, which also sees TraceSettings::seconds as FrameUniforms::seconds;
@@ -995,7 +995,7 @@ void testRefusals(gfx::Context& ctx) {
     badTable.materials = scene.statics.materials;
     badTable.materials[2].texture = rt::kRetroScreenTexture;
     CHECK(refuses(std::invalid_argument(""), badTable));
-    // A sphere instance needs step 5's Task 8.
+    // A sphere instance needs the spheres.
     modern::SceneFrame sphere = scene.frame;
     sphere.instances[0].kind = rt::GeometryKind::Spheres;
     CHECK(refuses(std::invalid_argument(""), sphere));
@@ -1039,7 +1039,7 @@ void testRefusals(gfx::Context& ctx) {
     modern::SceneFrame badKind = badPortal;
     badKind.lights.back().kind = 4; // no LightKind
     CHECK(refuses(std::invalid_argument(""), badKind));
-    badKind.lights.back().kind = 3; // Tree: step 5's Task 12
+    badKind.lights.back().kind = 3; // Tree: the spheres
     CHECK(refuses(std::invalid_argument(""), badKind));
     // A gate names a Portal light of the frame (the Cornell box's light 0 is an Emitter).
     modern::SceneFrame gated = badPortal;

@@ -1,7 +1,7 @@
 #ifndef EVO_RT_MEDIUM_GLSL
 #define EVO_RT_MEDIUM_GLSL
 
-// Participating media between surface hits (step 5, Task 11): height fog and a baked density grid, as
+// Participating media between surface hits: height fog and a baked density grid, as
 // src/modern/medium.hpp describes. This file holds what the integrator is built from: the frame's media
 // (MediumUniforms `mediumData`, binding EVO_BINDING_MEDIUM; FrameUniforms.mediumFlags), their own random
 // numbers, the fog's closed forms, the grid's DDA over its majorant cells (EVO_BINDING_MAJORANT) and its density
@@ -9,7 +9,7 @@
 // Henyey-Greenstein phase function. The integrator itself (the primary segment, medium vertices, the
 // multiple-scattering continuation) is medium_path.glsl, which pathtrace.rgen includes after its helpers.
 // Without a medium (mediumFlags 0) mediumActive() is false and mediumTransmittance() is exactly 1, so the
-// tracer's picture is step 4's byte for byte. Needs common.glsl and random.glsl.
+// tracer's picture is the original picture byte for byte. Needs common.glsl and random.glsl.
 
 const float kMediumInfinity = 1e30; // = pathtrace.rgen's kRayMax: a ray that leaves the scene
 // Tentative collisions per tracking walk at most (a safety net: a walk this long is in a medium dense enough

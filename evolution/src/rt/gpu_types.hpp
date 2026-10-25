@@ -6,7 +6,7 @@
 // sides together. The geometry structs types.glsl also mirrors (Vertex, MeshRecord, Mat34) live in
 // rt/geometry.hpp, and the descriptor bindings in rt/bindings.hpp.
 //
-// Step 5's ABI (Tasks 1 and 1b froze it so that later tasks fill in features without moving a field):
+// the ABI (Tasks 1 and 1b froze it so that later tasks fill in features without moving a field):
 // Material is 96 bytes (flags, abbe, medium, receiver), RectLight's last word is the portal `gate`,
 // InstanceRecord's the sphere `flags`, FrameUniforms is 208 bytes (with the frame's `seconds`), and the
 // feature structs below (EnvironmentUniforms, MediumUniforms, SphereRecord, TreeLight, LightTreeNode,
@@ -28,8 +28,8 @@ enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Che
 // in the pixel's palette colour (marble, basalt or gold leaf), in the world's xz plane (Tesserae) or over a
 // sphere about its instance's origin along great circles from the point above its centre (TesseraeSphere);
 // baseColor2's x and y move the mosaic by that many tesserae (baseColor is unused).
-// Hull and Planet are the Ship's (step 5, Task 16; shaders/rt/pbr.rchit documents what they read).
-// The City's patterns (Task 23 of step 5, shaders/rt/city_patterns.glsl) start at 16: the facades of its
+// Hull and Planet are the Ship's (shaders/rt/pbr.rchit documents what they read).
+// The City's patterns (shaders/rt/city_patterns.glsl) start at 16: the facades of its
 // towers (punched windows, a curtain wall, ribbon bands, a round curtain wall), its streets, and on Emissive
 // materials the light trails of its traffic and the lettering of its signs.
 // From 32 (shaders/rt/detail_patterns.glsl): the Particles scene's sea beads (Pbr spheres: a mirror flattened
@@ -69,10 +69,10 @@ inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight
 
 // Material::flags.
 //   CameraOnlyEmission  the emission counts only as seen from the camera or along a chain of delta events
-//                       from it, never after a rough vertex, and the surface is never a light (Task 6)
-//   CausticReceiver     the surface receives the caustic photon map (Task 13)
+//                       from it, never after a rough vertex, and the surface is never a light
+//   CausticReceiver     the surface receives the caustic photon map
 //   ThinWalled          a dielectric of no thickness: transmission without refraction (stained glass), always
-//                       smooth (bsdf.glsl's thinDielectricSample; the raygen and the photons, Task 20)
+//                       smooth (bsdf.glsl's thinDielectricSample; the raygen and the photons)
 inline constexpr std::uint32_t kMaterialCameraOnlyEmission = 1u, kMaterialCausticReceiver = 2u,
                                kMaterialThinWalled = 4u;
 
@@ -104,21 +104,21 @@ struct Material { // 96 bytes, scalar
     float baseColor2[3] = {0.f, 0.f, 0.f};
     std::uint32_t materialClass = static_cast<std::uint32_t>(MaterialClass::Pbr);
     std::uint32_t flags = 0;          // kMaterial*
-    float abbe = 0.f;                 // dispersion: the Abbe number of a dielectric, 0 for none (Task 6)
-    std::uint32_t medium = kNoMedium; // the participating medium inside a closed surface (Task 11)
+    float abbe = 0.f;                 // dispersion: the Abbe number of a dielectric, 0 for none
+    std::uint32_t medium = kNoMedium; // the participating medium inside a closed surface
     // The caustic receiver this surface is: an index into the receiver table (CausticReceiver[], binding
-    // EVO_BINDING_CAUSTIC_RECEIVERS) on a kMaterialCausticReceiver surface, else kNoReceiver (Task 13).
+    // EVO_BINDING_CAUSTIC_RECEIVERS) on a kMaterialCausticReceiver surface, else kNoReceiver.
     std::uint32_t receiver = kNoReceiver;
 };
 
 // Portal: radiance = the environment along the direction. Tree: the whole light tree of a scene's sphere
-// lights (Task 12), one top-level entry.
+// lights, one top-level entry.
 enum class LightKind : std::uint32_t { Emitter = 0, RetroScreen = 1, Portal = 2, Tree = 3 };
 
 // A one-sided rectangular area light: point = corner + u * edgeU + v * edgeV for u, v in [0, 1], emitting
 // along normalize(cross(edgeU, edgeV)). `gate` is the index of the Portal light through which this light is
 // seen (a moon outside a window: light selection gives it no weight at a point the portal does not show it
-// to, Task 3), or kNoLight.
+// to), or kNoLight.
 struct RectLight { // 64 bytes, scalar
     float corner[3];
     float edgeU[3];
@@ -131,14 +131,14 @@ struct RectLight { // 64 bytes, scalar
 };
 
 // InstanceRecord::flags: the instance is a set of analytic spheres (`mesh` then holds its first sphere), and
-// those are the frame's particle field rather than the scene's static spheres (Task 8).
+// those are the frame's particle field rather than the scene's static spheres.
 inline constexpr std::uint32_t kInstanceSpheres = 1u, kInstanceDynamicSpheres = 2u;
 
 struct InstanceRecord { // 16 bytes; index = gl_InstanceCustomIndexEXT
     std::uint32_t mesh, material, light, flags;
 };
 
-// What an instance's geometry is: triangles of a mesh, or analytic spheres (Task 8: an intersection shader,
+// What an instance's geometry is: triangles of a mesh, or analytic spheres (an intersection shader,
 // a second set of kHitGroupsPerKind hit groups).
 enum class GeometryKind : std::uint32_t { Triangles = 0, Spheres = 1 };
 inline constexpr std::uint32_t kHitGroupsPerKind = 4; // = MaterialClass
@@ -148,11 +148,11 @@ constexpr std::uint32_t hitGroupFor(MaterialClass c, GeometryKind k) {
 
 // --- The path tracer's frame -------------------------------------------------------------------------------
 
-// FrameUniforms::flags. FixedLightSelection: choose lights by their fixed selectWeight alone (step 4), not by
-// their importance at the shading point (Task 3 of step 5); for comparisons and tests.
+// FrameUniforms::flags. FixedLightSelection: choose lights by their fixed selectWeight alone, not by
+// their importance at the shading point; for comparisons and tests.
 inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u,
                                kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u;
-// TLAS instance masks (Task 20): a thin-walled glass pane is a filter, not an occluder; shadow rays trace the
+// TLAS instance masks: a thin-walled glass pane is a filter, not an occluder; shadow rays trace the
 // solid instances, then the panes in their way for their tint.
 inline constexpr std::uint8_t kInstanceMaskSolid = 1u, kInstanceMaskPane = 2u;
 
@@ -189,21 +189,21 @@ struct FrameUniforms { // 208 bytes, scalar
     std::uint32_t instanceCount;
     float clampIndirect;            // luminance limit of one contribution after a rough vertex
     float lightWeightSum;           // the sum of every light's selectWeight (no shader reads it since Task 3)
-    float regularizeRoughness;      // the least roughness of every lobe after the first rough vertex (Task 6)
-    std::uint32_t treeLightCount;   // the lights of the light tree (Task 12)
-    std::uint32_t mediumFlags;      // which media the frame has (Task 11)
-    std::uint32_t causticReceivers; // caustic maps bound (Task 13)
-    std::uint32_t lensing;          // 1: bend rays (Task 25)
+    float regularizeRoughness;      // the least roughness of every lobe after the first rough vertex
+    std::uint32_t treeLightCount;   // the lights of the light tree
+    std::uint32_t mediumFlags;      // which media the frame has
+    std::uint32_t causticReceivers; // caustic maps bound
+    std::uint32_t lensing;          // 1: bend rays
     float seconds;           // the frame's chapter-local show time (TraceSettings::seconds), every frame
-    float shutterOffset;     // this slice's time offset from `seconds` (Task 9)
+    float shutterOffset;     // this slice's time offset from `seconds`
     float environmentSelect; // the probability that NEE samples the environment instead of a rect light
-    std::uint32_t sliceIndex, sliceCount; // the export shutter's time slices (Task 9)
+    std::uint32_t sliceIndex, sliceCount; // the export shutter's time slices
 };
 
 // --- Step 5 feature structs (Task 1 fixed their sizes; the code that owns each fills them)
 // -------------------------------
 
-// The scene's environment (binding EVO_BINDING_ENVIRONMENT; Task 2): kind (EnvironmentKind), an overall
+// The scene's environment (binding EVO_BINDING_ENVIRONMENT): kind (EnvironmentKind), an overall
 // intensity, the sun or moon disc (cosine of its angular radius, the share of environment samples it gets,
 // its direction and radiance), the dome's share, the star field, the gradient (zenith, horizon, ground), haze
 // and a glow.
@@ -226,7 +226,7 @@ struct EnvironmentUniforms { // 112 bytes, scalar
     float glowStrength;
 };
 
-// The frame's participating media (binding EVO_BINDING_MEDIUM; Task 11, modern::packMedium; which of them the
+// The frame's participating media (binding EVO_BINDING_MEDIUM; modern::packMedium; which of them the
 // frame has is FrameUniforms::mediumFlags). The grid: worldToMedium (row-major 3x4, the box to [0, 1]^3), its
 // voxels per axis, sigma_t = densityScale * the baked density, the single-scattering albedo and HG g, the
 // majorant grid's cells per axis and the emission's scale. The fog: albedo, HG g, and sigma_t(y) =
@@ -248,7 +248,7 @@ struct MediumUniforms { // 128 bytes, scalar
 };
 
 // An analytic sphere (static spheres, binding EVO_BINDING_STATIC_SPHERES, and the particle field,
-// EVO_BINDING_PARTICLE_SPHERES; Task 8): colour multiplies the material's baseColor, emission scales
+// EVO_BINDING_PARTICLE_SPHERES): colour multiplies the material's baseColor, emission scales
 // colour into emitted radiance, prevCenter is where it was in the previous frame (motion vectors).
 struct SphereRecord { // 48 bytes, scalar
     float center[3];
@@ -259,7 +259,7 @@ struct SphereRecord { // 48 bytes, scalar
     float emission;
 };
 
-// A light of the light tree (binding EVO_BINDING_TREE_LIGHTS; Task 12): an emissive sphere. trail holds the
+// A light of the light tree (binding EVO_BINDING_TREE_LIGHTS): an emissive sphere. trail holds the
 // child bits from the root to its leaf, depth their count.
 struct TreeLight { // 48 bytes, scalar
     float center[3];
@@ -269,7 +269,7 @@ struct TreeLight { // 48 bytes, scalar
     std::uint32_t trail, depth, pad0, pad1;
 };
 
-// A node of the light tree (binding EVO_BINDING_TREE_NODES; Task 12). A leaf has child = light | 0x80000000;
+// A node of the light tree (binding EVO_BINDING_TREE_NODES). A leaf has child = light | 0x80000000;
 // an inner node's children are child and child + 1.
 struct LightTreeNode { // 32 bytes, scalar
     float boundsMin[3];
@@ -278,7 +278,7 @@ struct LightTreeNode { // 32 bytes, scalar
     std::uint32_t child;
 };
 
-// Gravitational lensing (binding EVO_BINDING_LENSING; Task 25, modern::packLensing): the black hole's centre
+// Gravitational lensing (binding EVO_BINDING_LENSING; modern::packLensing): the black hole's centre
 // and Schwarzschild radius r_s, the radius of the sphere about it inside which main rays follow the null
 // geodesic, the most integration steps a ray takes there, flags (kLensingDisc: the frame's grid medium is the
 // lens's accretion disc, which the lens marches along the bent segments) and each step's length as a fraction

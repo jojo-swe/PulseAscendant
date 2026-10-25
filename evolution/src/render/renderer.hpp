@@ -32,10 +32,10 @@ struct RenderSettings {
     std::uint32_t spp = 1;                // samples per pixel per frame (at least 1)
     std::uint32_t maxBounces = 0;         // 0 = the mode's default (interactive 4, export 6)
     modern::SceneDetail detail;           // the 2026 scenes' detail (--detail)
-    // The 2026 side traces at traceSize(width, height, traceScale) and upscales in time (Task 4 of step 5);
+    // The 2026 side traces at traceSize(width, height, traceScale) and upscales in time;
     // in (0, 1]. The window runs at 0.67 by default (--trace-scale), the CLI's exports always at 1.
     float traceScale = 1.f;
-    // The export shutter (Task 9 of step 5): the seconds the shutter is open per frame, 0.5 / fps for a 180
+    // The export shutter: the seconds the shutter is open per frame, 0.5 / fps for a 180
     // degree shutter (the CLI's exports), 0 for none. Exports trace up to 8 time slices of it, one per 4
     // samples (modern/shutter.hpp), for motion blur; the window never has a shutter.
     double shutterSeconds = 0;

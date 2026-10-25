@@ -1,7 +1,7 @@
 #ifndef EVO_MODERN_LOGO_TARGETS_GLSL
 #define EVO_MODERN_LOGO_TARGETS_GLSL
 
-// The "EVOLUTION" logo as particle targets (step 5, Task 17; ASCENDANT reuses it, Task 24). The GLSL twin of
+// The "EVOLUTION" logo as particle targets (ASCENDANT reuses it). The GLSL twin of
 // src/modern/scenes/logo_targets.hpp, which documents the layout; scene_particles_test checks that the
 // shader's particles land where the C++ says for every id of a field.
 //

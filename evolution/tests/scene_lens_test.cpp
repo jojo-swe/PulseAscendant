@@ -1,4 +1,4 @@
-// The Lens scene (step 5, Task 21): LENS and LENS OF GOD on lavapipe, with the validation layer on; fails on
+// The Lens scene: LENS and LENS OF GOD on lavapipe, with the validation layer on; fails on
 // any message.
 //
 // (c) the cards: the feat lines, the full-detail photon count the frames shoot, the 16,384 tesserae, the

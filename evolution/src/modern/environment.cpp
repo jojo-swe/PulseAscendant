@@ -45,7 +45,7 @@ void checkColour(const char* name, Vec3 c) {
 } // namespace
 
 EnvironmentDesc environmentDefaults(EnvironmentKind kind) {
-    EnvironmentDesc d; // NightSky: step 4's night sky around the Studio, the moon an emitter of its own
+    EnvironmentDesc d; // NightSky: the original night sky around the Studio, the moon an emitter of its own
     d.kind = kind;
     switch (kind) {
     case EnvironmentKind::NightSky:

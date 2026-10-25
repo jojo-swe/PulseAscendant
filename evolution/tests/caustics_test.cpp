@@ -1,4 +1,4 @@
-// Caustic photon maps (step 5, Task 13) on lavapipe, with the validation layer and its synchronization
+// Caustic photon maps on lavapipe, with the validation layer and its synchronization
 // validation on; fails on any message. The scene: a smooth glass sphere (an analytic sphere, IOR 1.5) over a
 // white Lambert floor that is the receiver, lit by an overhead disc of light (the environment's; nothing else
 // in the sky) or by a small rect light.

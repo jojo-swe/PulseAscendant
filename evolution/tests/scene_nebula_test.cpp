@@ -1,4 +1,4 @@
-// The Nebula scene (step 5, Task 18): PLASMA and NEBULA on lavapipe, with the validation layer on; fails on any
+// The Nebula scene: PLASMA and NEBULA on lavapipe, with the validation layer on; fails on any
 // message.
 //
 // (k) the cards: NEBULA's card names 16,777,216 voxels (256^3, the full-detail grid) and 3 stars, which are

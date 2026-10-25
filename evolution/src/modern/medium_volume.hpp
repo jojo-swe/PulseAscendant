@@ -1,6 +1,6 @@
 #pragma once
 
-// The grid medium's GPU side (step 5, Task 11; the medium itself is described in modern/medium.hpp).
+// The grid medium's GPU side (the medium itself is described in modern/medium.hpp).
 
 #include "gfx/buffer.hpp"
 #include "gfx/compute_pipeline.hpp"

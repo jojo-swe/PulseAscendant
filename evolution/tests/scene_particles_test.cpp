@@ -1,4 +1,4 @@
-// The Particles scene (step 5, Task 17): DOTS and PARTICLE OCEAN on lavapipe, with the validation layer on;
+// The Particles scene: DOTS and PARTICLE OCEAN on lavapipe, with the validation layer on;
 // fails on any message.
 //
 // (k) the cards: each chapter's 2026 card (Particles::nowCard) is the show bible's line with the numbers from

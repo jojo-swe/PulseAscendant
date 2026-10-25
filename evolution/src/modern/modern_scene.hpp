@@ -48,7 +48,7 @@ public:
 
 // The scenes of the 2026 side. Placeholder is the fill.comp gradient and beat circle, through the HDR image
 // and the tonemap like every 2026 picture; every other id is a path-traced scene (the Studio from step 4,
-// the rest from step 5's scene tasks). Count is the number of ids.
+// the rest from the scene tasks). Count is the number of ids.
 enum class SceneId : std::uint32_t {
     Placeholder,
     Studio,
@@ -79,7 +79,7 @@ struct SceneEntry {
 std::span<const SceneEntry> sceneTable();
 
 // The scene an effect shows (kSceneOfEffect in src/modern/scenes.cpp, one row per effect): FINALE, PORTAL,
-// STUDIO NIGHT, RETURN and REBOOT show the Studio; each step 5 scene task moves its
+// STUDIO NIGHT, RETURN and REBOOT show the Studio; each scene task moves its
 // own chapters' rows off the placeholder. Every scene but the placeholder that an effect maps to has a make
 // function.
 SceneId sceneFor(show::Effect effect);

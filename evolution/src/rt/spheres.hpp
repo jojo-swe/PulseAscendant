@@ -1,6 +1,6 @@
 #pragma once
 
-// Analytic spheres (step 5, Task 8): the path tracer's second geometry kind. A sphere is a SphereRecord
+// Analytic spheres: the path tracer's second geometry kind. A sphere is a SphereRecord
 // (rt/gpu_types.hpp) in a storage buffer and an AABB in a bottom-level acceleration structure of
 // VK_GEOMETRY_TYPE_AABBS_KHR; the intersection shader (shaders/rt/sphere.rint, the math in
 // shaders/rt/sphere.glsl) solves the ray against it and the sphere variants of the closest-hits

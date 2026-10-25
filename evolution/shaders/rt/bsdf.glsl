@@ -276,7 +276,7 @@ vec3 evalRoughDielectricLocal(vec3 tint, float a, float eta, vec3 wo, vec3 wi, o
 
 // --- Public interface --------------------------------------------------------------------------------------
 
-// Path regularisation (Task 6 of step 5): the surface with every lobe, the coat too, at least `least` rough.
+// Path regularisation: the surface with every lobe, the coat too, at least `least` rough.
 // A delta lobe (roughness < kDeltaRoughness) becomes a GGX lobe when least >= kDeltaRoughness. The caller
 // passes the result to bsdfEval and bsdfSample alike.
 Surface regularizedSurface(Surface s, float least) {

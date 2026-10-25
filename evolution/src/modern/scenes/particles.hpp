@@ -1,6 +1,6 @@
 #pragma once
 
-// The Particles scene (step 5, Task 17): DOTS and PARTICLE OCEAN, two million traced micro-spheres made every
+// The Particles scene: DOTS and PARTICLE OCEAN, two million traced micro-spheres made every
 // frame by one stateless compute shader (shaders/modern/particles_particles.comp, through rt::ParticleField;
 // Task 8) whose CPU twins are dotsParticle and oceanParticle below.
 //

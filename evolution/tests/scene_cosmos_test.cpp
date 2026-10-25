@@ -1,4 +1,4 @@
-// The Cosmos scene (step 5, Task 24): GALAXY and ASCENDANT on lavapipe, with the validation layer on; fails on
+// The Cosmos scene: GALAXY and ASCENDANT on lavapipe, with the validation layer on; fails on
 // any message.
 //
 // (k) the cards: GALAXY's names 16,777,216 stars and 256x64x256 dust, ASCENDANT's 2,097,152 particles and

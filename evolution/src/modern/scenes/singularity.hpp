@@ -1,6 +1,6 @@
 #pragma once
 
-// The Singularity scene (step 5, Task 25): SINGULARITY, Act II's climax. A Schwarzschild black hole of r_s = 1
+// The Singularity scene: SINGULARITY, Act II's climax. A Schwarzschild black hole of r_s = 1
 // unit at the origin bends every main ray (modern::LensingFrame, shaders/rt/lensing.glsl: up to
 // kGeodesicSteps RK4 steps of the null geodesic inside 30 r_s). Its accretion disc, in the xz plane from the
 // innermost stable orbit (3 r_s) to kDiscOuter, is a grid medium of kDiscGrid voxels

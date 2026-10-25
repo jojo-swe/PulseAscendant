@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The Spheres scene's particle field (step 5, Task 22), in two modes (params[0].w):
+// The Spheres scene's particle field, in two modes (params[0].w):
 //
 // 0, SPHERE STORM: a vortex of chrome spheres, its first `emissive` particles glowing.
 //   params[0] = (count, emissive count, radius scale, 0)

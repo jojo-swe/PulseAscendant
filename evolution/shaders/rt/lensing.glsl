@@ -1,7 +1,7 @@
 #ifndef EVO_RT_LENSING_GLSL
 #define EVO_RT_LENSING_GLSL
 
-// Gravitational lensing (step 5, Task 25): main rays bent piecewise around a Schwarzschild black hole, from
+// Gravitational lensing: main rays bent piecewise around a Schwarzschild black hole, from
 // LensingUniforms `lensingData` (binding EVO_BINDING_LENSING; src/modern/lensing.hpp documents the model).
 // pathtrace.rgen sends every main ray through traceLensed(), which is a plain trace while !lensingActive().
 // Included by pathtrace.rgen after its payload, rand(dimension) and kMissIndexSky, and after medium.glsl,

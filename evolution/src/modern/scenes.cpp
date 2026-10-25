@@ -31,16 +31,16 @@ template <typename Scene> std::unique_ptr<ModernScene> make(SceneDetail detail) 
 constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Placeholder, "Placeholder", nullptr},
     {SceneId::Studio, "Studio", &make<Studio>},
-    {SceneId::Ship, "Ship", &make<Ship>},                // Task 16
-    {SceneId::Particles, "Particles", &make<Particles>}, // Task 17
-    {SceneId::Nebula, "Nebula", &make<Nebula>},          // Task 18
-    {SceneId::Tunnel, "Tunnel", &make<Tunnel>},          // Task 19
-    {SceneId::Glass, "Glass", &make<Glass>},             // Task 20
-    {SceneId::Lens, "Lens", &make<Lens>},                // Task 21
-    {SceneId::Spheres, "Spheres", &make<Spheres>},       // Task 22
-    {SceneId::City, "City", &make<City>},                // Task 23
-    {SceneId::Cosmos, "Cosmos", &make<Cosmos>},          // Task 24
-    {SceneId::Singularity, "Singularity", &make<Singularity>}, // Task 25
+    {SceneId::Ship, "Ship", &make<Ship>},
+    {SceneId::Particles, "Particles", &make<Particles>},
+    {SceneId::Nebula, "Nebula", &make<Nebula>},
+    {SceneId::Tunnel, "Tunnel", &make<Tunnel>},
+    {SceneId::Glass, "Glass", &make<Glass>},
+    {SceneId::Lens, "Lens", &make<Lens>},
+    {SceneId::Spheres, "Spheres", &make<Spheres>},
+    {SceneId::City, "City", &make<City>},
+    {SceneId::Cosmos, "Cosmos", &make<Cosmos>},
+    {SceneId::Singularity, "Singularity", &make<Singularity>},
 }};
 
 // The scene each effect shows, one row per effect in show::Effect's order. The six Studio chapters show the

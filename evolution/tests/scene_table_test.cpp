@@ -1,4 +1,4 @@
-// The scene table (Task 1 of step 5), on the CPU:
+// The scene table, on the CPU:
 //   - every effect has a row in kSceneOfEffect, and an effect past the last throws;
 //   - the six Studio effects (FLYBY, FINALE, PORTAL, STUDIO NIGHT, RETURN, REBOOT) show the Studio; every
 //   other
@@ -235,7 +235,7 @@ void testStudioSweep() {
     evo::test::SweepLimits limits;
     limits.maxCameraStep = 0.05f; // the Studio's cameras move centimetres per frame
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Studio, limits);
-    // 480 instances since Task 14 of step 5 (step 4: 195): the inner shade and the skyline's 56 towers with
+    // 480 instances since Task 14 of step 5 (originally 195): the inner shade and the skyline's 56 towers with
     // their lit windows; 487 behind the screen; 5 lights with the town glow on the right wall (the monitor's foot, body and housing give way to the dark
     // box's nine walls and the stars).
     CHECK(stats.frames > 5000 && stats.maxInstances == 487 && stats.maxLights == 5);

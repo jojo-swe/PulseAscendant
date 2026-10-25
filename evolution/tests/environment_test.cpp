@@ -1,11 +1,11 @@
-// Scene environments and sky sampling (step 5, Task 2) on lavapipe, with the validation layer and its
+// Scene environments and sky sampling on lavapipe, with the validation layer and its
 // synchronization validation on; fails on any message. A GPU probe (shaders/test/environment_probe.comp) runs
 // environment.glsl's functions directly; the path tracer runs at 64x64 unless noted.
 //
 // (0) the C++ side: EnvironmentDesc{} is the NightSky defaults (the moon's direction, no disc, not sampled),
 //     every kind's defaults pack to valid uniforms, the disc and dome shares, and the refusals (also through
 //     checkSceneFrame, which the path tracer and the scene sweep run); the Studio's frames keep their own
-//     NightSky (studioEnvironment, Task 14 of step 5), never sampled, and its moon emitter stands along that
+//     NightSky (studioEnvironment), never sampled, and its moon emitter stands along that
 //     sky's glow direction;
 // (a) disc and dome sampling: every sample's pdf equals environmentPdf (1e-4) and its radiance equals
 //     environmentLighting; the pdf integrates to 1 over the sphere (importance-sampled Monte Carlo, 1 %);
@@ -856,7 +856,7 @@ double chapterTime(int chapter, double fraction) {
     return start + fraction * (show::chapterStart(chapter + 1) - start);
 }
 
-// The Studio under its sky, measured with this test's renderer: step 4's before Task 2 (c722ab1) was 0.10121
+// The Studio under its sky, measured with this test's renderer: the original before Task 2 (c722ab1) was 0.10121
 // and 0.15723; Task 14 of step 5 relit the Studio (STUDIO NIGHT: the lamp off, the CRT the key light, a low
 // wide dolly; REBOOT: a dark modern room, the CRT's light rig and exposure).
 // Re-measured on the merge of Task 14 with the NEE shadow-ray fix (d91fb09 and later), which lit REBOOT more.

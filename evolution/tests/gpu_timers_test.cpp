@@ -1,4 +1,4 @@
-// GPU timestamp scopes (Task 4 of step 5): a query pool per ring slot, read when the ring reuses the slot.
+// GPU timestamp scopes: a query pool per ring slot, read when the ring reuses the slot.
 // Nested scopes come back in the order they began, each non-negative and finite, an outer scope at least as
 // long as each scope inside it; the frame read last is the newest completed one; collect() after waitAll()
 // reads the frames still pending, oldest first; a disabled timer set (as on a queue without timestamps)

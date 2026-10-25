@@ -509,7 +509,7 @@ void testHueKept() {
 }
 
 // (k) The CRT red. (0.8, 0.1, 0.1) is a saturated 1993 red on the Studio's screen, and 6.8 the screen's white
-// level before the tonemap (emission 1.2 x 2^2.5 EV). Under ACES (step 4) it came out as (255, 204, 195): the
+// level before the tonemap (emission 1.2 x 2^2.5 EV). Under ACES it came out as (255, 204, 195): the
 // green byte 9 above the blue, a hue shift of 8 degrees towards orange, as well as washed out. Under PBR
 // Neutral green and blue stay equal at every pixel (the hue stays exactly red) and the red leads green by at
 // least 70 (golden: 254, 181, 181). An earlier draft asked for r >= 2 g here: PBR Neutral's desaturation (Kd = 0.15)

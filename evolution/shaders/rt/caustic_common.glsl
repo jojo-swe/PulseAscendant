@@ -1,7 +1,7 @@
 #ifndef EVO_RT_CAUSTIC_COMMON_GLSL
 #define EVO_RT_CAUSTIC_COMMON_GLSL
 
-// What the caustic photon maps' three sides share (step 5, Task 13): the photon pass
+// What the caustic photon maps' three sides share: the photon pass
 // (shaders/modern/photons.comp), the receivers' radiance in the closest-hits (caustics.glsl) and the
 // raygen's double-count exclusion (caustic_paths.glsl). Plain GLSL over types.glsl and bsdf.glsl: no
 // bindings and no ray tracing built-ins.

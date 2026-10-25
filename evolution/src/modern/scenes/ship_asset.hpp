@@ -1,6 +1,6 @@
 #pragma once
 
-// The starship (step 5, Task 16) as an asset any scene can fly: its meshes and materials appended to a
+// The starship as an asset any scene can fly: its meshes and materials appended to a
 // scene's tables, its instances at a model-to-render transform, the per-frame materials (seams pulsing on the
 // kick, engines at a throttle, the strobe on the beat), its two plumes as a grid medium, and a star field of
 // splats. The Ship scene (scenes/ship.hpp) stages it in WORMHOLE; other scenes (the megamix's cut) add it the
@@ -18,7 +18,7 @@
 // - a gold-tinted double-walled glass canopy over a cockpit lit by a dash light (the scene's one rect light)
 //   and its screens; navigation lights and a strobe;
 // - two plumes: one baked density grid of 192 x 96 x 96 voxels (two plumes of 96^3) behind the nozzles
-//   (shaders/modern/ship_plumes.comp; Task 11's medium): a turbulent cone whose emission is Planck's law at a
+//   (shaders/modern/ship_plumes.comp; the media's medium): a turbulent cone whose emission is Planck's law at a
 //   temperature falling along the axis (white-blue, orange, dark), with shock diamonds under the afterburner.
 // The stars (shaders/modern/ship_splats.comp): 262,144 splats with four-spike diffraction kernels that grow
 // near the sun, the sun's glare, and optionally a planet's atmosphere shell (a glow of splats over its limb).

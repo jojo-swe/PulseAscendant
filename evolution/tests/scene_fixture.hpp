@@ -1,4 +1,4 @@
-// The standard checks of a step 5 scene test (the "standard scene contract" of the step 5 plan), shared by
+// The standard checks of a step 5 scene test (the "standard scene contract" of the plan), shared by
 // every tests/scene_<scene>_test.cpp (CMake: evo_scene_test(<scene>), linked with this fixture). Each check
 // throws std::runtime_error naming the chapter, time and what failed, and prints one line per chapter it
 // passes.

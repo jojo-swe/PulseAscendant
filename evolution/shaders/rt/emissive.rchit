@@ -80,7 +80,7 @@ float screenTextureLod(HitPoint h) {
     return max(0.5 * log2(texelsPerArea) + log2(width / cosine), -8.0);
 }
 
-// The CRT's curved glass (Task 14 of step 5): the coat's shading normal bulges towards the viewer like a
+// The CRT's curved glass: the coat's shading normal bulges towards the viewer like a
 // sphere of kCrtGlassRadius about a point behind the picture's centre, so the glass reflects the room the way
 // a tube's face does, while the quad (and the light's NEE on it) stays flat.
 const float kCrtGlassRadius = 0.5;
@@ -110,9 +110,9 @@ void main() {
             crtGlass(h, h.material, m.baseColor, emission);
         }
     } else if (m.pattern == kPatternCityTrail) {
-        emission *= cityTrail(h.uv); // Task 23: a car's light trail
+        emission *= cityTrail(h.uv); // City: a car's light trail
     } else if (m.pattern == kPatternCitySign && payload.coneSpread >= 0.0) {
-        // Task 23: a sign's lettering, to the camera and along delta chains; its mean is the light's emission.
+        // City: a sign's lettering, to the camera and along delta chains; its mean is the light's emission.
         emission *= citySign(h.uv, vec2(length(h.dPdu), length(h.dPdv)), cityBuildingSeed());
     }
     // A camera-only emitter (an indicator LED, whose glow belongs to the bloom) lights nothing: it shows to

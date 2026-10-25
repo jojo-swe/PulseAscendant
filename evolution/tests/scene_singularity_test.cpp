@@ -1,4 +1,4 @@
-// The Singularity scene (step 5, Task 25) and the gravitational lens (shaders/rt/lensing.glsl) on lavapipe,
+// The Singularity scene and the gravitational lens (shaders/rt/lensing.glsl) on lavapipe,
 // with the validation layer on; fails on any message.
 //
 // (k) the card names 48-step geodesics, which is the scene's lens, and is the scene's own nowCard; the shots'

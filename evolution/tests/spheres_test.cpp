@@ -1,4 +1,4 @@
-// Analytic spheres and the particle field (step 5, Task 8) on lavapipe, with the validation layer and its
+// Analytic spheres and the particle field on lavapipe, with the validation layer and its
 // synchronization validation on; fails on any message.
 //
 // (m) the sphere math (shaders/rt/sphere.glsl, run by a compute probe) against the double-precision CPU

@@ -1,6 +1,6 @@
 #pragma once
 
-// Caustic photon maps on receiver surfaces (step 5, Task 13; Decision 20: biased but deterministic).
+// Caustic photon maps on receiver surfaces (Decision 20: biased but deterministic).
 //
 // A frame with caustics (SceneFrame::caustics) shoots `photons` photons from one light (a rect Emitter, or
 // the environment's disc) at the bounding sphere of its caster instances. A photon must hit a smooth (delta)

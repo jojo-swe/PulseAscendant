@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The Particles scene's particle field (step 5, Task 17): DOTS and PARTICLE OCEAN, one pure function of
+// The Particles scene's particle field: DOTS and PARTICLE OCEAN, one pure function of
 // (id, seconds, params) each, chosen by params[3].w. src/modern/scenes/particles.cpp mirrors both on the CPU
 // (dotsParticle, oceanParticle) and documents the shapes; scene_particles_test checks the two agree.
 //

@@ -20,7 +20,7 @@ T - 5/64 + 5/64 is exactly T in double precision.
 Step 4: the path-traced chapters, with the TLAS rebuilt every frame, and the export stays
 pure: no temporal history, the seed from the show time alone. Path tracing is what costs time on lavapipe, so
 the chapters come in two parts that CTest runs in parallel: "studio", the traced part (every chapter whose
---show-info "scene" is not "Placeholder": the Studio's five and each step 5 scene's
+--show-info "scene" is not "Placeholder": the Studio's five and each scene's
 chapters as they land), and "rest" (every other chapter); "all" runs both. CTest passes --spp 2 and
 --detail 0.004 (the lavapipe detail: the scenes' particle, splat and voxel counts shrink, so a scene task's
 chapters stay quick here) at 160x90.

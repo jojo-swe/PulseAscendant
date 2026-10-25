@@ -1,4 +1,4 @@
-// Emissive splats (step 5, Task 10): everything of a splat shader but its points. A scene's splat shader
+// Emissive splats: everything of a splat shader but its points. A scene's splat shader
 // includes this file and defines
 //
 //     SplatPoint splatPoint(uint id, float seconds, vec4 params[4]);

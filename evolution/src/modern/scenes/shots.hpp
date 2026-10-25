@@ -1,6 +1,6 @@
 #pragma once
 
-// Shared by the Cosmos and Singularity scenes (step 5, Tasks 24 and 25): the chapter's downbeats from the beat
+// Shared by the Cosmos and Singularity scenes: the chapter's downbeats from the beat
 // grid, and eased Catmull-Rom camera keys, orbits about a point and the four lenses of the show bible as
 // vertical fields of view at 16:9.
 

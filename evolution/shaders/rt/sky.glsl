@@ -14,7 +14,7 @@
 //   flux a pixel receives does not depend on the resolution and a star does not alias at 1 spp.
 // - The town (NightSky, Dusk): lights in a band under the horizon, clustered along hashed street lines,
 //   dimmer towards the horizon, drawn the same way.
-// NightSky with its defaults is step 4's night sky, whose stars and town lights were lit cells.
+// NightSky with its defaults is the original night sky, whose stars and town lights were lit cells.
 
 #include "random.glsl"
 
@@ -100,7 +100,7 @@ vec3 skyDisc(vec3 d, bool limbDarkened) {
 // --- Stars -------------------------------------------------------------------------------------------------
 
 const uint kStarCells = 384u;             // per cube face side
-const float kStarShare = 180.0 / 65536.0; // the cells with a star at starDensity 1, over the cube (step 4's)
+const float kStarShare = 180.0 / 65536.0; // the cells with a star at starDensity 1, over the cube (the original)
 // A cell's mean solid angle over the cube, 4 pi / (6 * 384^2): a star's flux is its brightness times it.
 const float kStarCellSolidAngle = 4.0 * kSkyPi / (6.0 * float(kStarCells) * float(kStarCells));
 const float kStarSigma = 2.5e-4;          // radians: a star's own width (a 4K pixel is about 3e-4)
@@ -137,8 +137,8 @@ float skyEllipse(vec2 delta, vec2 radial, float sigmaRadial, float sigmaAcross) 
 // max(kStarSigma, footprint) converted to uv that way at the star (round on the sphere), and radiance =
 // flux * G_uv * s^1.5 integrates to its flux exactly; the flux is brightness times a cell's mean solid
 // angle. A cell holds a star with a chance proportional to its solid angle, so the stars per steradian are
-// the same everywhere on the cube (step 4 had up to 5 times more at its corners), as many as step 4's over the
-// whole sky, with step 4's mean radiance. Stars sit in the middle
+// the same everywhere on the cube (the original had up to 5 times more at its corners), as many as the original over the
+// whole sky, with the original mean radiance. Stars sit in the middle
 // half of their cells, never in a face's outer ring, and are at most 0.3 cells long, so the 3 x 3 cells
 // around d hold every star that reaches it and none is cut at a cube edge. A footprint wider than that (a
 // cell under about 3 pixels) leaves the stars at 0.3 cells: the pixel's own filter averages them.

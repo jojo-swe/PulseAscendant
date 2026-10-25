@@ -8,7 +8,7 @@
 
 namespace evo {
 
-// --bench (Task 4 of step 5): the window's rendering, headless and timed on the GPU, so it can be measured
+// --bench: the window's rendering, headless and timed on the GPU, so it can be measured
 // on RTX hardware. Interactive mode at --width x --height, --spp (1), --trace-scale (0.67) and
 // --detail, with the window's CRT and HUD settings (title included); every path-traced scene of the chosen
 // chapters is prepared first. Per chapter (--chapters, default all, in the order given): two warm-up frames

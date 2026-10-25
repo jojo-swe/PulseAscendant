@@ -1,7 +1,7 @@
 #pragma once
 
 // The CPU mirror of shaders/rt/spectral.glsl (keep the two equal; integrator_test (e) compares them): the
-// path tracer's hero wavelength (Task 6 of step 5). A path that meets dispersive glass (Material::abbe > 0)
+// path tracer's hero wavelength. A path that meets dispersive glass (Material::abbe > 0)
 // carries one wavelength, uniform over [kSpectralMinNm, kSpectralMinNm + kSpectralRangeNm], and its
 // throughput is multiplied by spectralRgb of it.
 //

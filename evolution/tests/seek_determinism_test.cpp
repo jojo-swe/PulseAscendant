@@ -1,4 +1,4 @@
-// Seeking with temporal accumulation on (Task 12 of step 4). The window renders Interactive:
+// Seeking with temporal accumulation on. The window renders Interactive:
 // 1 spp per frame (4 on the frame of a history reset and 2 on the next: Task 7 of step 5), accumulated over
 // the frames since the last history reset. Whenever the user seeks (keys
 // <- / -> and 1-9, 0 jump to chapter starts; the show loops at its end), the first frame after the reset must
@@ -18,7 +18,7 @@
 //     and the history never resets, while exports skip it and report Skipped when it runs again; the
 //     window's 1993 beats equal the export's bytes.
 // Runs with the validation layer on and fails on any message it reports. With an argument, the trace scale
-// of both modes (Task 4 of step 5: CTest runs it again at the window's 0.67, where the window jitters its
+// of both modes (CTest runs it again at the window's 0.67, where the window jitters its
 // samples and the temporal upscaler keeps a history of its own; the exports it compares with then render at
 // that scale too).
 

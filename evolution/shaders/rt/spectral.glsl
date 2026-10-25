@@ -1,7 +1,7 @@
 #ifndef EVO_RT_SPECTRAL_GLSL
 #define EVO_RT_SPECTRAL_GLSL
 
-// The path tracer's hero wavelength (Task 6 of step 5); the CPU mirror is src/rt/spectral.hpp, which says
+// The path tracer's hero wavelength; the CPU mirror is src/rt/spectral.hpp, which says
 // what the functions are (keep the two equal; integrator_test (e) compares them).
 //   spectralRgb(lambda)                 linear sRGB weight of one wavelength: >= 0, mean (1, 1, 1) over
 //                                       [kSpectralMinNm, kSpectralMinNm + kSpectralRangeNm]

@@ -1,4 +1,4 @@
-// Per-point light selection (Task 3 of step 5) on lavapipe, with the validation layer on; fails on any
+// Per-point light selection on lavapipe, with the validation layer on; fails on any
 // message.
 //
 // (a) the GPU (shaders/rt/lights.glsl through a compute probe) equals the CPU reference
@@ -8,10 +8,10 @@
 // (b) pickLight's choices over 65536 stratified u equal lightSelectPdf within 1 %, its pdf is
 //     lightSelectPdf's, the pdfs sum to 1, and a point where no light has weight picks nothing;
 // (c) MIS stays unbiased: a Cornell box with three lights of powers 1 : 30 : 900 has the same mean with
-//     NEE + MIS as with BSDF sampling alone, and its per-pixel variance is at most 0.6 of step 4's fixed
+//     NEE + MIS as with BSDF sampling alone, and its per-pixel variance is at most 0.6 of the original fixed
 //     selection weights;
 // (d) the Studio in RETURN (the lamp on): at desk points the DOS screen (nearly black) gets under 8 % of the
-//     samples (step 4: 30 %), an all-white picture over 20 %;
+//     samples (originally 30 %), an all-white picture over 20 %;
 // (e) the Studio's moon is only chosen where the segment to it crosses the window.
 //
 // With --measure <dir> it renders the Studio at 1 spp with per-point and with fixed selection against a
@@ -171,7 +171,7 @@ public:
     }
 
 private:
-    // The tree's nodes (Task 12: lightImportance reads the root of a Tree light; these frames have none).
+    // The tree's nodes (lightImportance reads the root of a Tree light; these frames have none).
     static constexpr std::array<gfx::Binding, 7> kBindings = {
         gfx::Binding{EVO_BINDING_FRAME, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
         gfx::Binding{EVO_BINDING_TREE_NODES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
@@ -197,7 +197,7 @@ private:
                                        kStorage, true, "probe lights"});
         if (!lights.empty())
             writeBuffer(lightBuffer, lights.data(), lights.size() * sizeof(rt::RectLight));
-        // The Studio's environment (the default NightSky, Task 2): a portal's power is its lighting radiance.
+        // The Studio's environment (the default NightSky): a portal's power is its lighting radiance.
         const rt::EnvironmentUniforms sky = modern::packEnvironment(modern::EnvironmentDesc{});
         gfx::Buffer environment(ctx_, {sizeof sky, kStorage, true, "probe environment"});
         writeBuffer(environment, &sky, sizeof sky);
@@ -476,9 +476,9 @@ double pixelVariance(const Lighting& a, const Lighting& b) {
 }
 
 // The Cornell box (rt_test_scenes.hpp) with three 0.5 x 0.5 ceiling lights instead of one, of powers
-// 1 : 30 : 900 (emissions kThreeLightEmission), all selectWeight 1: step 4's fixed selection gives each a
+// 1 : 30 : 900 (emissions kThreeLightEmission), all selectWeight 1: the original fixed selection gives each a
 // third of the samples wherever it is. The tall metal block is lowered to 0.6 m: with its top 0.8 m under a
-// ceiling light, step 4's integrator gives the ceiling above it 10-20 % less two-bounce light with NEE than
+// ceiling light, the original integrator gives the ceiling above it 10-20 % less two-bounce light with NEE than
 // with BSDF sampling alone (about -1.3 % over test::cornellBox's frame at high spp, with one light, so the
 // same with fixed and per-point selection: NEE's shadow rays hit the light they aimed at, since fixed, see
 // path_tracer_test's close light). This test is about selection, so it keeps clear of that.

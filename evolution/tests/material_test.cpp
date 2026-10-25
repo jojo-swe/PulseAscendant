@@ -267,7 +267,7 @@ rt::FrameUniforms sentinelFrame(std::uint32_t e) {
     return f;
 }
 
-// A struct of N plain 4-byte fields (the step 5 feature structs and Mat34), filled with the sentinels word by
+// A struct of N plain 4-byte fields (the feature structs and Mat34), filled with the sentinels word by
 // word: gpu_types.hpp pins every field's offsetof at 4 k for its declaration index k, so word k is field k.
 template <typename T, std::size_t N> T sentinelWords(const std::array<bool, N>& isUint, std::uint32_t e) {
     static_assert(sizeof(T) == 4 * N && rt::kGpuMirror<T>);
@@ -426,7 +426,7 @@ void testStructLayout(Context& ctx) {
         expected.push_back(rt::pcgHash(input));
     CHECK(expected.size() == kElements * (24 + 16 + 4 + 8 + 4 + 52 + 12 + 28 + 32 + 12 + 12 + 8 + 8 + 16) +
                                  47 + kHashInputs.size());
-    // The step 5 ABI (Tasks 1 and 1b): sizes and the hit group of each geometry kind.
+    // The ABI (Tasks 1 and 1b): sizes and the hit group of each geometry kind.
     static_assert(sizeof(rt::Material) == 96 && sizeof(rt::FrameUniforms) == 208 &&
                   sizeof(rt::EnvironmentUniforms) == 112 && sizeof(rt::MediumUniforms) == 128 &&
                   sizeof(rt::SphereRecord) == 48 && sizeof(rt::TreeLight) == 48 &&
@@ -435,7 +435,7 @@ void testStructLayout(Context& ctx) {
     static_assert(rt::hitGroupFor(rt::MaterialClass::Checker, rt::GeometryKind::Triangles) == 3 &&
                   rt::hitGroupFor(rt::MaterialClass::Pbr, rt::GeometryKind::Spheres) == 4 &&
                   rt::hitGroupFor(rt::MaterialClass::Checker, rt::GeometryKind::Spheres) == 7);
-    // New fields default so that step 4's pictures do not change: no flags, no dispersion, no medium, no
+    // New fields default so that the original pictures do not change: no flags, no dispersion, no medium, no
     // caustic receiver.
     const rt::Material plain{};
     CHECK(plain.flags == 0 && plain.abbe == 0.f && plain.medium == rt::kNoMedium &&

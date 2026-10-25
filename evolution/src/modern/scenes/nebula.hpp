@@ -1,6 +1,6 @@
 #pragma once
 
-// The Nebula scene (step 5, Task 18): PLASMA's 2026 half and NEBULA, both a grid medium baked every frame by
+// The Nebula scene: PLASMA's 2026 half and NEBULA, both a grid medium baked every frame by
 // shaders/modern/nebula_medium.comp and lit from inside by stars, which are the frame's light tree (an
 // emissive sphere field from shaders/modern/nebula_stars.comp, whose C++ twin is nebulaStar below).
 //

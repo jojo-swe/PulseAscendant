@@ -1,4 +1,4 @@
-// The light tree (step 5, Task 12): next-event estimation over thousands of emissive sphere lights.
+// The light tree: next-event estimation over thousands of emissive sphere lights.
 //
 // CPU (src/rt/light_tree.*):
 // (a) the build: every node's bounds hold its lights' spheres and are the union of its children's, its

@@ -1,4 +1,4 @@
-// Export mode (Task 11 of step 4): what the renderer hands the modern stage and what comes out, at 160x90 in
+// Export mode: what the renderer hands the modern stage and what comes out, at 160x90 in
 // STUDIO NIGHT at 40 %. With equal bounces, the window's first
 // frame after a history reset equals an export frame at spp max(--spp, 4) byte for byte (the window traces 4
 // spp on a reset frame and 2 on the next, kResetSpp; one tonemap, display encoding exactly once, the export
@@ -7,7 +7,7 @@
 // pcg(llround(showSeconds * 48000)) in exports, plus 0x9E3779B9 per frame since the last reset in the window.
 // Runs with the validation layer on and fails on any message it reports.
 //
-// STUDIO NIGHT path traces the Studio (Task 10): the test fails unless every Studio chapter maps to it and
+// STUDIO NIGHT path traces the Studio: the test fails unless every Studio chapter maps to it and
 // the frames really run the modern stage and, for the CRT, the retro stage. The bounce limit reaches the
 // tracer: exports at 1 and 6 bounces differ, and so do the Export and Interactive defaults (6 and 4).
 
@@ -127,7 +127,7 @@ void testSeeds(evo::gfx::Context& ctx) {
 
 // the window's first frame after a reset equals an export frame at equal bounces
 // and spp max(--spp, 4), on the very first frame and after a seek. The window reports the samples it traced:
-// 4, 2, then --spp (Task 7 of step 5); an export always --spp.
+// 4, 2, then --spp; an export always --spp.
 void testWindowMatchesExport(evo::gfx::Context& ctx) {
     const TimelineFrame t = studioNight(0.4);
     for (const std::uint32_t spp : {1u, 2u, 5u}) { // 5: two trace dispatches
