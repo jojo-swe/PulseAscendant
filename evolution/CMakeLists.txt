@@ -1183,3 +1183,15 @@ evo_scene_test(glass)
 # volume. `scene_ship_test --look <dir> [spp] [width height]` renders stills.
 target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
 evo_scene_test(ship)
+
+# --- The part after the show and the release tools -------------------------------------------------------
+
+# A 1993 part outside the show's chapters (src/retro/secret_part.cpp) with its own retro stage and compositor
+# (src/render/secret_renderer.cpp); its test checks the text, the keys and the pictures.
+target_sources(evo_render PRIVATE src/retro/secret_part.cpp src/render/secret_renderer.cpp)
+add_executable(secret_part_test tests/secret_part_test.cpp)
+target_link_libraries(secret_part_test PRIVATE evo_app)
+target_compile_definitions(secret_part_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_dependencies(secret_part_test Evolution_shaders)
+add_test(NAME secret_part COMMAND secret_part_test)
+

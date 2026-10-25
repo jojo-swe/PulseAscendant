@@ -10,6 +10,8 @@
 #include "gfx/vk_check.hpp"
 #include "modern/modern_scene.hpp"
 #include "render/renderer.hpp"
+#include "render/secret_renderer.hpp"
+#include "show/music_curves.hpp"
 #include "show/timeline.hpp"
 
 #include <SDL3/SDL.h>
@@ -19,6 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -34,6 +37,10 @@ namespace evo {
 namespace {
 
 constexpr Uint32 kMinimisedPollMs = 50;
+
+// The applause device. Four keys, two seconds, in order. Esc brings you back.
+constexpr std::string_view kSecretWord = "CLAP";
+constexpr double kSecretWordSeconds = 2.0;
 // A chapter key pressed just after a jump may read the clock a hair before the chapter it jumped to; this
 // much slack counts it as in that chapter, so Right, Right moves two chapters.
 constexpr double kChapterSlack = 0.05;
@@ -121,6 +128,20 @@ std::filesystem::path musicPath(const Options& options) {
     return base ? gfx::pathFromUtf8(base) / show::kMusicFile : std::filesystem::path(show::kMusicFile);
 }
 
+// A letter key as its upper-case letter, anything else as 0.
+char letterOf(SDL_Keycode key) {
+    return key >= SDLK_A && key <= SDLK_Z ? static_cast<char>('A' + (key - SDLK_A)) : '\0';
+}
+
+// The next tracked beat after show time `now`, in show seconds (now itself past the track's last beat).
+double nextBeat(double now) {
+    const int track = show::trackAt(now);
+    const double start = show::trackStart(track);
+    const show::BeatGridView grid = show::beatGrid(track);
+    const int beat = grid.beatAt(now - start) + 1;
+    return beat < grid.count() ? start + grid.beatTime(beat) : now;
+}
+
 void toggleFullscreen(SDL_Window* window) {
     const bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
     if (!SDL_SetWindowFullscreen(window, !fullscreen))
@@ -151,6 +172,55 @@ std::string windowTitle(const show::TimelineFrame& frame) {
     char clock[16];
     std::snprintf(clock, sizeof clock, "%02d:%02d", seconds / 60, seconds % 60);
     return std::string("EVOLUTION  ") + frame.title + "  " + clock;
+}
+
+retro::KeyWord secretKeyWord() {
+    return retro::KeyWord(kSecretWord, kSecretWordSeconds);
+}
+
+SecretSession::SecretSession(std::string_view answer)
+    : keys_(secretKeyWord()), solvedUpFront_(retro::isPatientAnswer(answer)) {}
+
+void SecretSession::start(double resumeAt) {
+    state_ = State::Part;
+    resumeAt_ = resumeAt;
+    input_ = {};
+    if (solvedUpFront_)
+        input_.solvedAt = retro::secretMarks().puzzle;
+    answer_ = {};
+}
+
+bool SecretSession::showKey(char key, double now) {
+    if (state_ != State::Show || !keys_.press(key, now))
+        return false;
+    state_ = State::Pending;
+    cutAt_ = nextBeat(now);
+    return true;
+}
+
+void SecretSession::partKey(char key, double t) {
+    if (state_ != State::Part)
+        return;
+    if (key == 'L' && input_.applauseAt < 0 && t >= retro::secretMarks().lastDevice)
+        input_.applauseAt = t;
+    if (answer_.press(key) && input_.solvedAt < 0)
+        input_.solvedAt = t;
+}
+
+double SecretSession::escape() {
+    state_ = State::Show;
+    keys_.reset();
+    return resumeAt_;
+}
+
+std::optional<double> SecretSession::update(double now) {
+    if (state_ == State::Pending && (now >= cutAt_ || now < cutAt_ - 1.0)) { // a seek away cuts at once
+        start(now);
+        return 0.0;
+    }
+    if (state_ == State::Part && now >= retro::secretDuration(input_))
+        return escape();
+    return std::nullopt;
 }
 
 std::string missingRequirementsMessage(const gfx::MissingRequirements& missing) {
@@ -202,9 +272,16 @@ int runWindowed(const Options& options) {
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
+    // The secret part: called up by its four keys, or from the start with --secret-part, when the music
+    // starts at its beginning and the show resumes at --time afterwards. Its renderer is built when needed.
+    SecretSession secret(options.secretAnswer);
+    std::unique_ptr<render::SecretRenderer> secretRenderer;
+    if (options.secretPart)
+        secret.start(options.time);
+
     // Started last, so the music begins with the first frame rather than during the device setup.
-    ShowClock clock(!options.noAudio, musicPath(options), show::showDuration(), options.time,
-                    options.audioOffsetMs / 1000.0);
+    ShowClock clock(!options.noAudio, musicPath(options), show::showDuration(),
+                    options.secretPart ? 0.0 : options.time, options.audioOffsetMs / 1000.0);
     std::fprintf(stderr, "%s\n", clock.status().c_str());
     bool silent = clock.silent();
     bool muted = options.mute;
@@ -220,6 +297,22 @@ int runWindowed(const Options& options) {
                 running = false;
                 break;
             case SDL_EVENT_KEY_DOWN:
+                if (event.key.repeat) {
+                    break; // a held key acts once
+                } else if (secret.state() == SecretSession::State::Part) {
+                    if (event.key.key == SDLK_ESCAPE)
+                        clock.seek(secret.escape());
+                    else if (event.key.key == SDLK_M)
+                        clock.setMuted(muted = !muted);
+                    else if (event.key.key == SDLK_F11)
+                        toggleFullscreen(window.handle);
+                    else
+                        secret.partKey(letterOf(event.key.key), clock.now());
+                    break;
+                } else if (secret.showKey(letterOf(event.key.key), clock.now())) {
+                    renderer.setCrt(!renderer.crt()); // the word's C toggled the CRT look: undo it
+                    break;
+                }
                 if (event.key.key == SDLK_ESCAPE) {
                     running = false;
                 } else if (event.key.repeat) {
@@ -265,6 +358,24 @@ int runWindowed(const Options& options) {
         // A no-op unless the drawable changed size; then it waits for the frames in flight first.
         renderer.resize(static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height));
 
+        if (const std::optional<double> seek = secret.update(clock.now()))
+            clock.seek(*seek);
+        if (secret.state() == SecretSession::State::Part) {
+            if (!secretRenderer)
+                secretRenderer = std::make_unique<render::SecretRenderer>(
+                    ctx, ring, static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height));
+            secretRenderer->resize(static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height));
+            if (title != "EVOLUTION") {
+                title = "EVOLUTION";
+                SDL_SetWindowTitle(window.handle, title.c_str());
+            }
+            VkCommandBuffer cmd = ring.begin();
+            secretRenderer->render(cmd, clock.now(), secret.input());
+            if (!swapchain.present(ring, cmd, secretRenderer->output()))
+                needRecreate = true;
+            continue;
+        }
+
         const show::TimelineFrame frame = show::sampleTimeline(clock.now());
         // The audio stream failed mid-show (or came back): say so, as at the start.
         if (clock.silent() != silent) {
@@ -285,6 +396,37 @@ int runWindowed(const Options& options) {
     return 0;
 }
 
+namespace {
+
+// --render-stream --secret-part: the part from --time for --duration, as its retro frames and the CRT make
+// it; headless never presses L, and --secret-part=WORD shows the answer when WORD is the patient's.
+int runSecretStream(const Options& options, gfx::Context& ctx, long frames) {
+    const auto width = static_cast<std::uint32_t>(options.width);
+    const auto height = static_cast<std::uint32_t>(options.height);
+    gfx::Readback readback(ctx, width, height);
+    gfx::FrameRing ring(ctx);
+    render::SecretRenderer renderer(ctx, ring, width, height);
+    SecretSession session(options.secretAnswer);
+    session.start(0.0);
+    for (long i = 0; i < frames; ++i) {
+        VkCommandBuffer cmd = ring.begin();
+        renderer.render(cmd, options.time + static_cast<double>(options.firstFrame + i) / options.fps,
+                        session.input(), options.crt);
+        readback.record(cmd, renderer.output());
+        ring.wait(ring.submit());
+        const std::vector<std::uint8_t> rgb = readback.rgb();
+        if (std::fwrite(rgb.data(), 1, rgb.size(), stdout) != rgb.size())
+            throw std::runtime_error("writing frame " + std::to_string(i) + " to stdout failed");
+        if ((i + 1) % 60 == 0 || i + 1 == frames)
+            std::fprintf(stderr, "render-stream: frame %ld/%ld\n", i + 1, frames);
+    }
+    if (std::fflush(stdout) != 0)
+        throw std::runtime_error("flushing stdout failed");
+    return 0;
+}
+
+} // namespace
+
 int runRenderStream(const Options& options) {
 #ifdef _WIN32
     _setmode(_fileno(stdout), _O_BINARY); // raw bytes: no CRLF translation
@@ -297,6 +439,8 @@ int runRenderStream(const Options& options) {
     const long frames = static_cast<long>(std::ceil(options.duration * options.fps - 1e-9));
     if (frames < 1)
         throw std::runtime_error("--duration is shorter than one frame"); // parseOptions rejects only 0
+    if (options.secretPart)
+        return runSecretStream(options, ctx, frames);
 
     const auto width = static_cast<std::uint32_t>(options.width);
     const auto height = static_cast<std::uint32_t>(options.height);
@@ -313,11 +457,13 @@ int runRenderStream(const Options& options) {
     // shared images) as setup, before the first frame.
     std::vector<double> times(static_cast<std::size_t>(frames));
     for (long i = 0; i < frames; ++i)
-        times[static_cast<std::size_t>(i)] = options.time + static_cast<double>(i) / options.fps;
+        times[static_cast<std::size_t>(i)] =
+            options.time + static_cast<double>(options.firstFrame + i) / options.fps;
     renderer.prepare(times);
     for (long i = 0; i < frames; ++i) {
         VkCommandBuffer cmd = ring.begin();
-        show::TimelineFrame frame = show::sampleTimeline(options.time + static_cast<double>(i) / options.fps);
+        show::TimelineFrame frame =
+            show::sampleTimeline(options.time + static_cast<double>(options.firstFrame + i) / options.fps);
         // An export forced into one era says so once, so a forced file is never mistaken for the show.
         if (applyForcedEra(frame) && i == 0)
             std::fprintf(stderr, "render-stream: EVO_FORCE_ERA=%s (%s only)\n", frame.era > .5f ? "1" : "0",

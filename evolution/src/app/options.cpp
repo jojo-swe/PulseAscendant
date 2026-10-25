@@ -14,7 +14,8 @@ constexpr int kMinSize = 16; // tiny frames keep the headless tests fast
 constexpr int kMaxSize = 8192;
 constexpr int kMinFps = 1;
 constexpr int kMaxFps = 240;
-constexpr int kMaxTime = 86400; // a day, in seconds: far past any timeline
+constexpr int kMaxTime = 86400;                // a day, in seconds: far past any timeline
+constexpr int kMaxFirstFrame = kMaxTime * 240; // a day at the highest frame rate
 constexpr double kMaxAudioOffsetMs = 500.0;
 
 int parseInt(const std::string& flag, const std::string& text, int min, int max) {
@@ -153,6 +154,8 @@ Options parseOptions(const std::vector<std::string>& args) {
             }
         } else if (flag == "--duration") {
             options.duration = parseSeconds(flag, nextValue());
+        } else if (flag == "--first-frame") {
+            options.firstFrame = parseInt(flag, nextValue(), 0, kMaxFirstFrame);
         } else if (flag == "--headless") {
             options.headless = true;
         } else if (flag == "--render-stream") {
@@ -187,6 +190,11 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.deviceInfo = true;
         } else if (flag == "--fullscreen") {
             options.fullscreen = true;
+        } else if (flag == "--secret-part") {
+            options.secretPart = true;
+        } else if (flag.rfind("--secret-part=", 0) == 0) {
+            options.secretPart = true;
+            options.secretAnswer = flag.substr(std::string("--secret-part=").size());
         } else if (flag == "--help" || flag == "-h") {
             options.help = true;
         } else {
@@ -200,6 +208,12 @@ Options parseOptions(const std::vector<std::string>& args) {
     const bool exporting = options.renderStream || !options.captureDir.empty();
     if (options.bench && exporting) {
         throw std::runtime_error("--bench cannot be combined with an export");
+    }
+    if (options.firstFrame != 0 && !options.renderStream) {
+        throw std::runtime_error("--first-frame needs --render-stream");
+    }
+    if (options.secretPart && (options.bench || !options.captureDir.empty())) {
+        throw std::runtime_error("--secret-part runs in the window or with --render-stream");
     }
     if (benchOnly && !options.bench) {
         throw std::runtime_error("--chapters and --bench-frames need --bench");
@@ -252,6 +266,7 @@ std::string helpText() {
            "                       needs a duration greater than 0\n"
            "  --headless           Render without opening a window\n"
            "  --render-stream      Write raw RGB frames to stdout (implies --headless)\n"
+           "  --first-frame N      With --render-stream: start at frame N, at --time + N / fps\n"
            "  --capture-dir PATH   Write one PNG frame, at --time, to PATH (implies --headless)\n"
            "  --bench              Benchmark the window's rendering headless: per chapter, render\n"
            "                       --bench-frames frames from 20 % into it (after 2 warm-up frames)\n"

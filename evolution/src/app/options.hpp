@@ -14,6 +14,9 @@ struct Options {
     int fps = 60;
     double time = 0.0;     // timeline position to start from, in seconds
     double duration = 0.0; // 0 = run until Esc
+    // --first-frame N (--render-stream): the stream's frame i shows time + (N + i) / fps, so a stream cut
+    // into pieces renders exactly the frames of one long stream.
+    long firstFrame = 0;
     bool headless = false;
     bool renderStream = false;
     bool validation = false;
@@ -40,6 +43,10 @@ struct Options {
     bool bench = false;
     int benchFrames = 120;
     std::vector<int> chapters; // --chapters LIST: chapter indices, as --show-info numbers them
+    // --secret-part[=WORD]: the window and --render-stream run the part of retro/secret_part.hpp instead of
+    // the show (--time and --duration then count its seconds); WORD is checked as the patient's answer.
+    bool secretPart = false;
+    std::string secretAnswer;
 };
 
 inline constexpr float kMinTraceScale = 0.25f;
