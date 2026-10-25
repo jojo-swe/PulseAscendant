@@ -2,7 +2,8 @@
 #extension GL_GOOGLE_include_directive : require
 
 // Hit group 0 (MaterialClass Pbr): plastic, metal and clear-coated surfaces, with the WoodPlanks,
-// BrushedMetal, Concrete, Hull and Planet patterns and the City's facades and streets (city_patterns.glsl).
+// BrushedMetal, Concrete, Hull, Planet and WORMHOLE's patterns and the City's facades and streets
+// (city_patterns.glsl).
 // Evaluates the material into the payload; never traces.
 
 #include "hit.glsl"
@@ -143,7 +144,7 @@ vec3 hullPattern(Material m, inout HitPoint h, inout float roughness, inout vec3
         if (m.baseColor2.x > 0.0) {
             color = heatTint(color, m.baseColor2.x * exp(-max(h.uv.x, 0.0) / max(m.baseColor2.y, 1e-3)));
         }
-        brushedGrooves(h, 0.12);
+        brushedGrooves(h, 0.07); // shallow enough that 16 samples resolve the streak without grain
         emission = vec3(0.0);
     } else {
         // Tiles: tone, roughness, and scuffs (soft value noise across each tile) toward baseColor2.
@@ -198,6 +199,93 @@ vec3 planetPattern(Material m, HitPoint h, inout float roughness, inout vec3 emi
     return color;
 }
 
+// --- WORMHOLE (step 6): the tunnel's wall and its rings ----------------------------------------------------
+
+// Fractal value noise whose octaves stop where they would be finer than `footprint` (in the units of `cell`,
+// the first octave's size): each octave fades out over the octave above the footprint, so a far wall is its
+// smooth mean instead of sparkle. About [0, 1].
+float filteredFbm3(vec3 p, uint seed, int octaves, float cell, float footprint) {
+    float sum = 0.0, weight = 0.5, total = 0.0;
+    for (int i = 0; i < octaves; ++i) {
+        float keep = clamp(log2(cell / max(footprint, 1e-6)) - 1.0, 0.0, 1.0);
+        float n = keep > 0.0 ? valueNoise3(p, seed + uint(i) * 0x1F123BB5u) : 0.5;
+        sum += weight * mix(0.5, n, keep);
+        total += weight;
+        p = p * 2.03 + vec3(17.1, 5.3, 11.7);
+        weight *= 0.5;
+        cell *= 0.4926;
+    }
+    return sum / total;
+}
+
+// The mouth's length in metres (modern::kWormholeMouthLength): the wall's v runs from -this at its rim.
+const float kWormholeMouth = 900.0;
+
+// The wormhole's wall (Pattern WormholeWall): the inside of a tube of radius patternScale, uv in metres (u
+// round the tube, v along it from where the mesh starts; coatRoughness, unused by the wall, is how far that is
+// from the gate, so that v + coatRoughness is the distance from the gate however the mesh is moved on). Gas spiralling once round every 30 km and streaming on towards
+// the exit at 260 m/s: a glacial-blue glow (the emission) in folds of domain-warped noise drawn out along the
+// flow, thin gold filaments (baseColor2 times the emission scale) along its brightest ridges, and dark lanes
+// of basalt dust (baseColor) between. In the mouth (v < 0) the glow fades out towards the rim.
+vec3 wormholeWall(Material m, HitPoint h, inout float roughness, inout vec3 emission) {
+    float radius = max(m.patternScale, 1.0);
+    float seconds = frame.seconds + frame.shutterOffset;
+    float v = h.uv.y + m.coatRoughness;
+    float twist = h.uv.x / radius + v * (6.2831853 / 30000.0);
+    float along = (v - 260.0 * seconds) / 520.0;
+    // On a cylinder 6 noise cells in radius: a cell is radius / 6 metres round and 520 m along.
+    vec3 p = vec3(6.0 * cos(twist), 6.0 * sin(twist), along);
+    float cell = radius / 6.0;
+    roughness = 0.65;
+    if (payload.coneSpread < 0.0) {
+        // After a rough vertex the wall is only light on the hull: its mean glow, so that glossy metal that
+        // finds it by chance does not sparkle.
+        emission = (0.12 * emission + 0.02 * m.emissionScale * m.baseColor2) *
+                   smoothstep(-0.95 * kWormholeMouth, -0.2 * kWormholeMouth, h.uv.y + m.coatRoughness);
+        return m.baseColor;
+    }
+    float footprint = patternFootprint(h);
+    vec3 warp = vec3(filteredFbm3(p * 0.5, 0x5A1u, 2, 2.0 * cell, footprint),
+                     filteredFbm3(p * 0.5 + 9.7, 0x5A2u, 2, 2.0 * cell, footprint),
+                     filteredFbm3(p * 0.5 + 3.3, 0x5A3u, 2, 2.0 * cell, footprint));
+    vec3 q = p + 2.2 * (warp - 0.5);
+    float gas = filteredFbm3(q, 0x5A4u, 4, cell, footprint);
+    float ridge = 1.0 - abs(2.0 * filteredFbm3(q * 1.9 + 4.1, 0x5A5u, 3, 0.53 * cell, footprint) - 1.0);
+    float glow = smoothstep(0.4, 0.8, gas);
+    float filament = pow(ridge, 16.0) * smoothstep(0.5, 0.68, gas);
+    float lane = smoothstep(0.3, 0.5, gas); // the dust lanes: dark where the gas thins
+    float mouth = smoothstep(-0.95 * kWormholeMouth, -0.2 * kWormholeMouth, v);
+    vec3 blue = emission * (0.03 + 1.4 * glow * glow * glow) * lane;
+    vec3 gold = m.baseColor2 * (1.4 * m.emissionScale * filament);
+    emission = (blue + gold) * mouth;
+    return m.baseColor * (0.6 + 0.8 * gas);
+}
+
+// A ring's basalt (Pattern WormholeRing): a torus, u in metres round the ring and v round its tube (0 on its
+// outer equator, pi * tube on its inner face). Blocks patternScale long with dark joints between them, a fine
+// strata grain, and the material's emission only in gold inlays running round the inner face either side of
+// its lamps (lines along the ring, filtered over the footprint; no radial ticks).
+vec3 wormholeRing(Material m, HitPoint h, inout float roughness, inout vec3 emission) {
+    float block = max(m.patternScale, 1.0);
+    const float tube = 10.0; // modern::kWormholeRingTube
+    float b = h.uv.y / tube; // the angle round the tube
+    float x = h.uv.x / block;
+    uint id = uint(int(floor(x))) * 0x8DA6B343u + 0x2B07u;
+    float tone = hash01(id);
+    float joint = min(fract(x), 1.0 - fract(x)) * block;
+    float footprint = patternFootprint(h);
+    float seam = filteredLine(joint, 0.12, footprint);
+    float strata = valueNoise3(vec3(h.uv.x * 0.08, h.uv.y * 1.7, tone * 31.0), 0x2B11u);
+    vec3 color = m.baseColor * (0.75 + 0.5 * tone) * (0.85 + 0.3 * strata);
+    color = mix(color, color * 0.25, seam);
+    roughness = mix(clamp(roughness * (0.8 + 0.4 * strata), 0.0, 1.0), 0.9, seam);
+    float inner = abs(b - 3.14159265); // 0 on the inner face
+    float inlay = max(filteredLine(abs(inner - 0.5) * tube, 0.3, footprint),
+                      0.4 * filteredLine(abs(inner - 0.75) * tube, 0.12, footprint));
+    emission *= inlay;
+    return color;
+}
+
 void main() {
     HitPoint h = hitPoint();
     Material m = h.material;
@@ -218,6 +306,10 @@ void main() {
         baseColor = hullPattern(m, h, roughness, emission);
     } else if (m.pattern == kPatternPlanet) {
         baseColor = planetPattern(m, h, roughness, emission);
+    } else if (m.pattern == kPatternWormholeWall) {
+        baseColor = wormholeWall(m, h, roughness, emission);
+    } else if (m.pattern == kPatternWormholeRing) {
+        baseColor = wormholeRing(m, h, roughness, emission);
     }
     writeSurface(h, baseColor, roughness, m.transmission, emission);
 }

@@ -384,6 +384,26 @@ from the screen to a low, long wide shot in FINALE and PORTAL, a low dolly past 
 from the accent, an orbit round the monitor in STUDIO NIGHT, a push back in in RETURN, a close-up in REBOOT).
 `studio_test --look <dir> [spp] [width height] [name]` renders a still of every shot.
 
+### The city and the wormhole
+
+The City (VECTOR CITY, ASCENT, CITY NIGHT, METROPOLIS) is one night city on the 1993 city's grid: towers
+under procedural facades whose every window is a cell with its own lit or dark state and a room behind its
+glass (3,896,219 cells, counted from the pattern's own bays and floors), wet streets that mirror 41,684
+street lamps and 155 aviation beacons, all lights of the light tree, and shop signs lettered in a 5 x 7 dot
+font. VECTOR CITY's neon takes the bright ends of the 1993 Gouraud ramps (sodium gold and white) and one red;
+ASCENT starts on STUDIO NIGHT's last frame, the Studio's camera carried out of its window to this room's
+window, under the same moon; CITY NIGHT lights only the 16,384 lamps nearest its street; METROPOLIS flies 58 m
+over its elevated avenue at 200 km/h, high enough that nothing crosses more than 60 px of a 4K frame in a
+frame. `scene_city_test --look <dir> [spp] [width height]` renders a contact sheet per chapter
+(`EVO_LOOK_HUD=1` adds the cards) and `scene_city_test --cpu` runs its checks without the GPU.
+
+WORMHOLE flies the ship through a gate over an ocean planet into a tube of luminous gas (the `WormholeWall`
+pattern: a glacial-blue glow drawn out along the flow, gold filaments, dark dust lanes, its fine octaves
+dropped where the ray cone is wider) with basalt rings 1 km apart inside it. Each ring carries 72 gold
+lamps, lights of the light tree, so a ring sweeps the hull with light on every beat from D; the sun stands at
+the tube's far end, and the last shot, where the ship pulls away into it, carries Act III's one anamorphic
+streak. `scene_ship_test --look <dir> [spp] [width height]` renders a still of every shot.
+
 ### Bloom and the look
 
 Everything after the trace that the direction sets is a pure function of the show time (`post::lookFor`): no

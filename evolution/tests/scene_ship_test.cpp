@@ -8,13 +8,14 @@
 //   (e) the engines: Planck's law at 6500 K is white, the plumes run from white-blue at the exit through
 //       orange to dark, the afterburner lights on the cut into the tunnel; the seams pulse on the kick and
 //       the strobe flashes on the beat;
+//   (w) the wormhole: the wall from the gate, the rings' lamps as the light tree round the ship on the beats
+//       from D, the sun at the tube's far end, the anamorphic streak in the last shot, no exposure ramp;
 //   (p) the standard chapter pictures (20 %, the accent, 80 %; the accent twice, byte for byte);
 //   (c) the crossing in export at spp 32 (8 shutter slices, as the default 64 spp export has): with
 //       the 1/120 s shutter the ship's silhouette spreads at least 2 px further along its screen velocity
 //       than without; the volume layer behind the nozzles holds the plumes (transmittance below 0.95,
 //       radiance above 0).
-// `scene_ship_test --look <dir> [spp] [width height]` renders stills instead (EVO_LOOK_ONLY, EVO_LOOK_AT and
-// EVO_LOOK_DETAIL narrow them).
+// `scene_ship_test --look <dir> [spp] [width height]` renders stills instead (tests/scene_look.hpp).
 
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
@@ -31,6 +32,7 @@
 #include "show/timeline.hpp"
 
 #include "scene_fixture.hpp"
+#include "scene_look.hpp"
 #include "test_env.hpp"
 
 #include <algorithm>
@@ -124,7 +126,9 @@ void testCard() {
 
 void testSweep() {
     evo::test::SweepLimits limits;
-    limits.maxCameraStep = 8.f; // the crossing camera stands in the world while the ship flies at 300 m/s
+    // The crossing camera stands in the world while the ship flies at 300 m/s; the gate's camera, 2 km from the
+    // ship, swings through the render frame (the ship's own) as the ship banks.
+    limits.maxCameraStep = 14.f;
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Ship, limits);
     CHECK(stats.shots == 5);
     CHECK(stats.frames > 1500);
@@ -188,6 +192,75 @@ void testFlight() {
         last = z;
     }
     std::printf("(f) the 1993 attitude throughout; %d rings on the beats from D; flight monotonic\n", rings);
+}
+
+// (w) The wormhole: its wall from the gate's mouth, the gate the first ring and ahead of the ship at the cut
+// into the tunnel; the rings' lamps are the frame's one light tree, kWormholeRingSlots rings of
+// kWormholeRingLights, and on every beat from D a ring's lamps stand round the ship (it flies through their
+// circle); the sun is dead ahead, at the far end of the tube, which runs on past the flight's end; the
+// anamorphic streak only in the last shot, rising to 1 by the white-out; and no exposure ramp of the scene's
+// own (the show's exposure keys carry the white-out).
+void testWormhole() {
+    const modern::Ship ship({1.f / 64});
+    const show::TimelineFrame head = at(0.0);
+    const modern::ShipTimes t = modern::shipTimes(head);
+    const double gate = modern::shipGateZ(head);
+    show::TimelineFrame cut = at(t.tunnel);
+    CHECK(gate >= modern::shipDistance(cut) + 400.0 && gate < modern::shipDistance(cut) + 1400.0);
+    CHECK(std::abs(std::remainder(gate - modern::shipRingZ(head, 0), double(modern::kWormholeRingSpacing))) < 1e-6);
+    // The wall reaches at least 15 km ahead of the ship, its mesh starting near it (the render frame's origin).
+    for (double local = 0; local < t.duration; local += 0.5) {
+        const modern::SceneFrame f = ship.frame(at(local));
+        bool found = false;
+        for (const modern::SceneInstance& in : f.instances) {
+            if (in.mesh != 1) // the wall's mesh (after the ring's)
+                continue;
+            found = true;
+            const Vec3 start{in.transform.m[0][3], in.transform.m[1][3], in.transform.m[2][3]};
+            CHECK(modern::length(start) < 4500.f);
+            CHECK(modern::length(start + Vec3{in.transform.m[0][2], in.transform.m[1][2], in.transform.m[2][2]} *
+                                           modern::kWormholeLength) > 15000.f);
+        }
+        CHECK(found);
+    }
+    CHECK(modern::kShipSunDirection.x == 0.f && modern::kShipSunDirection.y == 0.f &&
+          modern::kShipSunDirection.z == 1.f);
+    const show::BeatGridView grid = show::beatGrid(head.track);
+    const double start = head.trackSeconds - head.localSeconds;
+    int beats = 0;
+    for (int b = grid.beatAt(start + t.drop + 1e-6); b < grid.count(); ++b) {
+        const double local = grid.beatTime(b) - start;
+        if (local >= t.duration - 0.01)
+            break;
+        const modern::SceneFrame f = ship.frame(at(local));
+        int trees = 0;
+        for (const evo::rt::RectLight& l : f.lights)
+            trees += l.kind == static_cast<std::uint32_t>(evo::rt::LightKind::Tree);
+        CHECK(trees == 1);
+        CHECK(f.treeLights.size() == modern::kWormholeRingSlots * modern::kWormholeRingLights);
+        // The slot whose lamps' centre is nearest the ship (the render frame's origin).
+        float nearest = 1e9f;
+        for (std::uint32_t slot = 0; slot < modern::kWormholeRingSlots; ++slot) {
+            Vec3 c{};
+            for (std::uint32_t k = 0; k < modern::kWormholeRingLights; ++k)
+                c = c + f.treeLights[slot * modern::kWormholeRingLights + k].center;
+            nearest = std::min(nearest, modern::length(c / float(modern::kWormholeRingLights)));
+        }
+        CHECK(nearest < 0.5f);
+        ++beats;
+    }
+    CHECK(beats >= 25);
+    for (double local = 0; local < t.duration; local += 1.0 / 60) {
+        const show::TimelineFrame f = at(local);
+        const float a = modern::shipAnamorphic(f);
+        CHECK(a >= 0.f && a <= 1.f);
+        CHECK(local >= t.release || a == 0.f);
+        CHECK(local < t.whiteout || a == 1.f);
+        CHECK(modern::shipExposureEV(f) <= 0.5f);
+    }
+    std::printf("(w) the gate at %.0f m (the ship at %.0f m on the cut into the tunnel), the wall drawn %.0f m on; on %d "
+                "beats from D a ring's lamps round the ship\n",
+                gate, modern::shipDistance(cut), double(modern::kWormholeLength), beats);
 }
 
 void testEngines() {
@@ -485,68 +558,23 @@ void testCrossing(gfx::Context& ctx) {
 // --- Stills to look at
 // ---------------------------------------------------------------------------------------
 
-// `scene_ship_test --look <dir> [spp] [width height]`: stills of FLYBY in export (with the shutter of 60
-// fps).
-void renderLook(gfx::Context& ctx, const std::filesystem::path& dir, std::uint32_t spp, std::uint32_t w,
-                std::uint32_t h) {
+// `scene_ship_test --look <dir> [spp] [width height]`: stills of every shot of WORMHOLE (tests/scene_look.hpp).
+std::vector<evo::test::LookStill> lookStills() {
     const double start = show::chapterStart(shipChapter());
     const modern::ShipTimes t = modern::shipTimes(at(0.0));
-    struct Shot {
-        double local;
-        const char* name;
+    return {
+        {start + 2.5, "wormhole_1_gate"},
+        {start + t.pass - 0.02, "wormhole_2_crossing"},
+        {start + t.pass + 1.2, "wormhole_3_follow"},
+        {start + t.tunnel - 0.6, "wormhole_4_gate"},
+        {start + t.tunnel + 2.5, "wormhole_5_tunnel"},
+        {start + t.drop + 0.25, "wormhole_6_drop"},
+        {start + t.accent + 1.255, "wormhole_7_riding"},
+        {start + t.release - 1.5, "wormhole_8_riding"},
+        {start + t.whiteout - 0.8, "wormhole_9_streak"},
+        {start + t.whiteout + 2.6, "wormhole_10_whiteout"},
+        {start + t.duration - 0.05, "wormhole_11_white"},
     };
-    std::vector<Shot> shots = {
-        {2.5, "ship_1_gate"},
-        {t.pass - 0.02, "ship_2_crossing"},
-        {t.pass + 1.2, "ship_3_follow"},
-        {t.tunnel - 0.6, "ship_4_gate"},
-        {t.tunnel + 2.5, "ship_5_tunnel"},
-        {t.accent + 1.255, "ship_6_riding"},
-        {t.release - 1.5, "ship_7_riding"},
-        {t.whiteout + 2.6, "ship_8_whiteout"},
-    };
-    if (const char* only = std::getenv("EVO_LOOK_ONLY")) {
-        std::vector<Shot> kept;
-        for (const Shot& s : shots)
-            if (std::string(s.name).find(only) != std::string::npos)
-                kept.push_back(s);
-        shots = kept;
-    }
-    if (const char* at = std::getenv("EVO_LOOK_AT"))
-        shots = {{std::stod(at), "ship_at"}};
-    gfx::FrameRing ring(ctx);
-    render::RenderSettings s{w, h};
-    s.hud = false;
-    s.mode = render::RenderMode::Export;
-    s.spp = spp;
-    s.detail = {1.f};
-    if (const char* d = std::getenv("EVO_LOOK_DETAIL"))
-        s.detail = {std::stof(d)};
-    s.shutterSeconds = 0.5 / 60;
-    render::Renderer renderer(ctx, ring, s);
-    gfx::Readback readback(ctx, w, h);
-    std::vector<double> times;
-    for (const Shot& shot : shots)
-        times.push_back(start + shot.local);
-    renderer.prepare(times);
-    std::filesystem::create_directories(dir);
-    for (std::size_t i = 0; i < shots.size(); ++i) {
-        const auto t0 = std::chrono::steady_clock::now();
-        VkCommandBuffer cmd = ring.begin();
-        renderer.render(cmd, forced2026(times[i]));
-        readback.record(cmd, renderer.output());
-        ring.wait(ring.submit());
-        const std::vector<std::uint8_t> rgb = readback.rgb();
-        double mean = 0;
-        for (std::size_t p = 0; p < rgb.size(); p += 3)
-            mean += (0.2126 * rgb[p] + 0.7152 * rgb[p + 1] + 0.0722 * rgb[p + 2]) / 255.0;
-        mean /= double(rgb.size() / 3);
-        const std::filesystem::path path = dir / (std::string(shots[i].name) + ".png");
-        evo::image::writePng(path, int(w), int(h), rgb.data());
-        std::printf("look: %s (%.2f s, mean %.3f) in %.1f s\n", path.string().c_str(), shots[i].local, mean,
-                    std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
-    }
-    idle(ctx);
 }
 
 } // namespace
@@ -556,9 +584,10 @@ int main(int argc, char** argv) {
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         if (argc >= 3 && std::string(argv[1]) == "--look") {
             auto ctx = gfx::Context::create({.validation = true});
-            renderLook(ctx, argv[2], argc >= 4 ? std::uint32_t(std::stoul(argv[3])) : 16u,
-                       argc >= 6 ? std::uint32_t(std::stoul(argv[4])) : 480u,
-                       argc >= 6 ? std::uint32_t(std::stoul(argv[5])) : 270u);
+            evo::test::renderLookStills(ctx, argv[2], argc >= 4 ? std::uint32_t(std::stoul(argv[3])) : 16u,
+                                        argc >= 6 ? std::uint32_t(std::stoul(argv[4])) : 480u,
+                                        argc >= 6 ? std::uint32_t(std::stoul(argv[5])) : 270u, lookStills(),
+                                        4);
             return ctx.validationMessageCount() == 0 ? 0 : 1;
         }
         const auto timed = [](const char* name, auto&& run) {
@@ -572,6 +601,7 @@ int main(int argc, char** argv) {
         timed("s", testSweep);
         timed("f", testFlight);
         timed("e", testEngines);
+        timed("w", testWormhole);
         {
             auto ctx = gfx::Context::create({.validation = true, .syncValidation = true});
             if (!ctx.validationEnabled())
