@@ -10,7 +10,7 @@
 //     cross-fade), back to FINALE (BeatSwap, the megamix on the CRT), into PLASMA (a 1993 chapter with the
 //     placeholder wiping in), to the start of STUDIO NIGHT (where the window's keys seek), then forwards
 //     inside the same camera shot and back again inside it (both TimeJump);
-//   - the STUDIO NIGHT camera cut at the accent: the frame of the cut resets (Shot) and from there equals a
+//   - the Studio camera's cut on PORTAL's glass (D): the frame of the cut resets (Shot) and from there equals a
 //     fresh renderer started on it;
 //   - a duplicated frame (dt = 0) continues the history, a step of -1/60 s resets it (TimeJump: time running
 //     backwards, as at the show's loop) and equals a fresh renderer there;
@@ -28,6 +28,8 @@
 #include "modern/modern_scene.hpp"
 #include "modern/studio.hpp"
 #include "render/renderer.hpp"
+#include "show/director.hpp"
+#include "show/era.hpp"
 #include "show/timeline.hpp"
 
 #include "test_env.hpp"
@@ -58,7 +60,7 @@ int checksPassed = 0;
 
 constexpr std::uint32_t kWidth = 160, kHeight = 90;
 constexpr double kFrame = 1.0 / 60.0;
-constexpr int kDots = 2, kPlasma = 3, kFinale = 9, kStudioNight = 11, kReturn = 19, kReboot = 20;
+constexpr int kDots = 2, kPlasma = 3, kFinale = 9, kPortal = 10, kStudioNight = 11, kReturn = 19, kReboot = 20;
 
 double chapterTime(int chapter, double fraction) {
     const double start = evo::show::chapterStart(chapter);
@@ -142,14 +144,16 @@ void checkSeek(Harness& seeker, double start, const std::vector<Frame>& referenc
 // The reference case and its journey through the show: every seek lands on a fresh renderer's frames.
 void testSeeks(evo::gfx::Context& ctx) {
     const double night = chapterTime(kStudioNight, 0.4); // shot 0, the dolly towards the desk
-    const double reboot = chapterTime(kReboot, 0.73);    // the portal: 1993 and the Studio both visible
+    const double reboot = chapterTime(kReboot, 0.5);     // the Studio before the glass, 1993 on its CRT
     const double finale = chapterTime(kFinale, 0.5);     // BeatSwap, the megamix on the CRT
     const double plasma = chapterTime(kPlasma, 0.45);    // the wipe: 1993 and the plasma nebula (a medium)
     const double nightStart = evo::show::chapterStart(kStudioNight); // where the window's keys seek to
     const double nightEarly = chapterTime(kStudioNight, 0.1);
 
     const TimelineFrame rebootFrame = evo::show::sampleTimeline(reboot);
-    CHECK(rebootFrame.effect == Effect::Reboot && rebootFrame.era > 0.f && rebootFrame.era < 1.f);
+    CHECK(rebootFrame.effect == Effect::Reboot && !evo::show::sceneCut(rebootFrame));
+    CHECK(evo::modern::studioCamera(rebootFrame).shot == evo::modern::studioCamera(
+                                                             evo::show::sampleTimeline(reboot + 11 * kFrame)).shot);
     const TimelineFrame plasmaFrame = evo::show::sampleTimeline(plasma);
     CHECK(plasmaFrame.effect == Effect::Plasma && plasmaFrame.wipe > 0.f && plasmaFrame.wipe < 1.f);
     CHECK(evo::show::sampleTimeline(finale).effect == Effect::Finale);
@@ -184,12 +188,13 @@ void testSeeks(evo::gfx::Context& ctx) {
     checkSeek(seeker, night, nightRef, HistoryReset::TimeJump); // backward inside the shot (-11/60 s)
 }
 
-// The STUDIO NIGHT cut at the accent: the frame of the cut resets (Shot), and from there the window's frames
-// equal a fresh renderer's started on that frame. The frames before the cut continue the history.
+// PORTAL's inward crossing at D, where the Studio's camera changes shot on the glass: the frame of the cut
+// resets (Shot), and from there the window's frames equal a fresh renderer's started on that frame. The
+// frames before the cut continue the history.
 void testShotCut(evo::gfx::Context& ctx) {
-    const double accent = evo::show::chapterStart(kStudioNight) +
-                          evo::show::sampleTimeline(chapterTime(kStudioNight, 0.5)).accentSeconds;
-    const double start = accent - 3 * kFrame;
+    const double glass =
+        evo::show::transitionMarks(evo::show::sampleTimeline(chapterTime(kPortal, 0.5))).downbeat;
+    const double start = glass - 3 * kFrame;
     int cut = -1;
     for (int i = 1; i < 8 && cut < 0; ++i) {
         const auto shotAt = [&](int k) {

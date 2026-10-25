@@ -3,6 +3,7 @@
 #include "gfx/frame_ring.hpp"
 #include "gfx/readback.hpp"
 #include "modern/scene_gpu.hpp"
+#include "post/look.hpp"
 #include "render/renderer.hpp"
 #include "show/timeline.hpp"
 
@@ -155,7 +156,9 @@ void checkChapterPictures(gfx::Context& ctx, modern::SceneId scene, const Pictur
                                 "]");
             if (!(s.clipped < kMaxClippedFraction))
                 fail(where, std::to_string(s.clipped) + " of the pixels clip at 255");
-            if (!(s.black < kMaxBlackFraction))
+            // Just after a Portal chapter's glass the grade maps the picture onto the 1993 palette, whose
+            // dark entries are black (post::paletteWeight): the black limit holds once that has faded.
+            if (!(s.black < kMaxBlackFraction) && post::paletteWeight(frame) < .5f)
                 fail(where, std::to_string(s.black) + " of the pixels are pure black");
             if (!(changed > kMinChangedFraction))
                 fail(where, "only " + std::to_string(changed) + " of the pixels differ from the placeholder");

@@ -872,8 +872,9 @@ void testRegistry(gfx::Context& ctx) {
 
 void testDosIdle() {
     namespace retro = evo::retro;
-    for (const Effect effect : {Effect::StudioNight, Effect::Return}) {
-        const retro::EffectInfo& info = retro::effectFor(effect);
+    // STUDIO NIGHT's CRT shows the DOS listing (RETURN has a screen of its own, closing_test).
+    {
+        const retro::EffectInfo& info = retro::effectFor(Effect::StudioNight);
         CHECK(info.text == &retro::dosIdleText && info.shader == nullptr);
         CHECK(info.retroRate == retro::kBootRetroRate);
     }
