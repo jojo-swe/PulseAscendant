@@ -66,9 +66,8 @@ bool validTraceScale(float scale);
 //
 // Path tracing follows the HistoryState the renderer hands over: TraceSettings {spp, maxBounces, frameSeed};
 // the denoiser follows denoiseSettingsFor(state) (stage_plan.hpp): Interactive denoises temporally with 3
-// a-trous iterations; Export has no temporal history and filters with 3 below 16 spp and not at all from 16
-// (the firefly filter clamps lone fireflies instead); 5 iterations
-// at history length <= 3 either way. The denoiser's history starts over
+// a-trous iterations (5 at history length <= 3); Export has no temporal history and filters with 5 below
+// 16 spp, and from 16 clamps lone fireflies, then filters with 2. The denoiser's history starts over
 // whenever state.reset is not None, and the motion guide uses the previous frame's camera only while the
 // history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the history
 // and the filter, so the screen stays sharp and current.

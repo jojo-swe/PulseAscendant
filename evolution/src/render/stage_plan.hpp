@@ -112,12 +112,17 @@ private:
 inline constexpr std::array<std::uint32_t, 2> kResetSpp{4, 2};
 std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset);
 
-// Exports filter spatially (a-trous) only below this many samples per pixel, and clamp fireflies from it.
+// From this many samples per pixel exports clamp fireflies and filter the surface lighting lightly: only
+// kExportFineAtrousIterations a-trous iterations (steps 1 and 2), which still remove the speckle of many
+// small lights and of caustics that 16-64 spp leave, while the depth, normal and luminance stops (the
+// luminance stop scaled by the local deviation, smaller at more samples) keep edges and detail.
 inline constexpr std::uint32_t kExportFilterSpp = 16;
+inline constexpr std::uint32_t kExportFineAtrousIterations = 2;
 
-// The denoiser settings of a frame: the window keeps history and always runs 3 a-trous iterations; exports
-// keep none, run 3 below kExportFilterSpp and 0 from it, where the firefly filter (k = 4) takes over
-// (never in the window). Both: 5 iterations at history length <= 3 and 4 on the volume layer.
+// The denoiser settings of a frame: the window keeps history and always runs 3 a-trous iterations (5 at
+// history length <= 3); exports keep none and run 3 (5, every pixel's history being one frame) below
+// kExportFilterSpp, and from it the firefly filter (k = 4, never in the window) and
+// kExportFineAtrousIterations in all. Both: 4 iterations on the volume layer.
 post::DenoiseSettings denoiseSettingsFor(const HistoryState& state);
 
 } // namespace evo::render
