@@ -66,6 +66,13 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
 // compositor is told which images are visible, so a skipped stage's stale image never reaches the output.
 // The history tracker advances on every frame in which the modern stage runs.
 //
+// Scene cuts (show/director.hpp): the modern stage renders show::sceneFrame(frame), the FINALE megamix's or
+// REBOOT's cut to another chapter's scene, else the frame itself. That frame picks the scene, its camera
+// shot, whether the scene samples the retro image, the history key and the seed, so a cut resets the history
+// (Chapter), the window's first frame after it traces the reset frame's samples, and a cut frame's 2026
+// picture is the picture of the cut's scene time. The retro stage, the compositor and the HUD follow the
+// frame itself.
+//
 // The ring must outlive the renderer, which waits for it (FrameRing::waitAll) before its images and
 // pipelines go, and on resize().
 //
@@ -84,10 +91,11 @@ public:
     // resets its history (Resize), even after a resize back to the size it last rendered. Not between
     // ring.begin() and ring.submit(). A no-op for the current size.
     void resize(std::uint32_t width, std::uint32_t height);
-    // Builds the GPU side of the path-traced scenes that the frames at these show times show, now instead of
-    // in the first frame that shows them, so that no chapter hitches (setup: not between ring.begin() and
-    // ring.submit()). The exports pass the times they will render. An unprepared renderer builds a scene
-    // inside its first frame, with the same pixels (ModernStage).
+    // Builds the GPU side of the path-traced scenes that the frames at these show times show (the scene of
+    // a frame's cut, if it has one), now instead of in the first frame that shows them, so that no chapter
+    // hitches (setup: not between ring.begin() and ring.submit()). The exports pass the times they will
+    // render. An unprepared renderer builds a scene inside its first frame, with the same pixels
+    // (ModernStage).
     void prepare(std::span<const double> showSeconds);
     // Every path-traced scene of the show (the window).
     void prepareAll() { modern_.prepareAll(); }

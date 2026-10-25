@@ -38,6 +38,8 @@ Then regenerated for the 1993 screens (phosphor, BOOT, RETURN, REBOOT, the FINAL
 boot_50, finale_50, portal_50, reboot_10, reboot_60, return_30, stream_finale and stream_studio_cut changed.
 Then regenerated for the epoch cards (the 1993 card through the CRT, the 2026 card in the stroke face in the
 left margin, in place of the 8x8 cards with drop shadows): every output changed in its card's area only.
+Then regenerated for the FINALE megamix's director: after D the room carries the 1993 card, so finale_50 and
+stream_finale changed (mean luminance -0.13 %); no other output moved.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):

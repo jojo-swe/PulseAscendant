@@ -1,5 +1,6 @@
 #include "show/timeline.hpp"
 
+#include "show/director.hpp"
 #include "show/era.hpp"
 #include "show/generated/beat_data.hpp"
 #include "show/generated/cue_data.hpp"
@@ -199,6 +200,7 @@ TimelineFrame sampleTimeline(double showSeconds) {
                     smoothFlow(d.track, chapterTrackSeconds);
 
     applyEra(f, beatGrid(f.track));
+    applyDirection(f);
     return f;
 }
 

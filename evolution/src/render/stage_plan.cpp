@@ -1,11 +1,18 @@
 #include "render/stage_plan.hpp"
 
+#include "show/director.hpp"
+
 #include <algorithm>
 
 namespace evo::render {
 
 StagePlan planStages(const show::TimelineFrame& frame, RenderMode mode, bool modernSamplesRetro) {
     StagePlan plan{};
+    if (show::holdsModern(frame)) { // FINALE: the 1993 picture is on the Studio's CRT, never the frame
+        plan.modernVisible = plan.modern = true;
+        plan.retro = modernSamplesRetro;
+        return plan;
+    }
     switch (frame.transition) {
     case show::Transition::Portal:
         plan.modernVisible = frame.era > 0.f;

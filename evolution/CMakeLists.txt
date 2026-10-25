@@ -1329,3 +1329,11 @@ add_test(NAME stroke_font COMMAND stroke_font_test)
 add_executable(epoch_cards_test tests/epoch_cards_test.cpp)
 target_link_libraries(epoch_cards_test PRIVATE evo_render evo_core)
 evo_gpu_test(epoch_cards epoch_cards_test TIMEOUT 300 PROCESSORS 2)
+
+# --- The director (scene cuts, the FINALE megamix, REBOOT's look ahead, the wipe edge) ------------
+
+# The cut list on the CPU: the megamix rows on the beat grid ending on D, their sources inside their shots, the
+# room after D, REBOOT's GALAXY frames, the cards' era and the compositor's flash policy.
+add_executable(director_test tests/director_test.cpp)
+target_link_libraries(director_test PRIVATE evo_show)
+add_test(NAME director COMMAND director_test)
