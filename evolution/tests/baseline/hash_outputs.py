@@ -28,6 +28,11 @@ Then regenerated after merging the Particles and Spheres scenes: only stream_dot
 Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the city, so stream_studio_ascent
 changed; every other output, the Studio's included, stayed byte for byte.
 Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
+Then regenerated for the bloom, the per-act grade and the authored exposure, with the denoiser's first frame on
+heavy-tailed light: every output with a path-traced 2026 picture changed (studio_night_40, finale_50,
+studio_night_acc, return_30, nebula_40, plasma_wipe, raytrace_2026 and the four streams; Act II's lifted blacks,
+and for studio_night_acc STUDIO NIGHT's +0.7 EV from D, raise the Studio's mean display luminance by 35-42 %); the
+1993-only and placeholder outputs stayed byte for byte.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
