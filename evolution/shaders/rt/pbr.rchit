@@ -2,9 +2,11 @@
 #extension GL_GOOGLE_include_directive : require
 
 // Hit group 0 (MaterialClass Pbr): plastic, metal and clear-coated surfaces, with the WoodPlanks,
-// BrushedMetal, Concrete, Hull and Planet patterns. Evaluates the material into the payload; never traces.
+// BrushedMetal, Concrete, Hull and Planet patterns and the City's facades and streets (city_patterns.glsl).
+// Evaluates the material into the payload; never traces.
 
 #include "hit.glsl"
+#include "city_patterns.glsl"
 
 // Smooth 3D value noise in [0, 1] (integer hashes of the lattice corners).
 float valueNoise3(vec3 p, uint seed) {
@@ -201,15 +203,18 @@ void main() {
     Material m = h.material;
     vec3 baseColor = m.baseColor;
     float roughness = m.roughness;
+    vec3 emission = materialEmission(m);
     if (m.pattern == kPatternWoodPlanks) {
         baseColor = woodPlanks(m, h.position);
     } else if (m.pattern == kPatternBrushedMetal) {
         baseColor = brushedMetal(m, h.position, roughness);
     } else if (m.pattern == kPatternConcrete) {
         baseColor = concrete(m, h.position, h.geometricNormal, roughness);
-    }
-    vec3 emission = materialEmission(m);
-    if (m.pattern == kPatternHull) {
+    } else if (m.pattern >= kPatternCityPunched && m.pattern <= kPatternCityRound) {
+        cityFacade(h, m.pattern, baseColor, roughness, emission); // Task 23
+    } else if (m.pattern == kPatternCityStreet) {
+        cityStreet(h, baseColor, roughness);
+    } else if (m.pattern == kPatternHull) {
         baseColor = hullPattern(m, h, roughness, emission);
     } else if (m.pattern == kPatternPlanet) {
         baseColor = planetPattern(m, h, roughness, emission);

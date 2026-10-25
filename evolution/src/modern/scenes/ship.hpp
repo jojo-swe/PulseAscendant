@@ -42,7 +42,7 @@ inline constexpr float kWormholeRingSpacing = 1000.f; // metres: "1 KM RINGS"
 inline constexpr float kWormholeRingRadius = 140.f, kWormholeRingTube = 10.f;
 inline constexpr std::uint32_t kShipAirSplats = 98304; // the planet's atmosphere shell
 inline constexpr float kShipCruise = 300.f;            // metres per second in shots 0 and 1
-inline constexpr float kPlanetRadius = 6000.f;
+inline constexpr float kShipPlanetRadius = 6000.f;
 // Towards the 5800 K sun in the world: ahead, a little right and up (the tunnel leads into it).
 inline constexpr Vec3 kShipSunDirection{0.30f, 0.14f, 0.944f};
 
