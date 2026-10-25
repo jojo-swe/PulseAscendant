@@ -1173,3 +1173,13 @@ add_dependencies(scene_lens_test scene_lens_test_shaders)
 # (and none without dispersion) and the cathedral's pools of coloured sunlight.
 target_sources(evo_modern PRIVATE src/modern/scenes/glass.cpp)
 evo_scene_test(glass)
+
+# --- Step 5 Task 16: the Ship (WORMHOLE) -------------------------------------------------------------------
+
+# The starship as an asset any scene can fly (src/modern/scenes/ship_asset.cpp: the hull, its plumes as a grid
+# medium, the star splats; shaders/modern/ship_{plumes,splats}.comp) and the Ship scene that stages it in
+# WORMHOLE (src/modern/scenes/ship.cpp), with its test: the standard picture and sweep checks, the card's
+# numbers, the plumes' blackbody ramp, the rings on the beat, the crossing's motion blur and the plumes'
+# volume. `scene_ship_test --look <dir> [spp] [width height]` renders stills.
+target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
+evo_scene_test(ship)
