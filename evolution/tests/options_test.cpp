@@ -146,9 +146,44 @@ int main() {
         CHECK(parseError({"--detail", "x"}) == "--detail expects a number, got 'x'");
         CHECK(parseError({"--detail"}) == "--detail needs a value");
 
+        // --trace-scale: the window's and the bench's trace resolution, 0.25..1, default 0.67; the exports
+        // always trace at the output size (1), and refuse the option.
+        CHECK(!defaults.traceScale && evo::traceScaleFor(defaults) == 0.67f);
+        CHECK(evo::traceScaleFor(evo::parseOptions({"--trace-scale", "0.5"})) == 0.5f);
+        CHECK(evo::traceScaleFor(evo::parseOptions({"--trace-scale", "1"})) == 1.f);
+        CHECK(evo::traceScaleFor(evo::parseOptions({"--trace-scale", "0.25"})) == 0.25f);
+        CHECK(evo::traceScaleFor(evo::parseOptions({"--capture-dir", "out"})) == 1.f);
+        CHECK(evo::traceScaleFor(evo::parseOptions({"--render-stream", "--duration", "1"})) == 1.f);
+        CHECK(evo::traceScaleFor(evo::parseOptions({"--bench"})) == 0.67f);
+        CHECK(parseError({"--trace-scale", "0.2"}) == "--trace-scale must be between 0.25 and 1, got 0.2");
+        CHECK(parseError({"--trace-scale", "1.5"}) == "--trace-scale must be between 0.25 and 1, got 1.5");
+        CHECK(parseError({"--trace-scale", "x"}) == "--trace-scale expects a number, got 'x'");
+        CHECK(parseError({"--trace-scale", "0.5", "--capture-dir", "out"}) ==
+              "--trace-scale is for the window and --bench: the exports trace at the output size");
+        CHECK(!parseError({"--trace-scale", "0.5", "--render-stream", "--duration", "1"}).empty());
+
+        // --bench: Interactive and headless, per chapter; --bench-frames N (default 120); --chapters LIST.
+        CHECK(!defaults.bench && defaults.benchFrames == 120 && defaults.chapters.empty());
+        const evo::Options bench =
+            evo::parseOptions({"--bench", "--bench-frames", "3", "--chapters", "11,3,0", "--width", "96"});
+        CHECK(bench.bench && bench.headless && bench.benchFrames == 3);
+        CHECK((bench.chapters == std::vector<int>{11, 3, 0}));
+        CHECK(evo::samplesPerPixel(bench) == 1); // interactive, like the window
+        CHECK(parseError({"--bench", "--bench-frames", "0"}) ==
+              "--bench-frames must be between 1 and 100000, got 0");
+        CHECK(parseError({"--bench", "--chapters", "1,,2"}) ==
+              "--chapters expects a comma-separated list of chapter indices, got '1,,2'");
+        CHECK(!parseError({"--bench", "--chapters", "-1"}).empty());
+        CHECK(!parseError({"--bench", "--chapters", ""}).empty());
+        CHECK(parseError({"--chapters", "1"}) == "--chapters and --bench-frames need --bench");
+        CHECK(parseError({"--bench-frames", "5"}) == "--chapters and --bench-frames need --bench");
+        CHECK(parseError({"--bench", "--capture-dir", "out"}) == "--bench cannot be combined with an export");
+        CHECK(!parseError({"--bench", "--render-stream", "--duration", "1"}).empty());
+
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
-        for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset",
-                                 "--no-crt", "--no-hud", "--spp", "--detail"})
+        for (const char* flag :
+             {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt", "--no-hud",
+              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--chapters"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);

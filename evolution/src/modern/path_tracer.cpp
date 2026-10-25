@@ -1,6 +1,7 @@
 #include "modern/path_tracer.hpp"
 
 #include "gfx/descriptors.hpp"
+#include "gfx/gpu_timers.hpp"
 #include "gfx/paths.hpp"
 #include "gfx/sync.hpp"
 #include "rt/bindings.hpp"
@@ -53,10 +54,14 @@ const std::array<gfx::Binding, EVO_BINDING_COUNT> kBindings = {
     gfx::Binding{EVO_BINDING_VOLUME, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
 };
 
-// pathtrace.rgen's push constants: which of the frame's samples this dispatch traces.
+// pathtrace.rgen's push constants: which of the frame's samples this dispatch traces, and the subpixel
+// window they are box-filtered over (its corner relative to the pixel's, and its size; (0, 0) and (1, 1) for
+// the whole pixel).
 struct TracePush {
     std::uint32_t sampleBase, sampleCount;
+    float windowOrigin[2], windowSize[2];
 };
+static_assert(sizeof(TracePush) == 24);
 
 // The largest struct a feature binding may declare (MediumUniforms): the dummy buffer covers any of them.
 constexpr VkDeviceSize kDummyBufferBytes = 256;
@@ -250,6 +255,13 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
             "uniforms, instances and lights when it runs)");
     if (settings.spp == 0)
         throw std::invalid_argument("PathTracer::trace(): spp 0");
+    for (int a = 0; a < 2; ++a) {
+        const float footprint = settings.pixelFootprint[a], jitter = settings.pixelJitter[a];
+        if (!(footprint > 0.f && footprint <= 1.f) || !(std::fabs(jitter) + 0.5f * footprint <= 0.5f + 1e-6f))
+            throw std::invalid_argument("PathTracer::trace(): the subpixel window (jitter " +
+                                        std::to_string(jitter) + ", footprint " + std::to_string(footprint) +
+                                        ") must lie inside the pixel");
+    }
     if (scene.samplesRetro() && retroScreen == nullptr)
         throw std::invalid_argument(
             "PathTracer::trace(): the scene shows the retro screen, but no retro image");
@@ -333,7 +345,11 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         writeBuffer(materials_[slot], frame.materials.data(), frame.materials.size() * sizeof(rt::Material));
     const gfx::Buffer& materialTable = frame.materials.empty() ? scene.staticMaterials() : materials_[slot];
 
+    if (timers_)
+        timers_->begin(cmd, "tlas");
     tlas_->build(cmd, scene.blases(), instances);
+    if (timers_)
+        timers_->end(cmd);
 
     gfx::Image& screen = scene.samplesRetro() ? *retroScreen : blackScreen_;
     // The feature images: the frame's, or the stand-ins (already in GENERAL, sampled).
@@ -397,6 +413,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     constexpr VkAccessFlags2 kReadWrite =
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
+    if (timers_)
+        timers_->begin(cmd, "trace");
     for (std::uint32_t d = 0; d < dispatches; ++d) {
         for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
@@ -405,10 +423,15 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         const TracePush push{d * kSppPerDispatch,
-                             std::min(kSppPerDispatch, settings.spp - d * kSppPerDispatch)};
+                             std::min(kSppPerDispatch, settings.spp - d * kSppPerDispatch),
+                             {0.5f + settings.pixelJitter[0] - 0.5f * settings.pixelFootprint[0],
+                              0.5f + settings.pixelJitter[1] - 0.5f * settings.pixelFootprint[1]},
+                             {settings.pixelFootprint[0], settings.pixelFootprint[1]}};
         pipeline_.push(cmd, &push, sizeof push);
         pipeline_.traceRays(cmd, width_, height_);
     }
+    if (timers_)
+        timers_->end(cmd);
     stats_.traceDispatches = dispatches;
 }
 

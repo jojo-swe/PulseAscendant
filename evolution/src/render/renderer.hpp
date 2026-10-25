@@ -2,6 +2,7 @@
 
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
+#include "gfx/gpu_timers.hpp"
 #include "gfx/image.hpp"
 #include "render/compositor.hpp"
 #include "render/modern_stage.hpp"
@@ -12,8 +13,11 @@
 
 #include <volk.h>
 
+#include <array>
 #include <cstdint>
 #include <span>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace evo::render {
@@ -27,6 +31,9 @@ struct RenderSettings {
     std::uint32_t spp = 1;                // samples per pixel per frame (at least 1)
     std::uint32_t maxBounces = 0;         // 0 = the mode's default (interactive 4, export 6)
     modern::SceneDetail detail;           // the 2026 scenes' detail (--detail)
+    // The 2026 side traces at traceSize(width, height, traceScale) and upscales in time (Task 4 of step 5);
+    // in (0, 1]. The window runs at 0.67 by default (--trace-scale), the CLI's exports always at 1.
+    float traceScale = 1.f;
     // Test hooks: the modern stage's scene factory and effect -> scene map (empty: the show's).
     modern::SceneFactory sceneFactory;
     modern::SceneMap sceneMap;
@@ -61,9 +68,13 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
 //
 // The ring must outlive the renderer, which waits for it (FrameRing::waitAll) before its images and
 // pipelines go, and on resize().
+//
+// Every frame is timed on the GPU (gfx::GpuTimers, when the queue has timestamps): "total" around the frame,
+// "retro" (when the retro stage runs), the modern stage's passes (ModernStage) and "compositor" (CRT, era
+// blend and HUD). Stats::gpuMs holds the scopes of the newest frame the GPU completed.
 class Renderer {
 public:
-    // Throws std::invalid_argument for a zero width, height or spp.
+    // Throws std::invalid_argument for a zero width, height or spp, or a trace scale outside (0, 1].
     Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings& settings);
     ~Renderer();
     Renderer(const Renderer&) = delete;
@@ -80,6 +91,13 @@ public:
     void prepare(std::span<const double> showSeconds);
     // Every path-traced scene of the show (the window).
     void prepareAll() { modern_.prepareAll(); }
+    // A new trace scale: waits for the frames in flight, recreates the trace-size images, and the modern
+    // stage's next frame resets its history (Resize). A no-op for the current scale; throws
+    // std::invalid_argument outside (0, 1] (changing nothing). Not between ring.begin() and ring.submit().
+    void setTraceScale(float scale);
+    float traceScale() const { return modern_.traceScale(); }
+    // The GPU timers every frame is timed with (the bench reads every completed frame from them).
+    gfx::GpuTimers& timers() { return timers_; }
     // Records all passes; output() is GENERAL afterwards.
     void render(VkCommandBuffer cmd, const show::TimelineFrame& frame);
     gfx::Image& output() { return compositor_.output(); }
@@ -104,6 +122,12 @@ public:
         // The samples per pixel the modern stage traced (frameSpp: more on the window's reset frames); 0
         // when the stage did not run.
         std::uint32_t spp = 0;
+        // GPU milliseconds per pass, in the order the scopes began ("total" first), of the newest frame the
+        // GPU completed when this render() was recorded (not this frame's); empty without timestamps.
+        std::vector<std::pair<std::string, double>> gpuMs;
+        // The subpixel jitter the modern stage traced with (trace pixels; post::subpixelWindow): non-zero
+        // only in the window below scale 1 after a history's first frame. 0 when the stage did not trace.
+        std::array<float, 2> traceJitter{0.f, 0.f};
     };
     Stats lastStats() const { return stats_; }
     RenderMode mode() const { return mode_; }
@@ -112,6 +136,7 @@ public:
 
 private:
     gfx::FrameRing& ring_;
+    gfx::GpuTimers timers_; // before the stages that record scopes into it
     bool crt_;
     bool hud_;
     bool hudTitle_;

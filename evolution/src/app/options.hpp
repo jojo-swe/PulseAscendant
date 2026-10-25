@@ -32,7 +32,23 @@ struct Options {
     std::optional<int> spp;
     // The 2026 scenes' detail (--detail, 0 < F <= 1): particle, splat, voxel and photon counts scale with it.
     float detail = 1.f;
+    // The trace resolution as a fraction of the output (--trace-scale, kMinTraceScale..1); unset = the
+    // mode's (traceScaleFor). The exports refuse it: they always trace at the output size.
+    std::optional<float> traceScale;
+    // --bench: Interactive and headless, every chapter of `chapters` (empty: all) for benchFrames frames,
+    // one JSON line each on stdout (app/bench.hpp).
+    bool bench = false;
+    int benchFrames = 120;
+    std::vector<int> chapters; // --chapters LIST: chapter indices, as --show-info numbers them
 };
+
+inline constexpr float kMinTraceScale = 0.25f;
+inline constexpr float kWindowTraceScale = 0.67f; // the window and --bench (Decision 7 of step 5)
+inline constexpr int kMaxBenchFrames = 100000;
+
+// The trace scale a run renders with: --trace-scale, or 1 for the exports (--capture-dir, --render-stream),
+// which trace at the output size, and kWindowTraceScale for the window and --bench.
+float traceScaleFor(const Options& options);
 
 inline constexpr int kMinSpp = 1;
 inline constexpr int kMaxSpp = 4096;

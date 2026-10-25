@@ -5,8 +5,9 @@
 // keeps a running mean of lighting, emission and albedo over the frame's samples; the first dispatch also
 // writes the depth, normal and motion guides from the unjittered centre ray.
 //
-// Per sample: box-filter jitter in the pixel and a thin-lens origin; then a loop over bounces. A hit's
-// emission at the primary hit goes to the emission image; later it adds throughput * Le * w_MIS. At every
+// Per sample: box-filter jitter in the pixel's subpixel window (push constants; the whole pixel by default)
+// and a thin-lens origin; then a loop over bounces. A hit's emission at the primary hit goes to the emission
+// image; later it adds throughput * Le * w_MIS. At every
 // surface with a non-delta lobe, next-event estimation samples the environment with probability
 // frame.environmentSelect, and otherwise picks one rect light by its weight at the shading point, samples a
 // uniform point on it and casts a shadow ray (portals and the environment: to infinity, the sky beyond),
@@ -35,6 +36,8 @@
 layout(push_constant) uniform Push {
     uint sampleBase;  // the frame's first sample traced by this dispatch
     uint sampleCount; // samples this dispatch traces
+    vec2 windowOrigin; // the subpixel window's corner relative to the pixel's ((0, 0): the whole pixel)
+    vec2 windowSize;   // its size in pixels ((1, 1): the whole pixel)
 } pc;
 
 layout(location = 0) rayPayloadEXT HitPayload payload;
@@ -251,7 +254,7 @@ SampleResult tracePath() {
     r.albedo = vec3(1.0);
 
     vec2 jitter = vec2(rand(0u), rand(1u));
-    vec3 direction = cameraDirection(vec2(gPixel) + jitter);
+    vec3 direction = cameraDirection(vec2(gPixel) + pc.windowOrigin + jitter * pc.windowSize);
     vec3 origin = frame.cameraPosition;
     if (frame.aperture > 0.0) {
         vec3 focus = origin + direction * (frame.focusDistance / dot(direction, frame.cameraForward));
