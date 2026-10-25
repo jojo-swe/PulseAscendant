@@ -64,6 +64,7 @@ add_library(evo_gfx STATIC
     src/gfx/descriptors.cpp
     src/gfx/fill_pass.cpp
     src/gfx/frame_ring.cpp
+    src/gfx/gpu_timers.cpp
     src/gfx/image.cpp
     src/gfx/paths.cpp
     src/gfx/readback.cpp
@@ -123,7 +124,8 @@ target_link_libraries(evo_rt PUBLIC evo_gfx)
 add_library(evo_post STATIC
     src/post/denoiser.cpp
     src/post/tonemap.cpp
-    src/post/tonemap_reference.cpp)
+    src/post/tonemap_reference.cpp
+    src/post/upscale.cpp)
 target_include_directories(evo_post PUBLIC src)
 target_link_libraries(evo_post PUBLIC evo_gfx)
 evo_add_shaders(evo_post
@@ -131,7 +133,8 @@ evo_add_shaders(evo_post
     shaders/post/atrous.comp
     shaders/post/combine.comp
     shaders/post/firefly.comp
-    shaders/post/tonemap.comp)
+    shaders/post/tonemap.comp
+    shaders/post/upscale.comp)
 
 # The renderer: the 1993 stage (effect -> palette indices -> palette), the 2026 placeholder and the
 # compositor (CRT pillarbox, era blend), all compute passes on the gfx foundation; plus the retro effect
@@ -199,6 +202,7 @@ evo_add_shaders(evo_modern
 # window, the Vulkan surface and the timer.
 add_library(evo_app STATIC
     src/app/app.cpp
+    src/app/bench.cpp
     src/app/capture.cpp
     src/app/clock.cpp)
 target_link_libraries(evo_app PUBLIC evo_render evo_gfx evo_show evo_audio SDL3::SDL3-static)
@@ -815,3 +819,37 @@ add_test(NAME scene_table COMMAND scene_table_test)
 add_executable(shared_tracer_test tests/shared_tracer_test.cpp)
 target_link_libraries(shared_tracer_test PRIVATE evo_scene_fixture)
 evo_gpu_test(shared_tracer shared_tracer_test)
+
+# --- Step 5 Task 4: trace resolution, temporal upscaler, GPU timers and --bench ----------------------------
+
+# GPU timestamp scopes per ring slot: nesting and order, non-negative times, reading on slot reuse and after
+# waitAll(), the disabled path (a queue without timestamps), misuse; with the validation layer on.
+add_executable(gpu_timers_test tests/gpu_timers_test.cpp)
+target_link_libraries(gpu_timers_test PRIVATE evo_gfx)
+target_compile_definitions(gpu_timers_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_test(NAME gpu_timers COMMAND gpu_timers_test)
+
+# The temporal upscaler on synthetic inputs, 64x36 -> 128x72: identity at equal sizes, a reset equal to the
+# spatial upsample, convergence on a static pattern, no ghost behind a moving bar, non-finite inputs, the
+# emission kept out of the history, the subpixel window; with synchronization validation.
+add_executable(upscale_test tests/upscale_test.cpp)
+target_link_libraries(upscale_test PRIVATE evo_post)
+evo_gpu_test(upscale upscale_test TIMEOUT 300 PROCESSORS 1)
+
+# The trace resolution through the renderer at 160x90 (and the tracer's subpixel window on an emitter quad):
+# the trace size, the window's first frame equal to an export at the same scale, seeks equal to a fresh
+# renderer below scale 1, a scale change resetting the history, and the GPU timers' passes.
+add_executable(trace_scale_test tests/trace_scale_test.cpp)
+target_link_libraries(trace_scale_test PRIVATE evo_render evo_modern)
+evo_gpu_test(trace_scale trace_scale_test)
+
+# --bench at 96x54: one JSON line per chapter with every key (GPU ms per pass, sizes, trace scale, device),
+# STUDIO NIGHT at the default trace scale and two chapters at scale 1; with the validation layer on.
+add_test(NAME bench
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/bench_test.py $<TARGET_FILE:Evolution> --validation)
+set_tests_properties(bench PROPERTIES TIMEOUT 300)
+
+# The seek determinism suite again at the window's default trace scale 0.67: jittered samples and the temporal
+# upscaler's history must reset with everything else (Review Focus 1).
+add_test(NAME seek_determinism_scaled COMMAND seek_determinism_test 0.67)
+set_tests_properties(seek_determinism_scaled PROPERTIES TIMEOUT 300 PROCESSORS 2)

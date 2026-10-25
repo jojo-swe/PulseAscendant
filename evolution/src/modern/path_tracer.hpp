@@ -23,6 +23,10 @@
 #include <optional>
 #include <vector>
 
+namespace evo::gfx {
+class GpuTimers;
+} // namespace evo::gfx
+
 namespace evo::modern {
 
 struct TraceSettings {
@@ -31,6 +35,12 @@ struct TraceSettings {
     bool nee = true;
     bool russianRoulette = true; // from bounce 3
     float clampIndirect = 64.f;  // luminance limit of a contribution after the first bounce
+    // The subpixel window (Task 4 of step 5, post::subpixelWindow): every sample of the frame is box-filtered
+    // over a window pixelFootprint wide (pixels, per axis, in (0, 1]) centred at the pixel centre plus
+    // pixelJitter; it must lie inside the pixel. The default is the whole pixel, step 4's box filter, byte
+    // for byte. The guides (depth, normal, motion) stay at the pixel centre.
+    std::array<float, 2> pixelJitter{0.f, 0.f};
+    std::array<float, 2> pixelFootprint{1.f, 1.f};
 };
 
 // Samples per trace dispatch: an export at many spp is split so that no dispatch runs long enough to trip a
@@ -122,6 +132,10 @@ public:
                const std::optional<Camera>& previousCamera, const TraceSettings& settings,
                gfx::Image* retroScreen, const TraceExtras& extras = {});
 
+    // GPU timer scopes for the TLAS build ("tlas") and the trace dispatches ("trace") of every later trace()
+    // (null: none). The timers must outlive the tracer's use of them.
+    void setTimers(gfx::GpuTimers* timers) { timers_ = timers; }
+
     GBuffer& gbuffer() { return gbuffer_; }
     std::uint32_t width() const { return width_; }
     std::uint32_t height() const { return height_; }
@@ -147,7 +161,8 @@ private:
     std::uint32_t width_ = 0, height_ = 0;
     TracerCapacity capacity_;
     Stats stats_{};
-    bool tracedThisFrame_ = false;           // reset by the ring's begin()
+    bool tracedThisFrame_ = false; // reset by the ring's begin()
+    gfx::GpuTimers* timers_ = nullptr;
     gfx::FrameRing::Subscription ringBegin_; // active while ring_ lives
 
     gfx::Image blackScreen_;
