@@ -28,6 +28,8 @@ Then regenerated after merging the Particles and Spheres scenes: only stream_dot
 Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the city, so stream_studio_ascent
 changed; every other output, the Studio's included, stayed byte for byte.
 Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
+Then regenerated for the 1993 screens (phosphor, BOOT, RETURN, REBOOT, the FINALE grid, PORTAL's prompt):
+boot_50, finale_50, portal_50, reboot_10, reboot_60, return_30, stream_finale and stream_studio_cut changed.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
