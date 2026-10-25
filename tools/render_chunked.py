@@ -96,8 +96,8 @@ def main():
                     '-i', str(listing), '-i', str(music), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy',
                     '-af', f'atrim=duration={length}', '-c:a', 'aac', '-b:a', '320k', '-ar', '48000',
                     '-movflags', '+faststart', '-metadata', f'title={show["title"]}',
-                    '-metadata', 'artist=jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo (Suno)',
-                    '-metadata', 'comment=Three acts. Music generated with Suno.', str(partial)], check=True)
+                    '-metadata', 'artist=jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo',
+                    '-metadata', 'comment=Three acts.', str(partial)], check=True)
     probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-count_packets', '-show_streams', '-show_format',
                                                 '-of', 'json', str(partial)]))
     video = next(s for s in probe['streams'] if s['codec_type'] == 'video')

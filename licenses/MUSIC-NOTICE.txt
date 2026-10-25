@@ -1,10 +1,8 @@
 Pulse Ascendant — music credits and provenance
 
-Three tracks were supplied by the project owner and generated with Suno.
-Artist metadata: joyolo.
+Three tracks by the artist joyolo, used with permission.
 
 Act I: Luminous Flow
-Suno ID: 1f52e6e8-5a07-45da-9c9b-09753a609eb3
 Original MP3 SHA-256:
 fd8c915c3d7a52cb3175b3ce84bceadf99405e6ea2efa675651838161a5adff3
 Runtime WAV SHA-256:
@@ -15,7 +13,6 @@ The first 299 decoded seconds are sample-identical to the source decode.
 A one-second equal-power fade ends at 300 seconds; playback speed is unchanged.
 
 Act II: Adventurous Uplift
-Suno ID: 29b80971-2988-41e1-b658-00291a06b4ae
 Original MP3 SHA-256:
 f82793aa129acfd5d9d8efbf15e67b08647666c09b615a38b99d4063855028d0
 Runtime WAV SHA-256:
@@ -25,7 +22,6 @@ Runtime: 13,916,160 stereo 48 kHz PCM16 frames (289.92 seconds).
 The complete supplied song is used at normal speed, without an added fade.
 
 Act III: Rigid Arpeggios
-Suno ID: 2a49b46a-28b5-40f9-b6e8-195ba877380a
 Original MP3 SHA-256:
 eab637ad1cd987632b1f76a6209c901a1fb2dcda683bcb6d4e4c00761349255d
 Runtime WAV SHA-256:
@@ -41,15 +37,12 @@ and SHA-256 are recorded in music/show-audio.json. Independent FFT analysis
 receipts are music/analysis.json, music/analysis-act2.json and
 music/analysis-act3.json.
 
-The tracks are included in this free, non-commercial demo at the project
-owner's request. Music is not covered by the code's MIT license and is not
+The tracks are included in this free, non-commercial demo with the artist's
+permission. Music is not covered by the code's MIT license and is not
 relicensed by this repository. No commercial or additional redistribution
-rights are granted here. Account tier and ownership have not been
-independently verified. Applicable creator rights and Suno terms remain in
-effect:
-https://suno.com/terms-of-service
+rights are granted here. All rights in the music remain with joyolo.
 
-Keep the original Suno provenance and credits. These tracks are separate
+Keep the original credits. These tracks are separate
 from Future Crew's original Second Reality soundtrack. Future Crew receives
 credit for the original 1993 demo, selected effect ideas and glenz geometry;
 the new supplied tracks are not presented as original Future Crew music.

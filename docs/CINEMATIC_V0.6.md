@@ -1,6 +1,6 @@
 # Pulse Ascendant v0.6 — on the beat, around the action
 
-The owner asked for a much stronger image, a camera that flies around the action with a blockbuster feel, a sense of speed for retention, and scene changes on the correct beat.
+Goals of this release: a much stronger image, a camera that flies around the action with a blockbuster feel, a sense of speed for retention, and scene changes on the correct beat.
 
 ## Beat-synced editing
 

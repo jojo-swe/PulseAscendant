@@ -1,6 +1,6 @@
 # Pulse Ascendant v0.3 — oberoende granskning
 
-Granskare: `two_act_review`, skrivskyddad granskning 2026-10-11. Användarens godkännandegräns: minst 7/10. Följande är granskarens slutrapport; videoexportens slutresultat redovisas separat i VERIFICATION.md.
+Skrivskyddad granskning 2026-10-11. Acceptansgräns: minst 7/10. Följande är granskarens slutrapport; videoexportens slutresultat redovisas separat i VERIFICATION.md.
 
 ---
 

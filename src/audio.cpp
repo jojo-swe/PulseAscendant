@@ -22,7 +22,7 @@ bool AudioPlayer::start(const std::filesystem::path& path,double expectedDuratio
  stream_=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&spec,callback,this);
  if(!stream_) {status_=std::string("SILENT MODE: ")+SDL_GetError();transport_.reset();return false;}
  if(!SDL_ResumeAudioStreamDevice(stream_)) {status_=SDL_GetError();stop();return false;}
- status_="PULSE ASCENDANT / THREE TRACKS / SUNO";return true;
+ status_="PULSE ASCENDANT / THREE TRACKS / JOYOLO";return true;
 }
 void SDLCALL AudioPlayer::callback(void* userdata,SDL_AudioStream* stream,int additional,int) {
  auto& p=*static_cast<AudioPlayer*>(userdata);

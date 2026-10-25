@@ -141,7 +141,7 @@ Chapter cuts land on tracked beats within ±2.5 seconds of editorial targets, pr
 
 These checks cover the documented builds and samples; physical Linux hardware RT and full-show audience retention remain unverified. See the [verification report](docs/VERIFICATION.md), [independent review](docs/QUALITY_REVIEW.md) and [release checksums](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/SHA256SUMS.txt).
 
-> **Film status:** the v0.5 1080p60 preview is available now. The full v0.5 4K60 export is complete and verified; YouTube publication is pending the earlier upload limit. Earlier YouTube videos show earlier versions: [v0.4 Short](https://youtube.com/shorts/uOhjmoLY6DI) · [v0.3 full film](https://youtu.be/b5ShsKNC7KM).
+> **Film status:** the v0.5 1080p60 preview is available now. The full v0.5 4K60 export is complete and verified. Earlier YouTube videos show earlier versions: [v0.4 Short](https://youtube.com/shorts/uOhjmoLY6DI) · [v0.3 full film](https://youtu.be/b5ShsKNC7KM).
 
 ## Make it your own
 
@@ -240,7 +240,7 @@ The native `--render-stream --fps N` option writes bottom-up RGB24 to stdout and
 
 Khronos Vulkan headers carry Apache-2.0 and MIT notices; the applicable notices and Apache license text are bundled under `licenses/`.
 
-New code uses the [MIT license](LICENSE); SDL uses its zlib license and bundled notices. **Music is not MIT-licensed.** Luminous Flow, Adventurous Uplift and Rigid Arpeggios were generated with Suno, carry artist metadata **joyolo**, and were supplied and requested for publication by the project owner. Their applicable rights remain separate. See [music credits and source hashes](licenses/MUSIC-NOTICE.txt), the receipts in `music/`, and [Suno's terms](https://suno.com/terms-of-service).
+New code uses the [MIT license](LICENSE); SDL uses its zlib license and bundled notices. **Music is not MIT-licensed.** Luminous Flow, Adventurous Uplift and Rigid Arpeggios are by the artist **joyolo** and are used with permission. Their rights remain with the artist. See [music credits and source hashes](licenses/MUSIC-NOTICE.txt) and the receipts in `music/`.
 
 <div align="center">
 

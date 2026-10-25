@@ -52,7 +52,7 @@ The shader uses bounded nearest-cell repetition for finite arrays, guarded
 radial folding, conservative distances for warped helix geometry, a maximum
 112 marching steps (72 in retro mode), and eight shadow steps. These are source
 properties; compilation, GPU images, and measured performance must be recorded
-separately by the integrating agent.
+separately by the integrator.
 
 ## Finish and distance-field correction
 

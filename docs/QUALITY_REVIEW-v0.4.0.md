@@ -1,6 +1,6 @@
 # Pulse Ascendant v0.4 — oberoende variationsgranskning
 
-Skrivskyddad granskare: variation_review, 2026-10-12. Baseline `01a26a8aa1d2a3860148c8551080fe5ec549aeef`. Historisk rapport bevaras i [QUALITY_REVIEW-v0.3.0.md](QUALITY_REVIEW-v0.3.0.md).
+Skrivskyddad granskning, 2026-10-12. Baseline `01a26a8aa1d2a3860148c8551080fe5ec549aeef`. Historisk rapport bevaras i [QUALITY_REVIEW-v0.3.0.md](QUALITY_REVIEW-v0.3.0.md).
 
 ## Granskarens slutrapport
 

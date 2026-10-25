@@ -118,7 +118,7 @@
     }
   ],
   "format": {
-    "filename": "C:\\Users\\johnj\\Documents\\Codex\\2026-10-11\\anv-nd-https-github-com-morluto\\SecondRealityRemix-Public\\dist\\variation\\frame-rounding-regression-30-v2.rendering.mp4",
+    "filename": "<workdir>\\dist\\variation\\frame-rounding-regression-30-v2.rendering.mp4",
     "nb_streams": 2,
     "nb_programs": 0,
     "nb_stream_groups": 0,
@@ -134,9 +134,9 @@
       "minor_version": "512",
       "compatible_brands": "isomiso2avc1mp41",
       "title": "PULSE ASCENDANT",
-      "artist": "jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo (Suno)",
+      "artist": "jojo-swe; music: Luminous Flow, Adventurous Uplift and Rigid Arpeggios / joyolo",
       "encoder": "Lavf62.3.100",
-      "comment": "Three playable acts. Music generated with Suno."
+      "comment": "Three playable acts."
     }
   }
 }

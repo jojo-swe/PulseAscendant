@@ -4,7 +4,7 @@
   "source_hash": "ea90f1ad65252a6714c338541416448e87861b8c683cada01f53b06aa91e17b1",
   "duration": 32.0,
   "fps": 60,
-  "music": "Rigid Arpeggios / joyolo (Suno)",
+  "music": "Rigid Arpeggios / joyolo",
   "music_start": 70.0,
   "cuts": [
     0.0,
@@ -161,9 +161,9 @@
         "minor_version": "512",
         "compatible_brands": "isomiso2avc1mp41",
         "title": "PULSE ASCENDANT / 16 worlds. One pulse.",
-        "artist": "jojo-swe; music: Rigid Arpeggios / joyolo (Suno)",
+        "artist": "jojo-swe; music: Rigid Arpeggios / joyolo",
         "encoder": "Lavf62.3.100",
-        "comment": "Three playable acts. Music generated with Suno."
+        "comment": "Three playable acts."
       }
     }
   }

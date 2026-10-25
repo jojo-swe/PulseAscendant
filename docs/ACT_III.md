@@ -43,7 +43,7 @@ resets at the boundary; the audio transport and integrated motion clock remain
 continuous. Export bounds use the measured final sample count.
 
 [The source receipt](../music/asset-receipt-act3.json) records the original MP3,
-runtime WAV and Suno provenance. Music rights are separate from the code's MIT
+runtime WAV and provenance. Music rights are separate from the code's MIT
 license; see [the music notice](../licenses/MUSIC-NOTICE.txt).
 
 See [the variation rework](VARIATION_REWORK.md) and [verification](VERIFICATION.md)

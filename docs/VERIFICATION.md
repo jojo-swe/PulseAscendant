@@ -41,11 +41,9 @@ Independent review: code 8.0/10, visual finish 7.2/10, sampled pace/readability 
 
 A 160.75-second preview contains 13 native clips with their original source music, 1920×1080 at 60 fps and 9645 frames. Full video decode to EOF passed. All 13 decoded audio windows match their source excerpts with at most 2 ms allowed offset; [actual results](evidence/v0.5.0/preview-audio.json) show zero measured offset. Concatenating individually encoded AAC clips initially introduced 21.375 ms; the final preview rebuilds one sample-exact PCM montage and encodes its audio once. Native video packets are retained and their starting timestamp normalized.
 
-## Full film and publication
+## Full film
 
-The owner resumed the v0.5 full 4K60 render, which is now complete and verified. YouTube publication remains pending. Do not reuse the verified v0.4 movie as v0.5. The owner explicitly superseded its queued upload with this revision.
-
-YouTube previously refused a new main upload because of its daily upload limit. No new main ID was created. The automatic completion follow-up is ACTIVE following the owner's resumption; it must not publish the superseded v0.4 film. The old public main remains until the new full movie is published, then will be made unlisted with a redirect. Existing older public trailers are labeled as older versions.
+The v0.5 full 4K60 render is complete and verified. The verified v0.4 movie is not reused as v0.5. Existing older public trailers are labeled as older versions.
 
 ## Completed full 4K60 export
 
