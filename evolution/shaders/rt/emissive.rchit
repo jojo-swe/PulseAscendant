@@ -14,6 +14,9 @@
 // from frame to frame (it boiled in the window at 1 spp), and an export averages the same four taps, so the
 // window still equals an export. Defocus (the lens point) still blurs it. Primary emission bypasses MIS and
 // NEE (which reads the picture at kDiffuseTextureLod), so this changes neither estimator.
+//
+// A thin-walled material with the retro texture is the same screen seen from behind: it glows towards its
+// back only and is otherwise a clear pane.
 
 #include "hit.glsl"
 #include "screen.glsl"
@@ -92,7 +95,12 @@ void main() {
     HitPoint h = hitPoint();
     Material m = h.material;
     vec3 emission = materialEmission(m);
-    if (m.texture == kRetroScreenTexture) {
+    if (m.texture == kRetroScreenTexture && (m.flags & kMaterialThinWalled) != 0u) {
+        // The screen seen from behind (a camera inside the picture, Studio's PORTAL and REBOOT): thin glass
+        // whose picture glows only towards its back, mirrored as a picture seen through its glass is; where
+        // it is black the glass is clear and the room shows through (the raygen passes the thin pane).
+        emission = h.front ? vec3(0.0) : retroScreenPicture(h.uv, screenTextureLod(h)) * m.emissionScale;
+    } else if (m.texture == kRetroScreenTexture) {
         float lod = screenTextureLod(h);
         bool primary = payload.coneSpread >= 0.0 && payload.coneWidth == 0.0;
         emission = (primary ? primaryScreenPicture(h, lod) : retroScreenPicture(h.uv, lod)) * m.emissionScale;

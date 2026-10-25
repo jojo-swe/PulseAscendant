@@ -1,6 +1,7 @@
 #include "render/compositor.hpp"
 
 #include "gfx/paths.hpp"
+#include "render/crt_view.hpp"
 #include "show/director.hpp"
 
 #include <array>
@@ -9,7 +10,8 @@ namespace evo::render {
 
 namespace {
 
-// Must match the push_constant block of shaders/crt.comp and shaders/composite.comp (32 bytes).
+// Must match the push_constant block of shaders/crt.comp (48 bytes); shaders/composite.comp declares the
+// first 32 bytes.
 struct CompositorPushConstants {
     std::uint32_t width;
     std::uint32_t height;
@@ -19,8 +21,10 @@ struct CompositorPushConstants {
     std::uint32_t transition; // a show::Transition value
     std::uint32_t crt;        // 0 = plain pillarbox
     std::uint32_t visible;    // kRetroVisible | kModernVisible
+    float zoom, fill;         // crtView: the picture's magnification near a Portal's glass
+    float centreX, centreY;
 };
-static_assert(sizeof(CompositorPushConstants) == 32);
+static_assert(sizeof(CompositorPushConstants) == 48);
 
 constexpr std::array<gfx::Binding, 2> kCrtBindings = {
     gfx::Binding{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
@@ -78,6 +82,7 @@ void Compositor::render(VkCommandBuffer cmd, gfx::Image& retro, gfx::Image& mode
                         const show::TimelineFrame& frame, bool crt, std::uint32_t visible,
                         std::span<const text::Item> overlay) {
     const VkExtent2D size = output_.extent();
+    const CrtView view = crtView(frame);
     const CompositorPushConstants push{size.width,
                                        size.height,
                                        show::holdsModern(frame) ? 1.f : frame.era,
@@ -85,7 +90,11 @@ void Compositor::render(VkCommandBuffer cmd, gfx::Image& retro, gfx::Image& mode
                                        show::eraFlash(frame),
                                        static_cast<std::uint32_t>(frame.transition),
                                        crt ? 1u : 0u,
-                                       visible & (kRetroVisible | kModernVisible)};
+                                       visible & (kRetroVisible | kModernVisible),
+                                       view.zoom,
+                                       view.fill,
+                                       view.centre[0],
+                                       view.centre[1]};
 
     // Without the retro bit the screen is never read: no CRT pass (the retro image may be stale).
     if ((visible & kRetroVisible) != 0) {

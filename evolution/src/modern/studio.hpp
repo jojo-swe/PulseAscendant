@@ -27,25 +27,59 @@ namespace evo::modern {
 // top right, bottom right, bottom left.
 std::array<Vec3, 4> studioScreenCorners();
 
+// The four lenses (36 mm equivalent), as horizontal fields of view in degrees: 24 mm for interiors, 35 mm
+// the Studio's default, 50 mm the CRT close-ups, 85 mm compression shots. lensFovY gives a lens's vertical
+// field of view on the 16:9 frame (what Camera takes).
+inline constexpr float kLens24 = 73.f, kLens35 = 54.f, kLens50 = 40.f, kLens85 = 24.f;
+float lensFovY(float horizontalDegrees);
+
 // A camera shot of a Studio chapter: from start to end in seconds into the chapter.
 struct StudioShot {
     float start, end;
 };
-// The shots of a chapter in order; they cover [0, chapterDuration]. STUDIO NIGHT cuts at its accent.
+// The shots of a chapter in order; they cover [0, chapterDuration]. A new shot resets the history: PORTAL
+// at its two glass crossings (D and the bar line two bars on), RETURN at its cut to the close-up (D); every
+// other Studio chapter is one shot.
 std::vector<StudioShot> studioShots(const show::TimelineFrame& frame);
 
-// The camera of a Studio chapter's frame: a pure function of the chapter's effect, localSeconds,
-// chapterDuration and accentSeconds. Each shot runs Catmull-Rom through authored keys with smoothstep
-// easing over the shot; `shot` is the index of the shot in studioShots (a change resets the history).
-//   FINALE, PORTAL  one shot: a slow pull from the screen out to a wide view of the desk (step 6 replaces
-//                   PORTAL's with the path out of the screen)
-//   STUDIO NIGHT    shot 0 until the accent: a wide dolly across the dark room towards the desk; shot 1 from
-//                   the accent: a close orbit around the monitor
-//   RETURN          one shot: a slow push back towards the screen
-//   REBOOT          one shot: a close-up of the screen, drifting slightly
-// Any other effect gets REBOOT's close-up. Every shot but STUDIO NIGHT's dolly is about the screen: it
-// focuses on the screen's plane with an aperture of at most 4 mm, so the CRT's picture stays sharp.
+// The camera of a Studio chapter's frame, a pure function of the show time. The moves are authored in show
+// seconds from the chapters' transition marks, Catmull-Rom through timed keys with eased ends, on the four
+// lenses, plus the handheld (studioHandheld) where a chapter has it:
+//   FLYBY         the pull back out of the CRT: before D, the approach and the pull-out crt.comp shows on the
+//                 full-frame 1993 picture (studioScreenSpan); from D the room, 1.2 m out by A + 1 s, then
+//                 one slow arc to the CRT in profile;
+//   FINALE        35 mm, 1.5 m from the CRT, handheld; closing in over the last bar, into PORTAL;
+//   PORTAL        the palindrome: the dolly into the CRT, through the glass on D into the 1993 starfield,
+//                 a turn centred on the accent that sees the room through the back of the glass,
+//                 out through the glass two bars after D, and back into the room to STUDIO NIGHT's first
+//                 frame;
+//   STUDIO NIGHT  the dolly that never stops, on from PORTAL: back to the night wide, round behind the chair
+//                 in the moonbeam to the window by D - 4 bars, tilting up to the sky, through the pane on
+//                 the accent;
+//   RETURN        from outside the window down into the lamp-lit room, then a cut on D to the CRT close-up
+//                 (50 mm, pushing in from 65 to 40 cm by the join), which REBOOT holds and dollies in from
+//                 D - 4 bars through the glass on D.
+// Shots that show the screen focus on its plane with an aperture of at most 4 mm.
 Camera studioCamera(const show::TimelineFrame& frame);
+
+// How much of the 16:9 frame's width the screen spans in the camera's view on the 35 mm lens: the picture's
+// size as crt.comp shows it before FLYBY's glass, so that the 1993 frame on D - 1/60 s and the Studio's on D
+// match (1.02: the picture just fills the frame on D; 0.75: the full-frame pillarbox).
+float studioScreenSpan(const show::TimelineFrame& frame);
+
+// The handheld micro-jitter of the Studio's cameras at a show time: three incommensurate sines and a hashed
+// wander per channel, 0.4 - 1.1 Hz, rotating at most kHandheldDegrees and moving at most kHandheldMetres
+// (offset: right, up, back in the camera's frame); 0 within 0.5 s of every glass time (studioGlassTimes),
+// easing back in over the next second. A pure function of the time.
+inline constexpr float kHandheldDegrees = 0.12f, kHandheldMetres = 0.002f;
+struct StudioHandheld {
+    Vec3 offset{0, 0, 0};
+    float yaw = 0, pitch = 0, roll = 0;
+};
+StudioHandheld studioHandheld(double showSeconds);
+// The show times at which a Studio camera passes a glass: FLYBY's D, PORTAL's D and two bars on, STUDIO
+// NIGHT's window pane (its accent) and REBOOT's D.
+std::vector<double> studioGlassTimes();
 
 // The exposure (EV, applied before the tonemap) of a Studio chapter: chosen per chapter by eye, so that the
 // room reads as a dark room lit by the CRT (and the lamp, where the rig has it on) and the screen's brightest
@@ -63,8 +97,10 @@ EnvironmentDesc studioEnvironment();
 // A chapter's light rig (Task 14 of step 5): the lamp's level (0 off, 1 full) and the screen's
 // emissionScale. The frame's material table carries them (SceneFrame::materials), and the lights' emissions
 // follow from it.
-//   STUDIO NIGHT    the lamp off, the screen 8: the CRT is the key light, the moonbeam the fill (3.5 left the nearly black DOS screen too weak against the moon)
-//   FINALE, PORTAL  the lamp at 0.2, the screen 2.4: the megamix lights the room (3.0 needed an
+//   FLYBY           the lamp off, the screen 2.4: the room is revealed lit by phosphor and moon
+//   STUDIO NIGHT    the lamp off, the screen 8: the CRT is the key light, the moonbeam the fill (3.5 left the
+//   nearly black DOS screen too weak against the moon) FINALE, PORTAL  the lamp at 0.2, the screen 2.4: the
+//   megamix lights the room (3.0 needed an
 //                   exposure that left the wide shots black once the screen's colours stayed saturated)
 //   RETURN, REBOOT  the lamp on (1), the screen 1.5: the lamp coming back on is a story beat
 // Any other effect gets RETURN's rig.
@@ -73,6 +109,18 @@ struct StudioRig {
     float screen;
 };
 StudioRig studioRig(show::Effect effect);
+
+// The rig and the exposure a frame actually uses: its chapter's (studioRig, studioExposureEV), but where a
+// take runs on across a change, eased between them so that nothing pops:
+//   FLYBY         the exposure opens from the picture's own brightness on the glass (D) to the room's by
+//                 A + 0.5 s (and closes down to it over the approach before D, where only crt.comp shows);
+//   PORTAL        behind the glass (D to the accent) the rig and the exposure ease to STUDIO NIGHT's, which
+//                 the camera lands in on 194.00: the room brightens beyond the glass as the camera turns to
+//                 it;
+//   RETURN        0.8 EV more open until its cut on D, coming in from the dawn outside; over its last bar the
+//                 exposure eases to REBOOT's, across the act's join.
+StudioRig studioRigAt(const show::TimelineFrame& frame);
+float studioExposureAt(const show::TimelineFrame& frame);
 
 class Studio final : public ModernScene {
 public:
@@ -114,6 +162,10 @@ public:
     static constexpr Vec3 kChromeAt{0.235f, 0.75f, -0.11f}, kGlassAt{-0.33f, 0.75f, -0.27f};
     // The indices of the rigged and the camera-only materials in the material tables.
     static constexpr std::uint32_t kScreenMaterial = 7, kLampMaterial = 22, kLedMaterial = 12;
+    // The screen seen from behind: thin glass with the picture at kScreenBackLevel of the rig's screen level
+    // (the phosphor seen through its backing, so the room shows through it).
+    static constexpr std::uint32_t kScreenBackMaterial = 34;
+    static constexpr float kScreenBackLevel = 0.15f;
 
     const SceneStatic& staticScene() const override { return static_; }
     // The fixed room with the chapter's camera, exposure, light rig (materials and lights) and sky.
@@ -123,10 +175,25 @@ public:
     bool samplesRetro() const override { return true; }
     std::string nowCard(show::Effect effect) const override;
 
+    // How many of FLYBY's 1993 stars hang behind the screen (kFlybyStars).
+    static constexpr std::uint32_t kStarCount = 512;
+
 private:
+    // The room as a camera behind the screen sees it (studioBehindScreen): the monitor's body gone, the
+    // screen thin glass seen from behind, a dark box round the camera open only through the screen, and the
+    // stars in it.
+    void buildBehindScreen();
+
     SceneStatic static_;
     std::vector<SceneInstance> instances_;
+    std::vector<SceneInstance> behindInstances_;
+    std::vector<std::uint32_t> behindHidden_; // the monitor's foot, body and housing
+    std::uint32_t screenInstance_ = 0;
     std::vector<rt::RectLight> lights_;
 };
+
+// Whether a camera is behind the screen's glass (PORTAL's and REBOOT's crossings): its eye behind the
+// screen's plane, within the monitor's width and height. The Studio then shows the inside of the picture.
+bool studioBehindScreen(const Camera& camera);
 
 } // namespace evo::modern

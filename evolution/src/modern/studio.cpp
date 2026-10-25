@@ -1,10 +1,14 @@
 #include "modern/studio.hpp"
 
 #include "modern/mesh_builder.hpp"
+#include "show/cues.hpp"
+#include "show/era.hpp"
+#include "show/music_curves.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <numbers>
 #include <span>
 #include <stdexcept>
@@ -59,8 +63,8 @@ constexpr float kMoonDistance = 4.f, kMoonSize = 0.18f;
 
 // Contributions after a rough vertex above this luminance are clamped (TraceSettings::clampIndirect; the
 // integrator's own default is 16, the Studio keeps the tighter value its look was tuned with); at the
-// Studio's exposures (EV 0.3 to 2) step 4's 2 left lamp-lit surfaces sparkling at export spp (no a-trous from 16 spp), while 0.5 barely moves their mean (0.143 ->
-// 0.142 in RETURN's close-up).
+// Studio's exposures (EV 0.3 to 2) step 4's 2 left lamp-lit surfaces sparkling at export spp (no a-trous from
+// 16 spp), while 0.5 barely moves their mean (0.143 -> 0.142 in RETURN's close-up).
 constexpr float kClampIndirect = 0.5f;
 
 // --- Small helpers -----------------------------------------------------------------------------------------
@@ -185,10 +189,13 @@ enum Material : std::uint32_t {
     kConcreteWall,
     kBuilding,
     kCityWindow,
+    kVoid,
+    kScreenBack,
+    kStar,
     kMaterialCount
 };
 static_assert(kScreenGlass == Studio::kScreenMaterial && kLampEmitter == Studio::kLampMaterial &&
-              kPowerLed == Studio::kLedMaterial);
+              kPowerLed == Studio::kLedMaterial && kScreenBack == Studio::kScreenBackMaterial);
 
 std::vector<rt::Mesh> buildMeshes() {
     std::vector<rt::Mesh> meshes(kMeshCount);
@@ -357,6 +364,25 @@ std::vector<rt::Material> buildMaterials(StudioRig rig) {
     setColor(m[kCityWindow].emission, {1.f, 0.72f, 0.42f});
     m[kCityWindow].emissionScale = 0.6f;
     m[kCityWindow].flags = rt::kMaterialCameraOnlyEmission;
+    // Behind the screen (PORTAL's and REBOOT's crossings): the dark the 1993 stars hang in, reflecting
+    // nothing, with the faintest blue glow (seen only, lighting nothing: the volume of nothing has a colour
+    // in 2026); the screen seen from behind, thin glass that shows the picture, dimmed, as an emission mask
+    // (black is clear: emissive.rchit) and lets the room through; the stars, emissive spheres (their colour
+    // times emission is the radiance).
+    m[kVoid] = plastic({0.f, 0.f, 0.f}, 1.f);
+    m[kVoid].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
+    setColor(m[kVoid].emission, {0.35f, 0.45f, 1.f});
+    m[kVoid].emissionScale = 0.0026f;
+    m[kVoid].flags = rt::kMaterialCameraOnlyEmission;
+    m[kScreenBack] = plastic({0.8f, 0.86f, 0.83f}, 0.f);
+    m[kScreenBack].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
+    m[kScreenBack].texture = rt::kRetroScreenTexture;
+    m[kScreenBack].emissionScale = Studio::kScreenBackLevel * rig.screen;
+    m[kScreenBack].transmission = 1.f;
+    m[kScreenBack].ior = 1.5f;
+    m[kScreenBack].flags = rt::kMaterialThinWalled;
+    m[kStar] = plastic({0.f, 0.f, 0.f}, 1.f);
+    m[kStar].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
     return m;
 }
 
@@ -421,75 +447,357 @@ std::vector<Key> keyboardLayout() {
 }
 
 // --- Cameras -----------------------------------------------------------------------------------------------
+//
+// Every Studio move is authored in show seconds, so that a move can run across a chapter join (FINALE into
+// PORTAL into STUDIO NIGHT, RETURN into REBOOT) without a seam. A path is a list of timed keys: the eye, and
+// the view as yaw (0 looks along -z, 90 along +x), pitch (up) and roll, in degrees. Between keys it is a
+// cubic Hermite with Catmull-Rom tangents from the neighbouring keys (non-uniform: divided by their time
+// apart); the first and last key of a path, and every key marked `rest`, have zero velocity, so a move
+// eases in and out like a smoothstep. Yaw is unwrapped (PORTAL's turn runs past 360).
 
-struct Key3 {
-    Vec3 eye, target;
+struct Pose {
+    Vec3 eye;
+    float yaw = 0, pitch = 0, roll = 0;
 };
 
-float smooth(float t) {
-    t = std::clamp(t, 0.f, 1.f);
-    return t * t * (3.f - 2.f * t);
+struct PoseKey {
+    double t;
+    Pose pose;
+    bool rest = false;
+};
+
+constexpr float kDegrees = kPi / 180.f;
+
+Vec3 forwardOf(float yaw, float pitch) {
+    const float y = yaw * kDegrees, p = pitch * kDegrees;
+    return {std::sin(y) * std::cos(p), std::sin(p), -std::cos(y) * std::cos(p)};
 }
 
-Vec3 catmullRom(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, float t) {
-    const float t2 = t * t, t3 = t2 * t;
-    return 0.5f * ((2.f * p1) + (p2 - p0) * t + (2.f * p0 - 5.f * p1 + 4.f * p2 - p3) * t2 +
-                   (3.f * p1 - p0 - 3.f * p2 + p3) * t3);
+// The yaw and pitch that look from eye at target.
+Pose look(Vec3 eye, Vec3 target, float roll = 0) {
+    const Vec3 d = normalize(target - eye);
+    return {eye, std::atan2(d.x, -d.z) / kDegrees, std::asin(std::clamp(d.y, -1.f, 1.f)) / kDegrees, roll};
 }
 
-// The keys at s in [0, 1] along a Catmull-Rom spline through them (the ends repeated).
-Key3 alongKeys(std::span<const Key3> keys, float s) {
-    const int n = static_cast<int>(keys.size());
-    if (n == 1)
-        return keys[0];
-    const float x = std::clamp(s, 0.f, 1.f) * static_cast<float>(n - 1);
-    const int i = std::min(static_cast<int>(x), n - 2);
-    const float t = x - static_cast<float>(i);
-    const auto at = [&](int k) { return keys[std::clamp(k, 0, n - 1)]; };
-    return {catmullRom(at(i - 1).eye, at(i).eye, at(i + 1).eye, at(i + 2).eye, t),
-            catmullRom(at(i - 1).target, at(i).target, at(i + 1).target, at(i + 2).target, t)};
+// A pose's numbers, so that the path interpolates them alike.
+using PoseVector = std::array<float, 6>;
+PoseVector pack(const Pose& p) {
+    return {p.eye.x, p.eye.y, p.eye.z, p.yaw, p.pitch, p.roll};
+}
+Pose unpack(const PoseVector& v) {
+    return {{v[0], v[1], v[2]}, v[3], v[4], v[5]};
+}
+
+Pose alongPath(std::span<const PoseKey> keys, double t) {
+    const std::size_t n = keys.size();
+    if (t <= keys.front().t)
+        return keys.front().pose;
+    if (t >= keys.back().t)
+        return keys.back().pose;
+    std::size_t i = 0;
+    while (i + 2 < n && t >= keys[i + 1].t)
+        ++i;
+    const auto tangent = [&](std::size_t k) {
+        PoseVector m{};
+        if (k == 0 || k + 1 == n || keys[k].rest)
+            return m;
+        const PoseVector a = pack(keys[k - 1].pose), b = pack(keys[k + 1].pose);
+        const auto span = static_cast<float>(keys[k + 1].t - keys[k - 1].t);
+        for (std::size_t c = 0; c < m.size(); ++c)
+            m[c] = (b[c] - a[c]) / span;
+        return m;
+    };
+    const auto h = static_cast<float>(keys[i + 1].t - keys[i].t);
+    const auto s = static_cast<float>((t - keys[i].t) / (keys[i + 1].t - keys[i].t));
+    const float s2 = s * s, s3 = s2 * s;
+    const float h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+    const PoseVector p0 = pack(keys[i].pose), p1 = pack(keys[i + 1].pose);
+    const PoseVector m0 = tangent(i), m1 = tangent(i + 1);
+    PoseVector out{};
+    for (std::size_t c = 0; c < out.size(); ++c)
+        out[c] = h00 * p0[c] + h10 * h * m0[c] + h01 * p1[c] + h11 * h * m1[c];
+    return unpack(out);
 }
 
 Vec3 screenCentre() {
     return {0.f, kScreenCentreY, kScreenZ};
 }
+// A point relative to the screen's centre.
+Vec3 fromScreen(float x, float y, float z) {
+    return screenCentre() + Vec3{x, y, z};
+}
 
-Camera makeCamera(const Key3& key, float fov, float aperture, std::uint32_t shot) {
+// The landmarks of the Studio's chapters in show seconds (transitionMarks), found once.
+struct ChapterMarks {
+    double start = 0, end = 0, accent = 0, downbeat = 0, bar = 2;
+    double twoBarsOn = 0; // the tracked bar line two bars after D (PORTAL's way out)
+};
+struct Landmarks {
+    ChapterMarks flyby, finale, portal, night, ret, reboot;
+};
+
+ChapterMarks marksOf(show::Effect effect) {
+    for (int c = 0; c < show::chapterCount(); ++c) {
+        if (show::cues[static_cast<std::size_t>(c)].effect != effect)
+            continue;
+        const show::TimelineFrame head = show::sampleTimeline(show::chapterStart(c));
+        const show::TransitionMarks m = show::transitionMarks(head);
+        const show::BeatGridView grid = show::beatGrid(head.track);
+        const double offset = show::trackStart(head.track);
+        const double twoBarsOn = grid.beatTime(grid.beatAt(m.downbeat - offset + 1e-9) + 8) + offset;
+        return {show::chapterStart(c), show::chapterStart(c + 1), m.accent, m.downbeat, m.bar, twoBarsOn};
+    }
+    throw std::logic_error("the show has no chapter for a Studio effect");
+}
+
+const Landmarks& landmarks() {
+    static const Landmarks marks{marksOf(show::Effect::Flyby),  marksOf(show::Effect::Finale),
+                                 marksOf(show::Effect::Portal), marksOf(show::Effect::StudioNight),
+                                 marksOf(show::Effect::Return), marksOf(show::Effect::Reboot)};
+    return marks;
+}
+
+// The distance from the screen's plane at which the picture spans kFillSpan of the frame's width on the 35 mm
+// lens: where FLYBY's pull-out crosses the glass (its first frame matches crt.comp's last, studioScreenSpan).
+constexpr float kFillSpan = 1.02f;
+float fillDistance() {
+    return 0.5f * kScreenWidth / (kFillSpan * std::tan(0.5f * kLens35 * kDegrees));
+}
+// The pillarbox distance: the picture spans 3/4 of the 16:9 frame's width, as crt.comp shows it full frame.
+float pillarboxDistance() {
+    return fillDistance() * kFillSpan / 0.75f;
+}
+
+// FLYBY: the pull back out of the CRT. Before D the 1993 picture is full frame and
+// crt.comp shows the camera's approach on it (studioScreenSpan): from the pillarbox distance at D - 2 bars it
+// eases in to six times closer by D - 0.5 s, where the beam and the grille resolve, then pulls back; on D
+// the Studio takes over at the glass with the picture filling the frame, and the pull continues out to
+// 1.2 m by A + 1 s: the room is revealed on the accent. From D + 1 bar one slow arc round the desk to the
+// right ends on the CRT in profile, the 1993 ship still flying on it.
+std::vector<PoseKey> flybyKeys() {
+    const ChapterMarks& m = landmarks().flyby;
+    const float fill = fillDistance(), pillarbox = pillarboxDistance();
+    const Vec3 c = screenCentre();
+    const Vec3 monitor{0.f, 1.02f, -0.42f}; // the arc's aim: the monitor's body
+    std::vector<PoseKey> keys = {
+        {m.downbeat - 2 * m.bar, look(fromScreen(0, 0, pillarbox), c), true},
+        {m.downbeat - 0.5, look(fromScreen(0, 0, pillarbox / 6.f), c), true},
+        {m.downbeat, look(fromScreen(0, 0, fill), c)},
+        {m.accent + 1.0, look(fromScreen(0.1f, 0.07f, 1.2f), fromScreen(0.02f, -0.02f, 0.f)), true},
+        {m.downbeat + 1 * m.bar, look(fromScreen(0.1f, 0.07f, 1.2f), fromScreen(0.02f, -0.02f, 0.f)), true},
+    };
+    // The arc: round the monitor's body to the right, rising a little, closing in to a three-quarter profile.
+    const double arcStart = m.downbeat + m.bar, arcEnd = m.end;
+    const Vec3 pivot{0.f, 1.02f, -0.42f};
+    for (int k = 1; k <= 3; ++k) {
+        const float f = static_cast<float>(k) / 3.f;
+        const float azimuth = (6.f + 66.f * f) * kDegrees, radius = 1.33f - 0.28f * f;
+        const Vec3 eye{pivot.x + radius * std::sin(azimuth), 1.27f + 0.05f * f,
+                       pivot.z + radius * std::cos(azimuth)};
+        keys.push_back({arcStart + (arcEnd - arcStart) * f, look(eye, monitor + Vec3{0.f, 0.03f * f, 0.f})});
+    }
+    keys.back().rest = true;
+    return keys;
+}
+
+// FINALE, PORTAL and the start of STUDIO NIGHT: one take across both joins.
+//   FINALE       35 mm, 1.5 m from the CRT, handheld; it closes in over the last bar, into PORTAL;
+//   PORTAL S0    the dolly into the CRT as the handheld fades: the screen fills the frame by D - 0.5 s and
+//                the camera crosses the glass on D (shot 1 from D, on a 24 mm lens);
+//   inside       the 1993 flyby's starfield as 2026 stars, in the dark behind the screen. The camera turns
+//                right, fastest on the accent: half way round it faces the back of the CRT's glass, the
+//                room hanging in space beyond it, then drifts back to the glass sideways and crosses it
+//                outward on the bar two bars after D (shot 2, 35 mm);
+//   out          still turning, it pulls back from the screen into the room and lands on STUDIO NIGHT's
+//                opening wide on 194.00, the act's join;
+//   STUDIO NIGHT the dolly that never stops: on back to the night wide, round to the left behind the chair
+//                in the moonbeam towards the window (by D - 4 bars), a tilt up to the sky as it nears the
+//                pane, through the pane on the accent, and on out over the town.
+std::vector<PoseKey> portalKeys() {
+    const Landmarks& l = landmarks();
+    const ChapterMarks &finale = l.finale, &portal = l.portal, &night = l.night;
+    const Vec3 c = screenCentre();
+    const double in = portal.downbeat, out = portal.twoBarsOn;
+    const Pose wide = look({0.16f, 1.22f, kScreenZ + 1.49f}, fromScreen(0.04f, -0.09f, 0.f));
+    std::vector<PoseKey> keys = {
+        {finale.start, wide, true},
+        {finale.end - finale.bar, wide, true},
+        {portal.start + 1.25, look(fromScreen(0.1f, 0.07f, 1.08f), fromScreen(0.02f, -0.02f, 0.f))},
+        {in - 2 * portal.bar, look(fromScreen(0.03f, 0.02f, 0.62f), c)},
+        {in - 0.5, look(fromScreen(0.f, 0.f, 0.21f), c)},
+        // The glass on D, already turning a little; the turn's fastest part on the accent.
+        {in, {fromScreen(0.f, 0.f, 0.f), 8.f, 0.f, 0.f}},
+        {in + 0.5, {fromScreen(0.012f, 0.004f, -0.15f), 55.f, 1.f, -2.f}},
+        {portal.accent, {fromScreen(0.05f, 0.01f, -0.29f), 135.f, 2.f, -3.f}},
+        // Facing the back of the glass, the room beyond it: the slowest part of the turn.
+        {in + portal.bar, {fromScreen(0.075f, 0.012f, -0.37f), 175.f, 1.f, -1.5f}},
+        {out - 1.02, {fromScreen(0.06f, 0.006f, -0.3f), 215.f, 0.f, 0.f}},
+        {out - 0.52, {fromScreen(0.02f, 0.f, -0.17f), 248.f, -1.f, 0.f}},
+        // Out through the glass sideways, still turning.
+        {out, {fromScreen(-0.04f, 0.f, 0.f), 268.f, -2.f, 0.f}},
+        {out + 0.83, {{-0.15f, 1.12f, 0.55f}, 330.f, -8.f, 0.f}},
+        // STUDIO NIGHT's first frame: the CRT on the right, the window's sill on the left.
+        {night.start, {{-0.25f, 1.15f, 1.05f}, 350.f, -9.f, 0.f}},
+        // The night wide, on back and low: the DOS prompt on the CRT, the moonbeam on the floor and the chair
+        // standing in it.
+        {night.start + 4.0, {{-0.25f, 0.95f, 3.3f}, 352.f, -8.f, 0.f}},
+        // Round to the left, behind the chair, towards the window.
+        {night.start + 6.3, {{-1.1f, 1.15f, 2.3f}, 366.f, -5.f, 0.f}},
+        {night.downbeat - 4 * night.bar, {{-1.45f, 1.3f, 1.2f}, 376.f, -2.f, 0.f}},
+        // Nearing the window, tilting up to the sky.
+        {night.downbeat - 1.5 * night.bar, {{-1.33f, 1.52f, -0.45f}, 372.f, 16.f, 0.f}},
+        {night.downbeat, {{-1.12f, 1.71f, -0.84f}, 368.f, 10.f, 0.f}},
+        // Through the pane on the accent: the upper right pane, clear of the mullion and the transom.
+        {night.accent, {{-1.04f, 1.79f, kRoomBack - 0.05f}, 366.f, 3.f, 0.f}},
+        {night.end - 1.6, {{-0.86f, 2.05f, -2.4f}, 362.f, -4.f, 0.f}},
+        {night.end, {{-0.8f, 2.12f, -2.85f}, 361.f, -5.f, 0.f}},
+    };
+    return keys;
+}
+
+// RETURN and REBOOT: one take from RETURN's D across the act join.
+//   RETURN S0   outside the window at the first grey of dawn, looking in, where ASCENT left;
+//   RETURN S1   it descends through the window (the lamp is on, the CRT dark), past the desk's left;
+//   RETURN S2   a cut on D to the CRT close-up on the 50 mm lens, handheld, pushing in from 65 cm to 40 cm
+//               by the act's join, where REBOOT holds it;
+//   REBOOT S1   the dolly into the screen from D - 4 bars, crossing the glass on D.
+std::vector<PoseKey> returnKeys() {
+    const ChapterMarks& m = landmarks().ret;
+    const Vec3 room{-0.35f, 0.92f, -0.1f};
+    return {
+        {m.start, look({-0.96f, 2.3f, -2.75f}, {-0.6f, 1.1f, 0.6f}), true},
+        {m.downbeat - 4 * m.bar, look({-1.02f, 1.98f, -1.75f}, {-0.55f, 1.0f, 0.6f})},
+        {m.downbeat - 2.2 * m.bar, look({-1.04f, 1.76f, kRoomBack - 0.05f}, {-0.5f, 0.95f, 0.6f})},
+        {m.downbeat - 0.9 * m.bar, look({-1.12f, 1.48f, -0.3f}, room)},
+        {m.downbeat, look({-1.3f, 1.34f, 0.32f}, room), true},
+    };
+}
+
+std::vector<PoseKey> closeUpKeys() {
+    const Landmarks& l = landmarks();
+    const Vec3 c = screenCentre();
+    const double glass = l.reboot.downbeat;
+    return {
+        {l.ret.downbeat, look(fromScreen(0.f, 0.f, 0.65f), c), true},
+        {l.ret.end, look(fromScreen(0.f, 0.f, 0.4f), c), true},
+        {glass - 4 * l.reboot.bar, look(fromScreen(0.f, 0.f, 0.4f), c), true},
+        {glass, {fromScreen(0.f, 0.f, 0.f), 0.f, 0.f, 0.f}},
+        {glass + 1.5, look(fromScreen(0.f, 0.f, -0.16f), fromScreen(0.f, 0.f, -1.f)), true},
+    };
+}
+
+const std::vector<PoseKey>& cachedKeys(int which) {
+    static const std::array<std::vector<PoseKey>, 4> paths = {flybyKeys(), portalKeys(), returnKeys(),
+                                                              closeUpKeys()};
+    return paths[static_cast<std::size_t>(which)];
+}
+enum PathId { kFlybyPath, kPortalPath, kReturnPath, kCloseUpPath };
+
+// The handheld's weight in a chapter (studioHandheld itself is 0 near every glass time): Studio chapters
+// only; FLYBY from its glass on, FINALE fully, PORTAL fading out over its dolly in (by the approach), none in
+// STUDIO NIGHT's dolly or RETURN's crane, the close-up from RETURN's cut through REBOOT's glass.
+float handheldWeight(const show::TimelineFrame& frame) {
+    const Landmarks& l = landmarks();
+    const double t = frame.showSeconds;
+    const auto smooth = [](double a, double b, double x) {
+        const double s = std::clamp((x - a) / (b - a), 0.0, 1.0);
+        return static_cast<float>(s * s * (3 - 2 * s));
+    };
+    switch (frame.effect) {
+    case show::Effect::Flyby:
+        return t >= l.flyby.downbeat ? 1.f : 0.f;
+    case show::Effect::Finale:
+        return 1.f;
+    case show::Effect::Portal:
+        return 1.f - smooth(l.portal.start, l.portal.downbeat - 2 * l.portal.bar, t);
+    case show::Effect::Return:
+        return t >= l.ret.downbeat ? 1.f : 0.f;
+    case show::Effect::Reboot:
+        return t < l.reboot.downbeat ? 1.f : 0.f;
+    default:
+        return 0.f;
+    }
+}
+
+Camera poseCamera(const Pose& pose, float lensDegrees, float aperture, float focus, std::uint32_t shot) {
+    const Vec3 forward = forwardOf(pose.yaw, pose.pitch);
+    const Vec3 right = normalize(cross(forward, Vec3{0, 1, 0}));
+    const Vec3 up = cross(right, forward);
+    const float roll = pose.roll * kDegrees;
     Camera c;
-    c.eye = key.eye;
-    c.target = key.target;
-    c.up = {0, 1, 0};
-    c.fovYDegrees = fov;
-    c.aperture = aperture;
-    c.focusDistance = length(key.target - key.eye);
+    c.eye = pose.eye;
+    c.target = pose.eye + forward * 0.5f;
+    c.up = up * std::cos(roll) + right * std::sin(roll);
+    c.fovYDegrees = lensFovY(lensDegrees);
+    // At the glass the focus is millimetres away: the aperture closes down with it (to a twentieth of the
+    // distance), so the picture stays sharp as the camera passes it.
+    c.focusDistance = std::max(focus, 0.002f);
+    c.aperture = std::min(aperture, 0.05f * c.focusDistance);
     c.shot = shot;
     return c;
 }
 
-// A camera about the screen: in focus on the screen's plane wherever it aims (the thin lens focuses on the
-// plane at focusDistance along the view, so the distance to the screen's centre along it), so the CRT's
-// picture stays sharp; the aperture keeps a little depth of field in the room around it.
-Camera screenCamera(const Key3& key, float fov, float aperture, std::uint32_t shot) {
-    Camera c = makeCamera(key, fov, aperture, shot);
-    c.focusDistance = std::max(dot(screenCentre() - key.eye, cameraBasis(c).forward), 0.05f);
-    return c;
+// The focus on the screen's plane (where the camera looks at it), so the CRT's picture stays sharp.
+float screenFocus(const Pose& pose) {
+    return dot(screenCentre() - pose.eye, forwardOf(pose.yaw, pose.pitch));
 }
 
-// The pull from the screen out to a wide view of the desk (FINALE, PORTAL), and RETURN's push back in.
-// It ends low and long (eye 1.1 m, a 32 degree lens): the PC on the right third, the window and the chair
-// standing in the moonbeam on the left.
-constexpr std::array<Key3, 4> kPullOut = {{
-    {{0.f, kScreenCentreY, kScreenZ + 0.3f}, {0.f, kScreenCentreY, kScreenZ}},
-    {{0.1f, kScreenCentreY + 0.02f, 0.3f}, {0.f, kScreenCentreY - 0.01f, kScreenZ}},
-    {{0.08f, 1.13f, 1.35f}, {-0.2f, 0.9f, kScreenZ - 0.1f}},
-    {{-0.2f, 1.1f, 3.3f}, {-0.56f, 0.63f, -0.6f}},
-}};
-// The lens of the pull-out at s in [0, 1]: from 40 degrees at the screen to 32 in the wide view.
-float pullOutFov(float s) {
-    return 40.f - 8.f * s;
+Pose withHandheld(Pose pose, const StudioHandheld& h, float weight) {
+    if (weight <= 0.f)
+        return pose;
+    const Vec3 forward = forwardOf(pose.yaw, pose.pitch);
+    const Vec3 right = normalize(cross(forward, Vec3{0, 1, 0}));
+    const Vec3 up = cross(right, forward);
+    pose.eye = pose.eye + (right * h.offset.x + up * h.offset.y - forward * h.offset.z) * weight;
+    pose.yaw += h.yaw * weight;
+    pose.pitch += h.pitch * weight;
+    pose.roll += h.roll * weight;
+    return pose;
+}
+
+// The hash of the handheld's noise (lowbias32).
+std::uint32_t hash32(std::uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352dU;
+    x ^= x >> 15;
+    x *= 0x846ca68bU;
+    x ^= x >> 16;
+    return x;
+}
+
+// Smooth value noise in [-1, 1]: hashed values on knots kNoiseRate a second, eased between (C1).
+constexpr double kNoiseRate = 1.6;
+float valueNoise(double t, std::uint32_t channel) {
+    const double x = t * kNoiseRate;
+    const double knot = std::floor(x);
+    const auto at = [&](double k) {
+        const auto i = static_cast<std::uint32_t>(static_cast<std::int64_t>(k));
+        return static_cast<float>(hash32(i * 0x9e3779b9u + channel * 0x85ebca6bu + 0x2026u)) / 4294967296.f *
+                   2.f -
+               1.f;
+    };
+    const auto s = static_cast<float>(x - knot);
+    const float e = s * s * (3.f - 2.f * s);
+    return at(knot) + (at(knot + 1) - at(knot)) * e;
+}
+
+// The times the camera passes a glass: FLYBY's D, PORTAL's crossings (D and the bar two bars on), REBOOT's D
+// and STUDIO NIGHT's window pane (its accent).
+const std::array<double, 5>& glassTimes() {
+    static const std::array<double, 5> times = [] {
+        const Landmarks& l = landmarks();
+        return std::array<double, 5>{l.flyby.downbeat, l.portal.downbeat, l.portal.twoBarsOn, l.night.accent,
+                                     l.reboot.downbeat};
+    }();
+    return times;
 }
 
 } // namespace
+
+float lensFovY(float horizontalDegrees) {
+    const float half = 0.5f * horizontalDegrees * kDegrees;
+    return 2.f * std::atan(std::tan(half) * 9.f / 16.f) / kDegrees;
+}
 
 std::array<Vec3, 4> studioScreenCorners() {
     const float l = -0.5f * kScreenWidth, r = 0.5f * kScreenWidth;
@@ -497,11 +805,53 @@ std::array<Vec3, 4> studioScreenCorners() {
     return {Vec3{l, t, kScreenZ}, Vec3{r, t, kScreenZ}, Vec3{r, b, kScreenZ}, Vec3{l, b, kScreenZ}};
 }
 
+std::vector<double> studioGlassTimes() {
+    const auto& times = glassTimes();
+    return {times.begin(), times.end()};
+}
+
+StudioHandheld studioHandheld(double showSeconds) {
+    // Off within 0.5 s of a glass, easing back in over the next second.
+    float gate = 1.f;
+    for (const double glass : glassTimes()) {
+        const double s = std::clamp((std::abs(showSeconds - glass) - 0.5) / 1.0, 0.0, 1.0);
+        gate = std::min(gate, static_cast<float>(s * s * (3 - 2 * s)));
+    }
+    if (gate <= 0.f)
+        return {};
+    // Each channel: three sines at incommensurate rates within 0.4 - 1.1 Hz and a slower hashed wander,
+    // scaled so that the sum never exceeds its limit (0.72 + 0.27 < 1).
+    const double tau = 2 * std::numbers::pi;
+    const auto channel = [&](std::uint32_t k, float limit) {
+        const double phase = 0.7 * k;
+        const double sines = 0.36 * std::sin(tau * 0.53 * showSeconds + 1.3 + phase) +
+                             0.22 * std::sin(tau * 0.79 * showSeconds + 0.4 + 2.1 * phase) +
+                             0.14 * std::sin(tau * 1.07 * showSeconds + 2.9 + 3.3 * phase);
+        return gate * limit * (static_cast<float>(sines) + 0.27f * valueNoise(showSeconds, k));
+    };
+    // Three channels each: the offset's length and the rotation's angle stay within the limits.
+    const float metres = kHandheldMetres / std::sqrt(3.f), degrees = kHandheldDegrees / std::sqrt(3.f);
+    StudioHandheld h;
+    h.offset = {channel(0, metres), channel(1, metres), channel(2, metres)};
+    h.yaw = channel(3, degrees);
+    h.pitch = channel(4, degrees);
+    h.roll = channel(5, degrees);
+    return h;
+}
+
 std::vector<StudioShot> studioShots(const show::TimelineFrame& frame) {
+    const Landmarks& l = landmarks();
     const auto duration = static_cast<float>(frame.chapterDuration);
+    const auto local = [&](double showSeconds, const ChapterMarks& m) {
+        return std::clamp(static_cast<float>(showSeconds - m.start), 0.f, duration);
+    };
     switch (frame.effect) {
-    case show::Effect::StudioNight: {
-        const float cut = std::clamp(static_cast<float>(frame.accentSeconds), 0.f, duration);
+    case show::Effect::Portal: {
+        const float in = local(l.portal.downbeat, l.portal), out = local(l.portal.twoBarsOn, l.portal);
+        return {{0.f, in}, {in, out}, {out, duration}};
+    }
+    case show::Effect::Return: {
+        const float cut = local(l.ret.downbeat, l.ret);
         return {{0.f, cut}, {cut, duration}};
     }
     default:
@@ -509,51 +859,60 @@ std::vector<StudioShot> studioShots(const show::TimelineFrame& frame) {
     }
 }
 
+float studioScreenSpan(const show::TimelineFrame& frame) {
+    const Camera camera = studioCamera(frame);
+    const float distance = std::max(dot(screenCentre() - camera.eye, cameraBasis(camera).forward), 1e-4f);
+    const float halfWidth = distance * std::tan(0.5f * kLens35 * kDegrees);
+    return 0.5f * kScreenWidth / halfWidth;
+}
+
 Camera studioCamera(const show::TimelineFrame& frame) {
-    const auto local = static_cast<float>(frame.localSeconds);
+    const Landmarks& l = landmarks();
+    const double t = frame.showSeconds;
     const std::vector<StudioShot> shots = studioShots(frame);
     std::uint32_t shot = 0;
-    while (shot + 1 < shots.size() && local >= shots[shot + 1].start)
+    while (shot + 1 < shots.size() && static_cast<float>(frame.localSeconds) >= shots[shot + 1].start)
         ++shot;
-    const StudioShot& span = shots[shot];
-    const float length = std::max(span.end - span.start, 1e-3f);
-    const float s = smooth((local - span.start) / length);
+    const StudioHandheld handheld = studioHandheld(t);
+    const float weight = handheldWeight(frame);
 
     switch (frame.effect) {
-    case show::Effect::Finale:
-    case show::Effect::Portal:
-        return screenCamera(alongKeys(kPullOut, s), pullOutFov(s), 0.004f, shot);
-    case show::Effect::StudioNight:
-        if (shot == 0) {
-            // A slow, low dolly across the dark room towards the desk, past the chair standing in the
-            // moonbeam on the floor (a dark foreground silhouette against it); the PC on the right third,
-            // the window on the left.
-            static constexpr std::array<Key3, 3> kDolly = {{
-                {{-0.2f, 1.1f, 3.35f}, {-0.57f, 0.62f, -0.6f}},
-                {{-0.15f, 1.1f, 2.85f}, {-0.5f, 0.66f, -0.6f}},
-                {{-0.1f, 1.1f, 2.35f}, {-0.42f, 0.7f, -0.55f}},
-            }};
-            return makeCamera(alongKeys(kDolly, s), 32.f, 0.006f, shot);
-        } else {
-            // A close orbit around the monitor, from its right to its left, the screen always in view: aimed
-            // at the monitor's body, in focus on the screen.
-            const Vec3 centre{0.f, kScreenCentreY - 0.06f, kScreenZ - 0.12f};
-            const float angle = (0.65f - 1.25f * s); // radians from +z, positive to the right
-            const float radius = 0.82f - 0.12f * std::sin(s * kPi);
-            const Vec3 eye{centre.x + radius * std::sin(angle), kScreenCentreY + 0.08f - 0.06f * s,
-                           centre.z + radius * std::cos(angle)};
-            return screenCamera({eye, centre}, 38.f, 0.004f, shot);
-        }
-    case show::Effect::Return: {
-        static constexpr std::array<Key3, 3> kPushIn = {kPullOut[3], kPullOut[2], kPullOut[1]};
-        return screenCamera(alongKeys(kPushIn, s), pullOutFov(1.f - s), 0.004f, shot);
+    case show::Effect::Flyby: {
+        const Pose pose = withHandheld(alongPath(cachedKeys(kFlybyPath), t), handheld, weight);
+        return poseCamera(pose, kLens35, 0.003f, screenFocus(pose), shot);
     }
+    case show::Effect::Finale:
+    case show::Effect::Portal: {
+        const Pose pose = withHandheld(alongPath(cachedKeys(kPortalPath), t), handheld, weight);
+        if (frame.effect == show::Effect::Portal && shot == 1) // behind the glass, among the stars
+            return poseCamera(pose, kLens24, 0.001f, 0.3f, shot);
+        return poseCamera(pose, kLens35, 0.003f, screenFocus(pose), shot);
+    }
+    case show::Effect::StudioNight: {
+        // The dolly's focus follows from the screen's plane to the window's as it nears the pane.
+        const Pose pose = alongPath(cachedKeys(kPortalPath), t);
+        const Vec3 forward = forwardOf(pose.yaw, pose.pitch);
+        const auto s = static_cast<float>(
+            std::clamp((t - l.night.start) / (l.night.downbeat - 4 * l.night.bar - l.night.start), 0.0, 1.0));
+        const float toWindow = std::max(dot(Vec3{-1.2f, 1.5f, kRoomBack} - pose.eye, forward), 0.3f);
+        const float onScreen = std::max(screenFocus(pose), 0.3f);
+        const float near = onScreen + (toWindow - onScreen) * s * s * (3 - 2 * s);
+        // Through the pane the focus racks out to the town.
+        const auto r = static_cast<float>(std::clamp((t - l.night.accent + 0.5) / 2.0, 0.0, 1.0));
+        return poseCamera(pose, kLens35, 0.004f, near * std::pow(30.f / near, r * r * (3 - 2 * r)), shot);
+    }
+    case show::Effect::Return:
+        if (shot == 0) {
+            const Pose pose = alongPath(cachedKeys(kReturnPath), t);
+            return poseCamera(pose, kLens35, 0.004f,
+                              dot(Vec3{-0.35f, 0.92f, -0.1f} - pose.eye, forwardOf(pose.yaw, pose.pitch)),
+                              shot);
+        }
+        [[fallthrough]];
     default: {
-        // REBOOT (and anything else): a close-up of the screen, drifting slightly.
-        const float t = local;
-        const Vec3 eye{0.025f * std::sin(0.21f * t), kScreenCentreY + 0.012f * std::sin(0.17f * t + 1.f),
-                       kScreenZ + 0.44f - 0.04f * s};
-        return screenCamera({eye, screenCentre()}, 42.f, 0.003f, shot);
+        // RETURN's close-up and REBOOT (and anything else): 40 cm from the glass on the 50 mm lens.
+        const Pose pose = withHandheld(alongPath(cachedKeys(kCloseUpPath), t), handheld, weight);
+        return poseCamera(pose, kLens50, 0.003f, screenFocus(pose), shot);
     }
     }
 }
@@ -562,6 +921,8 @@ float studioExposureEV(show::Effect effect) {
     switch (effect) {
     case show::Effect::StudioNight:
         return 2.f; // the screen at 8: a display gain of 28 for the grey DOS text; the moon fills the room
+    case show::Effect::Flyby:
+        return 1.4f; // the screen at 2.4 with the 1993 ship on black: the room is lit by phosphor and moon
     case show::Effect::Finale:
     case show::Effect::Portal:
         return 0.2f; // the screen at 2.4: a gain of 2.4, so the megamix's colours stay saturated
@@ -584,11 +945,74 @@ StudioRig studioRig(show::Effect effect) {
     switch (effect) {
     case show::Effect::StudioNight:
         return {0.f, 8.f};
+    case show::Effect::Flyby:
+        return {0.f, 2.4f};
     case show::Effect::Finale:
     case show::Effect::Portal:
         return {0.2f, 2.4f};
     default:
         return {1.f, 1.5f};
+    }
+}
+
+namespace {
+
+// FLYBY's exposure on its glass: the screen's 2.4 times 2^EV near 1, as crt.comp's picture.
+constexpr float kFlybyGlassEV = -1.25f;
+// RETURN's extra exposure before its cut, while the camera comes in through the window.
+constexpr float kDawnEV = 0.8f;
+
+float smoothBetween(double from, double to, double t) {
+    const double s = std::clamp((t - from) / (to - from), 0.0, 1.0);
+    return static_cast<float>(s * s * (3 - 2 * s));
+}
+
+} // namespace
+
+StudioRig studioRigAt(const show::TimelineFrame& frame) {
+    StudioRig rig = studioRig(frame.effect);
+    if (frame.effect == show::Effect::Portal) {
+        const ChapterMarks& m = landmarks().portal;
+        const StudioRig night = studioRig(show::Effect::StudioNight);
+        const float s = smoothBetween(m.downbeat, m.accent, frame.showSeconds);
+        rig = {rig.lamp + (night.lamp - rig.lamp) * s, rig.screen + (night.screen - rig.screen) * s};
+    }
+    return rig;
+}
+
+float studioExposureAt(const show::TimelineFrame& frame) {
+    const Landmarks& l = landmarks();
+    const double t = frame.showSeconds;
+    const float own = studioExposureEV(frame.effect);
+    switch (frame.effect) {
+    case show::Effect::Flyby:
+        // Through the glass the picture fills the frame at about the brightness crt.comp showed it at (a
+        // display gain near 1); as the pull-out leaves the screen the exposure opens up to the dark room by
+        // A + 0.5 s, so the room is revealed on the accent. (Before D the Studio is not shown: it closes down
+        // over the approach, as the camera nears the picture.)
+        {
+            const float glass =
+                t < l.flyby.downbeat
+                    ? smoothBetween(l.flyby.downbeat - 2 * l.flyby.bar, l.flyby.downbeat - 0.5, t)
+                    : 1.f - smoothBetween(l.flyby.downbeat, l.flyby.accent + 0.5, t);
+            return own + (kFlybyGlassEV - own) * glass;
+        }
+    case show::Effect::Portal: {
+        // Behind the glass the exposure opens up with the rig to STUDIO NIGHT's, which the camera lands in.
+        const float night = studioExposureEV(show::Effect::StudioNight);
+        return own + (night - own) * smoothBetween(l.portal.downbeat, l.portal.accent, t);
+    }
+    case show::Effect::Return: {
+        // Before the cut to the close-up the camera comes in from the grey dawn outside: the exposure is
+        // kDawnEV more open, for the dark wall round the window.
+        if (t < l.ret.downbeat)
+            return own + kDawnEV;
+        // Over the last bar, to REBOOT's, which the close-up runs on into.
+        const float reboot = studioExposureEV(show::Effect::Reboot);
+        return own + (reboot - own) * smoothBetween(l.ret.end - l.ret.bar, l.ret.end, t);
+    }
+    default:
+        return own;
     }
 }
 
@@ -694,8 +1118,11 @@ Studio::Studio(SceneDetail) {
               {0.11f, 0.018f, 0.11f}));
     const float bodyZ = kMonitorFrontZ - kMonitorHalf[2];
     const float bodyY = kMonitorBottom + kMonitorHalf[1];
+    behindHidden_.push_back(static_cast<std::uint32_t>(instances_.size() - 1)); // the foot
     add(kMonitorFront, kBeige, translate({0.f, bodyY, bodyZ}));
+    behindHidden_.push_back(static_cast<std::uint32_t>(instances_.size() - 1));
     add(kMonitorRear, kBeige, translate({0.f, bodyY + 0.01f, bodyZ - kMonitorHalf[2] - 0.08f}));
+    behindHidden_.push_back(static_cast<std::uint32_t>(instances_.size() - 1));
     {
         const float bz = kMonitorFrontZ + 0.5f * kBezelDepth;
         const float sideWidth = 0.5f * (2 * kMonitorHalf[0] - kScreenWidth) - 0.004f;
@@ -731,6 +1158,7 @@ Studio::Studio(SceneDetail) {
     }
     const rt::Mat34 screen = translate(screenCentre());
     add(kScreen, kScreenGlass, screen, kScreenLight);
+    screenInstance_ = static_cast<std::uint32_t>(instances_.size() - 1);
     lights[kScreenLight] = rectLightForQuad(screen, kScreenWidth, kScreenHeight, rt::LightKind::RetroScreen,
                                             screenEmission(static_.materials[kScreenGlass]), kScreenWeight);
 
@@ -865,17 +1293,139 @@ Studio::Studio(SceneDetail) {
     }
 
     lights_.assign(lights.begin(), lights.end());
+    buildBehindScreen();
+}
+
+// --- Behind the screen -------------------------------------------------------------------------------------
+
+namespace {
+
+// The dark box behind the screen, open only through the picture: wide enough that no camera inside sees
+// past it, clear of the lamp's arm and the moonbeam on the left and of the case below.
+constexpr float kBoxLeft = -0.38f, kBoxRight = 0.38f, kBoxBottom = 0.905f, kBoxTop = 1.4f;
+constexpr float kBoxBack = kRoomBack - 0.005f, kBoxFront = kMonitorFrontZ - 0.0005f, kBoxWall = 0.01f;
+
+// FLYBY's starfield (retro/flyby.cpp), mirrored here: the 1993 stars in their own view space, a camera at
+// the origin looking along +z with a 42 degree vertical field of view on the 320 x 200 screen at a pixel
+// aspect of 1.2; each star keeps its x and y while it streams from z = 10 towards the camera at 4 units a
+// second. Behind the glass the 1993 camera's origin is the screen's centre and a unit is kStarUnit metres, so
+// the camera crosses the glass where the 1993 camera sat, and the stars stand where the 1993 frame drew them
+// on D.
+constexpr double kStarFar = 10.0, kStarNear = 0.6, kStarSpeed = 4.0, kStarExit = 1.42;
+constexpr std::uint32_t kStarSeed = 1993;
+constexpr float kStarUnit = 0.045f;
+constexpr std::uint32_t kStarRuns = 4;
+
+double unitHash(std::uint32_t h) {
+    return static_cast<double>(h) / 4294967296.0;
+}
+
+} // namespace
+
+bool studioBehindScreen(const Camera& camera) {
+    const Vec3 e = camera.eye;
+    return e.z < kScreenZ && e.z > kBoxBack && e.x > kBoxLeft && e.x < kBoxRight && e.y > kBoxBottom &&
+           e.y < kBoxTop;
+}
+
+void Studio::buildBehindScreen() {
+    behindInstances_.clear();
+    for (std::uint32_t i = 0; i < instances_.size(); ++i) {
+        if (std::find(behindHidden_.begin(), behindHidden_.end(), i) != behindHidden_.end())
+            continue;
+        SceneInstance in = instances_[i];
+        if (i == screenInstance_) {
+            // Thin glass, and no light: seen from the room it shows nothing the screen's light does not.
+            in.material = kScreenBack;
+            in.light = rt::kNoLight;
+        }
+        behindInstances_.push_back(in);
+    }
+    const auto block = [&](Vec3 min, Vec3 max) {
+        behindInstances_.push_back({kUnitBox, kVoid, place((min + max) * 0.5f, max - min)});
+    };
+    const float w = kBoxWall;
+    block({kBoxLeft - w, kBoxBottom - w, kBoxBack - w}, {kBoxRight + w, kBoxTop + w, kBoxBack});
+    block({kBoxLeft - w, kBoxBottom - w, kBoxBack}, {kBoxLeft, kBoxTop + w, kBoxFront});
+    block({kBoxRight, kBoxBottom - w, kBoxBack}, {kBoxRight + w, kBoxTop + w, kBoxFront});
+    block({kBoxLeft, kBoxBottom - w, kBoxBack}, {kBoxRight, kBoxBottom, kBoxFront});
+    block({kBoxLeft, kBoxTop, kBoxBack}, {kBoxRight, kBoxTop + w, kBoxFront});
+    // The front, round the picture.
+    const float l = -0.5f * kScreenWidth, r = 0.5f * kScreenWidth;
+    const float b = kScreenCentreY - 0.5f * kScreenHeight, t = kScreenCentreY + 0.5f * kScreenHeight;
+    const float f0 = kBoxFront - 0.002f, f1 = kBoxFront;
+    block({kBoxLeft, kBoxBottom, f0}, {l, kBoxTop, f1});
+    block({r, kBoxBottom, f0}, {kBoxRight, kBoxTop, f1});
+    block({l, kBoxBottom, f0}, {r, b, f1});
+    block({l, t, f0}, {r, kBoxTop, f1});
+
+    // The stars where FLYBY's table has them on PORTAL's D, and as each would stand at the same depth on its
+    // next kStarRuns - 1 runs (each run takes a new direction): 2026 shows four times the 1993 field. Less
+    // those the camera's way in and out passes within 1.5 cm of.
+    const Landmarks& marks = landmarks();
+    const double travelled = kStarSpeed * (marks.portal.downbeat - marks.portal.start);
+    const double focalY = 100.0 / std::tan(21.0 * std::numbers::pi / 180.0);
+    const double focalX = focalY * 1.2;
+    std::vector<Vec3> way;
+    for (int k = 0; k <= 200; ++k) {
+        const double t = marks.portal.downbeat - 0.2 + (2 * marks.portal.bar + 0.4) * k / 200.0;
+        way.push_back(alongPath(cachedKeys(kPortalPath), t).eye);
+    }
+    for (std::uint32_t k = 0; k < kStarCount * kStarRuns; ++k) {
+        const std::uint32_t i = k % kStarCount, run0 = k / kStarCount;
+        const std::uint32_t seed = hash32(kStarSeed * 7919u + i * 2u);
+        const double r0 = 0.03 + 0.97 * unitHash(seed);
+        const double end = std::max(kStarNear, r0 * kStarFar / kStarExit);
+        const double run = kStarFar - end;
+        const double along = unitHash(hash32(seed + 1u)) * run + travelled;
+        const auto now = static_cast<std::uint32_t>(std::floor(along / run));
+        const double z = kStarFar - (along - static_cast<double>(now) * run);
+        const std::uint32_t cycle = now + run0;
+        const double angle = 2 * std::numbers::pi * unitHash(hash32(seed ^ (cycle * 0x632be5abu + 0x51u)));
+        const double x = r0 * std::cos(angle) * kStarFar * 160.0 / focalX;
+        const double y = r0 * std::sin(angle) * kStarFar * 100.0 / focalY;
+        const Vec3 centre =
+            screenCentre() +
+            Vec3{static_cast<float>(x), static_cast<float>(y), -static_cast<float>(z)} * kStarUnit;
+        bool clear = true;
+        for (const Vec3& p : way)
+            clear = clear && length(centre - p) > 0.015f;
+        if (!clear)
+            continue;
+        // A little variety in size and colour: blue-white to warm white, as the 1993 ramp's top (240, 240,
+        // 255) is the bluest.
+        const auto u = static_cast<float>(unitHash(hash32(seed + 7u + 131u * run0)));
+        const auto v = static_cast<float>(unitHash(hash32(seed + 11u + 131u * run0)));
+        rt::SphereRecord star{};
+        star.center[0] = centre.x;
+        star.center[1] = centre.y;
+        star.center[2] = centre.z;
+        star.prevCenter[0] = centre.x;
+        star.prevCenter[1] = centre.y;
+        star.prevCenter[2] = centre.z;
+        star.radius = 0.0004f + 0.0006f * u * u;
+        setColor(star.color, Vec3{0.85f + 0.15f * v, 0.9f, 1.f - 0.18f * v});
+        star.emission = 6.f + 10.f * (1.f - u);
+        star.material = kStar;
+        static_.spheres.push_back(star);
+    }
+    static_.capacity.spheres = static_cast<std::uint32_t>(static_.spheres.size());
+    SceneInstance stars{0, kStar, identity()};
+    stars.kind = rt::GeometryKind::Spheres;
+    stars.firstSphere = 0;
+    stars.sphereCount = static_cast<std::uint32_t>(static_.spheres.size());
+    behindInstances_.push_back(stars);
 }
 
 SceneFrame Studio::frame(const show::TimelineFrame& frame) const {
     SceneFrame f;
     f.camera = studioCamera(frame);
-    f.instances = instances_;
+    f.instances = studioBehindScreen(f.camera) ? behindInstances_ : instances_;
     f.lights = lights_;
-    f.exposureEV = studioExposureEV(frame.effect);
+    f.exposureEV = studioExposureAt(frame);
     f.clampIndirect = kClampIndirect;
-    // The chapter's light rig: its material table, and the lights' emissions from it.
-    const StudioRig rig = studioRig(frame.effect);
+    // The frame's light rig: its material table, and the lights' emissions from it.
+    const StudioRig rig = studioRigAt(frame);
     f.materials = buildMaterials(rig);
     f.lights[kScreenLight].emission[0] = f.lights[kScreenLight].emission[1] =
         f.lights[kScreenLight].emission[2] = f.materials[kScreenGlass].emissionScale;

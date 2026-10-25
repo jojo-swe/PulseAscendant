@@ -12,7 +12,8 @@ namespace evo::show {
 // All times are track seconds. A is the accent (chapter start + accentSeconds), D the downbeat at or before
 // A, and a bar is four beats measured at D.
 //   Cut      era = the cue's eraFixed for the whole chapter.
-//   Portal   era rises smoothly from A - 1 s to A + 1 s; eraCut flashes to 1 at A and decays.
+//   Portal   the camera crosses the CRT's glass on D: FLYBY and TUNNEL step from 0 to 1 on D; PORTAL and
+//            REBOOT hold 1 (their 1993 picture is on the Studio's CRT); eraCut stays 0.
 //   Wipe     wipe (and era) run linearly from 0 to 1 over the two bars ending at D.
 //   BeatSwap era flips at the bar lines from D - 4 bars, then on every beat of the last two bars, and holds
 //            1 from D on; swapCount counts the flips so far and eraCut flashes on each.

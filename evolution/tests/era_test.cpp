@@ -108,28 +108,42 @@ void checkDeterminism() {
     }
 }
 
-// (b) Portal: a smooth crossing centred on the accent, with a cut flash at A.
+// (b) Portal: the camera crosses the CRT's glass on D. FLYBY and TUNNEL step from 1993 to 2026 exactly on D
+// (0 one frame before, 1 on D), PORTAL and REBOOT hold 2026 (their 1993 picture is on the Studio's CRT), and
+// no Portal chapter flashes.
 void checkPortal() {
     CHECK(evo::show::cues[1].transition == Transition::Portal);  // Flyby
     CHECK(evo::show::cues[20].transition == Transition::Portal); // Reboot, era 0 to 1 at the start of Act III
+    int stepping = 0, holding = 0;
     for (int chapter = 0; chapter < evo::show::chapterCount(); ++chapter) {
         if (evo::show::cues[chapter].transition != Transition::Portal)
             continue;
         const Marks m = marks(chapter);
-        CHECK(m.accent - 2 > m.start && m.accent + 2 < m.end);
-        CHECK(at(m, m.start + .01).era == 0.f);
-        CHECK(at(m, m.accent - 2).era == 0.f);
-        CHECK(std::abs(at(m, m.accent).era - .5f) < 1e-3f);
-        CHECK(at(m, m.accent + 2).era == 1.f);
-        CHECK(at(m, m.end - .01).era == 1.f);
-        CHECK(at(m, m.accent - .01).eraCut == 0.f);
-        CHECK(std::abs(at(m, m.accent + .01).eraCut - std::exp(-.08f)) < 1e-3f);
-        CHECK(at(m, m.accent + 1).eraCut < .001f);
+        const Effect effect = evo::show::cues[chapter].effect;
+        const bool holds = effect == Effect::Portal || effect == Effect::Reboot;
+        CHECK(holds || effect == Effect::Flyby || effect == Effect::Tunnel);
+        (holds ? holding : stepping) += 1;
+        CHECK(m.downbeat - 2 * m.bar > m.start && m.downbeat + 2 * m.bar < m.end);
+        const double d = evo::show::transitionMarks(at(m, m.start + .01)).downbeat; // show seconds
+        CHECK(std::abs(d - (m.offset + m.downbeat)) < 1e-9);
+        if (holds) {
+            CHECK(sampleTimeline(d - 1.0 / 60).era == 1.f);
+            CHECK(sampleTimeline(d).era == 1.f);
+        } else {
+            CHECK(sampleTimeline(d - 1.0 / 60).era == 0.f);
+            CHECK(sampleTimeline(d - 1e-6).era == 0.f);
+            CHECK(sampleTimeline(d).era == 1.f);
+        }
         for (double t = m.start; t < m.end; t += .01) {
             const TimelineFrame frame = at(m, t);
+            if (frame.chapter != chapter)
+                continue;
+            CHECK(frame.eraCut == 0.f);
             CHECK(frame.wipe == 0.f && frame.swapCount == 0);
+            CHECK(frame.era == (holds || frame.showSeconds >= d ? 1.f : 0.f));
         }
     }
+    CHECK(stepping == 2 && holding == 2);
     // Act I ends in 2026, where Act II picks up.
     CHECK(sampleTimeline(evo::show::chapterStart(11) - .01).era == 1.f);
 }

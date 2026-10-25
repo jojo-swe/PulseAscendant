@@ -1,6 +1,7 @@
 // The scene table (Task 1 of step 5), on the CPU:
 //   - every effect has a row in kSceneOfEffect, and an effect past the last throws;
-//   - the five Studio effects (FINALE, PORTAL, STUDIO NIGHT, RETURN, REBOOT) show the Studio; every other
+//   - the six Studio effects (FLYBY, FINALE, PORTAL, STUDIO NIGHT, RETURN, REBOOT) show the Studio; every
+//   other
 //     effect shows the placeholder or its planned scene (the chapter -> scene map, kPlannedScene),
 //     and the effects of one planned scene move together, so a scene task flips its rows in scenes.cpp
 //     without editing this test;
@@ -40,12 +41,12 @@ int checksPassed = 0;
     } while (false)
 
 bool isStudio(Effect e) {
-    return e == Effect::Finale || e == Effect::Portal || e == Effect::StudioNight || e == Effect::Return ||
-           e == Effect::Reboot;
+    return e == Effect::Flyby || e == Effect::Finale || e == Effect::Portal || e == Effect::StudioNight ||
+           e == Effect::Return || e == Effect::Reboot;
 }
 
 // The scene each effect's 2026 side will show (the chapter -> scene map, Tasks 16-25): the
-// placeholder for BOOT, CREDITS and THE END, which keep it, and for FLYBY, whose 2026 side is the pull-out
+// placeholder for BOOT, CREDITS and THE END, which keep it; FLYBY's 2026 side is the Studio, the pull-out
 // from the screen into the room. The starship crosses in WORMHOLE.
 SceneId plannedScene(Effect e) {
     switch (e) {
@@ -82,6 +83,7 @@ SceneId plannedScene(Effect e) {
         return SceneId::Cosmos;
     case Effect::Singularity:
         return SceneId::Singularity;
+    case Effect::Flyby:
     case Effect::Finale:
     case Effect::Portal:
     case Effect::StudioNight:
@@ -109,7 +111,7 @@ void testEffectRows() {
         studio += scene == SceneId::Studio;
         CHECK(std::strcmp(modern::effectSceneName(effect), modern::sceneName(scene)) == 0);
     }
-    CHECK(studio == 5);
+    CHECK(studio == 6);
     // A scene's rows move together: all of them on the scene, or none yet.
     for (std::size_t s = 1; s < modern::kSceneCount; ++s) {
         if (moved[s] != 0 && moved[s] != planned[s])
@@ -117,7 +119,7 @@ void testEffectRows() {
                          moved[s], planned[s]);
         CHECK(moved[s] == 0 || moved[s] == planned[s]);
     }
-    CHECK(planned[static_cast<std::size_t>(SceneId::Studio)] == 5);
+    CHECK(planned[static_cast<std::size_t>(SceneId::Studio)] == 6);
     for (std::size_t s = static_cast<std::size_t>(SceneId::Ship); s < modern::kSceneCount; ++s)
         CHECK(planned[s] > 0); // every scene has its chapters
     bool threw = false;
@@ -130,7 +132,7 @@ void testEffectRows() {
     int scenes = 0;
     for (std::size_t s = static_cast<std::size_t>(SceneId::Ship); s < modern::kSceneCount; ++s)
         scenes += moved[s] != 0;
-    std::printf("effect rows: %zu effects, 5 Studio, %d step 5 scenes on their planned rows, the rest "
+    std::printf("effect rows: %zu effects, 6 Studio, %d step 5 scenes on their planned rows, the rest "
                 "Placeholder\n",
                 show::kEffectCount, scenes);
 }
@@ -200,13 +202,13 @@ void testStudioCamera() {
     CHECK(made != nullptr && made->samplesRetro());
     const modern::Studio studio;
     const auto chapters = evo::test::chaptersOf(SceneId::Studio);
-    CHECK(chapters.size() == 5);
+    CHECK(chapters.size() == 6);
     double total = 0;
     for (const int c : chapters)
         total += show::chapterStart(c + 1) - show::chapterStart(c);
     int compared = 0;
     for (int k = 0; k < 500; ++k) {
-        // 500 times spread over the five chapters' combined length.
+        // 500 times spread over the six chapters' combined length.
         double t = (k + 0.5) / 500.0 * total;
         int chapter = chapters.front();
         for (const int c : chapters) {
@@ -227,7 +229,7 @@ void testStudioCamera() {
         CHECK(made->camera(frame).shot == a.shot);
         ++compared;
     }
-    std::printf("Studio::camera == frame().camera at %d times in its 5 chapters\n", compared);
+    std::printf("Studio::camera == frame().camera at %d times in its 6 chapters\n", compared);
 }
 
 void testStudioSweep() {
@@ -235,8 +237,9 @@ void testStudioSweep() {
     limits.maxCameraStep = 0.05f; // the Studio's cameras move centimetres per frame
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Studio, limits);
     // 480 instances since Task 14 of step 5 (step 4: 195): the inner shade and the skyline's 56 towers with
-    // their lit windows.
-    CHECK(stats.frames > 5000 && stats.maxInstances == 480 && stats.maxLights == 4);
+    // their lit windows; 487 behind the screen (the monitor's foot, body and housing give way to the dark
+    // box's nine walls and the stars).
+    CHECK(stats.frames > 5000 && stats.maxInstances == 487 && stats.maxLights == 4);
 }
 
 } // namespace

@@ -2,8 +2,8 @@
 // CRT shows the retro picture and lights the room. At 320x180 in Export with 4 spp unless a test says
 // otherwise, with the validation layer on; fails on any message it reports. Captures go to
 // <EVO_TEST_OUT_DIR>/step4.
-//   (a) STUDIO NIGHT at 30 % and 80 %: lit but not blown out, the screen brighter than the room's mean, each
-//       frame under 30 s;
+//   (a) STUDIO NIGHT 0.6 s and 4 s in (its opening frame and the night wide): lit but not blown out, the
+//       screen brighter than the room's mean, each frame under 30 s;
 //   (b) the CRT is STUDIO NIGHT's key light (Task 14 (a)): a white retro picture against a black one
 //   brightens
 //       the screen, and the desk in front of it by at least 40 % (step 4: 10 % in RETURN), and changes a wall
@@ -11,11 +11,11 @@
 //       of 0.02 was written for encoded values);
 //   (c) in the window: a red picture on frame N, a green one on frame N + 1 -> the screen on
 //       frame N + 1 is green (its emission bypasses the temporal history and the filter);
-//   (d) studioCamera: finite, smooth within a shot, cutting exactly at the authored times;
-//   (e) the scene: 101 key caps on one mesh, every transform finite, within the TLAS's capacity, the lights;
-//   (f) sceneFor's mapping, and STUDIO NIGHT running the retro stage for the CRT;
-//   (g) the DOS idle screen: C:\DEMO> with BOOT's 2 Hz cursor, a pure function of the retro frame;
-//   (h) the CRT stays sharp in the window: every shot that shows the screen up close focuses on its plane
+//   (d) studioCamera: finite, smooth within a shot, cutting exactly at the authored times, on the four
+//   lenses; (e) the scene: 101 key caps on one mesh, every transform finite, within the TLAS's capacity, the
+//   lights; (f) sceneFor's mapping, and STUDIO NIGHT running the retro stage for the CRT; (g) the DOS idle
+//   screen: C:\DEMO> with BOOT's 2 Hz cursor, a pure function of the retro frame; (h) the CRT stays sharp in
+//   the window (RETURN's close-up): every shot that shows the screen focuses on its plane
 //       with a small aperture; at 1 spp the same frame shown twice barely changes in the screen, and the
 //       30th window frame's screen matches a 32 spp export of the same time (64 until Task 14 of step 5,
 //       which halved it for the time budget: the screen differs from either by 0.003, the bound is 0.025);
@@ -34,7 +34,22 @@
 //   (n) [g] the moonbeam: in the STUDIO NIGHT wide shot the floor where the moon's ray through the window's
 //       centre lands is at least twice as bright as the floor beside the beam.
 // [f] is (h) and renderer_test's Studio resize case, unchanged.
-// With --look <dir> [spp] [width height] it only renders stills of every shot to look at.
+// The Portal crossings and the Studio's camera:
+//   (o) FLYBY: the screen spans at least 98 % of the frame's width on D, the camera is 1.2 m out by A + 1 s;
+//       PORTAL crosses the screen's plane inward on D and outward on the bar two bars on (each within a
+//       frame, inside the picture's rectangle), and turns at least 175 degrees over the span centred on its
+//       accent, fastest within a beat of it; STUDIO NIGHT passes the window's pane on its accent (within a
+//       frame, clear of the glazing bars); REBOOT reaches the glass on D (within a frame);
+//   (p) the moves: no straight constant-speed stretch inside a move (the eye's second difference never stays
+//       0 for a quarter second while it moves), lenses only 24, 35 and 50 mm; every shot change on a tracked
+//       bar line (within 1 ms) and outside the two beats before its chapter's accent;
+//   (q) the handheld: within its limits over the whole show, 0 within 0.5 s of every glass, its spectrum over
+//       60 s peaking within 0.4 - 1.1 Hz on every channel;
+//   (r) behind the screen: PORTAL 0.6 s after its inward crossing shows at least 200 star pixels at 480x270;
+//       at 191.0 (facing the back of the glass) the room shows through it (the frame's mean above 0.03);
+//       checkChapterPictures passes for the Studio's six chapters.
+// With --look <dir> [spp] [width height] it only renders stills of every shot to look at; with --only
+// <letters> it runs just those checks.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -51,6 +66,9 @@
 #include "retro/boot.hpp"
 #include "retro/dos_idle.hpp"
 #include "retro/effects.hpp"
+#include "scene_fixture.hpp"
+#include "show/era.hpp"
+#include "show/music_curves.hpp"
 #include "show/timeline.hpp"
 #include "text/text_pass.hpp"
 
@@ -94,7 +112,12 @@ double secondsSince(std::chrono::steady_clock::time_point start) {
 
 const std::filesystem::path kOutDir = std::filesystem::path(EVO_TEST_OUT_DIR) / "step4";
 
-constexpr int kFinale = 9, kPortal = 10, kStudioNight = 11, kReturn = 19, kReboot = 20;
+constexpr int kFlyby = 1, kFinale = 9, kPortal = 10, kStudioNight = 11, kReturn = 19, kReboot = 20;
+
+// STUDIO NIGHT `seconds` into the chapter.
+TimelineFrame nightAt(double seconds) {
+    return show::sampleTimeline(show::chapterStart(kStudioNight) + seconds);
+}
 
 // A chapter at `fraction` of its length.
 TimelineFrame chapterAt(int chapter, double fraction) {
@@ -315,9 +338,10 @@ constexpr std::uint32_t kW = 320, kH = 180;
 
 void testStudioNightLooks(gfx::Context& ctx) {
     Stages stages(ctx, kW, kH);
-    for (const double fraction : {0.3, 0.8}) {
+    stages.render(nightAt(0.6), exportState(nightAt(0.6), 1)); // builds the scene and the pipelines, untimed
+    for (const double at : {0.6, 4.0}) {
         const auto start = std::chrono::steady_clock::now();
-        const TimelineFrame frame = chapterAt(kStudioNight, fraction);
+        const TimelineFrame frame = nightAt(at);
         CHECK(frame.effect == Effect::StudioNight);
         const Picture p = stages.render(frame, exportState(frame, 4));
         const double seconds = secondsSince(start);
@@ -331,10 +355,9 @@ void testStudioNightLooks(gfx::Context& ctx) {
         const double mean = p.meanLuminance();
         const double screen = meanOver(p, screenRect(camera, kW, kH, 0.1));
         const double clippedShare = double(clipped) / (double(kW) * kH);
-        std::printf(
-            "(a) STUDIO NIGHT at %.0f %%: mean luminance %.3f, screen %.3f, %.2f %% clipped, %.1f s\n",
-            fraction * 100, mean, screen, clippedShare * 100, seconds);
-        p.save(kOutDir / ("studio_night_" + std::to_string(int(fraction * 100)) + ".png"));
+        std::printf("(a) STUDIO NIGHT at %.1f s: mean luminance %.3f, screen %.3f, %.2f %% clipped, %.1f s\n",
+                    at, mean, screen, clippedShare * 100, seconds);
+        p.save(kOutDir / ("studio_night_" + std::to_string(int(at * 10)) + ".png"));
         CHECK(mean > 0.05);
         CHECK(clippedShare < 0.02);
         CHECK(screen > mean);
@@ -349,8 +372,8 @@ void testCrtLightsTheRoom(gfx::Context& ctx) {
     gfx::Image white = makeRetro(ctx, 255, 255, 255);
     gfx::Image black = makeRetro(ctx, 0, 0, 0);
     Stages stages(ctx, kW, kH);
-    // STUDIO NIGHT's wide dolly: the lamp is off, the CRT is the key light.
-    const TimelineFrame frame = chapterAt(kStudioNight, 0.3);
+    // STUDIO NIGHT's dolly: the lamp is off, the CRT is the key light.
+    const TimelineFrame frame = nightAt(0.6);
     CHECK(modern::studioCamera(frame).shot == 0);
     const modern::Camera camera = modern::studioCamera(frame);
     const Picture lit = stages.render(frame, exportState(frame, 4), &white);
@@ -358,10 +381,10 @@ void testCrtLightsTheRoom(gfx::Context& ctx) {
     lit.save(kOutDir / "studio_crt_white.png");
     dark.save(kOutDir / "studio_crt_black.png");
     // The desk between the keyboard and the case, in front of the monitor; the back wall right of the
-    // window, which the screen (facing +z, in front of it) cannot see.
+    // window, behind the lamp's arm, which the screen (facing +z, in front of it) cannot see.
     const Rect screen = screenRect(camera, kW, kH, 0.1);
     const Rect desk = around(camera, kW, kH, {0.1f, 0.75f, -0.27f}, 3);
-    const Rect wall = around(camera, kW, kH, {-0.45f, 1.75f, -0.95f}, 6);
+    const Rect wall = around(camera, kW, kH, {-0.5f, 1.0f, -0.95f}, 6);
     // Measured in the display's linear light: PBR Neutral lifts dim coloured surfaces (its toe acts on the
     // smallest channel only), where the encoding is steepest, so encoded values would understate the desk's
     // gain and overstate the wall's.
@@ -388,7 +411,7 @@ void testScreenFollowsPicture(gfx::Context& ctx) {
     gfx::Image red = makeRetro(ctx, 40, 0, 0);
     gfx::Image green = makeRetro(ctx, 0, 40, 0);
     gfx::Image black = makeRetro(ctx, 0, 0, 0);
-    const TimelineFrame first = chapterAt(kStudioNight, 0.8);
+    const TimelineFrame first = nightAt(0.6);
     const TimelineFrame second = show::sampleTimeline(first.showSeconds + 1.0 / 60);
     // Frame N + 1 showing `now` after a history of `before` on frames N - 3 .. N.
     const auto after = [&](gfx::Image& before, gfx::Image& now) {
@@ -434,18 +457,40 @@ Vec3 screenCentre() {
     return sum * 0.25f;
 }
 
-// Every Studio shot but STUDIO NIGHT's wide dolly is about the screen.
+// Whether a camera has the screen's centre in its frame, in front of it.
+bool seesScreen(const modern::Camera& c) {
+    const modern::CameraBasis b = modern::cameraBasis(c);
+    const Vec3 v = screenCentre() - c.eye;
+    const float z = modern::dot(v, b.forward);
+    if (z <= 0.05f)
+        return false;
+    const float tanHalf = std::tan(c.fovYDegrees * 3.14159265f / 360.f);
+    return std::abs(modern::dot(v, b.up) / z) < tanHalf &&
+           std::abs(modern::dot(v, b.right) / z) < tanHalf * 16.f / 9.f;
+}
+
+// The shots that are about the screen (all but STUDIO NIGHT's dolly and RETURN's crane), wherever they see
+// it.
 bool screenShot(Effect effect, std::uint32_t shot) {
-    return !(effect == Effect::StudioNight && shot == 0);
+    return effect != Effect::StudioNight && !(effect == Effect::Return && shot == 0) &&
+           !(effect == Effect::Portal && shot == 1);
+}
+
+constexpr std::array<int, 6> kStudioChapters = {kFlyby, kFinale, kPortal, kStudioNight, kReturn, kReboot};
+
+std::size_t expectedShots(Effect effect) {
+    return effect == Effect::Portal ? 3u : effect == Effect::Return ? 2u : 1u;
 }
 
 void testCameras() {
     int samples = 0;
-    for (const int chapter : {kFinale, kPortal, kStudioNight, kReturn, kReboot}) {
+    const std::array<float, 3> lenses = {modern::lensFovY(modern::kLens24), modern::lensFovY(modern::kLens35),
+                                         modern::lensFovY(modern::kLens50)};
+    for (const int chapter : kStudioChapters) {
         const TimelineFrame head = show::sampleTimeline(show::chapterStart(chapter));
         CHECK(modern::sceneFor(head.effect) == modern::SceneId::Studio);
         const std::vector<modern::StudioShot> shots = modern::studioShots(head);
-        CHECK(shots.size() == (head.effect == Effect::StudioNight ? 2u : 1u));
+        CHECK(shots.size() == expectedShots(head.effect));
         CHECK(shots.front().start == 0.f && std::abs(shots.back().end - head.chapterDuration) < 1e-4);
         std::optional<modern::Camera> previous;
         const double duration = show::chapterStart(chapter + 1) - show::chapterStart(chapter);
@@ -456,11 +501,12 @@ void testCameras() {
             const modern::Camera c = modern::studioCamera(frame);
             CHECK(finite(c.eye) && finite(c.target) && std::isfinite(c.fovYDegrees) && c.focusDistance > 0);
             CHECK(modern::length(c.target - c.eye) > 0.05f);
+            CHECK(std::find(lenses.begin(), lenses.end(), c.fovYDegrees) != lenses.end());
             std::uint32_t expectedShot = 0;
             for (std::size_t i = 1; i < shots.size(); ++i)
                 expectedShot += static_cast<float>(frame.localSeconds) >= shots[i].start ? 1 : 0;
             CHECK(c.shot == expectedShot);
-            if (screenShot(frame.effect, c.shot)) {
+            if (screenShot(frame.effect, c.shot) && seesScreen(c)) {
                 // In focus on the screen's plane (the thin lens focuses on a plane at focusDistance along
                 // the view), with a small aperture: the CRT's picture stays sharp.
                 const modern::CameraBasis b = modern::cameraBasis(c);
@@ -468,6 +514,7 @@ void testCameras() {
                 CHECK(c.aperture <= 0.004f);
             }
             if (previous && previous->shot == c.shot) {
+                CHECK(previous->fovYDegrees == c.fovYDegrees); // no zooms within a shot
                 CHECK(modern::length(c.eye - previous->eye) < 0.05f);
                 CHECK(modern::length(c.target - previous->target) < 0.05f);
             }
@@ -475,13 +522,260 @@ void testCameras() {
             ++samples;
         }
     }
-    // STUDIO NIGHT cuts exactly at its accent.
-    const TimelineFrame night = show::sampleTimeline(show::chapterStart(kStudioNight));
-    const double cut = show::chapterStart(kStudioNight) + night.accentSeconds;
-    CHECK(modern::studioCamera(show::sampleTimeline(cut - 1e-3)).shot == 0);
-    CHECK(modern::studioCamera(show::sampleTimeline(cut + 1e-3)).shot == 1);
-    std::printf("(d) cameras: %d frames finite and smooth, STUDIO NIGHT cuts at %.2f s\n", samples,
-                night.accentSeconds);
+    std::printf("(d) cameras: %d frames finite, smooth and on the four lenses\n", samples);
+}
+
+// --- (o) ---------------------------------------------------------------------------------------------------
+
+constexpr double kFrame = 1.0 / 60;
+
+modern::Camera cameraAt(double showSeconds) {
+    return modern::studioCamera(show::sampleTimeline(showSeconds));
+}
+
+show::TransitionMarks marksOf(int chapter) {
+    return show::transitionMarks(show::sampleTimeline(show::chapterStart(chapter)));
+}
+
+// The tracked bar line `bars` bars after a time on a bar line.
+double barsAfter(double showSeconds, int bars) {
+    const show::TimelineFrame f = show::sampleTimeline(showSeconds);
+    const show::BeatGridView grid = show::beatGrid(f.track);
+    const double offset = show::trackStart(f.track);
+    return grid.beatTime(grid.beatAt(showSeconds - offset + 1e-9) + 4 * bars) + offset;
+}
+
+// The times within [from, to) at which the eye passes the plane z = planeZ, to the frame.
+std::vector<double> crossings(double from, double to, float planeZ, std::vector<Vec3>* where = nullptr) {
+    std::vector<double> out;
+    float last = cameraAt(from).eye.z - planeZ;
+    for (double t = from + kFrame; t < to; t += kFrame) {
+        const Vec3 eye = cameraAt(t).eye;
+        const float now = eye.z - planeZ;
+        if ((last < 0.f) != (now < 0.f)) {
+            // The frame on the far side of the plane.
+            out.push_back(t);
+            if (where != nullptr)
+                where->push_back(eye);
+        }
+        last = now;
+    }
+    return out;
+}
+
+// The camera's heading in degrees, unwrapped along a run of times.
+std::vector<double> headings(double from, double to) {
+    std::vector<double> out;
+    double offset = 0, last = 0;
+    for (double t = from; t <= to + 1e-9; t += kFrame) {
+        const modern::CameraBasis b = modern::cameraBasis(cameraAt(t));
+        double h = std::atan2(b.forward.x, -b.forward.z) * 180.0 / 3.14159265358979 + offset;
+        if (!out.empty()) {
+            while (h - last > 180)
+                h -= 360, offset -= 360;
+            while (h - last < -180)
+                h += 360, offset += 360;
+        }
+        out.push_back(h);
+        last = h;
+    }
+    return out;
+}
+
+void testCrossings() {
+    const float screenZ = modern::studioScreenCorners()[0].z;
+    const std::array<Vec3, 4> corners = modern::studioScreenCorners();
+    const auto inPicture = [&](Vec3 p) {
+        return p.x > corners[0].x && p.x < corners[1].x && p.y < corners[0].y && p.y > corners[2].y;
+    };
+
+    // FLYBY: the picture fills the frame on D; 1.2 m out by A + 1 s.
+    const show::TransitionMarks flyby = marksOf(kFlyby);
+    const modern::Camera onGlass = cameraAt(flyby.downbeat);
+    const Pixel left = project(onGlass, 1600, 900, corners[0]),
+                right = project(onGlass, 1600, 900, corners[1]);
+    const double span = (right.x - left.x) / 1600.0;
+    CHECK(span >= 0.98);
+    const double out = cameraAt(flyby.accent + 1.0).eye.z - screenZ;
+    CHECK(std::abs(out - 1.2) < 0.01);
+    CHECK(crossings(show::chapterStart(kFlyby), show::chapterStart(kFlyby + 1), screenZ).empty());
+
+    // PORTAL: in on D, out on the bar two bars on, inside the picture both times.
+    const show::TransitionMarks portal = marksOf(kPortal);
+    const double outward = barsAfter(portal.downbeat, 2);
+    std::vector<Vec3> where;
+    const std::vector<double> times =
+        crossings(show::chapterStart(kPortal), show::chapterStart(kPortal + 1), screenZ, &where);
+    CHECK(times.size() == 2);
+    CHECK(times[0] >= portal.downbeat - 1e-9 && times[0] - portal.downbeat <= kFrame + 1e-9);
+    CHECK(times[1] >= outward - 1e-9 && times[1] - outward <= kFrame + 1e-9);
+    CHECK(inPicture(where[0]) && inPicture(where[1]));
+    for (const double t : {portal.downbeat + kFrame, portal.accent, outward - kFrame})
+        CHECK(modern::studioBehindScreen(cameraAt(t)));
+    CHECK(!modern::studioBehindScreen(cameraAt(portal.downbeat - kFrame)) &&
+          !modern::studioBehindScreen(cameraAt(outward)));
+    // The turn over the span centred on the accent that starts on the glass, fastest within a beat of it.
+    const double reach = portal.accent - portal.downbeat;
+    const std::vector<double> h = headings(portal.accent - reach, portal.accent + reach);
+    const double turned = std::abs(h.back() - h.front());
+    CHECK(turned >= 175);
+    double fastest = 0, when = 0;
+    for (std::size_t i = 1; i < h.size(); ++i)
+        if (std::abs(h[i] - h[i - 1]) > fastest) {
+            fastest = std::abs(h[i] - h[i - 1]);
+            when = portal.accent - reach + double(i) * kFrame;
+        }
+    const double beat = portal.bar / 4;
+    CHECK(std::abs(when - portal.accent) <= beat);
+
+    // STUDIO NIGHT: through the window's pane on the accent, clear of the glazing bars (the opening x in
+    // [-1.85, -0.65], y in [1, 2]; the mullion at x = -1.37, the transom at y = 1.62, studio.cpp).
+    const show::TransitionMarks night = marksOf(kStudioNight);
+    where.clear();
+    const std::vector<double> pane =
+        crossings(show::chapterStart(kStudioNight), show::chapterStart(kStudioNight + 1), -1.0f, &where);
+    CHECK(pane.size() == 1);
+    CHECK(std::abs(pane[0] - night.accent) <= kFrame + 1e-9);
+    const Vec3 p = where[0];
+    CHECK(p.x > -1.85f && p.x < -0.65f && p.y > 1.f && p.y < 2.f);
+    CHECK(std::abs(p.x + 1.37f) > 0.05f && std::abs(p.y - 1.62f) > 0.05f);
+
+    // REBOOT: on the glass on D.
+    const show::TransitionMarks reboot = marksOf(kReboot);
+    const std::vector<double> glass =
+        crossings(show::chapterStart(kReboot), show::chapterStart(kReboot + 1), screenZ);
+    CHECK(!glass.empty() && std::abs(glass[0] - reboot.downbeat) <= kFrame + 1e-9);
+
+    std::printf("(o) FLYBY spans %.3f of the frame on D, %.3f m out at A + 1 s; PORTAL in at %.3f, out at "
+                "%.3f, turning %.0f degrees, fastest at %.3f (accent %.3f); STUDIO NIGHT's pane at %.3f; "
+                "REBOOT's glass at %.3f\n",
+                span, out, times[0], times[1], turned, when, portal.accent, pane[0], glass[0]);
+}
+
+// --- (p) ---------------------------------------------------------------------------------------------------
+
+void testMoves() {
+    int frames = 0;
+    for (const int chapter : kStudioChapters) {
+        const double start = show::chapterStart(chapter), end = show::chapterStart(chapter + 1);
+        const TimelineFrame head = show::sampleTimeline(start);
+        const show::TransitionMarks marks = show::transitionMarks(head);
+        // Shot changes: on tracked bar lines, outside the two beats before the accent.
+        const show::BeatGridView grid = show::beatGrid(head.track);
+        const double offset = show::trackStart(head.track);
+        const std::vector<modern::StudioShot> shots = modern::studioShots(head);
+        for (std::size_t i = 1; i < shots.size(); ++i) {
+            const double at = start + shots[i].start;
+            const int beat = grid.beatAt(at - offset + 0.002);
+            CHECK(beat >= 0 && grid.bar(beat) == 0 && std::abs(grid.beatTime(beat) + offset - at) < 0.001);
+            const double beatLength = marks.bar / 4;
+            CHECK(!(at > marks.accent - 2 * beatLength && at <= marks.accent));
+        }
+        // No straight, constant-speed stretch while the eye moves (handheld aside: its weight is 0 in these
+        // checks' moves or adds curvature).
+        int straight = 0;
+        Vec3 a = cameraAt(start).eye, b = cameraAt(start + kFrame).eye;
+        for (double t = start + 2 * kFrame; t < end; t += kFrame) {
+            const modern::Camera cc = cameraAt(t);
+            const Vec3 c = cc.eye;
+            const bool sameShot = cameraAt(t - 2 * kFrame).shot == cc.shot;
+            const bool moving = modern::length(c - b) > 1e-4f;
+            const bool linear = modern::length(c - b * 2.f + a) < 1e-7f;
+            straight = sameShot && moving && linear ? straight + 1 : 0;
+            CHECK(straight < 15);
+            a = b;
+            b = c;
+            ++frames;
+        }
+    }
+    std::printf("(p) moves: %d frames eased (no straight stretch), shot changes on bar lines\n", frames);
+}
+
+// --- (q) ---------------------------------------------------------------------------------------------------
+
+void testHandheld() {
+    using modern::StudioHandheld;
+    const std::vector<double> glass = modern::studioGlassTimes();
+    CHECK(glass.size() == 5);
+    double mostDegrees = 0, mostMetres = 0;
+    for (double t = 0; t < show::showDuration(); t += kFrame / 2) {
+        const StudioHandheld hh = modern::studioHandheld(t);
+        const double degrees = std::sqrt(hh.yaw * hh.yaw + hh.pitch * hh.pitch + hh.roll * hh.roll);
+        mostDegrees = std::max(mostDegrees, degrees);
+        mostMetres = std::max(mostMetres, double(modern::length(hh.offset)));
+        // Off near a glass.
+        for (const double g : glass)
+            if (std::abs(t - g) <= 0.5)
+                CHECK(degrees == 0 && modern::length(hh.offset) == 0.f);
+        // The same time, the same jitter.
+        const StudioHandheld again = modern::studioHandheld(t);
+        CHECK(again.yaw == hh.yaw && again.offset.x == hh.offset.x);
+    }
+    CHECK(mostDegrees <= modern::kHandheldDegrees + 1e-6 && mostMetres <= modern::kHandheldMetres + 1e-9);
+    CHECK(mostDegrees > 0.5 * modern::kHandheldDegrees && mostMetres > 0.5 * modern::kHandheldMetres);
+    // The spectrum of each channel over 60 s away from any glass (REBOOT's D is the last one): the strongest
+    // frequency (DFT bins every 1/60 Hz up to 5 Hz, the mean removed) lies within 0.4 - 1.1 Hz.
+    const double from = glass.back() + 2.0;
+    constexpr int n = 3600;
+    std::array<std::vector<double>, 6> channels;
+    for (int i = 0; i < n; ++i) {
+        const StudioHandheld hh = modern::studioHandheld(from + i * kFrame);
+        const std::array<double, 6> v = {hh.offset.x, hh.offset.y, hh.offset.z, hh.yaw, hh.pitch, hh.roll};
+        for (int c = 0; c < 6; ++c)
+            channels[c].push_back(v[c]);
+    }
+    for (auto& x : channels) {
+        double mean = 0;
+        for (const double v : x)
+            mean += v / n;
+        double best = 0, peak = 0;
+        for (int k = 1; k <= 300; ++k) {
+            const double f = k / 60.0;
+            double re = 0, im = 0;
+            for (int i = 0; i < n; ++i) {
+                const double phase = 2 * 3.14159265358979 * f * i * kFrame;
+                re += (x[i] - mean) * std::cos(phase);
+                im += (x[i] - mean) * std::sin(phase);
+            }
+            const double power = re * re + im * im;
+            if (power > best) {
+                best = power;
+                peak = f;
+            }
+        }
+        CHECK(peak >= 0.4 && peak <= 1.1);
+    }
+    std::printf(
+        "(q) handheld: at most %.4f degrees and %.5f m, 0 near the %zu glass times, spectra peaking in "
+        "0.4 - 1.1 Hz\n",
+        mostDegrees, mostMetres, glass.size());
+}
+
+// --- (r) ---------------------------------------------------------------------------------------------------
+
+void testBehindScreen(gfx::Context& ctx) {
+    constexpr std::uint32_t w = 480, h = 270;
+    Stages stages(ctx, w, h);
+    const show::TransitionMarks portal = marksOf(kPortal);
+    const TimelineFrame inside = show::sampleTimeline(portal.downbeat + 0.6);
+    CHECK(modern::studioBehindScreen(modern::studioCamera(inside)));
+    const Picture stars = stages.render(inside, exportState(inside, 16));
+    stars.save(kOutDir / "studio_portal_stars.png");
+    std::size_t lit = 0;
+    for (std::uint32_t y = 0; y < h; ++y)
+        for (std::uint32_t x = 0; x < w; ++x)
+            lit += stars.luminance(x, y) > 0.25;
+    const TimelineFrame back = show::sampleTimeline(191.0);
+    CHECK(modern::studioBehindScreen(modern::studioCamera(back)));
+    const Picture room = stages.render(back, exportState(back, 16));
+    room.save(kOutDir / "studio_portal_room_through_glass.png");
+    std::printf("(r) behind the screen: %zu star pixels 0.6 s after the glass; the room through the glass's "
+                "back at 191.0: mean %.3f\n",
+                lit, room.meanLuminance());
+    CHECK(lit >= 200);
+    CHECK(room.meanLuminance() > 0.03);
+    evo::test::checkChapterPictures(ctx, modern::SceneId::Studio);
+    std::printf("(r) checkChapterPictures: the Studio's 6 chapters pass\n");
 }
 
 // --- (e)
@@ -553,7 +847,7 @@ void testScene() {
 void testRegistry(gfx::Context& ctx) {
     for (std::size_t i = 0; i < show::kEffectCount; ++i) {
         const auto effect = static_cast<Effect>(i);
-        const bool studio = effect == Effect::Finale || effect == Effect::Portal ||
+        const bool studio = effect == Effect::Flyby || effect == Effect::Finale || effect == Effect::Portal ||
                             effect == Effect::StudioNight || effect == Effect::Return ||
                             effect == Effect::Reboot;
         CHECK((modern::sceneFor(effect) == modern::SceneId::Studio) == studio);
@@ -564,12 +858,12 @@ void testRegistry(gfx::Context& ctx) {
     // STUDIO NIGHT is 2026 only, yet the renderer runs the retro stage for the CRT.
     gfx::FrameRing ring(ctx);
     render::Renderer renderer(ctx, ring, {160, 90});
-    const TimelineFrame frame = chapterAt(kStudioNight, 0.3);
+    const TimelineFrame frame = nightAt(4.0);
     VkCommandBuffer cmd = ring.begin();
     renderer.render(cmd, frame);
     ring.wait(ring.submit());
     CHECK(renderer.lastStats().retroRendered && renderer.lastStats().modernRendered);
-    std::printf("(f) registry: 5 Studio chapters; STUDIO NIGHT renders retro frame %u for the CRT\n",
+    std::printf("(f) registry: 6 Studio chapters; STUDIO NIGHT renders retro frame %u for the CRT\n",
                 renderer.lastStats().retroFrame);
 }
 
@@ -658,8 +952,8 @@ Picture playWindow(Stages& stages, const TimelineFrame& last, std::uint32_t coun
 }
 
 void testWindowScreenSharp(gfx::Context& ctx) {
-    // STUDIO NIGHT's orbit around the monitor, the DOS prompt on the screen.
-    const TimelineFrame still = chapterAt(kStudioNight, 0.8);
+    // RETURN's close-up of the screen, the DOS prompt on it.
+    const TimelineFrame still = chapterAt(kReturn, 0.8);
     const modern::Camera camera = modern::studioCamera(still);
     CHECK(camera.shot == 1);
     Stages window(ctx, kW, kH);
@@ -669,13 +963,13 @@ void testWindowScreenSharp(gfx::Context& ctx) {
     const Picture frame31 = window.render(still, interactiveState(still, render::HistoryReset::None, 30));
     Stages exporter(ctx, kW, kH);
     const Picture reference = exporter.render(still, exportState(still, 32));
-    frame30.save(kOutDir / "studio_window_orbit_30.png");
-    reference.save(kOutDir / "studio_window_orbit_export.png");
+    frame30.save(kOutDir / "studio_window_closeup_30.png");
+    reference.save(kOutDir / "studio_window_closeup_export.png");
     const Rect screen = screenRect(camera, kW, kH, 0.1);
     const double flicker = meanAbsDifference(frame30, frame31, screen);
     const double error = meanAbsDifference(frame30, reference, screen);
     std::printf(
-        "(h) window orbit screen: frame to frame %.4f, from a 32 spp export %.4f, local contrast %.3f "
+        "(h) window close-up screen: frame to frame %.4f, from a 32 spp export %.4f, local contrast %.3f "
         "(export %.3f)\n",
         flicker, error, localContrast(frame30, screen), localContrast(reference, screen));
     // Mean absolute differences over the screen on the display scale (1 = 255 levels). A jittered single
@@ -718,11 +1012,11 @@ void testRig() {
     const modern::Studio studio;
     const modern::SceneStatic& statics = studio.staticScene();
     namespace rt = evo::rt;
-    for (const int chapter : {kFinale, kPortal, kStudioNight, kReturn, kReboot})
-        for (const double fraction : {0.1, 0.5, 0.9}) {
+    for (const int chapter : {kFlyby, kFinale, kPortal, kStudioNight, kReturn, kReboot})
+        for (const double fraction : {0.1, 0.5, 0.6, 0.9}) {
             const TimelineFrame t = chapterAt(chapter, fraction);
             const modern::SceneFrame f = studio.frame(t);
-            const modern::StudioRig rig = modern::studioRig(t.effect);
+            const modern::StudioRig rig = modern::studioRigAt(t);
             modern::checkSceneFrame(statics, f);
             CHECK(f.materials.size() == statics.materials.size());
             const rt::Material& lamp = f.materials[modern::Studio::kLampMaterial];
@@ -737,13 +1031,20 @@ void testRig() {
                 CHECK(screenLight.emission[c] == rig.screen);
                 lampEmission += lampLight.emission[c];
             }
-            if (t.effect == Effect::StudioNight)
+            if (t.effect == Effect::StudioNight || t.effect == Effect::Flyby)
                 CHECK(lampEmission == 0 && lamp.emissionScale == 0.f);
             if (t.effect == Effect::Return || t.effect == Effect::Reboot)
                 CHECK(lampEmission > 0);
             // The rig changes the lamp and the screen only; the LEDs are camera-only emitters.
+            CHECK(f.materials[modern::Studio::kScreenBackMaterial].emissionScale ==
+                  modern::Studio::kScreenBackLevel * rig.screen);
+            CHECK(f.exposureEV == modern::studioExposureAt(t));
+            if (t.effect != Effect::Portal && t.effect != Effect::Flyby && t.effect != Effect::Return)
+                CHECK(f.exposureEV == modern::studioExposureEV(t.effect) &&
+                      rig.screen == modern::studioRig(t.effect).screen);
             for (std::size_t i = 0; i < f.materials.size(); ++i)
-                if (i != modern::Studio::kLampMaterial && i != modern::Studio::kScreenMaterial)
+                if (i != modern::Studio::kLampMaterial && i != modern::Studio::kScreenMaterial &&
+                    i != modern::Studio::kScreenBackMaterial)
                     CHECK(std::memcmp(&f.materials[i], &statics.materials[i], sizeof(rt::Material)) == 0);
             CHECK((f.materials[modern::Studio::kLedMaterial].flags & rt::kMaterialCameraOnlyEmission) != 0);
         }
@@ -773,7 +1074,7 @@ std::vector<bool> speckles(const Picture& p, double levels) {
 void testSpeckle(gfx::Context& ctx) {
     const auto start = std::chrono::steady_clock::now();
     Stages stages(ctx, 160, 90);
-    const TimelineFrame frame = chapterAt(kStudioNight, 0.08);
+    const TimelineFrame frame = nightAt(5.0); // the dolly on from the night wide
     CHECK(modern::studioCamera(frame).shot == 0);
     // Two renders with different seeds: a pixel above its neighbours in both is a detail of the picture (an
     // edge, a star, the screen's text: about 1.1 % of this frame at 256 spp), one above them in a single
@@ -847,7 +1148,8 @@ void testLedCameraOnly(gfx::Context& ctx) {
     const TimelineFrame frame = chapterAt(kFinale, 0.5);
     constexpr std::uint32_t w = kW / 2, h = kH / 2;
     Stages stages(ctx, w, h);
-    const render::HistoryState state = exportState(frame, 4);
+    // 16 spp: from FINALE's wide (1.5 m out) the LEDs are a few pixels, which 4 spp of BSDF rays may miss.
+    const render::HistoryState state = exportState(frame, 16);
     stages.render(frame, state, &white); // builds the Studio
     modern::TraceSettings settings{state.spp, state.maxBounces, state.frameSeed};
     modern::SceneFrame on = studio.frame(frame);
@@ -888,7 +1190,7 @@ void testLedCameraOnly(gfx::Context& ctx) {
 void testMoonbeam(gfx::Context& ctx) {
     constexpr std::uint32_t w = kW / 2, h = kH / 2;
     Stages stages(ctx, w, h);
-    const TimelineFrame frame = chapterAt(kStudioNight, 0.08);
+    const TimelineFrame frame = nightAt(4.0);
     const modern::Camera camera = modern::studioCamera(frame);
     CHECK(camera.shot == 0);
     // The moon's ray through the window's centre, down to the floor; the floor 1 m to its right is outside
@@ -964,6 +1266,9 @@ int main(int argc, char** argv) {
         auto ctx = gfx::Context::create({.validation = true});
         if (!ctx.validationEnabled())
             std::printf("warning: validation layer unavailable; only the pictures are checked\n");
+        // --only <letters> runs just those checks (for example --only kn).
+        const std::string only = argc >= 3 && std::string(argv[1]) == "--only" ? argv[2] : "";
+        const auto run = [&](char letter) { return only.empty() || only.find(letter) != std::string::npos; };
         if (argc >= 3 && std::string(argv[1]) == "--look") {
             const std::uint32_t spp = argc >= 4 ? std::uint32_t(std::stoul(argv[3])) : 64u;
             const std::uint32_t w = argc >= 6 ? std::uint32_t(std::stoul(argv[4])) : 640u;
@@ -972,20 +1277,42 @@ int main(int argc, char** argv) {
             CHECK(ctx.validationMessageCount() == 0);
             return 0;
         }
-        testCameras();
-        testScene();
-        testDosIdle();
-        testRegistry(ctx);
-        testStudioNightLooks(ctx);
-        testCrtLightsTheRoom(ctx);
-        testScreenFollowsPicture(ctx);
-        testWindowScreenSharp(ctx);
-        testClampIndirect(ctx);
-        testRig();
-        testSpeckle(ctx);
-        testChromeReflectsScreen(ctx);
-        testLedCameraOnly(ctx);
-        testMoonbeam(ctx);
+        if (run('d'))
+            testCameras();
+        if (run('o'))
+            testCrossings();
+        if (run('p'))
+            testMoves();
+        if (run('q'))
+            testHandheld();
+        if (run('e'))
+            testScene();
+        if (run('g'))
+            testDosIdle();
+        if (run('f'))
+            testRegistry(ctx);
+        if (run('a'))
+            testStudioNightLooks(ctx);
+        if (run('b'))
+            testCrtLightsTheRoom(ctx);
+        if (run('c'))
+            testScreenFollowsPicture(ctx);
+        if (run('h'))
+            testWindowScreenSharp(ctx);
+        if (run('i'))
+            testClampIndirect(ctx);
+        if (run('j'))
+            testRig();
+        if (run('k'))
+            testSpeckle(ctx);
+        if (run('l'))
+            testChromeReflectsScreen(ctx);
+        if (run('m'))
+            testLedCameraOnly(ctx);
+        if (run('n'))
+            testMoonbeam(ctx);
+        if (run('r'))
+            testBehindScreen(ctx);
         CHECK(ctx.validationMessageCount() == 0);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());

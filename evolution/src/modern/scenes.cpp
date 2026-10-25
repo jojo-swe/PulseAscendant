@@ -43,12 +43,12 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Singularity, "Singularity", &make<Singularity>}, // Task 25
 }};
 
-// The scene each effect shows, one row per effect in show::Effect's order. The five Studio chapters show the
+// The scene each effect shows, one row per effect in show::Effect's order. The six Studio chapters show the
 // Studio; the 1993-only chapters (BOOT, CREDITS, THE END) never show a 2026 picture
 // and stay on the placeholder; each scene task moves its own chapters' rows to its scene (the comment).
 constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEffect{{
     {Effect::Boot, SceneId::Placeholder},
-    {Effect::Flyby, SceneId::Placeholder}, // the Studio's pull-out
+    {Effect::Flyby, SceneId::Studio}, // the pull-out from the CRT reveals the room
     {Effect::Dots, SceneId::Particles},
     {Effect::Plasma, SceneId::Nebula},
     {Effect::Tunnel, SceneId::Tunnel},

@@ -21,8 +21,8 @@ layout(set = 0, binding = 0, rgba8) uniform readonly image2D retroScreen;
 layout(set = 0, binding = 1, rgba8) uniform readonly image2D modernImage;
 layout(set = 0, binding = 2, rgba8) uniform writeonly image2D outImage;
 
-// Must match CompositorPushConstants in src/render/compositor.cpp (32 bytes), shared by both of the
-// compositor's passes.
+// Must match the first 32 bytes of CompositorPushConstants in src/render/compositor.cpp (48 bytes; crt.comp
+// declares the crt view fields after these), shared by both of the compositor's passes.
 layout(push_constant) uniform PushConstants {
     uint width;
     uint height;

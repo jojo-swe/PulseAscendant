@@ -40,6 +40,9 @@ Then regenerated for the epoch cards (the 1993 card through the CRT, the 2026 ca
 left margin, in place of the 8x8 cards with drop shadows): every output changed in its card's area only.
 Then regenerated for the FINALE megamix's director: after D the room carries the 1993 card, so finale_50 and
 stream_finale changed (mean luminance -0.13 %); no other output moved.
+Then regenerated for the Studio's new takes and the Portal crossings: every Studio capture and the three Studio
+streams changed (new cameras and handheld), and flyby_2026, now the Studio; every 1993 and non-Studio output
+stayed byte for byte.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
