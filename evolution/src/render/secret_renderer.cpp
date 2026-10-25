@@ -17,13 +17,13 @@ SecretRenderer::SecretRenderer(gfx::Context& ctx, gfx::FrameRing& ring, std::uin
       blank_(ctx, {1, 1, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, 1, "secret part blank"}) {}
 
 SecretRenderer::~SecretRenderer() {
-    ring_.waitAll();
+    ring_.waitAll(); // shutdown
 }
 
 void SecretRenderer::resize(std::uint32_t width, std::uint32_t height) {
     if (width == width_ && height == height_)
         return;
-    ring_.waitAll();
+    ring_.waitAll(); // resize: the compositor's images may still be read
     compositor_.resize(width, height);
     width_ = width;
     height_ = height;
