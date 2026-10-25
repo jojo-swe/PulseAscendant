@@ -1,22 +1,22 @@
-// FINALE, chapter 9: the megamix. On the CPU: the cuts fall on every kFinaleBeatsPerCut-th tracked beat of
-// the chapter (the flash frame is the retro frame the beat falls in), every sub-effect shows, in order, with
-// exactly one flash frame per cut, and each one gets its home chapter's frame and a home retro frame that
-// advances at its own rate. On the GPU, through the retro stage: a FINALE frame equals the sub-effect's own
-// frame at the same home retro frame byte for byte (indices and colours; the own frame without its text,
-// since FINALE draws its own text, none, over a sub-effect), a flash frame is all white, and a FINALE frame
-// is the same after another frame and from a fresh stage. Runs with the validation layer on and fails on any
-// message it reports.
+// FINALE, chapter 9: the 1993 side as a 3x3 grid of every effect round the EVOLUTION scroller. On the CPU:
+// the cells tile the screen with 1-pixel gutters, each tile is 3:1 of kFinaleSource, the tiles' home frames
+// start at their best moments and advance at their own rates (wrapping inside their chapters), and PORTAL
+// continues FINALE's count. On the GPU, through the retro stage: every tile equals the box-downsampled (in
+// linear light) solo render of its effect without its text, the centre and the gutters hold FINALE's own
+// picture, the 1993 card is typed bottom-left on black cells, and a frame is the same after another frame and
+// from a fresh stage. Runs with the validation layer on and fails on any message it reports.
 
 #include "gfx/context.hpp"
+#include "retro/boot.hpp"
 #include "retro/dots.hpp"
 #include "retro/effects.hpp"
 #include "retro/finale.hpp"
+#include "retro/portal.hpp"
 #include "retro/raytrace.hpp"
 #include "retro/rotozoom.hpp"
 #include "retro/tunnel.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/cues.hpp"
-#include "show/music_curves.hpp"
 #include "show/timeline.hpp"
 #include "test_env.hpp"
 
@@ -35,6 +35,7 @@ namespace {
 
 using evo::retro::EffectFrame;
 using evo::retro::EffectInfo;
+using evo::retro::PixelRect;
 using evo::show::Effect;
 using evo::show::TimelineFrame;
 using evo::test::RetroStageFixture;
@@ -51,157 +52,92 @@ int checksPassed = 0;
 constexpr int kFinaleChapter = 9;
 constexpr std::uint32_t kRate = evo::retro::kFinaleRetroRate;
 
-// A FINALE frame at `fraction` of the way through retro frame `retroFrame` (just before the chapter's end for
-// the last, partial retro frame).
-TimelineFrame finale(std::uint32_t retroFrame, double fraction = 0.5) {
-    const double start = evo::show::chapterStart(kFinaleChapter);
+// A frame of `chapter` at `fraction` of the way through retro frame `retroFrame`.
+TimelineFrame at(int chapter, std::uint32_t retroFrame, double fraction = 0.5) {
+    const double start = evo::show::chapterStart(chapter);
     const double end = start + evo::show::sampleTimeline(start).chapterDuration;
-    const TimelineFrame frame =
-        evo::show::sampleTimeline(std::min(start + (retroFrame + fraction) / kRate, end - 1e-6));
+    return evo::show::sampleTimeline(std::min(start + (retroFrame + fraction) / kRate, end - 1e-6));
+}
+TimelineFrame finale(std::uint32_t retroFrame, double fraction = 0.5) {
+    const TimelineFrame frame = at(kFinaleChapter, retroFrame, fraction);
     if (frame.chapter != kFinaleChapter || frame.effect != Effect::Finale)
         throw std::runtime_error("expected a FINALE frame at retro frame " + std::to_string(retroFrame));
     return frame;
 }
 
-// The retro frames the stage shows in the chapter, the last one partial.
-std::uint32_t frameCount() {
-    return static_cast<std::uint32_t>(std::ceil(finale(0, 0).chapterDuration * kRate));
-}
-
-EffectFrame resolved(std::uint32_t retroFrame) {
-    return evo::retro::resolveEffect(evo::retro::effectFor(Effect::Finale), finale(retroFrame), retroFrame);
-}
-
-// The chapters FLYBY, DOTS, TUNNEL, GLENZ, LENS and RAYTRACE have of their own.
-int homeChapter(Effect effect) {
-    switch (effect) {
-    case Effect::Flyby:
-        return 1;
-    case Effect::Dots:
-        return 2;
-    case Effect::Tunnel:
-        return 4;
-    case Effect::Glenz:
-        return 5;
-    case Effect::Lens:
-        return 6;
-    case Effect::Raytrace:
-        return 7;
-    default:
-        return -1;
-    }
-}
-
-// The registry entry: its own flash entry with the resolver, no shader and no text.
 void testRegistry() {
     const EffectInfo& info = evo::retro::effectFor(Effect::Finale);
-    CHECK(info.resolve == evo::retro::finaleResolve);
-    CHECK(info.shader == nullptr && info.scene == nullptr && info.text == nullptr && info.texture == nullptr);
-    CHECK(info.retroRate == kRate);
-    for (Effect sub : evo::retro::kFinaleCuts)
-        CHECK(evo::retro::effectFor(sub).resolve == nullptr);
-    // An entry without a resolver resolves to itself.
-    const TimelineFrame dots = evo::show::sampleTimeline(evo::show::chapterStart(2) + 1);
-    const EffectFrame self = evo::retro::resolveEffect(evo::retro::effectFor(Effect::Dots), dots, 35);
-    CHECK(self.effect == Effect::Dots && self.retroFrame == 35 && self.frame.showSeconds == dots.showSeconds);
+    CHECK(info.grid == &evo::retro::finaleGrid && !info.phosphor);
+    CHECK(info.shader == nullptr && info.texture == nullptr && info.retroRate == kRate);
+    CHECK(info.text == &evo::retro::finaleText && info.scene == &evo::retro::finaleScene);
+    CHECK(info.palette == &evo::retro::finalePalette);
+    for (Effect tile : evo::retro::kFinaleTiles)
+        CHECK(evo::retro::effectFor(tile).grid == nullptr);
+    // Every 1993 effect of Act I is a tile, once.
+    const std::set<Effect> tiles(evo::retro::kFinaleTiles.begin(), evo::retro::kFinaleTiles.end());
+    CHECK(tiles.size() == 8);
+    for (Effect e : {Effect::Flyby, Effect::Dots, Effect::Plasma, Effect::Tunnel, Effect::Glenz, Effect::Lens,
+                     Effect::Raytrace, Effect::City})
+        CHECK(tiles.contains(e));
 }
 
-// The cuts are every kFinaleBeatsPerCut-th tracked beat of the chapter, counted from the beat it starts on;
-// each flash is the retro frame its beat falls in.
-void testCutsOnTheBeatGrid() {
-    const TimelineFrame frame = finale(0, 0);
-    const double start = evo::show::chapterStart(kFinaleChapter);
-    const int track = evo::show::trackAt(start);
-    const double offset = start - evo::show::trackStart(track);
-    const evo::show::BeatGridView grid = evo::show::beatGrid(track);
-    std::vector<double> beats; // the chapter's beats, chapter seconds
-    for (int beat = 0; beat < grid.count(); ++beat) {
-        const double local = grid.beatTime(beat) - offset;
-        if (local > -1e-6 && local < frame.chapterDuration)
-            beats.push_back(local);
+// The cells: 106 x 66 with 1-pixel gutters, filling 320 x 200 exactly; the tiles skip the centre.
+void testLayout() {
+    CHECK(evo::retro::finaleCell(0) == (PixelRect{0, 0, 106, 66}));
+    CHECK(evo::retro::finaleCell(8) == (PixelRect{214, 134, 106, 66}));
+    CHECK(evo::retro::finaleCell(4) == (PixelRect{107, 67, 106, 66}));
+    std::vector<int> covered(320 * 200, 0);
+    for (int cell = 0; cell < 9; ++cell) {
+        const PixelRect r = evo::retro::finaleCell(cell);
+        for (int y = r.y; y < r.y + r.height; ++y)
+            for (int x = r.x; x < r.x + r.width; ++x)
+                ++covered[static_cast<std::size_t>(y * 320 + x)];
     }
-    CHECK(beats.size() > 20);
-    CHECK(std::abs(beats[0]) < 1e-6); // the chapter starts on a beat
-
-    const std::vector<std::uint32_t> cuts = evo::retro::finaleCutFrames(frame);
-    std::size_t expected = 0;
-    for (std::size_t i = evo::retro::kFinaleBeatsPerCut; i < beats.size();
-         i += evo::retro::kFinaleBeatsPerCut) {
-        CHECK(expected < cuts.size());
-        const double at = beats[i] * kRate;
-        CHECK(cuts[expected] <= at && at < cuts[expected] + 1.0);
-        ++expected;
+    int gutter = 0;
+    for (int c : covered) {
+        CHECK(c <= 1);
+        gutter += c == 0;
     }
-    CHECK(cuts.size() == expected);
-    CHECK(cuts.size() >= evo::retro::kFinaleCuts.size());
-    // The same for any frame of the chapter: fixed facts only.
-    CHECK(evo::retro::finaleCutFrames(finale(200, 0.9)) == cuts);
-    std::printf("finale: %zu cuts every %d beats, at retro frames %u .. %u of %u\n", cuts.size(),
-                evo::retro::kFinaleBeatsPerCut, cuts.front(), cuts.back(), frameCount());
+    CHECK(gutter == 2 * 200 + 2 * 320 - 4); // two columns and two rows
+    std::set<int> cells;
+    for (std::size_t t = 0; t < 8; ++t)
+        cells.insert(evo::retro::finaleTileCell(t));
+    CHECK(cells.size() == 8 && !cells.contains(evo::retro::kFinaleCentre));
+    CHECK(evo::retro::kFinaleSource.width == 3 * 106 && evo::retro::kFinaleSource.height == 3 * 66);
 }
 
-// The beat a chapter starts on, on a made-up grid: the beat at its start (within 1e-6 either way), else the
-// next; the first beat for a start before the track's first beat (where beatAt says -1).
-void testFirstBeat() {
-    const double times[] = {0.5, 1.0, 1.5, 2.0};
-    const unsigned char bars[] = {0, 1, 2, 3};
-    const evo::show::BeatGridView grid(times, bars, 4);
-    CHECK(grid.beatAt(0.2) == -1);
-    CHECK(evo::retro::finaleFirstBeat(grid, 0.0) == 0);
-    CHECK(evo::retro::finaleFirstBeat(grid, 0.2) == 0);
-    CHECK(evo::retro::finaleFirstBeat(grid, 0.5) == 0);
-    CHECK(evo::retro::finaleFirstBeat(grid, 0.5 - 1e-7) == 0);
-    CHECK(evo::retro::finaleFirstBeat(grid, 0.5 + 1e-7) == 0);
-    CHECK(evo::retro::finaleFirstBeat(grid, 0.6) == 1);
-    CHECK(evo::retro::finaleFirstBeat(grid, 1.5) == 2);
-    CHECK(evo::retro::finaleFirstBeat(grid, 1.7) == 3);
-}
-
-// Every retro frame of the chapter: the flash exactly on the cut frames, the sub-effects in order between
-// them (FLYBY first), all six shown, each in its home chapter's frame, advancing at its own rate.
-void testEveryFrameResolves() {
-    const std::vector<std::uint32_t> cuts = evo::retro::finaleCutFrames(finale(0));
-    const std::set<std::uint32_t> flashes(cuts.begin(), cuts.end());
-    std::set<Effect> shown;
-    std::size_t flashCount = 0;
-    int segment = 0;
-    std::uint32_t segmentStart = 0;
-    for (std::uint32_t retroFrame = 0; retroFrame < frameCount(); ++retroFrame) {
-        const EffectFrame r = resolved(retroFrame);
-        if (flashes.contains(retroFrame)) {
-            CHECK(r.effect == Effect::Finale && r.retroFrame == retroFrame &&
-                  r.frame.chapter == kFinaleChapter);
-            ++flashCount;
-            ++segment;
-            segmentStart = retroFrame;
-            continue;
+// The tiles' clocks: from their home starts, at their own rates, wrapping inside their chapters; PORTAL's
+// first frame is the one after FINALE's last.
+void testTileClocks() {
+    for (Effect tile : evo::retro::kFinaleTiles) {
+        const std::uint32_t rate = evo::retro::effectFor(tile).retroRate;
+        const int home = evo::retro::finaleHomeChapter(tile);
+        const double duration = evo::show::sampleTimeline(evo::show::chapterStart(home)).chapterDuration;
+        const auto last = static_cast<std::uint32_t>(std::floor(duration * rate)) - 1;
+        const std::uint32_t start = evo::retro::finaleHomeStart(tile);
+        for (std::uint32_t elapsed = 0; elapsed < 700; elapsed += 7) {
+            const EffectFrame source = evo::retro::finaleTileSource(tile, elapsed);
+            CHECK(source.effect == tile && source.frame.chapter == home && source.frame.effect == tile);
+            CHECK(source.retroFrame >= start && source.retroFrame <= last);
+            CHECK(source.retroFrame == start + (elapsed * rate / kRate) % (last - start + 1));
+            // The frame is the home chapter at that retro frame.
+            CHECK(static_cast<std::uint32_t>(std::floor(source.frame.localSeconds * rate)) ==
+                  source.retroFrame);
         }
-        CHECK(r.effect == evo::retro::kFinaleCuts[segment % evo::retro::kFinaleCuts.size()]);
-        shown.insert(r.effect);
-        // The home chapter's frame: its chapter and effect, the retro frame's middle.
-        const int home = evo::retro::finaleHomeChapter(r.effect);
-        const EffectInfo& sub = evo::retro::effectFor(r.effect);
-        CHECK(home == homeChapter(r.effect));
-        CHECK(r.frame.chapter == home && r.frame.effect == r.effect);
-        CHECK(r.frame.chapterDuration ==
-              evo::show::sampleTimeline(evo::show::chapterStart(home)).chapterDuration);
-        CHECK(static_cast<std::uint32_t>(std::floor(r.frame.localSeconds * sub.retroRate)) == r.retroFrame);
-        // From the sub-effect's start, at its own rate.
-        const std::uint32_t elapsed = retroFrame - segmentStart;
-        CHECK(r.retroFrame == evo::retro::finaleHomeStart(r.effect) + elapsed * sub.retroRate / kRate);
     }
-    CHECK(flashCount == cuts.size());
-    CHECK(shown.size() == evo::retro::kFinaleCuts.size());
-    CHECK(resolved(0).effect == Effect::Flyby);
+    const TimelineFrame lastFinale = finale(0);
+    const auto finaleFrames = static_cast<std::uint32_t>(std::ceil(lastFinale.chapterDuration * kRate));
+    CHECK(evo::retro::finaleElapsed(lastFinale, 17) == 17);
+    CHECK(evo::retro::finaleElapsed(at(10, 0), 0) == finaleFrames);
+    CHECK(evo::retro::finaleElapsed(at(10, 0), 25) == finaleFrames + 25);
 }
 
-// The home starting moments show each effect at its best, well inside its chapter.
 void testHomeStarts() {
-    for (Effect sub : evo::retro::kFinaleCuts) {
+    for (Effect sub : evo::retro::kFinaleTiles) {
         const int home = evo::retro::finaleHomeChapter(sub);
         const double duration = evo::show::sampleTimeline(evo::show::chapterStart(home)).chapterDuration;
         const std::uint32_t rate = evo::retro::effectFor(sub).retroRate;
-        // At least 4 s of the home chapter after the start (a cut of two beats is under a second).
+        // At least 4 s of the home chapter after the start, so a tile loops at most every 4 s.
         CHECK(evo::retro::finaleHomeStart(sub) + 4.0 * rate < duration * rate);
     }
     const auto facts = [](Effect sub) {
@@ -237,7 +173,7 @@ void testHomeStarts() {
     CHECK(year.from == evo::retro::DotsShape::Year && year.to == evo::retro::DotsShape::Year);
 }
 
-// The own frame of a sub-effect without its text, as FINALE shows it.
+// A tile's own frame without its text, as the grid shows it.
 const EffectInfo& withoutText(Effect effect) {
     static const std::array<EffectInfo, evo::show::kEffectCount> entries = [] {
         std::array<EffectInfo, evo::show::kEffectCount> all{};
@@ -250,55 +186,95 @@ const EffectInfo& withoutText(Effect effect) {
     return entries[static_cast<std::size_t>(effect)];
 }
 
-bool allWhite(const evo::test::RetroPicture& picture) {
-    return std::all_of(picture.indices.begin(), picture.indices.end(),
-                       [](std::uint8_t i) { return i == evo::retro::kFinaleWhite; }) &&
-           std::all_of(picture.rgb.begin(), picture.rgb.end(), [](std::uint8_t c) { return c == 255; });
+double toLinear(int c) {
+    const double v = c / 255.0;
+    return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+}
+double toByte(double linear) {
+    const double c = linear <= 0.0031308 ? linear * 12.92 : 1.055 * std::pow(linear, 1 / 2.4) - 0.055;
+    return 255 * std::clamp(c, 0.0, 1.0);
+}
+int channel(const std::vector<std::uint8_t>& rgb, int x, int y, int c) {
+    return rgb[(static_cast<std::size_t>(y) * 320 + static_cast<std::size_t>(x)) * 3 +
+               static_cast<std::size_t>(c)];
+}
+
+// The largest difference between a cell of the grid and the 3x3 box means of a solo picture over
+// kFinaleSource.
+double tileError(const std::vector<std::uint8_t>& grid, const std::vector<std::uint8_t>& solo,
+                 const PixelRect& cell) {
+    const PixelRect from = evo::retro::kFinaleSource;
+    double worst = 0;
+    for (int v = 0; v < cell.height; ++v)
+        for (int u = 0; u < cell.width; ++u)
+            for (int c = 0; c < 3; ++c) {
+                double sum = 0;
+                for (int dy = 0; dy < 3; ++dy)
+                    for (int dx = 0; dx < 3; ++dx)
+                        sum += toLinear(channel(solo, from.x + 3 * u + dx, from.y + 3 * v + dy, c));
+                worst =
+                    std::max(worst, std::fabs(channel(grid, cell.x + u, cell.y + v, c) - toByte(sum / 9)));
+            }
+    return worst;
 }
 
 void testImages(evo::gfx::Context& ctx) {
-    RetroStageFixture mix(ctx, true);
-    RetroStageFixture own(ctx, true, withoutText);
-    const std::vector<std::uint32_t> cuts = evo::retro::finaleCutFrames(finale(0));
-
-    // Each sub-effect's first cut, at its first frame after the flash and in its middle: the sub-effect's own
-    // frame at the same home retro frame.
-    std::set<Effect> compared;
-    for (std::size_t c = 0; c + 1 < cuts.size() && compared.size() < evo::retro::kFinaleCuts.size(); ++c) {
-        for (std::uint32_t retroFrame : {cuts[c] + 1, (cuts[c] + cuts[c + 1]) / 2}) {
-            const EffectFrame r = resolved(retroFrame);
-            const evo::test::RetroPicture picture = mix.renderPicture(finale(retroFrame));
-            const evo::test::RetroPicture reference =
-                own.renderPicture(evo::retro::finaleHomeFrame(r.effect, r.retroFrame));
-            CHECK(picture.indices == reference.indices);
-            CHECK(picture.rgb == reference.rgb);
-            const std::set<std::uint8_t> distinct(picture.indices.begin(), picture.indices.end());
-            CHECK(distinct.size() > 4);
-            compared.insert(r.effect);
+    RetroStageFixture grid(ctx, true);
+    RetroStageFixture solo(ctx, true, withoutText);
+    for (std::uint32_t r : {20u, 333u}) {
+        const evo::test::RetroPicture picture = grid.renderPicture(finale(r));
+        CHECK(grid.stage().picturesDrawn() == 9); // eight tiles and FINALE's own picture
+        for (std::size_t t = 0; t < evo::retro::kFinaleTiles.size(); ++t) {
+            const EffectFrame source = evo::retro::finaleTileSource(evo::retro::kFinaleTiles[t], r);
+            const evo::test::RetroPicture own = solo.renderPicture(source.frame);
+            CHECK(solo.stage().retroFrame() == source.retroFrame);
+            const PixelRect cell = evo::retro::finaleCell(evo::retro::finaleTileCell(t));
+            const double error = tileError(picture.rgb, own.rgb, cell);
+            std::printf("finale: frame %u tile %zu (%s) off by %.2f levels at most\n", r, t,
+                        evo::show::effectName(evo::retro::kFinaleTiles[t]), error);
+            // The card may cover the bottom-left cell's last rows.
+            if (cell.y + cell.height <= evo::retro::kCardY || evo::retro::cardShown(finale(r), r, kRate) < 0)
+                CHECK(error <= 1.0);
         }
+        // The gutters are black; the centre holds the scroller's warm glyphs on black.
+        for (int y = 0; y < 200; ++y)
+            CHECK(channel(picture.rgb, 106, y, 0) == 0 && channel(picture.rgb, 213, y, 1) == 0);
+        const PixelRect centre = evo::retro::finaleCell(evo::retro::kFinaleCentre);
+        int lit = 0, black = 0;
+        for (int y = centre.y; y < centre.y + centre.height; ++y)
+            for (int x = centre.x; x < centre.x + centre.width; ++x) {
+                const int red = channel(picture.rgb, x, y, 0), blue = channel(picture.rgb, x, y, 2);
+                lit += red > 200;
+                black += red == 0;
+                CHECK(blue <= red); // warm or white, never cold
+            }
+        CHECK(lit > 60 && black > centre.width * centre.height / 2);
     }
-    // FLYBY at the chapter's start too, before the first cut: without its greeting.
-    CHECK(mix.renderPicture(finale(3)).indices ==
-          own.renderPicture(
-                 evo::retro::finaleHomeFrame(Effect::Flyby, evo::retro::finaleHomeStart(Effect::Flyby) + 3))
-              .indices);
-    CHECK(compared.size() == evo::retro::kFinaleCuts.size());
 
-    // One white frame at each cut, the frames either side not white.
-    for (std::uint32_t cut : cuts) {
-        CHECK(allWhite(mix.renderPicture(finale(cut, 0.1))));
-        CHECK(!allWhite(mix.renderPicture(finale(cut - 1))));
-        if (cut + 1 < frameCount())
-            CHECK(!allWhite(mix.renderPicture(finale(cut + 1))));
-    }
+    // The card: typed bottom-left in white on black cells while it shows.
+    const TimelineFrame any = finale(0);
+    std::uint32_t typed = 0;
+    while (evo::retro::cardShown(any, typed, kRate) < 10)
+        ++typed;
+    const evo::test::RetroPicture card = grid.renderPicture(finale(typed));
+    const PixelRect rect = evo::retro::cardRect(any, typed, kRate);
+    CHECK(rect.x == 4 && rect.y == 188 && rect.width >= 8 * 11);
+    int white = 0;
+    for (int y = rect.y; y < rect.y + 8; ++y)
+        for (int x = rect.x; x < rect.x + 8 * 10; ++x) {
+            const int red = channel(card.rgb, x, y, 0);
+            CHECK(red == 0 || red == 255);
+            white += red == 255;
+        }
+    CHECK(white > 60);
 
     // Deterministic: the same retro frame (another moment of it) after another frame, and from a fresh stage.
-    for (std::uint32_t retroFrame : {cuts[2] + 5, cuts[4] + 3, cuts[5] + 9}) {
-        const std::vector<std::uint8_t> first = mix.render(finale(retroFrame, 0.1));
-        mix.render(finale(retroFrame + 7));
-        CHECK(mix.render(finale(retroFrame, 0.9)) == first);
-        RetroStageFixture fresh(ctx);
-        CHECK(fresh.render(finale(retroFrame, 0.5)) == first);
+    for (std::uint32_t r : {57u, 260u}) {
+        const std::vector<std::uint8_t> first = grid.renderPicture(finale(r, 0.1)).rgb;
+        grid.renderPicture(finale(r + 7));
+        CHECK(grid.renderPicture(finale(r, 0.9)).rgb == first);
+        RetroStageFixture fresh(ctx, true);
+        CHECK(fresh.renderPicture(finale(r, 0.5)).rgb == first);
     }
 }
 
@@ -308,9 +284,8 @@ int main() {
     try {
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
         testRegistry();
-        testFirstBeat();
-        testCutsOnTheBeatGrid();
-        testEveryFrameResolves();
+        testLayout();
+        testTileClocks();
         testHomeStarts();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});

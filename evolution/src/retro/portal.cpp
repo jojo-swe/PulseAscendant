@@ -1,8 +1,7 @@
 #include "retro/portal.hpp"
 
 #include "retro/boot.hpp"
-#include "retro/flyby.hpp"
-#include "retro/math.hpp"
+#include "retro/finale.hpp"
 
 #include <algorithm>
 #include <array>
@@ -13,123 +12,120 @@ namespace evo::retro {
 
 namespace {
 
-// The caption's script for the prompt's typing engine.
-constexpr std::array<PromptWrite, 1> kCaption = {{{1.0, kPortalCaptionText, 8}}};
-
-// Appends a flat screen-space quad (corners in whole pixels, in order round it) as two triangles, leaving
-// out either one if it has no area; depth 0, as the bezel is never sorted.
-void addQuad(RetroScene& scene, const std::array<std::array<int, 2>, 4>& corners, std::uint8_t index) {
-    const auto add = [&](int a, int b, int c) {
-        RetroTriangle t{};
-        const int k[3] = {a, b, c};
-        for (int v = 0; v < 3; ++v) {
-            t.x[v] = corners[static_cast<std::size_t>(k[v])][0] * kSubpixel;
-            t.y[v] = corners[static_cast<std::size_t>(k[v])][1] * kSubpixel;
-            t.index[v] = index;
-        }
-        t.mode = kFlat;
-        const std::int64_t area = std::int64_t{t.x[1] - t.x[0]} * (t.y[2] - t.y[0]) -
-                                  std::int64_t{t.y[1] - t.y[0]} * (t.x[2] - t.x[0]);
-        if (area == 0)
-            return;
-        scene.triangles.push_back(t);
-        scene.triangleDepth.push_back(0);
-    };
-    add(0, 1, 2);
-    add(0, 2, 3);
+std::uint32_t frameOf(double seconds) {
+    return static_cast<std::uint32_t>(std::floor(std::max(seconds, 0.0) * kPortalRetroRate + 1e-9));
 }
 
-// The ring between the rectangle [ox0, ox1) x [oy0, oy1) and the one [ix0, ix1) x [iy0, iy1) inside it, as
-// four trapezoids in their own indices: top, left, right, bottom.
-void addFrame(RetroScene& scene, int ox0, int oy0, int ox1, int oy1, int ix0, int iy0, int ix1, int iy1,
-              const std::array<std::uint8_t, 4>& indices) {
-    addQuad(scene, {{{ox0, oy0}, {ox1, oy0}, {ix1, iy0}, {ix0, iy0}}}, indices[0]);
-    addQuad(scene, {{{ox0, oy0}, {ix0, iy0}, {ix0, iy1}, {ox0, oy1}}}, indices[1]);
-    addQuad(scene, {{{ox1, oy0}, {ox1, oy1}, {ix1, iy1}, {ix1, iy0}}}, indices[2]);
-    addQuad(scene, {{{ox0, oy1}, {ix0, iy1}, {ix1, iy1}, {ox1, oy1}}}, indices[3]);
+// The position of a cell in kPortalOrder.
+int orderOf(int cell) {
+    for (std::size_t i = 0; i < kPortalOrder.size(); ++i)
+        if (kPortalOrder[i] == cell)
+            return static_cast<int>(i);
+    return 0;
 }
 
 } // namespace
 
-double portalProgress(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    const double seconds = frame.accentSeconds > 0 ? frame.accentSeconds : frame.chapterDuration;
-    if (seconds <= 0)
-        return 1;
-    return std::clamp(static_cast<double>(retroFrame) / (seconds * kPortalRetroRate), 0.0, 1.0);
+std::uint32_t portalOffFrame(const show::TimelineFrame& frame, int cell) {
+    return frameOf(chapterBeat(frame, kPortalFirstOff + orderOf(cell)));
 }
 
-PortalInset portalInset(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    const double e = smoothstep(portalProgress(frame, retroFrame));
-    return {static_cast<int>(std::lround(kPortalInsetX * e)),
-            static_cast<int>(std::lround(kPortalInsetY * e))};
+std::uint32_t portalPromptFrame(const show::TimelineFrame& frame) {
+    return frameOf(chapterBeat(frame, kPortalPromptBeat));
 }
 
-Camera portalCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    const double p = portalProgress(frame, retroFrame);
-    // The turn, over the first 60 %: from the ship's right side, a little ahead, round to dead behind it.
-    const double turn = smoothstep(p / 0.6);
-    const double azimuth = radians(100 * (1 - turn));
-    const double elevation = radians(16 - 9 * turn);
-    // The pull-back, from the start: 6.5 units to 16 times that, where the ship is a speck of a few pixels.
-    const double distance = 6.5 * std::pow(16.0, smoothstep(p));
-    Camera camera{};
-    camera.eye[0] = distance * std::cos(elevation) * std::sin(azimuth);
-    camera.eye[1] = distance * std::sin(elevation);
-    camera.eye[2] = -distance * std::cos(elevation) * std::cos(azimuth);
-    camera.up[1] = 1;
-    camera.fovYDegrees = kFlybyFovY; // FLYBY's, which its stars keep
-    return camera;
+Collapse portalCollapse(const PixelRect& cell, std::uint32_t n) {
+    int width = cell.width, height = cell.height;
+    switch (n) {
+    case 0:
+        height = (cell.height + 1) / 3;
+        break;
+    case 1:
+        height = 4;
+        break;
+    case 2:
+        height = 2;
+        break;
+    case 3:
+        height = 1;
+        width = static_cast<int>(std::lround(0.45 * cell.width));
+        break;
+    case 4:
+        height = 1;
+        width = static_cast<int>(std::lround(0.12 * cell.width));
+        break;
+    case 5:
+        height = 1;
+        width = 2;
+        break;
+    default:
+        return {{cell.x + cell.width / 2, cell.y + cell.height / 2, 0, 0}, 0};
+    }
+    const PixelRect rect{cell.x + (cell.width - width) / 2, cell.y + (cell.height - height) / 2, width,
+                         height};
+    const double gain = static_cast<double>(cell.width) * cell.height / (static_cast<double>(width) * height);
+    return {rect, static_cast<float>(std::min(gain, 64.0))};
 }
 
-void portalPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    flybyPalette(palette, frame, retroFrame);
-    // The beige plastic of a 1993 monitor, lit from the top left.
-    palette[kPortalBezelTop] = rgba(222, 214, 190);
-    palette[kPortalBezelLeft] = rgba(198, 190, 166);
-    palette[kPortalBezelRight] = rgba(160, 152, 130);
-    palette[kPortalBezelBottom] = rgba(130, 124, 106);
+std::string portalPrompt(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    const std::uint32_t start = portalPromptFrame(frame);
+    if (retroFrame < start)
+        return {};
+    const std::string text = kPortalPromptText;
+    const std::size_t typed = (retroFrame - start) * kPortalPromptRate / kPortalRetroRate;
+    return text.substr(0, std::min(typed, text.size()));
+}
+
+std::vector<GridLayer> portalGrid(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    const std::uint32_t elapsed = finaleElapsed(frame, retroFrame);
+    const EffectFrame own{frame.effect, frame, retroFrame};
+    std::vector<GridLayer> layers;
+    const auto add = [&](const EffectFrame& source, const PixelRect& from, int cell) {
+        const PixelRect rect = finaleCell(cell);
+        const std::uint32_t off = portalOffFrame(frame, cell);
+        if (retroFrame < off) {
+            layers.push_back({source, from, rect});
+            return;
+        }
+        const Collapse c = portalCollapse(rect, retroFrame - off);
+        if (c.rect.width > 0)
+            layers.push_back({source, from, c.rect, c.gain});
+    };
+    for (std::size_t tile = 0; tile < kFinaleTiles.size(); ++tile)
+        add(finaleTileSource(kFinaleTiles[tile], elapsed), kFinaleSource, finaleTileCell(tile));
+    const std::uint32_t centreGone = portalOffFrame(frame, kFinaleCentre) + kPortalCollapseFrames;
+    if (retroFrame < centreGone) {
+        add(own, finaleCell(kFinaleCentre), kFinaleCentre);
+        const PixelRect card = cardRect(frame, retroFrame, kPortalRetroRate);
+        if (card.width > 0)
+            layers.push_back({own, card, card});
+    } else {
+        // Nothing left of the grid: the whole screen is PORTAL's own (black, the prompt, the card).
+        layers.push_back({own, {0, 0, 320, 200}, {0, 0, 320, 200}});
+    }
+    return layers;
 }
 
 void portalScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
-    flybySceneFrom(scene, portalCamera(frame, retroFrame), retroFrame);
-    const PortalInset inset = portalInset(frame, retroFrame);
-
-    // Only the stars wholly inside the picture: points are drawn after every triangle, so the bezel cannot
-    // hide them.
-    std::size_t kept = 0;
-    for (std::size_t i = 0; i < scene.points.size(); ++i) {
-        const RetroPoint p = scene.points[i];
-        const auto [x, y] = pointCorner(p);
-        if (x < inset.x || x + p.size > kScreenWidth - inset.x || y < inset.y ||
-            y + p.size > kScreenHeight - inset.y)
-            continue;
-        scene.points[kept] = p;
-        scene.pointDepth[kept] = scene.pointDepth[i];
-        ++kept;
-    }
-    scene.points.resize(kept);
-    scene.pointDepth.resize(kept);
-
-    if (inset.x == 0 && inset.y == 0)
-        return;
-    // The bevel from the screen's edges in to the rim, then the black rim round the picture.
-    const int rim = std::min({kPortalRim, inset.x, inset.y});
-    const int x0 = inset.x, y0 = inset.y, x1 = kScreenWidth - inset.x, y1 = kScreenHeight - inset.y;
-    addFrame(scene, 0, 0, kScreenWidth, kScreenHeight, x0 - rim, y0 - rim, x1 + rim, y1 + rim,
-             {kPortalBezelTop, kPortalBezelLeft, kPortalBezelRight, kPortalBezelBottom});
-    if (rim > 0)
-        addFrame(scene, x0 - rim, y0 - rim, x1 + rim, y1 + rim, x0, y0, x1, y1, {0, 0, 0, 0});
+    cardCursor(scene, frame, retroFrame, kPortalRetroRate, kFinaleWhite);
 }
 
-std::vector<text::Item> portalText(const show::TimelineFrame&, std::uint32_t retroFrame) {
-    constexpr std::uint32_t kWhite = 0xFF000000u | kPortalCaption; // drawIndex writes the low byte
-    const std::string typed = promptWritten(kCaption, retroFrame);
+std::vector<text::Item> portalText(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
     std::vector<text::Item> items;
-    if (!typed.empty())
-        items.push_back({kPortalCaptionX, kPortalCaptionY, 1, kWhite, typed});
-    if (promptCursorOn(retroFrame))
-        items.push_back({static_cast<float>(kPortalCaptionX + 8 * static_cast<int>(typed.size())),
-                         kPortalCaptionY, 1, kWhite, "_"});
+    const std::uint32_t centreGone = portalOffFrame(frame, kFinaleCentre) + kPortalCollapseFrames;
+    if (retroFrame < centreGone)
+        items = finaleScroller(finaleElapsed(frame, retroFrame));
+    else {
+        const std::string typed = portalPrompt(frame, retroFrame);
+        constexpr std::uint32_t kWhite = 0xFF000000u | kFinaleWhite;
+        if (!typed.empty())
+            items.push_back({kPortalPromptX, kPortalPromptY, 1, kWhite, typed});
+        if (beatCursorOn(frame, retroFrame, kPortalRetroRate))
+            items.push_back({static_cast<float>(kPortalPromptX + 8 * static_cast<int>(typed.size())),
+                             kPortalPromptY, 1, kWhite, "_"});
+    }
+    const std::vector<text::Item> card = cardText(frame, retroFrame, kPortalRetroRate, kFinaleWhite);
+    items.insert(items.end(), card.begin(), card.end());
     return items;
 }
 

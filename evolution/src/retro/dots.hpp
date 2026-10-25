@@ -92,5 +92,7 @@ void dotsPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32
 // The 512 points projected through dotsCamera(), back to front; shade 31 at view depth kDotsNear and 0 at
 // kDotsFar (clamped), size 2 nearer than kDotsBig, else 1.
 void dotsScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame);
+// The same for any 512 world positions (REBOOT shows the cube alone with it).
+void dotsSceneFrom(RetroScene& scene, const DotsPoints& positions);
 
 } // namespace evo::retro

@@ -1,0 +1,57 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// One layer of a composed 1993 picture (retro::GridLayer): the rect `from` of a palette mapped source
+// picture scaled into the rect `to` of the colour image. Each output pixel averages, in linear light, the
+// source pixels of its box (columns from.x + floor(u * from.w / to.w) up to from.x + floor((u + 1) * from.w /
+// to.w), at least one; rows alike), times gain, clamped; a one-pixel box at gain 1 copies its bytes. A masked
+// layer leaves the pixels whose mean is black alone. One invocation per pixel of `to`.
+
+#include "srgb.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform readonly image2D source;
+layout(set = 0, binding = 1, rgba8) uniform writeonly image2D target;
+
+layout(push_constant) uniform Push {
+    ivec4 from; // x, y, width, height
+    ivec4 to;
+    float gain;
+    uint masked;
+} pc;
+
+void main() {
+    ivec2 u = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(u, pc.to.zw))) {
+        return;
+    }
+    ivec2 pixel = pc.to.xy + u;
+    if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, imageSize(target)))) {
+        return;
+    }
+    ivec2 first = pc.from.xy + (u * pc.from.zw) / pc.to.zw;
+    ivec2 last = pc.from.xy + ((u + 1) * pc.from.zw) / pc.to.zw; // exclusive
+    last = max(last, first + 1);
+    ivec2 lo = max(first, ivec2(0));
+    ivec2 hi = min(last, imageSize(source));
+    vec3 sum = vec3(0.0);
+    int count = 0;
+    vec4 single = vec4(0.0);
+    for (int y = lo.y; y < hi.y; ++y) {
+        for (int x = lo.x; x < hi.x; ++x) {
+            single = imageLoad(source, ivec2(x, y));
+            sum += srgbToLinear(single.rgb);
+            ++count;
+        }
+    }
+    vec3 mean = count > 0 ? sum / float(count) : vec3(0.0);
+    if (pc.masked != 0u && all(equal(mean, vec3(0.0)))) {
+        return;
+    }
+    if (count == 1 && pc.gain == 1.0) {
+        imageStore(target, pixel, vec4(single.rgb, 1.0));
+        return;
+    }
+    imageStore(target, pixel, vec4(linearToSrgb(min(mean * pc.gain, vec3(1.0))), 1.0));
+}

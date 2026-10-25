@@ -1,5 +1,6 @@
-// The retro effect registry: which shader, rate, palette, text, background, scene, texture and resolver each
-// chapter's 1993 side uses. Kept out of retro/effects.hpp so the header pulls in no effect's own header.
+// The retro effect registry: which shader, rate, palette, text, background, scene, texture, grid and
+// phosphor each chapter's 1993 side uses. Kept out of retro/effects.hpp so the header pulls in no effect's
+// own header.
 
 #include "retro/effects.hpp"
 
@@ -18,18 +19,19 @@
 #include "retro/the_end.hpp"
 #include "retro/tunnel.hpp"
 
+#include <cmath>
+
 namespace evo::retro {
 
 // FLYBY's greeting scrolls by the retro frame at the scroller's rate.
 static_assert(kFlybyRetroRate == kScrollerRetroRate);
-// PORTAL reuses FLYBY's ship, stars and flicker, all keyed by FLYBY's retro frame.
-static_assert(kPortalRetroRate == kFlybyRetroRate);
-// PORTAL's caption types with BOOT's prompt engine (promptWritten, promptCursorOn), keyed by BOOT's rate.
-static_assert(kPortalRetroRate == kBootRetroRate);
+// PORTAL runs FINALE's grid on, frame for frame.
+static_assert(kPortalRetroRate == kFinaleRetroRate);
+// PORTAL's prompt, REBOOT's and RETURN's type with BOOT's prompt engine, keyed by BOOT's rate.
+static_assert(kPortalRetroRate == kBootRetroRate && kDosIdleRetroRate == kBootRetroRate);
 
-EffectFrame resolveEffect(const EffectInfo& info, const show::TimelineFrame& frame,
-                          std::uint32_t retroFrame) {
-    return info.resolve ? info.resolve(frame, retroFrame) : EffectFrame{frame.effect, frame, retroFrame};
+double phosphorDecay(std::uint32_t retroRate, double seconds) {
+    return std::exp(-(1.0 / retroRate) / seconds);
 }
 
 const EffectInfo& effectFor(show::Effect effect) {
@@ -41,7 +43,8 @@ const EffectInfo& effectFor(show::Effect effect) {
                                       .retroRate = kBootRetroRate,
                                       .palette = bootPalette,
                                       .text = bootText,
-                                      .background = bootBackground};
+                                      .background = bootBackground,
+                                      .phosphor = true};
     static constexpr EffectInfo kPlasma{
         .shader = kPlasmaShader, .retroRate = kPlasmaRetroRate, .palette = plasmaPalette};
     static constexpr EffectInfo kFlyby{.shader = nullptr,
@@ -66,29 +69,51 @@ const EffectInfo& effectFor(show::Effect effect) {
                                       .retroRate = kRotozoomRetroRate,
                                       .palette = rotozoomPalette,
                                       .texture = rotozoomTexture};
-    // The megamix: its own entry is the white flash between two cuts.
+    // The 3x3 grid; its own picture is the centre's scroller and the card.
     static constexpr EffectInfo kFinale{.shader = nullptr,
                                         .retroRate = kFinaleRetroRate,
                                         .palette = finalePalette,
-                                        .background = finaleBackground,
-                                        .resolve = finaleResolve};
+                                        .text = finaleText,
+                                        .scene = finaleScene,
+                                        .grid = finaleGrid};
     static constexpr EffectInfo kCredits{.shader = nullptr,
                                          .retroRate = kScrollerRetroRate,
                                          .palette = creditsPalette,
                                          .text = creditsText,
-                                         .background = creditsBackground};
+                                         .background = creditsBackground,
+                                         .scene = creditsScene,
+                                         .phosphor = true,
+                                         .phosphorSeconds = kPhosphorFastSeconds};
     static constexpr EffectInfo kPortal{.shader = nullptr,
                                         .retroRate = kPortalRetroRate,
-                                        .palette = portalPalette,
+                                        .palette = finalePalette,
                                         .text = portalText,
-                                        .scene = portalScene};
-    static constexpr EffectInfo kReboot{
-        .shader = nullptr, .retroRate = kBootRetroRate, .palette = bootPalette, .text = rebootText};
-    // The Studio's CRT in the 2026-only chapters that show the Studio: the DOS prompt the demo exited to.
-    static constexpr EffectInfo kDosIdle{
-        .shader = nullptr, .retroRate = kDosIdleRetroRate, .palette = bootPalette, .text = dosIdleText};
-    static constexpr EffectInfo kTheEnd{
-        .shader = nullptr, .retroRate = kTheEndRetroRate, .palette = theEndPalette, .text = theEndText};
+                                        .scene = portalScene,
+                                        .grid = portalGrid};
+    static constexpr EffectInfo kReboot{.shader = nullptr,
+                                        .retroRate = kBootRetroRate,
+                                        .palette = rebootPalette,
+                                        .text = rebootText,
+                                        .scene = rebootScene,
+                                        .phosphor = true};
+    // The Studio's CRT in STUDIO NIGHT: the DOS prompt the demo exited to.
+    static constexpr EffectInfo kDosIdle{.shader = nullptr,
+                                         .retroRate = kDosIdleRetroRate,
+                                         .palette = bootPalette,
+                                         .text = dosIdleText,
+                                         .phosphor = true};
+    static constexpr EffectInfo kReturn{.shader = nullptr,
+                                        .retroRate = kDosIdleRetroRate,
+                                        .palette = returnPalette,
+                                        .text = returnText,
+                                        .background = returnBackground,
+                                        .phosphor = true};
+    static constexpr EffectInfo kTheEnd{.shader = nullptr,
+                                        .retroRate = kTheEndRetroRate,
+                                        .palette = theEndPalette,
+                                        .text = theEndText,
+                                        .scene = theEndScene,
+                                        .phosphor = true};
     switch (effect) {
     case show::Effect::Boot:
         return kBoot;
@@ -115,8 +140,9 @@ const EffectInfo& effectFor(show::Effect effect) {
     case show::Effect::Portal:
         return kPortal;
     case show::Effect::StudioNight:
-    case show::Effect::Return:
         return kDosIdle;
+    case show::Effect::Return:
+        return kReturn;
     case show::Effect::Reboot:
         return kReboot;
     case show::Effect::TheEnd:

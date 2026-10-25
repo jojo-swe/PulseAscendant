@@ -241,8 +241,11 @@ void dotsPalette(Palette& palette, const show::TimelineFrame&, std::uint32_t) {
 }
 
 void dotsScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    dotsSceneFrom(scene, dotsPositions(frame, retroFrame));
+}
+
+void dotsSceneFrom(RetroScene& scene, const DotsPoints& positions) {
     const Camera camera = dotsCamera();
-    const DotsPoints positions = dotsPositions(frame, retroFrame);
     RetroScene dots;
     for (const Point& p : positions) {
         const double world[3] = {p[0], p[1], p[2]};
