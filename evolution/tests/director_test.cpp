@@ -255,13 +255,16 @@ void testFlash() {
     forced.eraCut = 1.f;
     CHECK(show::eraFlash(forced) == 0.f);
 
-    // Portal chapters: none, even on the accent.
+    // Portal chapters: none, even on the accent with an era cut forced (the era steps on the glass, with
+    // no eraCut of its own).
     for (const int chapter : {1, 4, 10, 20}) {
         const TimelineFrame start = sampleTimeline(show::chapterStart(chapter) + .01);
         CHECK(start.transition == show::Transition::Portal);
         const double accent = show::transitionMarks(start).accent;
-        const TimelineFrame onAccent = sampleTimeline(accent + .01);
-        CHECK(onAccent.eraCut > .5f);
+        TimelineFrame onAccent = sampleTimeline(accent + .01);
+        CHECK(onAccent.eraCut == 0.f);
+        CHECK(show::eraFlash(onAccent) == 0.f);
+        onAccent.eraCut = 1.f;
         CHECK(show::eraFlash(onAccent) == 0.f);
     }
 
