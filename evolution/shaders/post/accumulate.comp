@@ -38,7 +38,7 @@ layout(set = 0, binding = 12, rgba16f) uniform readonly image2D volumeImage;
 layout(set = 0, binding = 13, rgba16f) uniform readonly image2D prevVolume;
 layout(set = 0, binding = 14, rgba16f) uniform writeonly image2D outVolume;
 
-// Must match AccumulatePush in src/post/denoiser.cpp (36 bytes).
+// Must match AccumulatePush in src/post/denoiser.cpp (44 bytes).
 layout(push_constant) uniform PushConstants {
     uint width;
     uint height;
@@ -48,7 +48,9 @@ layout(push_constant) uniform PushConstants {
     float alphaMoments;
     float sigmaDepth;
     float sigmaNormal;
-    uint useFirefly; // the illumination comes from fireflyImage (exports at 16 spp and more)
+    uint useFirefly;       // the illumination comes from fireflyImage (exports at 16 spp and more)
+    uint hasMedium;        // 0: no medium; the volume layer is neither read nor written (its length 0)
+    uint useVolumeHistory; // 0: the volume history is not this medium's (a reset, or no medium last frame)
 } pc;
 
 const float kDepthTolerance = 0.05; // |z_prev - z| <= 0.05 z
@@ -105,6 +107,32 @@ void loadNeighbourhood(ivec2 p, float lum, float depth, vec3 normal) {
             neighbourLuminance[i] = luminance(illuminationAt(q));
         }
     }
+}
+
+// Outliers already in the history (window frames 2 and 3 after a reset, length 2 and 3): the spatial
+// estimate sees this frame's samples only, so a bright sample of an earlier frame, now in the history at 1/2
+// or 1/3 weight, looked noise-free to it, kept its luminance stop and stayed a speck. This is the largest
+// temporal variance in the 5x5 neighbourhood (each neighbour against the history moments at its reprojected
+// position, the nearest texel along the centre's motion; weighted by its depth and normal stop against the
+// centre): every pixel within reach of the first à-trous pass of such an outlier filters it with a wide
+// luminance stop, so it spreads over its neighbourhood rather than vanishing (denoiser_test: the speck's peak
+// 12.8 -> 0.86, the frame's mean within 7 %: low-variance pixels beyond its reach gather little of it).
+float neighbourhoodTemporalVariance(ivec2 p, vec2 motion, float alpha) {
+    ivec2 shift = ivec2(floor(motion + 0.5));
+    float largest = 0.0;
+    for (int dy = -kSpatialRadius; dy <= kSpatialRadius; ++dy) {
+        for (int dx = -kSpatialRadius; dx <= kSpatialRadius; ++dx) {
+            int i = neighbourIndex(dx, dy);
+            ivec2 previous = p + ivec2(dx, dy) + shift;
+            if (neighbourWeight[i] <= 0.0 || !inside(previous)) {
+                continue;
+            }
+            vec4 moments = imageLoad(prevMoments, previous);
+            float delta = neighbourLuminance[i] - moments.g;
+            largest = max(largest, neighbourWeight[i] * (1.0 - alpha) * (moments.b + alpha * delta * delta));
+        }
+    }
+    return largest;
 }
 
 // The luminance variance of one frame from its neighbourhood, for pixels whose history is too short for
@@ -279,8 +307,22 @@ void main() {
         variance = 0.0;
         if (hit) {
             loadNeighbourhood(p, lum, depth, normal);
-            variance = spatialVariance() * (4.0 / historyLength);
+            float spatial = spatialVariance();
+            float magnitude = abs(spatial);
+            if (valid) { // length 2 and 3: also the history's outliers (see neighbourhoodTemporalVariance)
+                float alpha = max(pc.alphaMoments, 1.0 / historyLength);
+                magnitude = max(magnitude, neighbourhoodTemporalVariance(p, motion.xy, alpha));
+            }
+            variance = (spatial < 0.0 ? -magnitude : magnitude) * (4.0 / historyLength);
         }
+    }
+
+    imageStore(outColor, p, vec4(min(color, vec3(kHalfMax)), clamp(variance, -kHalfMax, kHalfMax)));
+    imageStore(outGuides, p, vec4(normal, depth));
+    if (pc.hasMedium == 0u) {
+        imageStore(outMoments, p,
+                   vec4(historyLength, min(mean, kHalfMax), min(temporalVariance, kHalfMax), 0.0));
+        return;
     }
 
     // The volume layer, on every pixel (a medium in front of the sky too).
@@ -298,7 +340,7 @@ void main() {
     }
     float volumeLength = 1.0;
     vec4 volumeOut = volume;
-    if (pc.useHistory != 0u && motion.z > 0.5 && isFinite(motion.x) && isFinite(motion.y)) {
+    if (pc.useVolumeHistory != 0u && motion.z > 0.5 && isFinite(motion.x) && isFinite(motion.y)) {
         vec2 base = vec2(p) + motion.xy;
         ivec2 origin = ivec2(floor(base));
         vec2 f = base - vec2(origin);
@@ -323,9 +365,7 @@ void main() {
         }
     }
 
-    imageStore(outColor, p, vec4(min(color, vec3(kHalfMax)), clamp(variance, -kHalfMax, kHalfMax)));
     imageStore(outMoments, p,
                vec4(historyLength, min(mean, kHalfMax), min(temporalVariance, kHalfMax), volumeLength));
-    imageStore(outGuides, p, vec4(normal, depth));
     imageStore(outVolume, p, volumeOut);
 }

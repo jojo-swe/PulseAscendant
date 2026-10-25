@@ -968,54 +968,74 @@ std::uint64_t outputHash(const std::vector<Output>& outputs) {
     return hash;
 }
 
+// Sparse lighting: each of `spp` samples per pixel is on with probability p at 1 / p, else 0 (mean 1).
+Frame sparseFrame(std::uint32_t index, float p, std::uint32_t spp, std::uint32_t width = kSize,
+                  std::uint32_t height = kSize) {
+    Frame frame = flatFrame(width, height);
+    for (std::uint32_t y = 0; y < height; ++y)
+        for (std::uint32_t x = 0; x < width; ++x) {
+            float sum = 0.0f;
+            for (std::uint32_t s = 0; s < spp; ++s)
+                sum += noise(index, x, y, 16 * s) + 0.5f < p ? 1.0f / p : 0.0f;
+            float* l = frame.at(frame.lighting, x, y);
+            l[0] = l[1] = l[2] = sum / static_cast<float>(spp);
+        }
+    return frame;
+}
+
+// The mean red lighting of a frame, and of an output's HDR image.
+double imageMean(const Frame& frame) {
+    double sum = 0.0;
+    for (std::size_t i = 0; i < frame.lighting.size(); i += 4)
+        sum += frame.lighting[i];
+    return sum / static_cast<double>(frame.lighting.size() / 4);
+}
+double hdrMean(const Output& out) {
+    double sum = 0.0;
+    const std::uint32_t height = static_cast<std::uint32_t>(out.hdrBits.size() / 4 / out.width);
+    for (std::uint32_t y = 0; y < height; ++y)
+        for (std::uint32_t x = 0; x < out.width; ++x)
+            sum += out.hdr(x, y, 0);
+    return sum / (std::size_t{out.width} * height);
+}
+
 // (a) Sparse first frames: Bernoulli lighting (on with p = 0.3 at 1 / 0.3, else 0: mean 1) on one plane at
 // length 1. The edge-robust variance sees all-zero quadrants and claims no noise, so step 4's denoiser left
 // holes (RMSE 0.1833 at length 1 and 0.1346 at length 2 on this input, 3 iterations; the plan guessed
 // ~0.063). Now sparse neighbourhoods get the plain variance with a first pass by geometry alone, and 5
-// iterations at length <= 2: RMSE below 0.045, and no darker than the samples. Very bright sparse samples
+// iterations at length <= 3: RMSE below 0.045, and no darker than the samples. Very bright sparse samples
 // stay finite.
 void testSparseFirstFrames(gfx::Context& ctx) {
     std::printf("sparse first frames are filtered clean\n");
-    const auto bernoulli = [](std::uint32_t index) {
-        Frame frame = flatFrame();
-        for (std::uint32_t y = 0; y < kSize; ++y)
-            for (std::uint32_t x = 0; x < kSize; ++x) {
-                const bool on = noise(index, x, y, 0) + 0.5f < 0.3f;
-                float* l = frame.at(frame.lighting, x, y);
-                l[0] = l[1] = l[2] = on ? 1.0f / 0.3f : 0.0f;
-            }
-        return frame;
+    const auto bernoulli = [](std::uint32_t index, float p = 0.3f, std::uint32_t spp = 1) {
+        return sparseFrame(index, p, spp);
     };
     Harness harness(ctx);
     const auto out = harness.run({bernoulli(900), bernoulli(901)}, {});
     CHECK(allLengths(out[0], 1.0f) && allLengths(out[1], 2.0f));
     const double first = rmse(out[0], 1.0f), second = rmse(out[1], 1.0f);
-    const auto mean = [](const Output& o) {
-        double sum = 0.0;
-        for (std::uint32_t y = 0; y < kSize; ++y)
-            for (std::uint32_t x = 0; x < kSize; ++x)
-                sum += o.hdr(x, y, 0);
-        return sum / (kSize * kSize);
-    };
-    std::printf("  RMSE after denoising: length 1 %.4f, length 2 %.4f (step 4: 0.1833, 0.1346); mean %.4f, "
-                "%.4f\n",
-                first, second, mean(out[0]), mean(out[1]));
+    std::printf("  RMSE after denoising: length 1 %.4f, length 2 %.4f (step 4: 0.1833, 0.1346)\n", first,
+                second);
     CHECK(first < 0.045);
     CHECK(second < 0.045);
     // Not darker than the samples: a luminance stop on skewed sparse noise weights the rare bright samples
     // down (by 9 % on this frame with the plan's plain 3x3 variance: mean 0.906 for samples 0.989;
-    // within 2 % now, the rest is the renormalised kernel at the image border).
-    double accumulated = 0.0; // the mean of the samples the history holds (length 2: both frames, halved)
-    for (std::uint32_t i = 0; i < 2; ++i) {
-        Frame input = bernoulli(900 + i);
-        double sum = 0.0;
-        for (std::uint32_t y = 0; y < kSize; ++y)
-            for (std::uint32_t x = 0; x < kSize; ++x)
-                sum += input.at(input.lighting, x, y)[0];
-        accumulated = i == 0 ? sum / (kSize * kSize) : 0.5 * (accumulated + sum / (kSize * kSize));
-        const double samples = accumulated;
-        std::printf("  frame %u: mean %.4f, samples %.4f\n", i + 1, mean(out[i]), samples);
-        CHECK(std::fabs(mean(out[i]) - samples) < 0.02 * samples);
+    // within 2 % now, the rest is the renormalised kernel at the image border). Also for sparser light: p =
+    // 0.1 at 4 spp (66 % of the pixels 0).
+    for (const auto& [p, spp] : {std::pair{0.3f, 1u}, std::pair{0.1f, 4u}}) {
+        Harness sparse(ctx);
+        const std::vector<Frame> frames = {bernoulli(900, p, spp), bernoulli(901, p, spp)};
+        const auto result = sparse.run(frames, {});
+        double accumulated = 0.0; // the mean of the samples the history holds (length 2: both frames, halved)
+        std::uint32_t i = 0;
+        for (const Frame& input : frames) {
+            const double samples = imageMean(input);
+            accumulated = i == 0 ? samples : 0.5 * (accumulated + samples);
+            std::printf("  p %.1f at %u spp, length %u: mean %.4f, samples %.4f, RMSE %.4f\n", p, spp, i + 1,
+                        hdrMean(result[i]), accumulated, rmse(result[i], 1.0f));
+            CHECK(std::fabs(hdrMean(result[i]) - accumulated) < 0.02 * accumulated);
+            ++i;
+        }
     }
 
     // Bright sparse samples (the half range's top) keep the output and the history finite.
@@ -1039,12 +1059,119 @@ void testSparseFirstFrames(gfx::Context& ctx) {
     CHECK(reset3.runOne(noisyFrame(901, 0.5f, 0.2f), step4).hdrBits == unchanged.hdrBits);
 }
 
-// The step 4 bytes: with no medium (volume = (0, 0, 0, 1)) and no extra reset iterations, the output and
-// history equal step 4's denoiser on the same input, temporal and stateless (hashes recorded with it on
-// llvmpipe; another driver may round differently, so there only the exact identity below is checked). And
-// everywhere: with albedo 1, no emission and no a-trous the output is the history, bit for bit.
-void testNoMediumKeepsStep4Bytes(gfx::Context& ctx) {
-    std::printf("no medium keeps the step 4 bytes\n");
+// A lit | sparse-dark edge on one surface (one depth, one normal: a shadow edge at 1 spp): dense light of
+// mean 1 (+-0.1) left of column 32, sparse light right of it (on with p = 0.1 at 0.5: mean 0.05, 90 % of the
+// pixels 0). The sparse side's first a-trous pass has no luminance stop; the later ones must stop at the
+// edge again, or the lit side bleeds into the dark one (removing `pc.step == 1u &&` in atrous.comp, geometry
+// alone in every pass, makes the dark side 6 px from the edge several times too bright). Stateless frames,
+// averaged over the rows of 4 frames: the dark side from 6 px off the edge within 20 % of its samples' mean,
+// the whole frame's energy within 3 %. The softened edge is printed (README: 2-4 px on first frames).
+void testSparseEdge(gfx::Context& ctx) {
+    std::printf("a lit | sparse-dark edge stays sharp and keeps its energy\n");
+    constexpr std::uint32_t kWidth = 64, kHeight = 192, kEdge = 32, kFrames = 4;
+    std::vector<Frame> frames;
+    for (std::uint32_t f = 0; f < kFrames; ++f) {
+        Frame frame = flatFrame(kWidth, kHeight);
+        for (std::uint32_t y = 0; y < kHeight; ++y)
+            for (std::uint32_t x = 0; x < kWidth; ++x) {
+                const float v = x < kEdge ? 1.0f + 0.2f * noise(1200 + f, x, y, 1)
+                                          : (noise(1200 + f, x, y, 0) + 0.5f < 0.1f ? 0.5f : 0.0f);
+                float* l = frame.at(frame.lighting, x, y);
+                l[0] = l[1] = l[2] = v;
+            }
+        frames.push_back(frame);
+    }
+    post::DenoiseSettings settings;
+    settings.temporal = false;
+    Harness harness(ctx, kWidth, kHeight);
+    const std::vector<Output> out = harness.run(frames, settings);
+
+    std::array<double, kWidth> output{}, input{};
+    for (std::uint32_t f = 0; f < kFrames; ++f)
+        for (std::uint32_t y = 0; y < kHeight; ++y)
+            for (std::uint32_t x = 0; x < kWidth; ++x) {
+                output[x] += out[f].hdr(x, y, 0) / (kFrames * kHeight);
+                input[x] += frames[f].at(frames[f].lighting, x, y)[0] / (kFrames * kHeight);
+            }
+    const auto band = [](const std::array<double, kWidth>& columns, std::uint32_t x0, std::uint32_t x1) {
+        double sum = 0.0;
+        for (std::uint32_t x = x0; x < x1; ++x)
+            sum += columns[x];
+        return sum / (x1 - x0);
+    };
+    const double dark = band(input, kEdge, kWidth), lit = band(input, 0, kEdge);
+    std::printf("  columns 26..41 (lit %.4f | dark %.4f):", lit, dark);
+    for (std::uint32_t x = 26; x < 42; ++x)
+        std::printf(" %.3f", output[x]);
+    std::printf("\n");
+    std::uint32_t softLit = 0, softDark = 0; // columns off their side's mean by more than 20 %
+    for (std::uint32_t x = 0; x < kEdge; ++x)
+        softLit += std::fabs(output[x] - lit) > 0.2 * lit ? 1u : 0u;
+    for (std::uint32_t x = kEdge; x < kWidth; ++x)
+        softDark += std::fabs(output[x] - dark) > 0.2 * dark ? 1u : 0u;
+    const double near = band(output, kEdge + 6, kEdge + 12), far = band(output, kEdge + 12, kWidth);
+    const double energy = band(output, 0, kWidth) / band(input, 0, kWidth);
+    std::printf(
+        "  soft edge: %u lit and %u dark columns off by > 20 %%; dark 6-12 px off the edge %.4f, beyond "
+        "%.4f; energy ratio %.4f\n",
+        softLit, softDark, near, far, energy);
+    CHECK(std::fabs(near - dark) <= 0.2 * dark);
+    CHECK(std::fabs(far - dark) <= 0.2 * dark);
+    for (std::uint32_t x = kEdge + 6; x < kWidth; ++x)
+        CHECK(std::fabs(output[x] - dark) <= 0.35 * dark); // one column: 768 samples, about 10 % noise
+    CHECK(std::fabs(energy - 1.0) <= 0.03);
+}
+
+// Outliers in the history (the window's frames 2 and 3 after a reset): frame 1 holds lone bright samples (2 %
+// of the pixels at 25 on 0.5 +- 0.05, like clamped indirect paths at 4 spp), frames 2 and 3 none. At length 2
+// and 3 the history holds them at 1/2 and 1/3 weight, but the frame's spatial estimate cannot see them and
+// the edge-robust minimum called the calm frame noise-free: each outlier stayed a speck (peak 12.77, 25x its
+// surroundings, before this fix). The variance at length 2 and 3 now also takes the largest temporal variance
+// in the 5x5 neighbourhood, so the outliers spread: no pixel above 2x the mean, and the mean within 8 % of
+// the history's (measured -6.7 % and -4.6 %: low-variance pixels beyond the outliers' reach gather little of
+// them; the history itself is unfiltered and keeps all of it).
+void testHistoryOutliers(gfx::Context& ctx) {
+    std::printf("outliers of earlier frames do not stay specks at length 2 and 3\n");
+    std::vector<Frame> frames;
+    double expected = 0.0;
+    for (std::uint32_t f = 0; f < 3; ++f) {
+        Frame frame = flatFrame();
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                const bool outlier = f == 0 && noise(1400, x, y, 3) + 0.5f < 0.02f;
+                const float v = outlier ? 25.0f : 0.5f + 0.1f * noise(1400 + f, x, y, 0);
+                float* l = frame.at(frame.lighting, x, y);
+                l[0] = l[1] = l[2] = v;
+            }
+        frames.push_back(frame);
+    }
+    Harness harness(ctx);
+    const std::vector<Output> out = harness.run(frames, {});
+    for (std::uint32_t f = 1; f < 3; ++f) {
+        // The history's mean: frame 1 at 1 / (f + 1), the others alike.
+        expected = 0.0;
+        for (std::uint32_t i = 0; i <= f; ++i)
+            expected += imageMean(frames[i]) / (f + 1);
+        float peak = 0.0f;
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x)
+                peak = std::max(peak, out[f].hdr(x, y, 0));
+        std::printf("  length %u: peak %.3f, mean %.4f (history %.4f)\n", f + 1, peak, hdrMean(out[f]),
+                    expected);
+        CHECK(out[f].length(5, 5) == static_cast<float>(f + 1));
+        CHECK(peak <= 2.0 * expected);
+        CHECK(std::fabs(hdrMean(out[f]) - expected) <= 0.08 * expected);
+    }
+}
+
+// Step 4's output, and no work without a medium. The step 4 denoiser's output on these frames (recorded at
+// probe pixels, temporal and stateless, with no extra reset iterations) is matched within fp16 rounding on
+// any driver; frames 2 and 3 of the temporal run are left out, since their variance now also counts the
+// difference between frames (see accumulate.comp). hasMedium = false (no volume reads or passes) gives the
+// same bytes as a (0, 0, 0, 1) volume layer read and filtered. And with albedo 1, no emission and no a-trous
+// the output is the history, bit for bit.
+void testNoMediumKeepsStep4Output(gfx::Context& ctx) {
+    std::printf("no medium keeps the step 4 output\n");
     std::vector<Frame> frames;
     for (std::uint32_t i = 0; i < 6; ++i) {
         Frame frame = noisyFrame(700 + i, 0.3f, 0.25f);
@@ -1065,16 +1192,89 @@ void testNoMediumKeepsStep4Bytes(gfx::Context& ctx) {
     post::DenoiseSettings stateless = temporal;
     stateless.temporal = false;
     Harness a(ctx), b(ctx);
-    const std::uint64_t temporalHash = outputHash(a.run(frames, temporal));
-    const std::uint64_t statelessHash = outputHash(b.run(frames, stateless));
-    std::printf("  hashes %016llx %016llx\n", static_cast<unsigned long long>(temporalHash),
-                static_cast<unsigned long long>(statelessHash));
-    if (ctx.deviceName().find("llvmpipe") != std::string::npos) {
-        CHECK(temporalHash == 0xaec4f5b1764ae804ull);
-        CHECK(statelessHash == 0x8d3e941bd00fd7e7ull);
-    } else {
-        std::printf("  not llvmpipe: the step 4 hashes are not compared\n");
+    const std::vector<Output> temporalOut = a.run(frames, temporal);
+    const std::vector<Output> statelessOut = b.run(frames, stateless);
+
+    // Recorded from the step 4 denoiser (llvmpipe): RGB at each probe pixel, per frame.
+    constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 6> kProbes = {
+        {{0, 0}, {5, 9}, {17, 33}, {31, 31}, {48, 7}, {63, 63}}};
+    using ProbeTable = std::array<std::array<float, 18>, 6>;
+    constexpr ProbeTable kTemporal = {{
+        {2.335938f, 0.350098f, 0.247437f, 0.271973f, 0.302979f, 0.293213f, 0.305908f, 0.293213f, 0.311035f,
+         0.307617f, 0.285645f, 0.298340f, 0.296387f, 0.287354f, 0.300781f, 2.291016f, 0.305664f, 0.297852f},
+        {2.337891f, 0.294434f, 0.253174f, 0.276123f, 0.292725f, 0.307617f, 0.305176f, 0.286377f, 0.294189f,
+         0.305664f, 0.300049f, 0.302490f, 0.289795f, 0.298340f, 0.299072f, 2.298828f, 0.319092f, 0.289307f},
+        {2.322266f, 0.298584f, 0.278809f, 0.285400f, 0.288086f, 0.300781f, 0.307861f, 0.297119f, 0.295898f,
+         0.303711f, 0.294922f, 0.299316f, 0.290527f, 0.300293f, 0.297607f, 2.292969f, 0.286133f, 0.291016f},
+        {2.345703f, 0.276855f, 0.339844f, 0.289795f, 0.284912f, 0.300049f, 0.299805f, 0.296631f, 0.292725f,
+         0.302490f, 0.303223f, 0.294678f, 0.293457f, 0.308350f, 0.298828f, 2.296875f, 0.275879f, 0.285889f},
+        {2.277344f, 0.280518f, 0.270996f, 0.294678f, 0.290283f, 0.301758f, 0.295654f, 0.297607f, 0.291992f,
+         0.304443f, 0.298584f, 0.297607f, 0.292236f, 0.301270f, 0.290283f, 2.308594f, 0.298584f, 0.297119f},
+        {2.326172f, 0.330811f, 0.305176f, 0.294678f, 0.287354f, 0.292969f, 0.297363f, 0.303223f, 0.296875f,
+         0.303955f, 0.301270f, 0.296875f, 0.292480f, 0.306885f, 0.288818f, 2.306641f, 0.308105f, 0.303223f},
+    }};
+    constexpr ProbeTable kStateless = {{
+        {2.335938f, 0.350098f, 0.247437f, 0.271973f, 0.302979f, 0.293213f, 0.305908f, 0.293213f, 0.311035f,
+         0.307617f, 0.285645f, 0.298340f, 0.296387f, 0.287354f, 0.300781f, 2.291016f, 0.305664f, 0.297852f},
+        {2.339844f, 0.238403f, 0.255127f, 0.284668f, 0.281250f, 0.321289f, 0.306152f, 0.283936f, 0.281494f,
+         0.305664f, 0.313477f, 0.310303f, 0.280762f, 0.314697f, 0.300781f, 2.322266f, 0.335449f, 0.275635f},
+        {2.271484f, 0.305908f, 0.324951f, 0.283203f, 0.280762f, 0.298340f, 0.319092f, 0.292480f, 0.301514f,
+         0.303467f, 0.286865f, 0.306396f, 0.299072f, 0.301270f, 0.282959f, 2.267578f, 0.266357f, 0.277832f},
+        {2.339844f, 0.284912f, 0.338379f, 0.296875f, 0.278564f, 0.304443f, 0.283203f, 0.291260f, 0.293701f,
+         0.298828f, 0.325439f, 0.284912f, 0.294678f, 0.320801f, 0.299561f, 2.283203f, 0.294434f, 0.288574f},
+        {2.261719f, 0.281006f, 0.260010f, 0.310547f, 0.292725f, 0.322998f, 0.289551f, 0.312256f, 0.296875f,
+         0.312012f, 0.271973f, 0.292236f, 0.292480f, 0.275635f, 0.297852f, 2.314453f, 0.292725f, 0.315430f},
+        {2.332031f, 0.331055f, 0.316406f, 0.307373f, 0.299072f, 0.289795f, 0.305908f, 0.309570f, 0.294922f,
+         0.299316f, 0.304199f, 0.293457f, 0.296875f, 0.323975f, 0.284424f, 2.304688f, 0.303223f, 0.333008f},
+    }};
+    // Within fp16 rounding: another driver may round each pass differently, a ulp or two through five passes
+    // (2^-8 relative is 4 ulp; 2^-11 is 8 ulp at 0.3).
+    const auto near = [](float value, float expected) {
+        return std::fabs(value - expected) <= std::max(std::fabs(expected) * 0x1p-8f, 0x1p-11f);
+    };
+    double worst = 0.0;
+    for (const auto& [outputs, table, skip] :
+         {std::tuple{&temporalOut, &kTemporal, true}, std::tuple{&statelessOut, &kStateless, false}})
+        for (std::uint32_t f = 0; f < 6; ++f) {
+            if (skip && (f == 1 || f == 2))
+                continue; // history length 2 and 3: see above
+            for (std::size_t i = 0; i < kProbes.size(); ++i)
+                for (std::uint32_t c = 0; c < 3; ++c) {
+                    const float value = (*outputs)[f].hdr(kProbes[i].first, kProbes[i].second, c);
+                    const float expected = (*table)[f][i * 3 + c];
+                    worst = std::max(worst, static_cast<double>(std::fabs(value - expected)));
+                    CHECK(near(value, expected));
+                }
+        }
+    std::printf("  largest difference to step 4 at the probes: %.6f\n", worst);
+
+    // No medium: the volume layer is neither read nor filtered (whatever it holds), which gives the same
+    // bytes as a (0, 0, 0, 1) layer that is, temporal and stateless.
+    std::vector<Frame> garbage = frames;
+    for (Frame& frame : garbage)
+        for (std::size_t i = 0; i < frame.volume.size(); ++i)
+            frame.volume[i] = i % 4 == 3 ? 0.1f : 5.0f;
+    for (post::DenoiseSettings settings : {temporal, stateless}) {
+        settings.hasMedium = false;
+        Harness skipped(ctx);
+        const std::vector<Output> skippedOut = skipped.run(garbage, settings);
+        const std::vector<Output>& withLayer = settings.temporal ? temporalOut : statelessOut;
+        for (std::size_t f = 0; f < frames.size(); ++f) {
+            CHECK(skippedOut[f].hdrBits == withLayer[f].hdrBits);
+            CHECK(skippedOut[f].historyBits == withLayer[f].historyBits);
+        }
     }
+    // A medium that appears starts the volume history over: the layer of the frames without one is stale.
+    post::DenoiseSettings none = temporal;
+    none.hasMedium = false;
+    Harness appears(ctx);
+    appears.run({garbage[0], garbage[1]}, none);
+    Frame fog = frames[2];
+    for (std::size_t i = 0; i < fog.volume.size(); ++i)
+        fog.volume[i] = i % 4 == 3 ? 0.5f : 0.25f;
+    const Output first = appears.runOne(fog, temporal);
+    CHECK(first.volumeLength(9, 9) == 1.0f && first.volume(9, 9, 0) == 0.25f &&
+          first.volume(9, 9, 3) == 0.5f);
 
     Harness plain(ctx);
     const auto out = plain.run({noisyFrame(710, 0.5f, 0.4f), noisyFrame(711, 0.5f, 0.4f)}, noFilter());
@@ -1085,8 +1285,8 @@ void testNoMediumKeepsStep4Bytes(gfx::Context& ctx) {
 }
 
 // (c) The export firefly filter: a flat 0.5 field with one pixel at 500 comes out at most 4x its largest
-// neighbour (the second largest of its 3x3 neighbourhood); a 2x2 block at 5 is kept within 1 %; the emission
-// is untouched; off (the default, as in the window) nothing is clamped.
+// neighbour (the second largest of its 3x3 neighbourhood); a 2x2 block at 5 is kept within 1 %; glints on a
+// geometry edge are kept; the emission is untouched; off (the default, as in the window) nothing is clamped.
 void testFireflyFilter(gfx::Context& ctx) {
     std::printf("the export firefly filter clamps lone fireflies only\n");
     Frame frame = flatFrame();
@@ -1100,13 +1300,26 @@ void testFireflyFilter(gfx::Context& ctx) {
             float* l = frame.at(frame.lighting, x, y);
             l[0] = l[1] = l[2] = 5.0f;
         }
+    // A dotted line of glints along a depth edge (the RETURN shot's window sill at 64 spp: 1-pixel glints
+    // 3-13 pixels apart, a line that fills in with more samples): kept.
+    for (std::uint32_t y = 0; y < kSize; ++y) {
+        for (std::uint32_t x = 55; x < kSize; ++x)
+            frame.depth[std::size_t{y} * kSize + x] = 2.0f;
+        if (y % 6 == 3) {
+            float* l = frame.at(frame.lighting, 54, y);
+            l[0] = l[1] = l[2] = 50.0f;
+        }
+    }
 
     post::DenoiseSettings settings = noFilter();
     settings.temporal = false;
     settings.fireflyFilter = true;
     Harness on(ctx);
     const Output filtered = on.runOne(frame, settings);
-    std::printf("  firefly %.3f, block %.3f\n", filtered.hdr(10, 10, 0), filtered.hdr(40, 40, 0));
+    std::printf("  firefly %.3f, block %.3f, edge glint %.3f\n", filtered.hdr(10, 10, 0),
+                filtered.hdr(40, 40, 0), filtered.hdr(54, 9, 0));
+    for (std::uint32_t y = 3; y < kSize; y += 6)
+        CHECK(std::fabs(filtered.history(54, y, 0) - 50.0f) <= 50.0f / 1024.0f);
     for (std::uint32_t c = 0; c < 3; ++c) {
         CHECK(filtered.history(10, 10, c) <= 4.0f * 0.5f * (1.0f + 1.0f / 1024.0f));
         CHECK(filtered.history(10, 10, c) >= 4.0f * 0.5f * (1.0f - 1.0f / 1024.0f)); // clamped, not dropped
@@ -1221,6 +1434,52 @@ void testVolumeLayer(gfx::Context& ctx) {
     history.denoiser().resetHistory();
     const Output reset = history.runOne(second, noFilter());
     CHECK(reset.volume(3, 4, 0) == halfToFloat(floatToHalf(0.4f)) && reset.volumeLength(3, 4) == 1.0f);
+}
+
+// A silhouette in fog: in-scattered light 0.4 in front of a far wall left of column 32 and 0.1 in front of a
+// near object right of it, noise +-0.05, no surface light (so the output is the filtered layer); the two
+// sides differ in transmittance (T 0.2 | 0.8, one depth), or in depth (1 | 0.5, one T). The volume a-trous
+// stops at either step, so the step keeps its width: the two columns beside it within 10 %, while the flat
+// noise still drops at least 3x. (A luminance stop alone smears it to 0.29 | 0.21: its standard deviation
+// is largest at the step itself.)
+void testVolumeEdge(gfx::Context& ctx) {
+    std::printf("a volume step with a transmittance or depth step keeps its width\n");
+    constexpr std::uint32_t kEdge = kSize / 2;
+    for (const bool depthStep : {false, true}) {
+        Frame frame = flatFrame();
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                float* v = frame.at(frame.volume, x, y);
+                for (std::uint32_t c = 0; c < 3; ++c)
+                    v[c] = (x < kEdge ? 0.4f : 0.1f) + 0.1f * noise(1300, x, y, c);
+                v[3] = depthStep ? 0.5f : (x < kEdge ? 0.2f : 0.8f);
+                if (depthStep && x >= kEdge)
+                    frame.depth[std::size_t{y} * kSize + x] = 0.5f;
+            }
+        post::DenoiseSettings settings;
+        settings.temporal = false;
+        settings.volumeAtrousIterations = 0;
+        Harness raw(ctx);
+        const Output unfiltered = raw.runOne(frame, settings);
+        settings.volumeAtrousIterations = 4;
+        Harness smooth(ctx);
+        const Output filtered = smooth.runOne(frame, settings);
+        const double left = columnMean(filtered, kEdge - 1), right = columnMean(filtered, kEdge);
+        std::printf("  %s step, columns 28..35:", depthStep ? "depth" : "T");
+        for (std::uint32_t x = kEdge - 4; x < kEdge + 4; ++x)
+            std::printf(" %.4f", columnMean(filtered, x));
+        std::printf("\n");
+        CHECK(std::fabs(left - 0.4) <= 0.04);
+        CHECK(std::fabs(right - 0.1) <= 0.01);
+        for (const auto& [x0, x1, mean] :
+             {std::tuple{8u, kEdge - 8, 0.4}, std::tuple{kEdge + 8, kSize - 8, 0.1}}) {
+            const double before = flatStddev(unfiltered, x0, x1, mean),
+                         after = flatStddev(filtered, x0, x1, mean);
+            std::printf("  flat %u..%u: stddev %.5f -> %.5f (%.1fx)\n", x0, x1, before, after,
+                        before / after);
+            CHECK(before / after >= 3.0);
+        }
+    }
 }
 
 // (e) Non-finite volume samples count as no medium: NaN or Inf radiance as 0, a non-finite transmittance as
@@ -1377,11 +1636,17 @@ int main() {
             settle();
             testSparseFirstFrames(ctx);
             settle();
-            testNoMediumKeepsStep4Bytes(ctx);
+            testSparseEdge(ctx);
+            settle();
+            testHistoryOutliers(ctx);
+            settle();
+            testNoMediumKeepsStep4Output(ctx);
             settle();
             testFireflyFilter(ctx);
             settle();
             testVolumeLayer(ctx);
+            settle();
+            testVolumeEdge(ctx);
             settle();
             testNonFiniteVolume(ctx);
             settle();

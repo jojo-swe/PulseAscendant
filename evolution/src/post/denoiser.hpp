@@ -4,6 +4,7 @@
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/image.hpp"
+#include "post/denoise_settings.hpp"
 
 #include <volk.h>
 
@@ -31,23 +32,13 @@ struct GBufferView {
     gfx::Image& volume;
 };
 
-struct DenoiseSettings {
-    bool temporal = true;               // false: every pixel starts its history this frame (export)
-    std::uint32_t atrousIterations = 3; // steps 1, 2, 4, ...; 0: no surface filter (nor reset passes)
-    float alphaColor = 0.2f, alphaMoments = 0.2f;
-    std::uint32_t maxHistory = 64;
-    float sigmaDepth = 1.f, sigmaNormal = 128.f, sigmaLuminance = 4.f;
-    std::uint32_t resetAtrousIterations = 5; // at history length <= 2 (when atrousIterations > 0)
-    bool fireflyFilter = false;              // exports at spp >= 16 (Decision 16)
-    float fireflyK = 4.f;
-    std::uint32_t volumeAtrousIterations = 4;
-};
-
 // SVGF-lite. Each denoise() records four kinds of compute pass:
 //   firefly     (fireflyFilter only: exports from 16 spp) the demodulated illumination of each pixel scaled
 //               so its luminance is at most fireflyK x the second largest of its 3x3 neighbourhood (= k x
 //               its largest neighbour when it is the largest itself); a lone firefly is clamped, anything two
-//               pixels wide is kept. Everything after reads this instead of the lighting.
+//               pixels wide is kept, and so is a pixel on a geometry edge (a 3x3 neighbour at another depth
+//               or normal, or a miss: a 1-pixel highlight along an edge, a dotted line of glints at 64 spp).
+//               Everything after reads this instead of the lighting.
 //   accumulate  illumination = lighting / max(albedo, 1e-3) (a non-finite sample counts as 0, the result is
 //               clamped to [0, the half maximum]), reprojected through the motion guide onto the previous
 //               frame's 2x2 bilinear footprint (a tap counts when inside, |z_prev - z| <= 0.05 z and
@@ -63,22 +54,36 @@ struct DenoiseSettings {
 //               5x5 neighbourhood's weight has zero luminance, it is the plain 5x5 variance instead, stored
 //               negative so the first a-trous pass filters that pixel by depth and normal only (a luminance
 //               stop on raw sparse samples weights the rare bright ones down and darkens the frame; the
-//               minimum estimator keeps holes).
-//               The volume layer beside it: made safe (non-finite radiance 0, non-finite T 1, T in [0, 1]),
-//               reprojected through the same motion guide with no depth or normal test, the history clamped
-//               to the current 3x3 min/max (the layer is smooth, not sparse), blended with alpha =
-//               max(alphaColor, 1 / its own length). The history is not clamped to the current neighbourhood:
-//               at 1 spp that would bias sparse lighting dark. A firefly (a sample clamped to 60000) entering
-//               a long history at alpha 0.2 adds 12000 and fades by 0.8 per frame: under 1 above its
-//               surroundings after 43 frames.
+//               minimum estimator keeps holes). At len 2 and 3 the variance is at least the largest temporal
+//               variance in the 5x5 neighbourhood (each neighbour against the history moments at its
+//               reprojected position): the spatial estimate sees this frame only, and an earlier frame's
+//               bright sample, still in the history, would otherwise stay a speck (the window's frames 2 and
+//               3 after a reset; denoiser_test: peak 12.8 -> 0.86, the mean within 7 %). Measured first-frame
+//               cost (denoiser_test, a lit | sparse-dark edge on one surface at len 1): the edge softens over
+//               about 4 pixels (1 on the lit side, 3 on the dark side off their side's mean by more than 20
+//               %), energy-neutral (+0.3 %); from 6 pixels off the edge the dark side is within 5 % of its
+//               samples' mean. With temporal moments (len >= 4) the edge is sharp again. The volume layer
+//               beside it: made safe (non-finite radiance 0, non-finite T 1, T in [0, 1]), reprojected
+//               through the same motion guide with no depth or normal test, the history clamped to the
+//               current 3x3 min/max (the layer is smooth, not sparse), blended with alpha = max(alphaColor, 1
+//               / its own length). The history is not clamped to the current neighbourhood: at 1 spp that
+//               would bias sparse lighting dark. A firefly (a sample clamped to 60000) entering a long
+//               history at alpha 0.2 adds 12000 and fades by 0.8 per frame: under 1 above its surroundings
+//               after 43 frames.
 //   atrous      atrousIterations 5x5 B3 passes, step 1, 2, 4, ..., weighted by depth, normal and luminance
 //               (against the 3x3 Gaussian of the variance), the variance carried with squared weights; pixels
-//               with len <= 2 get max(atrousIterations, resetAtrousIterations) (the others are copied
+//               with len <= 3 get max(atrousIterations, resetAtrousIterations) (the others are copied
 //               through the extra passes). Then volumeAtrousIterations passes over the volume layer's
-//               radiance, weighted by luminance only (against the 3x3 standard deviation at each pass); its
-//               transmittance is not blurred, since it carries the silhouettes of the surfaces behind.
+//               radiance, weighted by luminance (against the 3x3 standard deviation at each pass), by
+//               transmittance (|T_p - T_q| / 0.05) and by depth as the surface passes (a hit and a miss never
+//               mix): a silhouette seen through a medium ends a segment of another length, so it is an edge
+//               of the layer too. Its transmittance is not blurred, since it carries the silhouettes of the
+//               surfaces behind.
 //   combine     hdrOut = T * (filtered illumination * albedo + emission) + filtered volume radiance, T the
 //               volume's transmittance; exactly the surface without a medium (volume = (0, 0, 0, 1)).
+// With hasMedium false the volume layer is neither read nor filtered (no volume loads in accumulate, no
+// volume passes, combine uses (0, 0, 0, 1)): the same bytes as a (0, 0, 0, 1) layer, without the work. The
+// next frame with a medium starts the volume history over.
 // The history is the accumulated, unfiltered illumination; the emission never enters history or filtering,
 // so an emissive screen stays sharp and current. A frame with len == 1 everywhere (the first after a reset,
 // or temporal == false) gives the same bytes either way, the volume layer included.
@@ -136,6 +141,7 @@ private:
                                          // the volume a-trous' scratch once accumulated
     std::uint32_t current_ = 0;
     bool historyValid_ = false;
+    bool volumeHistoryValid_ = false; // the last denoise() had a medium (its volume history is current)
     gfx::FrameRing::Subscription ringAlive_; // active while ring_ lives
 };
 

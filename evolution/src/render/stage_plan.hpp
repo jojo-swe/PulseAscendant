@@ -1,6 +1,6 @@
 #pragma once
 
-#include "post/denoiser.hpp"
+#include "post/denoise_settings.hpp"
 #include "show/timeline.hpp"
 
 #include <array>
@@ -110,7 +110,7 @@ inline constexpr std::uint32_t kExportFilterSpp = 16;
 
 // The denoiser settings of a frame: the window keeps history and always runs 3 a-trous iterations; exports
 // keep none, run 3 below kExportFilterSpp and 0 from it, where the firefly filter (k = 4) takes over
-// (Decision 16; never in the window). Both: 5 iterations at history length <= 2 and 4 on the volume layer.
+// (Decision 16; never in the window). Both: 5 iterations at history length <= 3 and 4 on the volume layer.
 post::DenoiseSettings denoiseSettingsFor(const HistoryState& state);
 
 } // namespace evo::render
