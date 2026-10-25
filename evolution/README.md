@@ -246,8 +246,15 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   picture, sampled through an sRGB view so it is decoded to linear light exactly once, at a mip level from a
   ray cone) and a portal (a window: its radiance is the procedural night sky behind it). Next-event
   estimation picks one light by fixed weights per sample and combines with the BSDF's own sampling by multiple
-  importance sampling (power heuristic), portals included. The night sky is a pure function of the direction:
-  a blue gradient, hashed stars, the moon's glow and a distant town's lights below the horizon.
+  importance sampling (power heuristic), portals included. The sky behind a portal is the scene's
+  environment.
+- **Environments.** Each scene's frame names its sky, a pure function of the direction: `NightSky` (the
+  Studio's: a blue gradient, the moon's glow, stars, a town's lights under the horizon), `Space`, `Dusk` or
+  `Day`, with an optional sun or moon disc. Rays from the camera and through mirrors see the full sky, its
+  stars and town lights drawn as points of fixed flux filtered over the ray's footprint (sharp at 4K, no
+  aliasing at 1 spp); next-event estimation, portals and rays after a rough bounce see a smooth lighting sky
+  (gradient, glow, disc). Outdoor scenes sample the environment directly, the disc uniformly in its cone and
+  the dome by cosine, weighed against the BSDF by multiple importance sampling.
 - **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
   after the first bounce clamped to a luminance limit (64, the Studio 2) against fireflies; a non-finite
   sample counts as 0 (checked from the float's bits, so a fast-math compiler cannot fold the check away).

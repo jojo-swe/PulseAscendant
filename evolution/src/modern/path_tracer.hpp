@@ -72,9 +72,10 @@ TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
 // EVO_BINDING_LENSING in src/rt/bindings.hpp): one pointer per resource, owned and written by the feature
 // (its task), which must keep it alive and unchanged until the frame completes; a buffer written per frame is
 // one of the feature's per-slot buffers. Null binds a one-element dummy of the tracer's own. An image is
-// sampled in GENERAL; trace() records its barrier.
+// sampled in GENERAL; trace() records its barrier. The environment is the exception: trace() packs the
+// frame's own (SceneFrame::environment) into a buffer per slot; a non-null `environment` replaces it.
 struct TraceExtras {
-    const gfx::Buffer* environment = nullptr;        // 15: EnvironmentUniforms (Task 2)
+    const gfx::Buffer* environment = nullptr;        // 15: replaces the frame's packed environment (a hook)
     const gfx::Buffer* treeNodes = nullptr;          // 16: LightTreeNode[] (Task 12)
     const gfx::Buffer* treeLights = nullptr;         // 17: TreeLight[] (Task 12)
     const gfx::Buffer* medium = nullptr;             // 18: MediumUniforms (Task 11)
@@ -156,6 +157,8 @@ private:
     gfx::Buffer dummyBuffer_;
     gfx::Image dummyDensity_, dummyMajorant_, dummyCaustics_;
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_, materials_;
+    // The frame's environment (SceneFrame::environment packed, binding EVO_BINDING_ENVIRONMENT), per slot.
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
     GBuffer gbuffer_;
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
     std::optional<rt::Tlas> tlas_;

@@ -164,9 +164,13 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
                                     "pt dummy caustics")) {
     ++gPipelinesCreated;
     ringBegin_ = ring.onBegin([this](std::uint32_t) { tracedThisFrame_ = false; });
-    for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot)
+    for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
         uniforms_[slot] = gfx::Buffer(
             ctx, {sizeof(rt::FrameUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, "frame uniforms"});
+        environments_[slot] =
+            gfx::Buffer(ctx, {sizeof(rt::EnvironmentUniforms), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true,
+                              "environment uniforms"});
+    }
     createFrameBuffers();
     tlas_.emplace(ctx_, ring_, capacity_.instances);
     createImages();
@@ -261,6 +265,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     if (frame.materials.size() > capacity_.materials)
         throw tooMany("materials", frame.materials.size(), capacity_.materials);
     checkSceneFrame(scene.source(), frame);
+    const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
     const std::vector<rt::Material>& materials =
         frame.materials.empty() ? scene.source().materials : frame.materials;
     std::vector<rt::Instance> instances;
@@ -312,13 +317,15 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
     for (const rt::RectLight& light : frame.lights)
         u.lightWeightSum += std::max(light.selectWeight, 0.f);
     // Step 5's fields, each set by the task that reads it: one time slice at the frame's time, no
-    // regularisation, no tree lights, medium, caustics or lensing, and NEE never samples the environment.
+    // regularisation, no tree lights, medium, caustics or lensing.
+    u.environmentSelect = frame.environment.select;
     u.sliceIndex = 0;
     u.sliceCount = 1;
 
     // This slot's buffers: the ring's begin() waited for the frame that last read them.
     const std::uint32_t slot = ring_.slot();
     writeBuffer(uniforms_[slot], &u, sizeof u);
+    writeBuffer(environments_[slot], &environment, sizeof environment);
     writeBuffer(instanceRecords_[slot], records.data(), records.size() * sizeof(rt::InstanceRecord));
     writeBuffer(lights_[slot], frame.lights.data(), frame.lights.size() * sizeof(rt::RectLight));
     if (!frame.materials.empty())
@@ -365,7 +372,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, const SceneFr
         storageBuffer(EVO_BINDING_INDICES, scene.geometry().indices()),
         storageBuffer(EVO_BINDING_MESH_RECORDS, scene.geometry().meshRecords()),
         sampledImage(EVO_BINDING_RETRO_SCREEN, screen),
-        extraBuffer(EVO_BINDING_ENVIRONMENT, extras.environment),
+        storageBuffer(EVO_BINDING_ENVIRONMENT,
+                      extras.environment ? *extras.environment : environments_[slot]),
         extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes),
         extraBuffer(EVO_BINDING_TREE_LIGHTS, extras.treeLights),
         extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
