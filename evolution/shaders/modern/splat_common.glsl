@@ -21,6 +21,15 @@ struct SplatPoint {
 
 SplatPoint splatPoint(uint id, float seconds, vec4 params[4]);
 
+#ifdef SPLAT_SPIKES
+// Diffraction spikes (optional: a shader defines SPLAT_SPIKES before including this file, and this function):
+// x the share of the point's flux that goes into four spikes along the picture's axes instead of its core, y
+// their length in pixels at the 1080-row reference (scaled to the trace's height). Each spike is a row of
+// bilinear taps whose weights fall off exponentially from the core; the taps are lens glare, so they are not
+// depth tested (the core is), and their weights are renormalised so the spikes carry exactly that share.
+vec2 splatSpikes(uint id, SplatPoint s, vec4 params[4]);
+#endif
+
 // One id per invocation, rows of kSplatRowWidth ids (src/modern/splats.hpp).
 layout(local_size_x = 256, local_size_y = 1) in;
 const uint kSplatRowWidth = 65536u;
@@ -76,8 +85,55 @@ void splatAccumulate(uint channel, ivec2 pixel, float value) {
     }
 }
 
+#ifdef SPLAT_SPIKES
+// Adds `value` bilinearly at a sub-pixel position (pixel centres at +0.5).
+void splatBilinear(vec2 at, vec3 value, ivec2 last) {
+    vec2 q = at - 0.5;
+    ivec2 base = ivec2(floor(q));
+    vec2 f = q - vec2(base);
+    for (int j = 0; j < 2; ++j) {
+        for (int i = 0; i < 2; ++i) {
+            ivec2 pixel = base + ivec2(i, j);
+            if (any(lessThan(pixel, ivec2(0))) || any(greaterThan(pixel, last))) {
+                continue;
+            }
+            float w = (i == 0 ? 1.0 - f.x : f.x) * (j == 0 ? 1.0 - f.y : f.y);
+            vec3 v = value * w;
+            splatAccumulate(0u, pixel, v.r);
+            splatAccumulate(1u, pixel, v.g);
+            splatAccumulate(2u, pixel, v.b);
+        }
+    }
+}
+
+const int kSplatSpikeTaps = 48; // per spike, at most
+
+// The four spikes of `flux` (already the spikes' share) around `position`, `lengthPx` long.
+void splatSpikeTaps(vec2 position, vec3 flux, float lengthPx, ivec2 last) {
+    int taps = clamp(int(ceil(lengthPx)), 1, kSplatSpikeTaps);
+    float step = max(lengthPx / float(taps), 1.0);
+    float total = 0.0;
+    for (int k = 1; k <= taps; ++k) {
+        total += exp(-3.5 * float(k) / float(taps));
+    }
+    vec3 perTap = flux / (4.0 * total);
+    for (int k = 1; k <= taps; ++k) {
+        vec3 value = perTap * exp(-3.5 * float(k) / float(taps));
+        float d = float(k) * step;
+        splatBilinear(position + vec2(d, 0.0), value, last);
+        splatBilinear(position - vec2(d, 0.0), value, last);
+        splatBilinear(position + vec2(0.0, d), value, last);
+        splatBilinear(position - vec2(0.0, d), value, last);
+    }
+}
+#endif
+
 // Projects, depth-tests and spreads one point.
+#ifdef SPLAT_SPIKES
+void splat(SplatPoint s, vec2 spikes) {
+#else
 void splat(SplatPoint s) {
+#endif
     if (!allFinite(s.position) || !allFinite(s.flux) || !isFinite(s.radius)) {
         return;
     }
@@ -96,7 +152,15 @@ void splat(SplatPoint s) {
     vec2 size = vec2(float(pc.width), float(pc.height));
     vec2 position = vec2((ndcX + 1.0) * 0.5 * size.x, (1.0 - ndcY) * 0.5 * size.y);
     // Off the picture by more than the footprint (and far off, where ivec2 would not hold it).
-    if (!(position.x > -3.0 && position.y > -3.0 && position.x < size.x + 3.0 && position.y < size.y + 3.0)) {
+#ifdef SPLAT_SPIKES
+    float spikeShare = clamp(spikes.x, 0.0, 1.0);
+    float spikeLength = max(spikes.y, 0.0) * size.y / 1080.0;
+    float margin = 3.0 + (spikeShare > 0.0 ? spikeLength : 0.0);
+#else
+    float margin = 3.0;
+#endif
+    if (!(position.x > -margin && position.y > -margin && position.x < size.x + margin &&
+          position.y < size.y + margin)) {
         return;
     }
     ivec2 centre = ivec2(floor(position));
@@ -106,6 +170,12 @@ void splat(SplatPoint s) {
         return;
     }
 
+#ifdef SPLAT_SPIKES
+    if (spikeShare > 0.0) {
+        splatSpikeTaps(position, flux * spikeShare, spikeLength, last);
+        flux *= 1.0 - spikeShare;
+    }
+#endif
     // sigma = max(projected radius, 0.5 px); the 5x5 taps around the centre pixel, renormalised to sum 1.
     float projected = max(s.radius, 0.0) / (z * pc.tanHalfFovY) * 0.5 * size.y;
     float sigma = max(projected, 0.5);
@@ -143,7 +213,12 @@ void main() {
         return;
     }
     vec4 params[4] = pc.params;
+#ifdef SPLAT_SPIKES
+    SplatPoint s = splatPoint(id, pc.seconds, params);
+    splat(s, splatSpikes(id, s, params));
+#else
     splat(splatPoint(id, pc.seconds, params));
+#endif
 }
 
 #endif

@@ -13,10 +13,6 @@ namespace {
 
 constexpr double kFovY = 45.0;
 
-// The spin, radians a second about x, y and z, and the starting angles.
-constexpr double kSpin[3] = {0.83, 1.21, 0.47};
-constexpr double kStart[3] = {0.4, 0.2, 0.1};
-
 using Point = GlenzPoint;
 
 // About x, then y, then z.
@@ -106,7 +102,8 @@ double glenzBounce(const show::TimelineFrame& frame, double seconds) {
 
 GlenzVertices glenzWorldVertices(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
     const double t = static_cast<double>(retroFrame) / kGlenzRetroRate;
-    const double angle[3] = {kStart[0] + kSpin[0] * t, kStart[1] + kSpin[1] * t, kStart[2] + kSpin[2] * t};
+    const double angle[3] = {kGlenzStartAngle[0] + kGlenzSpin[0] * t, kGlenzStartAngle[1] + kGlenzSpin[1] * t,
+                             kGlenzStartAngle[2] + kGlenzSpin[2] * t};
     const double lift = kGlenzFloor + kGlenzLift * glenzBounce(frame, t);
     GlenzVertices world{};
     const GlenzVertices& model = glenzMesh().vertices;

@@ -1,7 +1,6 @@
 #pragma once
 
-// Tunnel: the 2026 side of TUNNEL. (WORMHOLE, Act III's cosmic tunnel, is to join it; it still shows the
-// placeholder.)
+// Tunnel: the 2026 side of TUNNEL.
 //
 // TUNNEL. 1993's dot tunnel (retro/tunnel.*) drew 96 rings of 64 points flying at the camera along a path of
 // summed sines, twisting slowly. Here every one of those points is a real light: a small glowing bead riding

@@ -45,10 +45,11 @@ bool isStudio(Effect e) {
 }
 
 // The scene each effect's 2026 side will show (the chapter -> scene map, Tasks 16-25): the
-// placeholder for BOOT, CREDITS and THE END, which keep it.
+// placeholder for BOOT, CREDITS and THE END, which keep it, and for FLYBY, whose 2026 side is the pull-out
+// from the screen into the room. The starship crosses in WORMHOLE.
 SceneId plannedScene(Effect e) {
     switch (e) {
-    case Effect::Flyby:
+    case Effect::Wormhole:
         return SceneId::Ship;
     case Effect::Dots:
     case Effect::Ocean:
@@ -58,7 +59,6 @@ SceneId plannedScene(Effect e) {
     case Effect::PlasmaPlanet:
         return SceneId::Nebula;
     case Effect::Tunnel:
-    case Effect::Wormhole:
         return SceneId::Tunnel;
     case Effect::Glenz:
     case Effect::Cathedral:
@@ -109,13 +109,12 @@ void testEffectRows() {
         CHECK(std::strcmp(modern::effectSceneName(effect), modern::sceneName(scene)) == 0);
     }
     CHECK(studio == 5);
-    // A scene takes its rows one chapter at a time (Tunnel shows TUNNEL; WORMHOLE is still to come): every
-    // row is the placeholder or its planned scene (checked above), and no scene shows more than it plans.
+    // A scene's rows move together: all of them on the scene, or none yet.
     for (std::size_t s = 1; s < modern::kSceneCount; ++s) {
         if (moved[s] != 0 && moved[s] != planned[s])
-            std::printf("%s shows %d of its %d planned effects\n", modern::sceneName(SceneId(s)), moved[s],
-                        planned[s]);
-        CHECK(moved[s] <= planned[s]);
+            std::fprintf(stderr, "%s shows %d of its %d planned effects\n", modern::sceneName(SceneId(s)),
+                         moved[s], planned[s]);
+        CHECK(moved[s] == 0 || moved[s] == planned[s]);
     }
     CHECK(planned[static_cast<std::size_t>(SceneId::Studio)] == 5);
     for (std::size_t s = static_cast<std::size_t>(SceneId::Ship); s < modern::kSceneCount; ++s)

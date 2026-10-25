@@ -1,0 +1,165 @@
+#version 460
+
+// FLYBY's splats (src/modern/scenes/ship.cpp): the star field, the planet's glowing limb and the sun's
+// diffraction spikes, a pure function of (id, params). Everything is in the ship's render frame:
+//   params[0] = (camera eye, star count)
+//   params[1] = the quaternion (x, y, z, w) that turns a world direction into the render frame
+//   params[2] = (planet centre, limb point count)
+//   params[3] = (towards the sun in the render frame, planet radius)
+// Ids [0, stars) are stars, [stars, stars + limb) the limb, and the last one the sun.
+
+#extension GL_GOOGLE_include_directive : require
+
+#define SPLAT_SPIKES
+#include "splat_common.glsl"
+
+uint hashId(uint v) {
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float unitFloat(uint h) {
+    return float(h >> 8u) * (1.0 / 16777216.0);
+}
+
+vec3 rotateByQuaternion(vec4 q, vec3 v) {
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
+
+// Stars sit this far out along their direction: beyond anything traced, so any surface hides them.
+const float kStarDistance = 1.0e6;
+// The Milky Way's pole in the world (stars crowd along the great circle around it).
+const vec3 kGalacticPole = vec3(0.32, 0.81, 0.49);
+
+// A star's colour from a temperature in [0, 1] (cool orange to hot blue-white).
+vec3 starColour(float t) {
+    vec3 cool = vec3(1.0, 0.62, 0.38), mid = vec3(1.0, 0.95, 0.88), hot = vec3(0.68, 0.8, 1.0);
+    return t < 0.5 ? mix(cool, mid, t * 2.0) : mix(mid, hot, t * 2.0 - 1.0);
+}
+
+// Three populations: a few bright stars with spikes, some clear ones, and the faint dust of the band.
+float starFlux(uint h, out uint tier) {
+    float u = unitFloat(h);
+    float v = unitFloat(hashId(h ^ 0x51u));
+    if (u < 0.0009) { // about 240 of 262,144
+        tier = 2u;
+        return mix(2.5, 14.0, v * v);
+    }
+    if (u < 0.013) {
+        tier = 1u;
+        return mix(0.25, 1.6, v * v);
+    }
+    tier = 0u;
+    return 0.006 * exp2(4.5 * v * v); // 0.006 .. 0.14
+}
+
+vec3 starDirectionWorld(uint id, uint h) {
+    float a = unitFloat(hashId(h + 1u)), b = unitFloat(hashId(h + 2u)), c = unitFloat(hashId(h + 3u));
+    if (c < 0.45) { // the band: a Gaussian in latitude about the galactic plane, denser towards one side
+        vec3 u = normalize(cross(kGalacticPole, vec3(0.0, 0.0, 1.0)));
+        vec3 w = cross(kGalacticPole, u);
+        float phi = 6.2831853 * a;
+        float g = sqrt(-2.0 * log(max(b, 1e-7))) * cos(6.2831853 * unitFloat(hashId(h + 4u)));
+        float latitude = 0.11 * g * (0.6 + 0.8 * abs(sin(0.5 * phi)));
+        return normalize(cos(latitude) * (cos(phi) * u + sin(phi) * w) + sin(latitude) * kGalacticPole);
+    }
+    float z = 2.0 * a - 1.0;
+    float r = sqrt(max(0.0, 1.0 - z * z));
+    return vec3(r * cos(6.2831853 * b), r * sin(6.2831853 * b), z);
+}
+
+// How much brighter the spikes grow near the sun (in the render frame).
+float nearSun(vec3 d, vec4 params[4]) {
+    float c = dot(d, normalize(params[3].xyz));
+    return 1.0 + 3.0 * exp((c - 1.0) / 0.02);
+}
+
+// The planet's limb: points of an air glow over the tangent circle the camera sees, at an altitude drawn from
+// an exponential atmosphere (a few on the planet's side of the limb), pulled towards the camera so that the
+// planet's own surface does not hide them (they still project where they are).
+const float kScaleHeight = 0.0065; // of the planet's radius
+SplatPoint limbPoint(uint k, uint count, vec4 params[4]) {
+    vec3 eye = params[0].xyz;
+    vec3 centre = params[2].xyz;
+    float radius = params[3].w;
+    vec3 toEye = eye - centre;
+    float distance = length(toEye);
+    SplatPoint s;
+    s.flux = vec3(0.0);
+    s.radius = 0.0;
+    s.position = eye;
+    if (!(distance > radius * 1.0001)) {
+        return s;
+    }
+    vec3 n = toEye / distance;
+    vec3 u = normalize(cross(n, abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 v = cross(n, u);
+    uint h = hashId(k * 0x9E3779B1u + 0x1F1Fu);
+    float phi = 6.2831853 * (float(k) + unitFloat(h)) / float(count);
+    float ratio = radius / distance;
+    vec3 rim = n * ratio + sqrt(1.0 - ratio * ratio) * (cos(phi) * u + sin(phi) * v); // unit, from the centre
+    float a = unitFloat(hashId(h + 1u));
+    float height;
+    float weight;
+    if (unitFloat(hashId(h + 2u)) < 0.72) { // above the limb, against space
+        height = -kScaleHeight * log(max(a, 1e-4));
+        weight = 1.0;
+    } else { // the air seen against the ocean, just inside the limb
+        height = 0.8 * kScaleHeight * log(max(a, 1e-4));
+        weight = 0.55;
+    }
+    vec3 point = centre + rim * radius * (1.0 + height);
+    vec3 sun = normalize(params[3].xyz);
+    float facing = dot(rim, sun);
+    float lit = smoothstep(-0.28, 0.25, facing);
+    vec3 day = vec3(0.32, 0.6, 1.0), dusk = vec3(1.0, 0.45, 0.16);
+    vec3 colour = mix(dusk, day, smoothstep(-0.02, 0.32, facing));
+    float limbLength = 6.2831853 * radius * sqrt(1.0 - ratio * ratio);
+    // Flux per point: the band's radiance over its length in pixels at the reference, shared over the points.
+    float pixels = limbLength / (distance * 0.7673) * 1080.0; // tan(21 deg) * 2: a 42 degree reference view
+    s.flux = colour * (0.03 + 1.6 * lit) * weight * pixels * 1.6 / float(count);
+    s.position = eye + (point - eye) * 0.4;
+    s.radius = 0.4 * radius * kScaleHeight * 0.35;
+    return s;
+}
+
+SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
+    uint stars = uint(params[0].w);
+    uint limb = uint(params[2].w);
+    SplatPoint s;
+    s.radius = 0.0;
+    if (id < stars) {
+        uint h = hashId(id ^ 0x5EEDu);
+        uint tier;
+        float flux = starFlux(hashId(h + 7u), tier);
+        vec3 d = rotateByQuaternion(params[1], starDirectionWorld(id, h));
+        s.position = params[0].xyz + d * kStarDistance;
+        s.flux = flux * starColour(unitFloat(hashId(h + 9u)));
+        return s;
+    }
+    if (id < stars + limb) {
+        return limbPoint(id - stars, limb, params);
+    }
+    // The sun: its spikes and a soft core of glare (the disc itself is the environment's).
+    s.position = params[0].xyz + normalize(params[3].xyz) * kStarDistance;
+    s.flux = vec3(1.0, 0.93, 0.84) * 160.0;
+    return s;
+}
+
+vec2 splatSpikes(uint id, SplatPoint s, vec4 params[4]) {
+    uint stars = uint(params[0].w);
+    uint limb = uint(params[2].w);
+    if (id >= stars + limb) {
+        return vec2(0.0); // the sun: a soft core only, no starburst
+    }
+    if (id >= stars) {
+        return vec2(0.0);
+    }
+    float brightness = max(s.flux.r, max(s.flux.g, s.flux.b));
+    if (brightness < 1.2) {
+        return vec2(0.0);
+    }
+    float boost = nearSun(normalize(s.position - params[0].xyz), params);
+    return vec2(min(0.3 * boost, 0.8), 9.0 * sqrt(brightness) * boost);
+}

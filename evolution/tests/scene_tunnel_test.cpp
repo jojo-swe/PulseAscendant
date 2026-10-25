@@ -1,4 +1,4 @@
-// The Tunnel scene: TUNNEL (and WORMHOLE). With the validation layer and its synchronization validation on;
+// The Tunnel scene: TUNNEL. With the validation layer and its synchronization validation on;
 // fails on any message it reports.
 //   (a) the map: the chapters that show Tunnel;
 //   (b) the cards: TUNNEL's two cards state the same count, 1993's points and 2026's lights, and it is the

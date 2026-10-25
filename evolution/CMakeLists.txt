@@ -183,6 +183,9 @@ add_library(evo_modern STATIC
 target_include_directories(evo_modern PUBLIC src)
 target_link_libraries(evo_modern PUBLIC evo_rt)
 target_link_libraries(evo_modern PUBLIC evo_show) # the scene interface reads show::TimelineFrame
+# The Glass scene places the 1993 glenz star and city lots (src/retro, built into evo_render, which links
+# evo_modern in turn: a cycle of static libraries, which CMake repeats on the link line).
+target_link_libraries(evo_modern PUBLIC evo_render)
 
 # The path tracer's shaders (rt_<name>.<stage>.spv beside the executable), and the 2026 scenes' compute
 # shaders: every shaders/modern/<scene>_<what>.comp loads as modern_<scene>_<what>.comp.spv (a scene task adds
@@ -1112,7 +1115,7 @@ add_executable(spheres_scene_test tests/spheres_scene_test.cpp)
 target_link_libraries(spheres_scene_test PRIVATE evo_scene_fixture)
 evo_gpu_test(scene_spheres spheres_scene_test)
 
-# --- Step 5 Task 19: Tunnel (TUNNEL, WORMHOLE) ------------------------------------------------------------------
+# --- Step 5 Task 19: Tunnel (TUNNEL) -----------------------------------------------------------------------------
 
 # The scene (src/modern/scenes/tunnel.cpp) and its beads' particle shader (shaders/modern/particles_tunnel.comp,
 # compiled by the shaders/modern glob). The test adds the 1993 mirror, the beads against the GPU, the camera
@@ -1149,3 +1152,43 @@ target_include_directories(medium_test PRIVATE tests)
 target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(medium_test medium_test_shaders)
 evo_gpu_test(medium medium_test)
+
+# Step 5, Task 21: the Lens scene (LENS, LENS OF GOD: a glass ball and a colossal lens over the 1993 rotozoom's
+# texture laid as a stone mosaic, the Checker hit group's Tesserae patterns) and its test, with a compute probe
+# of shaders/rt/tesserae.glsl against the 1993 texture (`scene_lens_test --look <dir> [spp] [detail]` renders
+# 480x270 stills of both chapters).
+target_sources(evo_modern PRIVATE src/modern/scenes/lens.cpp)
+evo_scene_test(lens)
+set(tesseraeProbeSpirv "${EVO_TEST_SPIRV_DIR}/test_tesserae_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${tesseraeProbeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_tesserae_probe.comp.d" -o "${tesseraeProbeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/tesserae_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/tesserae_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_tesserae_probe.comp.d"
+    COMMENT "Compiling test shader test_tesserae_probe.comp"
+    VERBATIM)
+add_custom_target(scene_lens_test_shaders DEPENDS "${tesseraeProbeSpirv}")
+target_compile_definitions(scene_lens_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(scene_lens_test scene_lens_test_shaders)
+
+# --- Step 5 Task 20: Glass (GLENZ, GLASS CATHEDRAL, CRYSTAL CITY) -------------------------------------------
+
+# The glenz star in flint glass over rainbow caustics, a stained-glass cathedral and a city of quartz towers
+# (src/modern/scenes/glass.cpp), and its scene test: the standard picture and sweep checks, the cards' numbers,
+# the 1993 star's motion, the music, Beer-Lambert and thin panes against closed forms, the glenz's rainbows
+# (and none without dispersion) and the cathedral's pools of coloured sunlight.
+target_sources(evo_modern PRIVATE src/modern/scenes/glass.cpp)
+evo_scene_test(glass)
+
+# --- Step 5 Task 16: the Ship (WORMHOLE) -------------------------------------------------------------------
+
+# The starship as an asset any scene can fly (src/modern/scenes/ship_asset.cpp: the hull, its plumes as a grid
+# medium, the star splats; shaders/modern/ship_{plumes,splats}.comp) and the Ship scene that stages it in
+# WORMHOLE (src/modern/scenes/ship.cpp), with its test: the standard picture and sweep checks, the card's
+# numbers, the plumes' blackbody ramp, the rings on the beat, the crossing's motion blur and the plumes'
+# volume. `scene_ship_test --look <dir> [spp] [width height]` renders stills.
+target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
+evo_scene_test(ship)
