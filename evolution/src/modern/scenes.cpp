@@ -1,5 +1,6 @@
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "modern/scenes/city.hpp"
 #include "modern/scenes/glass.hpp"
 #include "modern/scenes/lens.hpp"
 #include "modern/scenes/particles.hpp"
@@ -33,7 +34,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Glass, "Glass", &make<Glass>},             // Task 20
     {SceneId::Lens, "Lens", &make<Lens>},                // Task 21
     {SceneId::Spheres, "Spheres", &make<Spheres>},       // Task 22
-    {SceneId::City, "City", nullptr},                    // Task 23
+    {SceneId::City, "City", &make<City>},                // Task 23
     {SceneId::Cosmos, "Cosmos", nullptr},                // Task 24
     {SceneId::Singularity, "Singularity", nullptr},      // Task 25
 }};
@@ -50,12 +51,12 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Glenz, SceneId::Glass},
     {Effect::Lens, SceneId::Lens},
     {Effect::Raytrace, SceneId::Spheres}, // Spheres
-    {Effect::City, SceneId::Placeholder}, // City
+    {Effect::City, SceneId::City},
     {Effect::Finale, SceneId::Studio},
     {Effect::Portal, SceneId::Studio},
     {Effect::StudioNight, SceneId::Studio},
-    {Effect::Ascent, SceneId::Placeholder},    // City
-    {Effect::CityNight, SceneId::Placeholder}, // City
+    {Effect::Ascent, SceneId::City},
+    {Effect::CityNight, SceneId::City},
     {Effect::Nebula, SceneId::Placeholder},    // Nebula
     {Effect::Cathedral, SceneId::Glass},
     {Effect::Ocean, SceneId::Particles},
@@ -69,8 +70,8 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::CrystalCity, SceneId::Glass},
     {Effect::LensOfGod, SceneId::Lens},
     {Effect::RaytraceInfinity, SceneId::Spheres}, // Spheres
-    {Effect::Metropolis, SceneId::Placeholder},   // City
-    {Effect::Ascendant, SceneId::Placeholder},    // Cosmos
+    {Effect::Metropolis, SceneId::City},
+    {Effect::Ascendant, SceneId::Placeholder}, // Cosmos
     {Effect::Credits, SceneId::Placeholder},
     {Effect::TheEnd, SceneId::Placeholder},
 }};

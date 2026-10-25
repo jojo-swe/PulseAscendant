@@ -25,6 +25,8 @@ vertex, the Studio's camera-only LEDs), which changed the same seven Studio outp
 +-0.1 %); the caustic photon maps (Task 13) and the light tree (Task 12) changed nothing, and no non-Studio
 output moved.
 Then regenerated after merging the Particles and Spheres scenes: only stream_dots and raytrace_2026 changed.
+Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the city, so stream_studio_ascent
+changed; every other output, the Studio's included, stayed byte for byte.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
