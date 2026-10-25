@@ -30,7 +30,8 @@
 // - Camera-only emission (kMaterialCameraOnlyEmission, an LED): counted at the primary hit and along a delta
 //   chain only, never after a rough vertex; such a surface is never a light (checkSceneFrame).
 // - Dispersion: at the path's first dielectric with abbe > 0 it picks a hero wavelength, uniform in
-//   [380, 780] nm from the bounce's dimension 7, and multiplies its throughput by spectralRgb(lambda)
+//   [380, 780] nm from the bounce's dimension 7, stratified over the frame's samples (sample k of n in the k-th
+//   n-th of the range: far less colour noise in glass at export spp, the same estimator), and multiplies its throughput by spectralRgb(lambda)
 //   (spectral.glsl: mean (1, 1, 1), so the estimate stays unbiased per channel); every dispersive surface on
 //   the path then has the IOR dispersiveIor(ior, abbe, lambda). abbe 0 leaves glass as it was.
 //
@@ -476,7 +477,11 @@ SampleResult tracePath() {
         }
         if (isDielectric(s) && payload.abbe > 0.0) {
             if (lambda < 0.0) {
-                lambda = kSpectralMinNm + kSpectralRangeNm * bounceRand(bounce, 7u);
+                // Stratified over the frame's samples: sample k of n takes its wavelength from the k-th n-th
+                // of the range, so every pixel sees the whole spectrum evenly (at 1 spp: uniform, as before).
+                float stratum = (float(gSample % max(frame.spp, 1u)) + bounceRand(bounce, 7u)) /
+                                float(max(frame.spp, 1u));
+                lambda = kSpectralMinNm + kSpectralRangeNm * stratum;
                 throughput *= spectralRgb(lambda);
             }
             s.ior = dispersiveIor(s.ior, payload.abbe, lambda);

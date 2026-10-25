@@ -1,5 +1,6 @@
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "modern/scenes/lens.hpp"
 #include "modern/scenes/particles.hpp"
 #include "modern/scenes/spheres.hpp"
 #include "modern/studio.hpp"
@@ -28,7 +29,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Nebula, "Nebula", nullptr},                // Task 18
     {SceneId::Tunnel, "Tunnel", nullptr},                // Task 19
     {SceneId::Glass, "Glass", nullptr},                  // Task 20
-    {SceneId::Lens, "Lens", nullptr},                    // Task 21
+    {SceneId::Lens, "Lens", &make<Lens>},                // Task 21
     {SceneId::Spheres, "Spheres", &make<Spheres>},       // Task 22
     {SceneId::City, "City", nullptr},                    // Task 23
     {SceneId::Cosmos, "Cosmos", nullptr},                // Task 24
@@ -45,9 +46,9 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Plasma, SceneId::Placeholder}, // Nebula
     {Effect::Tunnel, SceneId::Placeholder}, // Tunnel
     {Effect::Glenz, SceneId::Placeholder},  // Glass
-    {Effect::Lens, SceneId::Placeholder},   // Lens
-    {Effect::Raytrace, SceneId::Spheres},   // Spheres
-    {Effect::City, SceneId::Placeholder},   // City
+    {Effect::Lens, SceneId::Lens},
+    {Effect::Raytrace, SceneId::Spheres}, // Spheres
+    {Effect::City, SceneId::Placeholder}, // City
     {Effect::Finale, SceneId::Studio},
     {Effect::Portal, SceneId::Studio},
     {Effect::StudioNight, SceneId::Studio},
@@ -64,7 +65,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::PlasmaPlanet, SceneId::Placeholder}, // Nebula
     {Effect::Wormhole, SceneId::Placeholder},     // Tunnel
     {Effect::CrystalCity, SceneId::Placeholder},  // Glass
-    {Effect::LensOfGod, SceneId::Placeholder},    // Lens
+    {Effect::LensOfGod, SceneId::Lens},
     {Effect::RaytraceInfinity, SceneId::Spheres}, // Spheres
     {Effect::Metropolis, SceneId::Placeholder},   // City
     {Effect::Ascendant, SceneId::Placeholder},    // Cosmos

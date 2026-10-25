@@ -1140,3 +1140,24 @@ target_include_directories(medium_test PRIVATE tests)
 target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(medium_test medium_test_shaders)
 evo_gpu_test(medium medium_test)
+
+# Step 5, Task 21: the Lens scene (LENS, LENS OF GOD: a glass ball and a colossal lens over the 1993 rotozoom's
+# texture laid as a stone mosaic, the Checker hit group's Tesserae patterns) and its test, with a compute probe
+# of shaders/rt/tesserae.glsl against the 1993 texture (`scene_lens_test --look <dir> [spp] [detail]` renders
+# 480x270 stills of both chapters).
+target_sources(evo_modern PRIVATE src/modern/scenes/lens.cpp)
+evo_scene_test(lens)
+set(tesseraeProbeSpirv "${EVO_TEST_SPIRV_DIR}/test_tesserae_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${tesseraeProbeSpirv}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_tesserae_probe.comp.d" -o "${tesseraeProbeSpirv}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/tesserae_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/tesserae_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_tesserae_probe.comp.d"
+    COMMENT "Compiling test shader test_tesserae_probe.comp"
+    VERBATIM)
+add_custom_target(scene_lens_test_shaders DEPENDS "${tesseraeProbeSpirv}")
+target_compile_definitions(scene_lens_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(scene_lens_test scene_lens_test_shaders)
