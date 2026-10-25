@@ -109,12 +109,13 @@ void testEffectRows() {
         CHECK(std::strcmp(modern::effectSceneName(effect), modern::sceneName(scene)) == 0);
     }
     CHECK(studio == 5);
-    // A scene's rows move together: all of them on the scene, or none yet.
+    // A scene takes its rows one chapter at a time (Tunnel shows TUNNEL; WORMHOLE is still to come): every
+    // row is the placeholder or its planned scene (checked above), and no scene shows more than it plans.
     for (std::size_t s = 1; s < modern::kSceneCount; ++s) {
         if (moved[s] != 0 && moved[s] != planned[s])
-            std::fprintf(stderr, "%s shows %d of its %d planned effects\n", modern::sceneName(SceneId(s)),
-                         moved[s], planned[s]);
-        CHECK(moved[s] == 0 || moved[s] == planned[s]);
+            std::printf("%s shows %d of its %d planned effects\n", modern::sceneName(SceneId(s)), moved[s],
+                        planned[s]);
+        CHECK(moved[s] <= planned[s]);
     }
     CHECK(planned[static_cast<std::size_t>(SceneId::Studio)] == 5);
     for (std::size_t s = static_cast<std::size_t>(SceneId::Ship); s < modern::kSceneCount; ++s)
