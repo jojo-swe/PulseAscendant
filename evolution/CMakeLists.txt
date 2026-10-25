@@ -970,6 +970,18 @@ add_dependencies(spheres_test spheres_test_shaders path_tracer_test_shaders evo_
                  evo_modern_intersection_shaders)
 evo_gpu_test(spheres spheres_test)
 
+# --- Step 5 Task 9: object motion vectors and the export shutter --------------------------------------------
+
+# The shutter's slice counts, offsets and chapter-clamped slice times (CPU), and the per-object motion vectors
+# and shutter on lavapipe with synchronization validation (tests/motion_test.cpp).
+target_sources(evo_modern PRIVATE src/modern/shutter.cpp)
+add_executable(motion_test tests/motion_test.cpp)
+target_link_libraries(motion_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(motion_test PRIVATE tests)
+target_compile_definitions(motion_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(motion_test spheres_test_shaders evo_modern_sphere_shaders evo_modern_intersection_shaders)
+evo_gpu_test(motion motion_test)
+
 # --- Step 5 Task 10: emissive splats -------------------------------------------------------------------------
 
 # SplatPass (src/modern/splats.cpp) and its shaders (shaders/modern/splat_common.glsl, splat_resolve.comp, which

@@ -73,6 +73,10 @@ struct HistoryState {
     std::uint32_t spp = 1;
     std::uint32_t maxBounces = kExportMaxBounces;
     std::uint32_t frameSeed = 0;
+    // The export shutter's open time per frame in seconds (0.5 / fps for a 180 degree shutter), 0 for none:
+    // the stage traces up to modern::kMaxShutterSlices time slices of it in Export mode only. The window has
+    // no shutter, whatever this says.
+    double shutterSeconds = 0;
 };
 
 // Decides, frame by frame, whether the temporal history continues. A reset on the first frame (and after

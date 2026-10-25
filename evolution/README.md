@@ -68,7 +68,11 @@ validation.
   guides, batched dispatches), `denoiser` (accumulation, resets, reprojection, edges, the emission bypass,
   NaN/Inf), `tonemap` (the GPU against the CPU reference and golden values) and `spheres` (the sphere
   intersection against a CPU reference, depth and normals, glass against a sphere mesh, 4096 particles over 32
-  frames two in flight against their analytic positions; `spheres_test --look <dir> [spp]` renders a picture).
+  frames two in flight against their analytic positions; `spheres_test --look <dir> [spp]` renders a picture) and
+  `motion` (the per-object motion guide of a moving instance, sphere and particle field against the analytic
+  reprojection; the denoiser keeping its history on a moving object; the export shutter's edge ramp, energy,
+  chapter clamping and purity; the window ignoring it; `motion_test --look <dir> [spp]` renders a motion-blurred
+  picture).
 - The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT as STUDIO NIGHT's key light, the screen
   following the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS
   prompt, the light rig per chapter, little speckle in the moonlit wide shot, the chrome sphere reflecting the
@@ -291,7 +295,10 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   measured yet (see the RTX checklist in HANDOFF). Every random number is an integer hash of (frame seed,
   pixel, sample, dimension).
 - **Denoiser** (`src/post`, `shaders/post`). The tracer writes the lighting without the primary hit's
-  emission, plus guides (albedo, normal, depth, motion). The lighting is divided by the albedo, reprojected
+  emission, plus guides (albedo, normal, depth, motion; the motion of a surface point is where it was in the
+  previous frame, carried back by its instance's previous transform or a sphere's `prevCenter`, so a moving
+  object keeps its history; the window passes the previous frame's instances while its history continues). The
+  lighting is divided by the albedo, reprojected
   into a temporal history (in the window only: rejected where depth or normal disagree, an exponential blend
   that starts as a plain copy after a reset), then filtered by three à-trous passes guided by depth, normal
   and an edge-robust estimate of the noise, and multiplied by the albedo again. The primary hit's emission,
@@ -489,6 +496,13 @@ camera cut, a resize or a change of settings. The exports (`--capture-dir`,
 4) at up to 6 bounces (the window: 4), filtered spatially (à-trous) only below 16 spp (from 16, a firefly
 filter clamps lone bright pixels instead; the window never uses it), and is a pure function
 of the options and its show time, so a streamed frame equals a fresh capture of the same time byte for byte.
+**Motion blur** is an export-only 180° shutter (`0.5 / --fps` seconds, centred on the frame's time): a frame of
+more than 4 samples per pixel is traced in one time slice per dispatch of 4 samples, at most 8, each slice with
+its own scene frame, particle field, TLAS and camera, and the picture is their mean (`src/modern/shutter.*`;
+the slice times are a pure function of the time, fps and spp). A slice never samples another chapter: its time
+is clamped into the frame's own chapter, so the first and last frames of a chapter blur only inwards. With 4
+samples or fewer, and always in the window, there is one slice and no blur. The guides (depth, normal, motion)
+come from the middle slice.
 The random seed of a frame comes from the show time, `pcg(llround(seconds × 48000))` (the audio sample clock);
 the window adds `0x9E3779B9` per frame since its last reset, so its first frame after a reset uses the export
 seed and, at equal bounces, equals the export frame at spp max(`--spp`, 4) byte for byte while that is below
