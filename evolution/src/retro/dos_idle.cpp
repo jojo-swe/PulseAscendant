@@ -10,7 +10,7 @@ namespace {
 
 // DIR's output in MS-DOS 6's layout (names padded to 8, extensions to 3, sizes right-aligned in 10 columns),
 // every row inside kBootColumns. The sizes add up.
-constexpr std::array<const char*, 14> kScreen = {
+constexpr std::array<const char*, 15> kScreen = {
     "C:\\DEMO>dir",
     "",
     " Volume in drive C is DEMOSCENE",
@@ -21,7 +21,8 @@ constexpr std::array<const char*, 14> kScreen = {
     "EVOLUTN  EXE   199,326 10-24-93",
     "MUSIC    MOD   711,160 10-24-93",
     "README   TXT     2,026 10-24-93",
-    "        3 file(s)    912,512 bytes",
+    "CLAP     WAV         0 10-24-93",
+    "        4 file(s)    912,512 bytes",
     "                   2,026,993 bytes free",
     "",
     kDosIdlePrompt,
