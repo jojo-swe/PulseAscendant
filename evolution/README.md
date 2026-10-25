@@ -67,8 +67,10 @@ validation.
   with several lights, a portal and a two-tone screen, the furnace, determinism, finiteness under stress, the
   guides, batched dispatches), `denoiser` (accumulation, resets, reprojection, edges, the emission bypass,
   NaN/Inf) and `tonemap` (the GPU against the CPU reference and golden values).
-- The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT lighting the room, the screen following
-  the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS prompt) and
+- The Studio: `studio` (STUDIO NIGHT lit but not blown out, the CRT as STUDIO NIGHT's key light, the screen
+  following the 1993 picture on the very next window frame, the cameras and their cuts, the scene, the DOS
+  prompt, the light rig per chapter, little speckle in the moonlit wide shot, the chrome sphere reflecting the
+  screen, camera-only LEDs, the moonbeam on the floor) and
   `seek_determinism` (in the window, after any seek, chapter change, camera cut or step back in time, the
   frames equal a fresh renderer's from the same point byte for byte; BeatSwap keeps the hidden 2026 side warm
   in the window and skips it in exports).
@@ -256,7 +258,7 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   (gradient, glow, disc). Outdoor scenes sample the environment directly, the disc uniformly in its cone and
   the dome by cosine, weighed against the BSDF by multiple importance sampling.
 - **Integrator.** Pixel jitter and a thin lens; Russian roulette from bounce 3; light reaching the camera
-  after the first bounce clamped to a luminance limit (64, the Studio 2) against fireflies; a non-finite
+  after the first bounce clamped to a luminance limit (64, the Studio 0.5) against fireflies; a non-finite
   sample counts as 0 (checked from the float's bits, so a fast-math compiler cannot fold the check away).
   The window traces at most 4 bounces, exports 6, in dispatches of 4 samples per pixel, so no single
   dispatch traces more than 4 spp. A whole frame is still one GPU submission of ceil(spp / 4) dispatches,
@@ -290,23 +292,37 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   shows the spatial Catmull-Rom upsample. At scale 1 there is no upscaler pass; the exports always trace at
   the output size.
 - **Tonemap.** Khronos PBR Neutral per frame, then the sRGB encoding and a static per-pixel triangular dither
-  into the RGBA8 image the compositor reads; a CPU reference pins it. PBR Neutral keeps the hue: below its
-  knee (0.76) it only subtracts a small offset, above it highlights compress and move towards white in the
-  plane of the colour and white, so a bright saturated light turns paler but never changes hue (ACES turned
-  the CRT's reds orange). White approaches 255 asymptotically (light 64 rounds to it).
+  into the RGBA8 image the compositor reads; a CPU reference pins it. PBR Neutral keeps the hue: it first
+  subtracts a small offset set by the smallest channel (at most 0.04, a toe for dark and saturated colours);
+  while the largest channel then stays below the knee at 0.76 that is all, and above it highlights compress
+  and move towards white in the plane of the colour and white, so a bright saturated light turns paler but
+  never changes hue (ACES turned the CRT's reds orange). White approaches 255 asymptotically: light 64
+  rounds to 255 before the dither (about 2 % of its pixels show 254 after it), light 16384 everywhere.
 
 ### The Studio
 
-A dark room at night (spec §2.1), all procedural: checkered linoleum, a wooden desk with a coat on brushed
-steel legs, a beige 1993 PC and CRT monitor, a 101-key keyboard (one key-cap mesh, 101 instances), a mouse,
-floppy disks, a mug, a chrome and a glass sphere on small stands, an office chair, a desk lamp, and a window in
-the back wall onto the night sky with the moon outside it (195 instances of 21 meshes, 29 materials). Four
-lights: the CRT's screen, the lamp, the window (a portal) and the moon (a small emitter outside the window).
-The CRT shows the live 1993 picture, barrel-warped with darker odd scanlines that fade out with distance, and
-lights the room; in STUDIO NIGHT and RETURN it sits at the DOS prompt the demo exited to (`C:\DEMO>` with a
-blinking cursor). The camera follows authored keys per chapter (a pull out from the screen in FINALE and
-PORTAL, a dolly towards the desk and, from the accent, an orbit round the monitor in STUDIO NIGHT, a push back
-in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
+A dark modern room at night (spec §2.1; step 5 Task 14), all procedural, around a 1993 PC that is the only
+1993 object in it: a polished concrete floor saw-cut into slabs and a board-formed concrete wall (the
+`Concrete` pattern), plaster walls, an oak desk on brushed steel legs, a slim black window frame, an office
+chair, a black desk lamp with its diffuser recessed in a matte shade, and beyond the window a skyline of dark
+towers with lit windows under the night sky (480 instances of 22 meshes, 33 materials). In it: the beige PC
+and CRT monitor, a 101-key keyboard (one key-cap mesh, 101 instances), a mouse, floppy disks, a mug, and a
+chrome and a glass sphere on small stands beside the monitor, where they reflect and refract the screen.
+Four lights: the CRT's screen, the lamp, the window (a portal) and the moon (an emitter outside the window,
+whose beam falls past the desk onto the floor). The power LEDs and the skyline's windows are camera-only
+emitters: seen, but lighting nothing (no fireflies).
+
+The CRT shows the live 1993 picture, barrel-warped, behind curved glass (the coat's shading normal bulges, the
+quad stays flat), with a beam profile of 200 lines and, in a 4K close-up, an aperture-grille phosphor mask,
+both fading into their mean with distance; in STUDIO NIGHT and RETURN it sits at the DOS prompt the demo
+exited to (`C:\DEMO>` with a blinking cursor). It is the room's key light, through a light rig per chapter
+(`studioRig`, carried by the frame's material table): in STUDIO NIGHT the lamp is off and the screen bright,
+in FINALE and PORTAL the lamp glows at 20 % and the megamix lights the room, in RETURN and REBOOT the lamp
+comes back on. The exposure per chapter keeps the colourful chapters' screen within a display gain of about
+2.4, where PBR Neutral keeps 1993's colours saturated. The camera follows authored keys per chapter (a pull out
+from the screen to a low, long wide shot in FINALE and PORTAL, a low dolly past the chair in the moonbeam and,
+from the accent, an orbit round the monitor in STUDIO NIGHT, a push back in in RETURN, a close-up in REBOOT).
+`studio_test --look <dir> [spp] [width height] [name]` renders a still of every shot.
 
 ### Limits worth knowing
 
@@ -324,9 +340,11 @@ in in RETURN, a close-up in REBOOT), with a per-chapter exposure.
   fine grain at the 64 spp default; more samples (e.g. `--spp 256`) clean them up.
 - **Long 4K exports on Windows are unmeasured:** a frame's whole trace is one submission (above), seconds
   long at 4K and 64 spp or more; measure it on the target GPU before a long export.
-- PBR Neutral still desaturates the CRT's brightest colours towards white (a 1993 red at the screen's white
-  level comes out pink, hue intact); the lights are picked by fixed weights
-  (no spatial importance); the glass sphere's caustic is subtle, dimmed by the Studio's indirect clamp.
+- PBR Neutral still desaturates the brightest colours towards white (a 1993 red at a display gain above
+  about 2.4 comes out pink, hue intact), so the Studio keeps its colourful chapters below that. The Studio
+  clamps indirect light at 0.5 until the path tracer clamps only after a rough vertex, which still dims the
+  lamp seen through the glass sphere and its caustic. Its moonlit wide shots are lit mostly by light bounced
+  off the moonbeam, which keeps a fine grain at export spp.
 
 ## Storyboard
 

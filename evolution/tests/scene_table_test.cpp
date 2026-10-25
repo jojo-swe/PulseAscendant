@@ -160,7 +160,9 @@ void testStudioSweep() {
     evo::test::SweepLimits limits;
     limits.maxCameraStep = 0.05f; // the Studio's cameras move centimetres per frame
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Studio, limits);
-    CHECK(stats.frames > 5000 && stats.maxInstances == 195 && stats.maxLights == 4);
+    // 480 instances since Task 14 of step 5 (step 4: 195): the inner shade and the skyline's 56 towers with
+    // their lit windows.
+    CHECK(stats.frames > 5000 && stats.maxInstances == 480 && stats.maxLights == 4);
 }
 
 } // namespace

@@ -4,8 +4,9 @@
 //
 // (0) the C++ side: EnvironmentDesc{} is the NightSky defaults (the moon's direction, no disc, not sampled),
 //     every kind's defaults pack to valid uniforms, the disc and dome shares, and the refusals (also through
-//     checkSceneFrame, which the path tracer and the scene sweep run); the Studio's frames keep the NightSky
-//     and its moon emitter stands along the sky's moon direction;
+//     checkSceneFrame, which the path tracer and the scene sweep run); the Studio's frames keep their own
+//     NightSky (studioEnvironment, Task 14 of step 5), never sampled, and its moon emitter stands along that
+//     sky's glow direction;
 // (a) disc and dome sampling: every sample's pdf equals environmentPdf (1e-4) and its radiance equals
 //     environmentLighting; the pdf integrates to 1 over the sphere (importance-sampled Monte Carlo, 1 %);
 //     the disc gets discShare of the samples, all inside it;
@@ -22,7 +23,8 @@
 //     cells are smaller and stars elongated in uv, the quadrature over 16 x 16 cells equals the flux of their
 //     stars from the hash (0.5 %);
 // (e) the Studio's mean display luminance at STUDIO NIGHT 40 % and REBOOT 60 % (160x90, spp 4, Export)
-//     stays within 5 % of the step 4 night sky's (measured before this task).
+//     stays within 5 % of its measured value (first the step 4 night sky's, measured before this task; since
+//     Task 14 of step 5 relit and reframed the Studio, that task's).
 // The layout of EnvironmentUniforms is material_test's probe. With --look <dir> [spp] it only renders stills
 // of the skies to look at.
 
@@ -449,21 +451,24 @@ void testDescriptions() {
     modern::checkSceneFrame(s.statics, s.frame);
     s.frame.environment.select = 2;
     CHECK(throws<std::invalid_argument>([&] { modern::checkSceneFrame(s.statics, s.frame); }));
-    // The Studio keeps the default NightSky, never sampled (its window portal samples the sky), and stands
-    // its moon emitter along the sky's disc and glow direction in every chapter.
+    // The Studio keeps its own NightSky in every chapter, never sampled (its window portal samples the sky),
+    // and stands its moon emitter along that sky's disc and glow direction.
+    const rt::EnvironmentUniforms studioSky = modern::packEnvironment(modern::studioEnvironment());
+    CHECK(studioSky.kind == std::uint32_t(EnvironmentKind::NightSky));
     const std::unique_ptr<modern::ModernScene> studio = modern::makeScene(modern::SceneId::Studio);
     for (const int chapter : {9, 10, 11, 19, 20})
         for (const double fraction : {0.1, 0.5, 0.9}) {
             const modern::SceneFrame f = studio->frame(show::sampleTimeline(
                 show::chapterStart(chapter) +
                 fraction * (show::chapterStart(chapter + 1) - show::chapterStart(chapter))));
-            CHECK(sameWords(modern::packEnvironment(f.environment), n));
+            CHECK(sameWords(modern::packEnvironment(f.environment), studioSky));
             CHECK(f.environment.select == 0.f);
         }
     const Vec3 studioMoon = modern::normalize(modern::Studio::kMoonDirection);
-    CHECK(std::abs(studioMoon.x - n.discDirection[0]) < 1e-6f &&
-          std::abs(studioMoon.y - n.discDirection[1]) < 1e-6f &&
-          std::abs(studioMoon.z - n.discDirection[2]) < 1e-6f);
+    CHECK(std::abs(studioMoon.x - studioSky.discDirection[0]) < 1e-6f &&
+          std::abs(studioMoon.y - studioSky.discDirection[1]) < 1e-6f &&
+          std::abs(studioMoon.z - studioSky.discDirection[2]) < 1e-6f &&
+          std::abs(studioMoon.x - studioSky.glowDirection[0]) < 1e-6f);
     std::printf("(0) defaults, shares and refusals; the Studio's NightSky\n");
 }
 
@@ -851,8 +856,10 @@ double chapterTime(int chapter, double fraction) {
     return start + fraction * (show::chapterStart(chapter + 1) - start);
 }
 
-// The step 4 night sky's Studio, measured with this test's renderer before Task 2 (c722ab1).
-constexpr double kStudioNightBaseline = 0.10121, kRebootBaseline = 0.15723;
+// The Studio under its sky, measured with this test's renderer: step 4's before Task 2 (c722ab1) was 0.10121
+// and 0.15723; Task 14 of step 5 relit the Studio (STUDIO NIGHT: the lamp off, the CRT the key light, a low
+// wide dolly; REBOOT: a dark modern room, the CRT's light rig and exposure).
+constexpr double kStudioNightBaseline = 0.07639, kRebootBaseline = 0.13166;
 constexpr int kStudioNight = 11, kReboot = 20;
 
 void testStudio(gfx::Context& ctx) {
@@ -877,7 +884,7 @@ void testStudio(gfx::Context& ctx) {
         for (std::size_t i = 0; i < rgb.size(); i += 3)
             mean += (0.2126 * rgb[i] + 0.7152 * rgb[i + 1] + 0.0722 * rgb[i + 2]) / 255.0;
         mean /= double(rgb.size() / 3);
-        std::printf("    %s: mean display luminance %.5f, step 4 sky %.5f (%.2f %%)\n", name, mean, baseline,
+        std::printf("    %s: mean display luminance %.5f, measured %.5f (%.2f %%)\n", name, mean, baseline,
                     100 * (mean / baseline - 1));
         CHECK(std::abs(mean / baseline - 1) < 0.05);
     }
