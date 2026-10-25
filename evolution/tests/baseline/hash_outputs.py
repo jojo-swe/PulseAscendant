@@ -7,8 +7,10 @@ Every run passes --validation, so a validation message fails the run. It also pr
 luminance of each Studio capture (Rec. 709 weights on the 8-bit sRGB bytes / 255, the measure of
 tests/scene_fixture.cpp's checkChapterPictures).
 
-The committed SUMS and LUMINANCE files next to this script were made on lavapipe (Mesa llvmpipe) at the
-step 5 Task 1b base, 4f300f6 (= main after Tasks 1, 5 and 7); Task 1b's own commits keep them. They are
+The committed SUMS and LUMINANCE files next to this script were made on lavapipe (Mesa llvmpipe). History:
+first at 4f300f6 (main after Tasks 1, 5 and 7), which Task 1b's own commits kept byte for byte; then
+regenerated after merging main d91fb09 (Tasks 2, 3 and 4), whose environments and light selection changed
+seven outputs (the lit Studio captures and streams; the merged build equals d91fb09's bytes exactly). They are
 lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
