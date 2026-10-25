@@ -213,9 +213,15 @@ struct LightTreeNode { // 32 bytes
     uint child;
 };
 
-struct LensingUniforms { // 32 bytes (Task 25 names the fields)
-    uint words[8];
+struct LensingUniforms { // 32 bytes (Task 25; rt::LensingUniforms documents the fields)
+    vec3 center;
+    float massRadius;
+    float influenceRadius;
+    uint steps;
+    uint flags;
+    float stepScale;
 };
+const uint kLensingDisc = 1u;
 struct CausticReceiver { // 64 bytes
     Mat34 worldToUv;
     uint layer;

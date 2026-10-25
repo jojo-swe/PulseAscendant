@@ -1193,3 +1193,14 @@ evo_scene_test(ship)
 # lanes in the volume layer. `scene_cosmos_test --look <dir> [spp] [detail]` renders one still per chapter.
 target_sources(evo_modern PRIVATE src/modern/scenes/cosmos.cpp)
 evo_scene_test(cosmos)
+
+# --- Step 5 Task 25: Singularity (SINGULARITY) -------------------------------------------------------------
+
+# The gravitational lens (src/modern/lensing.cpp packs LensingFrame; shaders/rt/lensing.glsl bends main rays
+# along the null geodesic and marches the accretion disc) and the black hole's scene
+# (src/modern/scenes/singularity.cpp; shaders/modern/singularity_{splats,medium}.comp), with its test: the
+# standard picture and sweep checks, the card, the Einstein ring at the analytic radius, capture below the
+# critical impact parameter, and the lens off. `scene_singularity_test --look <dir> [spp] [detail]` renders the
+# ring still.
+target_sources(evo_modern PRIVATE src/modern/lensing.cpp src/modern/scenes/singularity.cpp)
+evo_scene_test(singularity)

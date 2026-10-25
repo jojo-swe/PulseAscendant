@@ -4,6 +4,7 @@
 #include "modern/scenes/lens.hpp"
 #include "modern/scenes/cosmos.hpp"
 #include "modern/scenes/particles.hpp"
+#include "modern/scenes/singularity.hpp"
 #include "modern/scenes/ship.hpp"
 #include "modern/scenes/spheres.hpp"
 #include "modern/studio.hpp"
@@ -36,7 +37,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Spheres, "Spheres", &make<Spheres>},       // Task 22
     {SceneId::City, "City", nullptr},                    // Task 23
     {SceneId::Cosmos, "Cosmos", &make<Cosmos>},                // Task 24
-    {SceneId::Singularity, "Singularity", nullptr},      // Task 25
+    {SceneId::Singularity, "Singularity", &make<Singularity>},      // Task 25
 }};
 
 // The scene each effect shows, one row per effect in show::Effect's order. The five Studio chapters show the
@@ -61,7 +62,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Cathedral, SceneId::Glass},
     {Effect::Ocean, SceneId::Particles},
     {Effect::SphereStorm, SceneId::Spheres},     // Spheres
-    {Effect::Singularity, SceneId::Placeholder}, // Singularity
+    {Effect::Singularity, SceneId::Singularity},
     {Effect::Return, SceneId::Studio},
     {Effect::Reboot, SceneId::Studio},
     {Effect::Galaxy, SceneId::Cosmos},

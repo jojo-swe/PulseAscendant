@@ -296,7 +296,7 @@ constexpr auto kMediumIsUint = uintsAt<32>({12, 13, 14, 20, 21, 22, 31}); // gri
 constexpr auto kSphereIsUint = uintsAt<12>({7});
 constexpr auto kTreeLightIsUint = uintsAt<12>({7, 8, 9, 10, 11});
 constexpr auto kTreeNodeIsUint = uintsAt<8>({7});
-constexpr auto kLensingIsUint = allUints<8>();
+constexpr auto kLensingIsUint = uintsAt<8>({5, 6}); // steps, flags
 constexpr auto kReceiverIsUint = uintsAt<16>({12, 13, 14, 15});
 
 // The inputs struct_layout.comp hashes with random.glsl's pcgHash; the CPU mirror rt::pcgHash (which

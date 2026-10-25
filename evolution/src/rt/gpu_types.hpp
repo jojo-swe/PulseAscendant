@@ -253,11 +253,20 @@ struct LightTreeNode { // 32 bytes, scalar
     std::uint32_t child;
 };
 
-// Gravitational lensing (binding EVO_BINDING_LENSING; Task 25 names the fields within the 32 bytes: centre,
-// mass radius, influence radius, steps).
+// Gravitational lensing (binding EVO_BINDING_LENSING; Task 25, modern::packLensing): the black hole's centre
+// and Schwarzschild radius r_s, the radius of the sphere about it inside which main rays follow the null
+// geodesic, the most integration steps a ray takes there, flags (kLensingDisc: the frame's grid medium is the
+// lens's accretion disc, which the lens marches along the bent segments) and each step's length as a fraction
+// of the ray's distance from the centre.
 struct LensingUniforms { // 32 bytes, scalar
-    std::uint32_t words[8];
+    float center[3];
+    float massRadius;
+    float influenceRadius;
+    std::uint32_t steps;
+    std::uint32_t flags;
+    float stepScale;
 };
+inline constexpr std::uint32_t kLensingDisc = 1u;
 
 // A caustic receiver (binding EVO_BINDING_CAUSTIC_RECEIVERS, the table Material::receiver indexes; Task 13
 // fills it and may name the pads): worldToUv maps a world point to the receiver's map, row-major 3x4 like
@@ -352,7 +361,9 @@ static_assert(offsetof(LightTreeNode, boundsMin) == 0 && offsetof(LightTreeNode,
               offsetof(LightTreeNode, boundsMax) == 16 && offsetof(LightTreeNode, child) == 28);
 
 static_assert(kGpuMirror<LensingUniforms> && sizeof(LensingUniforms) == 32);
-static_assert(offsetof(LensingUniforms, words) == 0);
+static_assert(offsetof(LensingUniforms, center) == 0 && offsetof(LensingUniforms, massRadius) == 12 &&
+              offsetof(LensingUniforms, influenceRadius) == 16 && offsetof(LensingUniforms, steps) == 20 &&
+              offsetof(LensingUniforms, flags) == 24 && offsetof(LensingUniforms, stepScale) == 28);
 
 static_assert(kGpuMirror<CausticReceiver> && sizeof(CausticReceiver) == 64);
 static_assert(offsetof(CausticReceiver, worldToUv) == 0 && offsetof(CausticReceiver, layer) == 48 &&

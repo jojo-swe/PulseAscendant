@@ -96,7 +96,8 @@ inline constexpr std::array<Cue, 31> cues = {{
         "2026 · PARTICLE OCEAN · 2,097,152 PARTICLES"},
     {344, Effect::SphereStorm, Transition::Cut, 1.f, 1, "SPHERE STORM", "",
         "2026 · SPHERE STORM · 32,768 SPHERES · 4,096 GLOWING"},
-    {368, Effect::Singularity, Transition::Cut, .9f, 1, "SINGULARITY", "", "2026 · SINGULARITY"},
+    {368, Effect::Singularity, Transition::Cut, .9f, 1, "SINGULARITY", "",
+        "2026 · GRAVITATIONAL LENSING · 48-STEP GEODESICS · DOPPLER DISC · PATH TRACED"},
     {390, Effect::Return, Transition::Cut, .5f, 1, "RETURN", "", "2026 · RETURN · THE STUDIO"},
 
     // Act III: Rigid Arpeggios. The Studio's CRT boots 1993 again, the camera goes through the glass and

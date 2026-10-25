@@ -227,9 +227,13 @@ void main() {
         putU(v.child);
     }
     for (uint e = 0; e < kElements; ++e) {
-        for (uint k = 0; k < 8; ++k) {
-            putU(lenses[e].words[k]);
-        }
+        LensingUniforms v = lenses[e];
+        put3(v.center);
+        putF(v.massRadius);
+        putF(v.influenceRadius);
+        putU(v.steps);
+        putU(v.flags);
+        putF(v.stepScale);
     }
 
     for (uint e = 0; e < kElements; ++e) {
