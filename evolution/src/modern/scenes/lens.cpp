@@ -611,7 +611,7 @@ Lens::Lens(SceneDetail detail)
     setColor(ball.color, {1.f, 1.f, 1.f});
     ball.material = kBallGlass;
     rt::SphereRecord planet = ball;
-    planet.radius = kPlanetRadius;
+    planet.radius = kLensPlanetRadius;
     planet.material = kPlanet;
     static_.spheres = {ball, planet};
     static_.sphereRanges = {{kBallSphere, 1}, {kPlanetSphere, 1}};
@@ -670,7 +670,7 @@ SceneFrame Lens::godFrame(const show::TimelineFrame& frame) const {
     planet.kind = rt::GeometryKind::Spheres;
     planet.firstSphere = kPlanetSphere;
     planet.sphereCount = 1;
-    planet.transform = translate({0.f, -kPlanetRadius, 0.f});
+    planet.transform = translate({0.f, -kLensPlanetRadius, 0.f});
     f.instances.push_back(planet);
     // The lens and its bezel, their axis on the sun.
     const rt::Mat34 lens =

@@ -22,7 +22,7 @@
 // third). It rolls one tessera per beat (its contact point crosses a joint on every beat), the spot with it,
 // the accent's beat among them.
 //
-// LENS OF GOD, the same at planetary scale: the planet (an analytic sphere of radius kPlanetRadius) is the
+// LENS OF GOD, the same at planetary scale: the planet (an analytic sphere of radius kLensPlanetRadius) is the
 // mosaic again, kPlanetTessera units a tessera, so the EVOLUTION logo reads from orbit; a flint lens
 // kGodLensDiameter units across in a brushed gold bezel hovers over it, its axis on the afternoon sun. Shots,
 // cut on bar lines: from orbit with the sun behind the camera; down to the lens's rim, the tesserae below
@@ -56,7 +56,7 @@ inline constexpr float kTessera = 0.25f;                         // LENS: metres
 inline constexpr float kGodLensDiameter = 200.f;                 // LENS OF GOD's units
 inline constexpr float kGodLensIor = 1.62f, kGodLensAbbe = 30.f; // flint
 inline constexpr float kGodLensFocalLength = 420.f; // the thin-lens design; godLensFocusDistance() is traced
-inline constexpr float kPlanetRadius = 4000.f;
+inline constexpr float kLensPlanetRadius = 4000.f;
 inline constexpr float kPlanetTessera = 25.f; // the lens spans 8 tesserae, its focus fits in one
 inline constexpr std::uint32_t kLensReceiverResolution = 512; // LENS's photon map, texels per side
 inline constexpr std::uint32_t kGodReceiverResolution = 512;  // the most LENS OF GOD's ever uses
