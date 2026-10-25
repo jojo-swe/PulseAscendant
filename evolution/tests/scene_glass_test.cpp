@@ -98,7 +98,8 @@ void testCards() {
     const modern::GlassCard cathedral = modern::glassCard(show::Effect::Cathedral);
     CHECK(cathedral.exportPhotons == 4194304u);
     CHECK(cathedral.glassObjects == 64 && modern::glassPillarCount() == 64);
-    CHECK(cathedral.line == "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS");
+    CHECK(cathedral.line == "2026 · GLASS CATHEDRAL · 64 GLASS PILLARS · 4,194,304 PHOTONS · SHAFTS");
+    CHECK(full.nowCard(show::Effect::Cathedral) == cathedral.line && full.nowCard(show::Effect::Dots).empty());
     const modern::GlassCard city = modern::glassCard(show::Effect::CrystalCity);
     CHECK(city.glassObjects == full.crystalTowers() && full.crystalTowers() == 400);
     CHECK(city.line == "2026 · CRYSTAL CITY · 400 PRISMS · DISPERSION · CAUSTICS");
@@ -225,6 +226,7 @@ void testMusic() {
     CHECK(glass.camera(atLocal(show::Effect::Glenz, accent + 4.0)).shot == 1);
     std::printf("music: GLENZ's key turns hard on the accent; the cathedral's shutters open %d, %d, %d\n", shut,
                 atAccent, later);
+
 }
 
 // --- Reading the tracer's images ---------------------------------------------------------------------------
@@ -369,6 +371,42 @@ Pixel project(const modern::Camera& c, Vec3 p, std::uint32_t w, std::uint32_t h)
 
 constexpr std::uint32_t kW = 320, kH = 180;
 
+// --- Composition and exposure (CPU) -------------------------------------------------------------------------
+
+void testComposition() {
+    const modern::Glass glass({1.f / 256});
+    const double accent = atLocal(show::Effect::Glenz, 0.0).accentSeconds;
+    const show::TimelineFrame c0 = atLocal(show::Effect::Cathedral, 0.0);
+    const show::TimelineFrame k0 = atLocal(show::Effect::CrystalCity, 0.0);
+    const modern::SceneFrame clear = glass.frame(atLocal(show::Effect::CrystalCity, k0.accentSeconds + 1.0));
+    // GLENZ's floor shot: 85 mm, low, from beyond the caustic's fan, the star's lower half in the top third.
+    const modern::Camera floor = glass.camera(atLocal(show::Effect::Glenz, accent + 4.0));
+    CHECK(floor.shot == 1 && std::abs(floor.fovYDegrees - 13.6f) < 0.05f && floor.eye.y < 1.3f);
+    const Vec3 centre =
+        modern::transformPoint(modern::glenzTransform(atLocal(show::Effect::Glenz, accent + 4.0), accent + 4.0), {});
+    const Pixel base = project(floor, {centre.x, 0.f, centre.z}, 320, 180);
+    std::printf("composition: GLENZ's floor shot has the star's foot %.0f %% down the frame\n", 100.f * base.y / 180);
+    CHECK(base.visible && base.y > 0.2f * 180 && base.y < 0.45f * 180); // the star's foot a third down
+    // The cathedral: on D the sun's disc is in the hero window as seen from the nave, and its line through
+    // the window's middle passes every glass pier (the disc reads through the glass, not through a pier).
+    const Vec3 sun = modern::cathedralSunDirection(), window = modern::cathedralHeroWindow();
+    float clearance = 1e30f;
+    for (float t = 0.f; t < window.y / sun.y; t += 0.02f)
+        clearance = std::min(clearance, modern::distanceToPier(window - sun * t));
+    CHECK(clearance > modern::pierReach() + 0.1f);
+    const modern::Camera onD = glass.camera(atLocal(show::Effect::Cathedral, c0.accentSeconds - 1.0));
+    CHECK(onD.shot == 2 && modern::dot(modern::cameraBasis(onD).forward, sun) > 0.995f);
+    // CRYSTAL CITY: its white-out is the show's exposure key's (post::Look), not the scene's: a constant base.
+    for (const double t : {0.0, 0.5, 1.5, 3.0, 10.0})
+        CHECK(glass.frame(atLocal(show::Effect::CrystalCity, t)).exposureEV ==
+              modern::glassExposureEV(show::Effect::CrystalCity));
+    // The first full spectrum on the accent: the sun's flux on the plaza (the photons' light) at least doubles
+    // as it clears the haze on D, just before it.
+    CHECK(clear.caustics->light == -1);
+    std::printf("    the cathedral's sun line clears the piers by %.2f m; GLENZ's floor shot at 85 mm\n",
+                clearance - modern::pierReach());
+}
+
 // --- The lab: Beer-Lambert and thin panes against closed forms ---------------------------------------------
 
 // A small test scene. View: the camera looks along +z through a glass body at z = 0 (a 1 m cube, or a thin
@@ -380,6 +418,7 @@ struct LabConfig {
     Vec3 absorption{0, 0, 0}; // the glass body's, per metre
     Vec3 tint{1, 1, 1};       // the pane's
     bool body = true;         // false: nothing between the lamp and the floor
+    float abbe = 0.f;         // the glass body's dispersion (0: none)
 };
 
 // The scene reads the test's current configuration at every frame (its materials are the frame's).
@@ -403,6 +442,7 @@ public:
         glass.transmission = 1;
         glass.materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Glass);
         glass.flags = config.pane ? rt::kMaterialThinWalled : 0u;
+        glass.abbe = config.abbe;
         rt::Material backdrop;
         backdrop.baseColor[0] = backdrop.baseColor[1] = backdrop.baseColor[2] = 0;
         backdrop.emission[0] = backdrop.emission[1] = backdrop.emission[2] = 1;
@@ -529,6 +569,44 @@ void testLab(Bench& bench) {
     CHECK(near(tintLit.x / paneLit.x, tint.x, 0.03f) && near(tintLit.y / paneLit.y, tint.y, 0.03f) &&
           near(tintLit.z / paneLit.z, tint.z, 0.01f));
     CHECK(clearPane.emission.mean(ux, uy, 1).x == 0.f);
+}
+
+// --- The hero wavelengths (GPU) ------------------------------------------------------------------------------
+
+// The chroma noise of the view through a dispersive cube onto the white backdrop (its true colour is grey):
+// the RMS over the middle of the picture of each pixel's chroma, (r - g, b - g) over its luminance.
+double chromaNoise(gfx::Context& ctx, std::uint32_t spp) {
+    LabConfig config;
+    config.abbe = 20.f;
+    Rig rig(ctx, 96, 54, spp, {1.f / 8},
+            [&config](SceneId, modern::SceneDetail) -> std::unique_ptr<modern::ModernScene> {
+                return std::make_unique<Lab>(&config);
+            },
+            [](show::Effect) { return SceneId::Ship; });
+    const Plane p = rig.render(atLocal(show::Effect::Glenz, 2.0)).lighting;
+    double sum = 0;
+    int n = 0;
+    for (int y = 12; y < 42; ++y)
+        for (int x = 33; x < 63; ++x) {
+            const Vec3 v = p.rgb(x, y);
+            const float l = 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
+            if (!(l > 1e-4f))
+                continue;
+            const double a = (v.x - v.y) / l, b = (v.z - v.y) / l;
+            sum += a * a + b * b;
+            ++n;
+        }
+    return std::sqrt(sum / std::max(n, 1));
+}
+
+// An export (16 spp and more) traces 4 wavelengths through dispersive glass where the window and smaller
+// counts trace 1: at nearly the same sample count, the chroma noise drops by at least 40 %.
+void testHeroWavelengths(gfx::Context& ctx) {
+    const double one = chromaNoise(ctx, 15), four = chromaNoise(ctx, 16);
+    std::printf("hero wavelengths: chroma noise through dispersive glass %.4f at 15 spp (one wavelength), %.4f at "
+                "16 spp (four): %.0f %% less\n",
+                one, four, 100.0 * (1.0 - four / one));
+    CHECK(four < 0.6 * one * std::sqrt(15.0 / 16.0));
 }
 
 // --- GLENZ's rainbows and the cathedral's pools (GPU) --------------------------------------------------------
@@ -712,7 +790,7 @@ void testRainbowsAndPools(Bench& bench) {
     // accent's downbeat) crosses the centre line, against the haze where the shut window beside it would
     // cross it; seen from between the western pillar rows, so that no pillar ends the camera's rays first.
     overhead = false;
-    const Vec3 sun = modern::normalize({0.80f, 0.47f, -0.37f});
+    const Vec3 sun = modern::cathedralSunDirection();
     const float bay = 3.4f, firstPillar = 5.f, wall = 10.5f + 0.32f, middle = 6.3f;
     auto crossing = [&](float windowZ) { // where the beam from the window's middle reaches x = 0
         const Vec3 w{wall, middle, windowZ};
@@ -808,6 +886,10 @@ int main(int argc, char** argv) {
                 look(ctx, argv[2], local, 1.f, false, show::Effect::CrystalCity, {0.f, 0.f, 50.f}, 30.f);
                 return 0;
             }
+            if (argc > 4 && std::string(argv[4]) == "fan") { // GLENZ's whole fan, from higher up
+                look(ctx, argv[2], local, 1.f, false, show::Effect::Glenz, {-1.6f, 0.f, 0.4f}, 4.9f);
+                return 0;
+            }
             look(ctx, argv[2], local, 1.f, false);
             look(ctx, argv[2], local, 1.f, true);
             return 0;
@@ -817,6 +899,7 @@ int main(int argc, char** argv) {
             testCards();
             testGlenzMatches1993();
             testMusic();
+            testComposition();
             testSweep();
         }
         auto ctx = gfx::Context::create({.validation = true, .syncValidation = true});
@@ -824,6 +907,10 @@ int main(int argc, char** argv) {
             std::printf("warning: validation layer unavailable; only the pixels are checked\n");
         else if (!ctx.syncValidationEnabled())
             std::printf("SKIP sync validation: unavailable\n");
+        if (run("heroes")) {
+            testHeroWavelengths(ctx);
+            idle(ctx);
+        }
         if (run("lab") || run("rainbows")) {
             Bench bench(ctx);
             if (run("lab"))

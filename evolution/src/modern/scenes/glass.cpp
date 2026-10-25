@@ -274,6 +274,7 @@ enum Material : std::uint32_t {
     kKeyEmitter,
     kKeySoftEmitter,
     kSoftbox,
+    kScrim,
     kTubeRed,
     kTubeGold,
     kTubeGreen,
@@ -291,6 +292,7 @@ enum Material : std::uint32_t {
     kPaneFirst, // kPaneColours stained-glass colours
     // CRYSTAL CITY
     kQuartz = kPaneFirst + 6,
+    kAmberCore,
     kPaving, // the receiver
     kPavingOutside,
     kMaterialCount
@@ -308,38 +310,56 @@ constexpr std::array<Vec3, kPaneColours> kPaneTint = {{
 
 // --- GLENZ's set ----------------------------------------------------------------------------------------------
 
-// The key light: a small strong square high above the star (its photons make the caustics).
-// High above the 1993 camera, so that the star throws its caustic back across the floor behind it, where the
-// locked camera sees it. The hard spot is small (0.4 degrees across from the star), so the caustic keeps the
-// flint's spectra apart; the soft box around it (before the accent) blurs them.
+// The key light: a small strong square out to the right of the star and a little in front, 25 degrees up from
+// it (its photons make the caustics). Low enough that the star throws its caustic a long way across the floor
+// to its left, where the locked camera sees it fan out in spectra beside the star, and the floor shot looks
+// along the fan. The hard spot is small (0.3 degrees across from the star), so the caustic keeps the flint's
+// spectra apart; the soft box around it (before the accent) blurs them.
 constexpr float kKeySize = 0.025f, kKeySoftSize = 0.32f;
-constexpr Vec3 kKeyAt{1.0f, 3.9f, -1.7f}, kKeyAim{0.f, 0.9f, 0.f};
-constexpr Vec3 kCausticAt{-0.3f, 0.f, 0.5f}; // where the caustic lands with the star at rest
-constexpr Vec3 kKeyWarm{1.f, 0.88f, 0.72f}, kKeyCool{0.84f, 0.92f, 1.f};
-constexpr float kKeyRadiance = 52000.f;
+constexpr Vec3 kKeyAt{4.0f, 2.9f, -1.4f}, kKeyAim{0.f, 0.9f, 0.f};
+constexpr Vec3 kCausticAt{-1.7f, 0.f, 0.8f}; // the middle of the caustic's fan with the star at rest
+// The key's colour temperature on the beats after D: about 3200 K and 7500 K.
+constexpr Vec3 kKeyWarm{1.f, 0.78f, 0.56f}, kKeyCool{0.78f, 0.88f, 1.f};
+constexpr float kKeyRadiance = 150000.f;
 constexpr float kKeySoftRadiance = kKeyRadiance * (kKeySize * kKeySize) / (kKeySoftSize * kKeySoftSize);
 constexpr Vec3 kKeyColor{1.f, 0.96f, 0.9f};
-// The strip softboxes behind the star on either side (the bright edges on the facets).
+// The key's snoot: an octagonal black tube, the inradius of its opening, its walls' thickness and its length
+// (a pool of light about 4 m across round the star; the floor beyond it dark).
+constexpr float kSnootOpening = 0.42f, kSnootWall = 0.02f, kSnootLength = 0.9f;
+// The strip softboxes behind the star on either side (the bright edges on the facets), and the scrim over the
+// stage (what the star's upper facets mirror: without it they show the black above the set).
 constexpr float kSoftboxWidth = 0.6f, kSoftboxHeight = 2.4f;
-constexpr float kSoftboxRadiance = 3.f;
+constexpr float kSoftboxRadiance = 1.6f;
+constexpr Vec3 kScrimAt{0.f, 5.2f, 0.6f};
+constexpr float kScrimSize = 4.f, kScrimRadiance = 0.6f;
 // The copper drum: six tubes round an axis along x, at the 1993 copper's angles (copper.comp).
 constexpr std::uint32_t kTubes = 6;
 constexpr float kTubeWidth = 7.f, kTubeHeight = 0.045f;
 constexpr float kTubeRadiance = 5.f;
 // The cyc wash: a cool strip on the floor at the foot of the cove, hidden behind a low ground row, lighting the
 // back wall from below (the backdrop the star refracts).
-constexpr float kWashWidth = 14.f, kWashHeight = 0.25f, kWashRadiance = 26.f;
+constexpr float kWashWidth = 14.f, kWashHeight = 0.25f, kWashRadiance = 40.f;
+constexpr int kWashUnits = 7;
 constexpr float kDrumY = 1.3f, kDrumZ = 2.7f, kDrumRadiusY = 0.95f, kDrumRadiusZ = 0.55f;
 // The cyclorama: the receiver square of the floor, the rest of the floor, the cove up to the back wall.
-// The receiver: the stage floor around the star, as far as the facets throw their spectra (8 m square:
-// 7.8 mm texels in the window, 3.9 mm in an export).
-constexpr float kReceiverHalf = 4.f;
-constexpr Vec3 kReceiverAt{0.f, 0.f, 0.5f};
+// The receiver: the stage floor round the star and behind it, as far as the facets throw their spectra (7 m
+// square: 6.8 mm texels in the window, 3.4 mm in an export).
+constexpr float kReceiverHalf = 3.5f;
+constexpr Vec3 kReceiverAt{0.f, 0.f, 1.6f};
 constexpr float kFloorHalf = 14.f, kFloorFront = -14.f, kCoveStart = 6.f,
                 kCoveRadius = 2.f, kWallTop = 10.f;
 constexpr std::uint32_t kGlenzResolution = 1024; // x kExportMapFactor in an export
 
-enum GlenzLight : std::uint32_t { kKeyLight, kKeySoftLight, kSoftLeft, kSoftRight, kWashLight, kTubeLight0 };
+enum GlenzLight : std::uint32_t {
+    kKeyLight,
+    kKeySoftLight,
+    kSoftLeft,
+    kSoftRight,
+    kScrimLight,
+    kFlatLight,
+    kWashLight, // kWashUnits of them
+    kTubeLight0 = kWashLight + kWashUnits
+};
 
 // --- GLASS CATHEDRAL's set ------------------------------------------------------------------------------------
 
@@ -350,18 +370,22 @@ constexpr float kFirstPillarZ = 5.f, kBay = 3.4f;
 constexpr int kBays = 16; // pillars per row; windows between them
 constexpr int kWindows = kBays - 1;
 constexpr std::array<float, 4> kPillarRows = {-8.f, -3.6f, 3.6f, 8.f};
-// A pillar: the glenz star stretched into a column, standing on its lower point in a stone plinth, its upper
-// point in the capital.
-constexpr Vec3 kPillarScale{0.40f, 1.95f, 0.40f};
+// A pillar: a clustered gothic pier of flint glass, a faceted octagonal core with four shafts on its axes and
+// four slender ones between them, from its moulded stone base (kPlinth) to its capital (kPillarTop). Every
+// facet is a prism: the sun through a pier breaks into spectra.
 constexpr float kPlinth = 0.6f;
-constexpr float kPillarTop = kPlinth + 2.f * 1.7f * kPillarScale.y; // the capital's underside
+constexpr float kPillarTop = 7.23f; // the capital's underside
+constexpr float kPierCore = 0.27f;  // the octagon's inradius
+constexpr float kPierShaft = 0.15f, kPierShaftAt = 0.29f; // the four shafts: radius, distance from the axis
+constexpr float kPierFillet = 0.075f, kPierFilletAt = 0.33f; // the four between them
+constexpr int kPierFacets = 72;
 constexpr float kWindowWidth = 2.2f, kWindowBottom = 3.f, kWindowTop = 9.6f;
 constexpr int kWindowCols = 4, kWindowRows = 12;
 constexpr float kRoseRadius = 4.f, kRoseY = 16.f, kGableTop = 26.f;
 constexpr std::uint32_t kCathedralResolution = 512; // x kExportMapFactor in an export
 // Sodium lamps hanging over the nave, one per bay.
 constexpr Vec3 kLampColor{1.f, 0.52f, 0.18f};
-constexpr float kLampRadiance = 260.f, kLampSize = 0.36f, kLampHeight = 9.5f;
+constexpr float kLampRadiance = 25.f, kLampSize = 0.36f, kLampHeight = 9.5f;
 constexpr int kWindowVariants = 4;
 // The east windows' shutters (outside the glass): bays 0 and 1 are open from the start, 2 and 3 stay shut,
 // kHeroBay opens on the accent's downbeat (the sun's disc appears in it), and bays kHeroBay + 1 .. 14 open
@@ -370,8 +394,10 @@ constexpr int kHeroBay = 4;
 constexpr float kShutterTravel = 7.4f, kShutterSeconds = 0.35f;
 // The haze: sigma_t per metre at the floor, halving every 14 m up.
 constexpr float kHazeDensity = 0.018f, kHazeFalloff = 0.05f;
-// Towards the sun: from the east (+x), 28 degrees up, a little towards the door.
-constexpr Vec3 kCathedralSun{0.80f, 0.47f, -0.37f};
+// Towards the sun: from the east (+x), 29 degrees up, a little towards the door. Its ray through the middle of
+// the hero window passes between the piers of both eastern rows, so the disc reads through the glass from
+// the nave.
+constexpr Vec3 kCathedralSun{0.80f, 0.47f, -0.29f};
 
 float pillarZ(int k) {
     return kFirstPillarZ + kBay * float(k);
@@ -389,7 +415,7 @@ constexpr std::uint32_t kCrystalResolution = 512; // x kExportMapFactor in an ex
 // receiver, 5 cm texels in the window) with the glenz sculpture at its centre.
 constexpr Vec3 kPlaza{0.f, 0.f, 63.f};
 constexpr float kPlazaHalf = 13.f;
-constexpr float kSculptureScale = 1.15f, kSculptureLift = 2.75f;
+constexpr float kSculptureScale = 2.f, kSculptureLift = 3.65f;
 constexpr std::uint32_t kCrystalVariants = 3;
 
 // --- Meshes ---------------------------------------------------------------------------------------------------
@@ -400,6 +426,9 @@ enum Mesh : std::uint32_t {
     kUnitBox,
     kCove,
     kPillarShaft,
+    kPier,
+    kPierBase,
+    kPierCapital,
     kArcadeArch,
     kVault,
     kVaultRib,
@@ -744,6 +773,53 @@ rt::Mesh pillarShaft() {
     return facetedLathe(profile, 8, kPi / 8);
 }
 
+// The pier's outline at angle a (radians from +x): the farthest of the octagonal core and the round shafts
+// along that direction (every shaft overlaps the core, so the outline is star-shaped about the axis).
+float pierRadius(float a) {
+    const float sector = kPi / 4.f;
+    const float off = a - sector * std::floor(a / sector) - 0.5f * sector;
+    float r = kPierCore / std::cos(off);
+    const Vec2 u{std::cos(a), std::sin(a)};
+    for (int k = 0; k < 8; ++k) {
+        const float at = k % 2 == 0 ? kPierShaftAt : kPierFilletAt, radius = k % 2 == 0 ? kPierShaft : kPierFillet;
+        const Vec2 c{at * std::cos(sector * float(k)), at * std::sin(sector * float(k))};
+        const float b = u.x * c.x + u.y * c.y;
+        const float disc = b * b - (c.x * c.x + c.y * c.y - radius * radius);
+        if (disc >= 0.f)
+            r = std::max(r, b + std::sqrt(disc));
+    }
+    return r;
+}
+
+// The glass pier from y = 0 to `height`, flat-faceted (kPierFacets round), its ends chamfered.
+rt::Mesh pier(float height) {
+    rt::Mesh m;
+    const float chamfer = 0.05f;
+    std::vector<Vec3> outline;
+    for (int i = 0; i < kPierFacets; ++i) {
+        const float a = 2.f * kPi * (float(i) + 0.5f) / float(kPierFacets);
+        const float r = pierRadius(a);
+        outline.push_back({r * std::cos(a), 0.f, r * std::sin(a)});
+    }
+    const std::array<std::pair<float, float>, 4> rings = {{{0.f, 0.86f}, {chamfer, 1.f}, {height - chamfer, 1.f},
+                                                           {height, 0.86f}}};
+    auto at = [&](int i, std::size_t ring) {
+        const Vec3 o = outline[static_cast<std::size_t>((i + kPierFacets) % kPierFacets)];
+        return Vec3{o.x * rings[ring].second, rings[ring].first, o.z * rings[ring].second};
+    };
+    for (int i = 0; i < kPierFacets; ++i)
+        for (std::size_t ring = 0; ring + 1 < rings.size(); ++ring) {
+            const Vec3 a = at(i, ring), b = at(i + 1, ring), c = at(i + 1, ring + 1), d = at(i, ring + 1);
+            const Vec3 mid = (a + b + c + d) * 0.25f;
+            flatQuad(m, a, b, c, d, Vec3{mid.x, 0.f, mid.z});
+        }
+    for (int i = 0; i < kPierFacets; ++i) {
+        flatTriangle(m, {0, 0, 0}, at(i, 0), at(i + 1, 0), {0, -1, 0});
+        flatTriangle(m, {0, height, 0}, at(i, 3), at(i + 1, 3), {0, 1, 0});
+    }
+    return m;
+}
+
 std::vector<rt::Mesh> buildMeshes() {
     std::vector<rt::Mesh> meshes(kMeshCount);
     meshes[kGlenzStar] = glenzStar();
@@ -760,6 +836,17 @@ std::vector<rt::Mesh> buildMeshes() {
         meshes[kCove] = extrudeAlongX(profile, kFloorHalf, {kCoveStart - 4.f, 4.f});
     }
     meshes[kPillarShaft] = pillarShaft();
+    meshes[kPier] = pier(kPillarTop - kPlinth);
+    {
+        // The pier's base: a square plinth under a torus and a scotia; its capital: a bell flaring to a
+        // square abacus (the boxes are added with the instances).
+        const std::array<Vec2, 7> base = {
+            {{0.f, 0.f}, {0.62f, 0.f}, {0.62f, 0.05f}, {0.55f, 0.1f}, {0.5f, 0.12f}, {0.47f, 0.15f}, {0.f, 0.15f}}};
+        meshes[kPierBase] = facetedLathe(base, 24, 0.f);
+        const std::array<Vec2, 7> capital = {
+            {{0.f, 0.f}, {0.43f, 0.f}, {0.45f, 0.06f}, {0.5f, 0.16f}, {0.6f, 0.24f}, {0.66f, 0.25f}, {0.f, 0.25f}}};
+        meshes[kPierCapital] = facetedLathe(capital, 24, 0.f);
+    }
     {
         const std::vector<Vec2> line = pointedArch(kBay, 0.72f, 10);
         meshes[kArcadeArch] = rib(line, 0.4f, 0.6f);
@@ -815,7 +902,7 @@ std::vector<rt::Material> buildMaterials(const GlassOptions& options) {
     m[kFlint] = glass({0.f, 0.f, 0.f}, kFlintIor, abbe);
     // The core is a denser glass fused inside the flint: its surface is a flint-to-core interface, of the
     // relative index n_core / n_flint and the relative dispersion (relativeAbbe), and it is cobalt.
-    m[kCobalt] = glass(options.clearCore ? Vec3{} : Vec3{0.5f, 0.7f, 0.06f}, kCoreIor / kFlintIor,
+    m[kCobalt] = glass(options.clearCore ? Vec3{} : Vec3{0.32f, 0.42f, 0.04f}, kCoreIor / kFlintIor,
                        abbe > 0.f ? relativeAbbe(kFlintIor, abbe, kCoreIor, kCoreAbbe) : 0.f);
     // The cyclorama: warm white paint, a light polish worn into it.
     m[kCyc] = stone({0.80f, 0.78f, 0.74f}, {0.71f, 0.69f, 0.66f}, 0.7f, 0.f);
@@ -826,6 +913,7 @@ std::vector<rt::Material> buildMaterials(const GlassOptions& options) {
     m[kKeyEmitter] = emitter(kKeyColor, kKeyRadiance);
     m[kKeySoftEmitter] = emitter(kKeyColor, kKeySoftRadiance);
     m[kSoftbox] = emitter({0.85f, 0.92f, 1.f}, kSoftboxRadiance);
+    m[kScrim] = emitter({0.92f, 0.95f, 1.f}, kScrimRadiance);
     m[kTubeRed] = emitter({1.f, 0.16f, 0.09f}, kTubeRadiance);
     m[kTubeGold] = emitter({1.f, 0.62f, 0.12f}, kTubeRadiance);
     m[kTubeGreen] = emitter({0.2f, 0.95f, 0.28f}, kTubeRadiance);
@@ -856,7 +944,10 @@ std::vector<rt::Material> buildMaterials(const GlassOptions& options) {
     for (std::uint32_t c = 0; c < kPaneColours; ++c)
         m[kPaneFirst + c] = pane(kPaneTint[c]);
     // CRYSTAL CITY: thick quartz-like glass, sea-green by absorption over metres.
-    m[kQuartz] = glass({0.12f, 0.04f, 0.02f}, 1.6f, abbe); // glacial: blue-green through metres
+    m[kQuartz] = glass({0.035f, 0.012f, 0.006f}, 1.6f, abbe); // glacial: blue-green through metres
+    // The plaza sculpture's core: the cobalt's place taken by amber, the sun's colour (Act III's gold).
+    m[kAmberCore] = m[kCobalt];
+    setColor(m[kAmberCore].baseColor2, options.clearCore ? Vec3{} : Vec3{0.01f, 0.05f, 0.2f});
     m[kPavingOutside] = stone({0.46f, 0.45f, 0.43f}, {0.34f, 0.33f, 0.32f}, 0.6f, 0.9f);
     m[kPavingOutside].coat = 0.15f;
     m[kPavingOutside].coatRoughness = 0.1f;
@@ -984,7 +1075,7 @@ GlassCard glassCard(show::Effect effect) {
         const std::uint32_t photons = kCathedralPhotons * kExportPhotonFactor;
         return {photons, glassPillarCount(), kFlintAbbe,
                 "2026 · GLASS CATHEDRAL · " + grouped(glassPillarCount()) + " GLASS PILLARS · " + grouped(photons) +
-                    " PHOTONS"};
+                    " PHOTONS · SHAFTS"};
     }
     default: {
         const auto prisms = static_cast<std::uint32_t>(crystalCityTowers().size());
@@ -1042,15 +1133,15 @@ Camera glenzCamera(const show::TimelineFrame& f) {
         const Key k{{0.f, lift, -float(retro::kGlenzCameraDistance) * kGlenzWorldScale}, {0.f, lift, 0.f}};
         return makeCamera(k, float(retro::glenzCamera().fovYDegrees), 0.f, 0.f, st.shot);
     }
-    // Free of the 1993 camera: from beyond the caustic, looking down across it to the star, the spectrum
-    // in the bottom two thirds of the frame and the glass in the top third; a slow push in, focused on the
-    // floor.
+    // Free of the 1993 camera: 85 mm, low beyond the end of the caustic's fan on the left, looking back along
+    // it to the star: the spectra in the bottom two thirds of the frame, the glass (its lower half) in the top third;
+    // a slow push in, focused on the middle of the fan.
     const std::array<Key, 2> keys = {{
-        {{-2.7f, 2.45f, 2.05f}, {-0.15f, 0.38f, 0.3f}},
-        {{-2.35f, 2.2f, 1.85f}, {-0.12f, 0.36f, 0.3f}},
+        {{-6.4f, 1.2f, 2.4f}, {-1.5f, 0.12f, 0.75f}},
+        {{-5.9f, 1.12f, 2.25f}, {-1.4f, 0.12f, 0.72f}},
     }};
     const Key k = alongKeys(keys, st.s);
-    return makeCamera(k, kLens35, 0.03f, length(kCausticAt - k.eye), st.shot);
+    return makeCamera(k, kLens85, 0.012f, length(kCausticAt - k.eye), st.shot);
 }
 
 // The cathedral: the nave runs along +z from the west door (z = 0) to the rose window (z = kNaveLength).
@@ -1076,7 +1167,7 @@ Camera cathedralCamera(const show::TimelineFrame& f) {
     case 2: {
         // On the downbeat the hero window's shutter opens on the sun: the camera looks up into it, then turns
         // down the nave as the light walks from bay to bay; focus on the pillars.
-        const Vec3 window{kNaveHalf + 0.4f * kWallThickness, 0.5f * (kWindowBottom + kWindowTop), windowZ(kHeroBay)};
+        const Vec3 window = cathedralHeroWindow();
         const Vec3 eye0 = window - normalize(kCathedralSun) * ((window.y - 1.5f) / normalize(kCathedralSun).y);
         const std::array<Key, 3> keys = {{
             {eye0, window},
@@ -1130,9 +1221,9 @@ Camera crystalCamera(const show::TimelineFrame& f) {
     default: {
         // Rising and looking back over the city: a field of spectra.
         const std::array<Key, 3> keys = {{
-            {{-1.f, 2.4f, 74.f}, {0.f, 1.f, 55.f}},
-            {{2.f, 13.f, 82.f}, {0.f, 0.f, 52.f}},
-            {{5.f, 30.f, 92.f}, {-1.f, 0.f, 44.f}},
+            {{-7.f, 3.f, 82.f}, {0.f, 2.f, 58.f}},
+            {{-2.f, 14.f, 90.f}, {0.f, 0.f, 55.f}},
+            {{5.f, 30.f, 98.f}, {-1.f, 0.f, 46.f}},
         }};
         return makeCamera(alongKeys(keys, st.s), kLens35, 0.f, 0.f, st.shot);
     }
@@ -1246,22 +1337,20 @@ Glass::Glass(SceneDetail detail, GlassOptions options) : detail_(detail), option
     for (const float x : kPillarRows)
         for (int k = 0; k < kBays; ++k) {
             const float z = pillarZ(k);
-            add(kUnitBox, kLimestone, place({x, 0.5f * kPlinth, z}, {1.2f, kPlinth, 1.2f}));
-            add(kUnitBox, kLimestone, place({x, kPillarTop + 0.2f, z}, {1.2f, 0.4f, 1.2f}));
+            add(kUnitBox, kLimestone, place({x, 0.225f, z}, {1.1f, 0.45f, 1.1f}));
+            add(kPierBase, kLimestone, translate({x, 0.45f, z}));
+            add(kPierCapital, kLimestone, translate({x, kPillarTop, z}));
+            add(kUnitBox, kLimestone, place({x, kPillarTop + 0.325f, z}, {1.36f, 0.15f, 1.36f}));
             if (k + 1 < kBays)
                 add(kArcadeArch, kLimestone,
                     place({x, kPillarTop + 0.4f, z + 0.5f * kBay}, rotate({0, 1, 0}, 0.5f * kPi), {1, 1, 1}));
         }
     for (int k = 0; k < kWindows; ++k)
         add(kLampHousing, kIron, translate({0, kLampHeight + 0.04f, windowZ(k)}));
-    // The pillars themselves, in bay order: each a stretched glenz star of flint glass, turned a little.
+    // The piers themselves, in bay order: flint glass on their bases.
     for (int k = 0; k < kBays; ++k)
-        for (std::size_t r = 0; r < kPillarRows.size(); ++r) {
-            const float turn = 0.25f * kPi * float((k + int(r)) % 2) + 0.11f * float(r);
-            pillars_.push_back({kGlenzStar, kFlint,
-                                place({kPillarRows[r], kPlinth + 1.7f * kPillarScale.y, pillarZ(k)},
-                                      rotate({0, 1, 0}, turn), kPillarScale)});
-        }
+        for (std::size_t r = 0; r < kPillarRows.size(); ++r)
+            pillars_.push_back({kPier, kFlint, translate({kPillarRows[r], kPlinth, pillarZ(k)})});
 }
 
 SceneFrame Glass::frame(const show::TimelineFrame& f) const {
@@ -1304,9 +1393,10 @@ SceneFrame Glass::glenzFrame(const show::TimelineFrame& f) const {
     SceneFrame out;
     out.camera = glenzCamera(f);
     out.exposureEV = glassExposureEV(show::Effect::Glenz);
-    // The tubes' and softboxes' light through the glass is path traced (only the key's is in the photon
-    // map): a low clamp keeps those caustics from sparkling on the floor.
-    out.clampIndirect = 1.5f;
+    // The tubes', the scrim's and the softboxes' light through the glass is path traced (only the key's is in
+    // the photon map), and so is the key's on the cyclorama's walls: a low clamp keeps those caustics from
+    // sparkling (an export does not filter).
+    out.clampIndirect = 0.3f;
     out.materials = static_.materials;
     std::vector<rt::Material>& mats = out.materials;
 
@@ -1364,35 +1454,62 @@ SceneFrame Glass::glenzFrame(const show::TimelineFrame& f) const {
              kKeySoftSize, mats);
     out.instances.push_back(
         {kUnitBox, kFixture, place(kKeyAt - keyAxis * 0.2f, keyTurn, {kKeySoftSize + 0.04f, kKeySoftSize + 0.04f, 0.36f})});
-    // The strip softboxes, out to either side of the star, turned to it.
+    // Its snoot: a black tube kSnootLength long round the light, so that it lights the star and the floor
+    // under it and little else; the caustic then has the floor to itself.
+    for (int side = 0; side < 8; ++side) {
+        const float a = 0.25f * kPi * float(side), offset = kSnootOpening + 0.5f * kSnootWall;
+        const float across = 2.f * (kSnootOpening + kSnootWall) * std::tan(kPi / 8.f) + 0.01f;
+        const rt::Mat34 wall = compose(rotate({0, 0, 1}, a),
+                                       place({offset, 0.f, 0.5f * kSnootLength}, {kSnootWall, across, kSnootLength}));
+        out.instances.push_back({kUnitBox, kFixture, compose(translate(kKeyAt), compose(keyTurn, wall))});
+    }
+    // The strip softboxes, out to either side of the star and behind it, turned to it: the bright edges.
+    const bool floorShot = out.camera.shot == 1;
     for (const float side : {-1.f, 1.f}) {
-        // (Re-rigged for the floor shot, which looks towards the right one: it goes under the stage.)
-        const Vec3 at{side * 2.6f, side > 0.f && out.camera.shot == 1 ? -3.f : 1.2f, -0.9f};
+        // (Re-rigged for the floor shot, which would see one: they go under the stage.)
+        const Vec3 at{side * 3.9f, floorShot ? -3.f : 1.2f, 1.2f};
         const Vec3 to = Vec3{0, 0.9f, 0} - at;
         const float yaw = std::atan2(to.x, to.z);
         addLight(out, kQuad, kSoftbox, place(at, rotate({0, 1, 0}, yaw), {1, 1, 1}), kSoftboxWidth,
                  kSoftboxHeight, mats);
     }
-    // The cyc wash behind its ground row, tilted up at the back wall.
+    // The scrim, facing down, and the white flat behind the 1993 camera, facing the star: what its upper and
+    // its front facets mirror.
+    addLight(out, kQuad, kScrim, place(kScrimAt, rotate({1, 0, 0}, 0.5f * kPi), {1, 1, 1}), kScrimSize, kScrimSize,
+             mats);
+    addLight(out, kQuad, kScrim, place({0.f, 1.6f, -6.f}, {1, 1, 1}), 6.f, 3.2f, mats);
+    // The cyc wash behind its ground row, tilted up at the back wall: a row of kWashUnits fixtures (each wall
+    // point is lit mostly by the nearest, which light selection then finds).
+    for (int k = 0; k < kWashUnits; ++k) {
+        const float width = kWashWidth / float(kWashUnits);
+        const Vec3 at{-0.5f * kWashWidth + (float(k) + 0.5f) * width, 0.22f, kCoveStart - 0.45f};
+        addLight(out, kQuad, kWash, place(at, rotate({1, 0, 0}, -0.3f * kPi), {1, 1, 1}), width, kWashHeight, mats);
+    }
     {
-        const Vec3 at{0.f, 0.22f, kCoveStart - 0.45f};
-        addLight(out, kQuad, kWash, place(at, rotate({1, 0, 0}, -0.3f * kPi), {1, 1, 1}), kWashWidth, kWashHeight,
-                 mats);
         out.instances.push_back({kUnitBox, kCyc, place({0.f, 0.2f, kCoveStart - 0.75f}, {kWashWidth + 0.4f, 0.4f, 0.12f})});
     }
-    // The copper drum's tubes, facing the camera's side (-z), at the copper's angles.
+    // The copper drum's tubes, facing the camera's side (-z), at the copper's angles. (Re-rigged for the floor
+    // shot, which looks along the caustic from the left: the drum stands beyond the star on the right, under
+    // the key's light, its tubes across the frame as the 1993 bars are.)
     for (std::uint32_t i = 0; i < kTubes; ++i) {
-        const Vec3 at = tubeCentre(i, f.localSeconds);
+        Vec3 at = tubeCentre(i, f.localSeconds);
+        float facing = kPi;
+        if (floorShot) {
+            at = {at.z + 1.f, at.y, 0.4f};
+            facing = -0.5f * kPi;
+        }
         const std::uint32_t material = kTubeRed + i % 3;
-        addLight(out, kQuad, material, place(at, rotate({0, 1, 0}, kPi), {1, 1, 1}), kTubeWidth, kTubeHeight,
+        addLight(out, kQuad, material, place(at, rotate({0, 1, 0}, facing), {1, 1, 1}), kTubeWidth, kTubeHeight,
                  mats);
     }
 
-    // Space: nothing but the stage.
+    // Beyond the set, the dim grey of a studio's flats: what the star's facets mirror where the scrim does not
+    // reach (black would read as holes in the glass). Never sampled: it lights nothing worth a shadow ray.
     out.environment = environmentDefaults(EnvironmentKind::Space);
     out.environment.starDensity = 0.f;
     out.environment.starBrightness = 0.f;
-    out.environment.zenith = out.environment.horizon = out.environment.ground = {0.f, 0.f, 0.f};
+    out.environment.zenith = out.environment.horizon = {0.1f, 0.102f, 0.11f};
+    out.environment.ground = {0.02f, 0.02f, 0.022f};
     out.environment.select = 0.f;
 
     CausticFrame c;
@@ -1407,6 +1524,29 @@ SceneFrame Glass::glenzFrame(const show::TimelineFrame& f) const {
     out.caustics = c;
     limitReceivers(out.materials, c.receivers.size());
     return out;
+}
+
+Vec3 cathedralSunDirection() {
+    return normalize(kCathedralSun);
+}
+
+Vec3 cathedralHeroWindow() {
+    return {kNaveHalf + 0.4f * kWallThickness, 0.5f * (kWindowBottom + kWindowTop), windowZ(kHeroBay)};
+}
+
+float distanceToPier(Vec3 p) {
+    float best = 1e30f;
+    for (const float x : kPillarRows)
+        for (int k = 0; k < kBays; ++k)
+            best = std::min(best, std::hypot(p.x - x, p.z - pillarZ(k)));
+    return best;
+}
+
+float pierReach() {
+    float r = 0.f;
+    for (int i = 0; i < 720; ++i)
+        r = std::max(r, pierRadius(2.f * kPi * float(i) / 720.f));
+    return r;
 }
 
 float cathedralShutter(const show::TimelineFrame& f, int window) {
@@ -1424,7 +1564,9 @@ SceneFrame Glass::cathedralFrame(const show::TimelineFrame& f) const {
     SceneFrame out;
     out.camera = cathedralCamera(f);
     out.exposureEV = glassExposureEV(show::Effect::Cathedral);
-    out.clampIndirect = 4.f;
+    // The glass piers refract the windows, the lamps and the sun into everything: a low clamp keeps their
+    // path-traced light (only the open windows' sunlight through them is in the photon maps) from sparkling.
+    out.clampIndirect = 1.5f;
     out.materials = static_.materials;
 
     // The pillars the sun reaches through the open windows throw the photons' caustics (casters first): the
@@ -1468,7 +1610,7 @@ SceneFrame Glass::cathedralFrame(const show::TimelineFrame& f) const {
     FogDesc fog;
     fog.density = kHazeDensity;
     fog.falloff = kHazeFalloff;
-    fog.albedo = {0.92f, 0.9f, 0.86f};
+    fog.albedo = {0.93f, 0.94f, 0.95f};
     fog.phaseG = 0.55f;
     out.medium = MediumFrame{fog, std::nullopt};
 
@@ -1507,9 +1649,9 @@ SceneFrame Glass::crystalFrame(const show::TimelineFrame& f) const {
               compose(rotate({0, 1, 0}, 0.12f * local), rotate({1, 0, 1}, 0.6155f)), Vec3{1, 1, 1} * kSculptureScale);
     out.instances.push_back({kGlenzStar, kFlint, sculpture});
     out.instances.push_back(
-        {kGlenzStar, kCobalt,
+        {kGlenzStar, kAmberCore,
          compose(sculpture, compose(rotate({0, 1, 0}, kGlenzCoreTurn), scale(Vec3{1, 1, 1} * kGlenzCoreScale)))});
-    out.instances.push_back({kPillarShaft, kLimestone, place(kPlaza, {2.6f, 0.08f, 2.6f})});
+    out.instances.push_back({kPillarShaft, kLimestone, place(kPlaza, {3.4f, 0.08f, 3.4f})});
     for (std::uint32_t i = 0; i < towers_.size(); ++i) {
         const Tower& t = towers_[i];
         const std::uint32_t variant = hashU(i * 7919u) % kCrystalVariants;
@@ -1553,14 +1695,12 @@ SceneFrame Glass::crystalFrame(const show::TimelineFrame& f) const {
     e.townDensity = 0.f;
     e.starDensity = 0.f;
     // A clear dawn: deep blue overhead, gold only low along the horizon.
-    e.zenith = {0.035f, 0.075f, 0.2f};
+    e.zenith = {0.05f, 0.1f, 0.25f};
     e.horizon = {0.42f, 0.27f, 0.12f};
     e.ground = {0.03f, 0.028f, 0.025f};
     e.haze = 0.15f;
     e.select = 0.5f;
     out.environment = e;
-    // White resolving into the sunrise over the first bars.
-    out.exposureEV += 5.f * (1.f - smooth(local / (1.8f * barLength(f, 0.0))));
 
     CausticFrame c;
     CausticReceiver r = receiverForQuad(place(kPlaza, flat, {1, 1, 1}), 2 * kPlazaHalf, 2 * kPlazaHalf,

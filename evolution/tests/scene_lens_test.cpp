@@ -22,6 +22,12 @@
 //     focused nearer the ball); with the ball's Abbe number 0 the two agree within 2 %;
 // (g) LENS OF GOD on the accent: the focus on the stone is at least 8x brighter than the lens's shadow round
 //     it;
+// (h) LENS's echo of 1993's lens until D: the hanging lens projects through the plan camera onto 1993's lens
+//     (its centre within a pixel of 320, its radius within 2 %), magnifies 2x (it hangs at half its focal
+//     length) and its light lands on the photon map; from D the camera holds still until the accent's beat,
+//     the spot entering the tessera in its focus on that beat, then follows; the sky's clouds keep the sun's
+//     line clear, and LENS OF GOD's cone of light runs from the lens to its focus with nothing moving on the
+//     accent but the focus's heat; the stones are calmed to kStoneSaturation of their chroma;
 // (p) checkChapterPictures for both chapters and (s) checkSceneSweep (scene_fixture.hpp).
 //
 // `scene_lens_test --look <dir> [spp] [detail]` renders 480x270 stills of both chapters at several moments
@@ -466,6 +472,96 @@ void testRotozoomMatch() {
     }
 }
 
+// --- (h) The plan view's lens, the held camera, the sky
+// ------------------------------------------------------------------------
+
+void testEchoAndSky() {
+    const show::TimelineFrame head = at(show::Effect::Lens, 0.0);
+    const double settle = modern::lensDownbeatBefore(head, head.accentSeconds);
+    const modern::Lens scene{{1.f / 256}};
+    int checked = 0;
+    for (double t = 0.05; t < settle; t += 0.1) {
+        const show::TimelineFrame f = at(show::Effect::Lens, t);
+        const Camera c = modern::lensCamera(f);
+        const modern::CameraBasis b = modern::cameraBasis(c);
+        const modern::PlanLens lens = modern::planLens(t);
+        // Where 1993 draws its lens on its 320 x 200 screen (unrounded), and how wide.
+        const double phase = t / 6.2 - std::floor(t / 6.2);
+        const double tri = phase < 0.5 ? 2 * phase : 2 - 2 * phase;
+        const double x93 = 48 + 224 * tri, y93 = 159 - 119 * std::abs(std::sin(3.14159265358979 * t / 2.3));
+        // The 2026 frame shows the 1993 picture's width (320 pixels) and crops its height; in 1993 pixels from
+        // the middle, a row is 1.2 of a pixel across.
+        const Vec3 v = lens.centre - c.eye;
+        const float z = modern::dot(v, b.forward);
+        const float tanHalf = std::tan(0.5f * c.fovYDegrees * 3.14159265f / 180.f), aspect = 16.f / 9.f;
+        const double px = 160.0 * modern::dot(v, b.right) / (z * tanHalf * aspect);
+        const double py = -160.0 * modern::dot(v, b.up) / (z * tanHalf * aspect) / 1.2;
+        CHECK(std::abs(px - (x93 - 160.0)) < 1.0 && std::abs(py - (y93 - 100.0)) < 1.0);
+        const double radius = 160.0 * lens.radius / (z * tanHalf * aspect);
+        CHECK(std::abs(radius - retro::kRotozoomLensRadius) < 0.02 * retro::kRotozoomLensRadius);
+        // It hangs at half its focal length over the stone: 2x at its middle.
+        const double focal = modern::godLensFocusDistance() * lens.scale;
+        CHECK(std::abs(lens.centre.y - 0.5 * focal) < 1e-3 * focal);
+        const modern::SceneFrame fr = scene.frame(f);
+        CHECK(fr.instances.size() == 3 && fr.instances[1].mesh == modern::Lens::kGodLensMesh);
+        CHECK(fr.caustics && fr.caustics->casterInstanceFirst == 1);
+        ++checked;
+    }
+    std::printf("(h) the plan view's lens is 1993's lens, in place and in size, at %d times before D\n", checked);
+    const modern::SceneFrame after = scene.frame(at(show::Effect::Lens, settle + 0.01));
+    CHECK(after.instances.size() == 2 && after.instances[1].kind == rt::GeometryKind::Spheres);
+
+    // From D the camera holds until the accent's beat, the spot crossing onto the tessera in its focus on that
+    // beat; after it, the camera moves.
+    const double beat = modern::lensAccentBeat(head);
+    CHECK(std::abs(beat - head.accentSeconds) < 0.5 * head.beatSeconds && beat > settle);
+    const Camera held = modern::lensCamera(at(show::Effect::Lens, settle + 0.01));
+    for (double t = settle + 0.01; t <= beat; t += 1.0 / 60) {
+        const Camera c = modern::lensCamera(at(show::Effect::Lens, t));
+        CHECK(modern::length(c.eye - held.eye) < 1e-4f && modern::length(c.target - held.target) < 1e-4f);
+    }
+    CHECK(modern::length(modern::lensCamera(at(show::Effect::Lens, beat + 1.0)).eye - held.eye) > 0.01f);
+    const float tile = std::floor(modern::lensFocusPoint(at(show::Effect::Lens, beat + 0.5 * head.beatSeconds)).x /
+                                  modern::kTessera);
+    const float before = modern::lensFocusPoint(at(show::Effect::Lens, beat - 0.05)).x / modern::kTessera;
+    const float onBeat = modern::lensFocusPoint(at(show::Effect::Lens, beat + 0.05)).x / modern::kTessera;
+    CHECK(std::floor(before) == tile - 1.f && std::floor(onBeat) == tile);
+    std::printf("    from D the camera holds; on the accent's beat (%.3f s) the spot crosses onto tessera %.0f\n",
+                beat, tile);
+
+    // The sky: a cloud deck whose clear tube runs along the sun's line through the spot; the stones calmed.
+    const modern::SceneFrame sky = scene.frame(at(show::Effect::Lens, 9.0));
+    CHECK(sky.medium && sky.medium->grid && !sky.medium->fog);
+    const auto& p = sky.medium->grid->params;
+    const Vec3 through{p[8], p[9], p[10]}, along{p[4], p[5], p[6]};
+    CHECK(modern::dot(modern::normalize(along - through), modern::lensSunDirection()) > 0.99999f);
+    CHECK(p[0] == 0.f); // no cone in LENS
+    CHECK(scene.staticScene().materials[modern::Lens::kMosaic].baseColor2[2] == modern::kStoneSaturation);
+    CHECK(modern::kStoneSaturation < 0.5f);
+
+    // LENS OF GOD: the cone from the lens's centre to its focal point, its radius the lens's.
+    const show::TimelineFrame god = at(show::Effect::LensOfGod, 0.0);
+    for (const double t : {3.0, god.accentSeconds - 0.5, god.accentSeconds, god.accentSeconds + 2.0}) {
+        const show::TimelineFrame f = at(show::Effect::LensOfGod, t);
+        const modern::SceneFrame fr = scene.frame(f);
+        CHECK(fr.medium && fr.medium->grid && fr.medium->fog);
+        const auto& q = fr.medium->grid->params;
+        const Vec3 lens{q[4], q[5], q[6]}, focal{q[8], q[9], q[10]};
+        CHECK(q[0] > 0.f && q[7] == 0.5f * modern::kGodLensDiameter);
+        CHECK(modern::length(lens - modern::godLensCentre(f)) < 1e-2f);
+        CHECK(std::abs(modern::length(lens - focal) - modern::godLensFocusDistance()) < 1e-2);
+        CHECK(modern::dot(modern::normalize(lens - focal), modern::godSunDirection()) > 0.99999f);
+    }
+    // Nothing moves on the accent but the heat: from the accent on, the lens, its focus and the clouds hold
+    // still (the camera too until it starts its push after the accent).
+    const modern::SceneFrame a0 = scene.frame(at(show::Effect::LensOfGod, god.accentSeconds));
+    const modern::SceneFrame a1 = scene.frame(at(show::Effect::LensOfGod, god.accentSeconds + 0.2));
+    CHECK(a0.medium->grid->params == a1.medium->grid->params);
+    CHECK(modern::length(modern::godFocusPoint(at(show::Effect::LensOfGod, god.accentSeconds)) -
+                         modern::godFocusPoint(at(show::Effect::LensOfGod, god.accentSeconds + 0.2))) < 1e-5f);
+    std::printf("    the sky keeps the sun's line clear; LENS OF GOD's cone runs from the lens to its focus\n");
+}
+
 // --- (f) The focus under the ball, and (d) its colours
 // ---------------------------------------------------------
 
@@ -695,6 +791,7 @@ int main(int argc, char** argv) {
         timed("t", [&] { testTesserae(ctx); });
         timed("o", [&] { testOptics(); });
         timed("r", [&] { testRotozoomMatch(); });
+        timed("h", [&] { testEchoAndSky(); });
         timed("s", [&] {
             test::SweepLimits limits;
             limits.maxCameraStep = 12.f; // LENS OF GOD's orbit, descent and pull-back cover kilometres

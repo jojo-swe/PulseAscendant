@@ -66,6 +66,14 @@ inline constexpr float kLensReceiverSide = 1.4f;              // metres round th
 inline constexpr int kLensRow = 80;
 inline constexpr float kLensTrail = 2.f; // tesserae from the contact point back to the spot's centre
 inline constexpr int kGodFocusTexel[2] = {50, 81};
+// The stones keep this share of their 1993 pixel's chroma: the plum and blue of the palette as mauve marble
+// and slate, the gold leaf still gold.
+inline constexpr float kStoneSaturation = 0.42f;
+// LENS OF GOD's air: the haze's mean free path at the ground (units), and the lens's cone of light in it: the
+// haze's density inside the cone and the glow of its in-scattered sunlight where the cone is as wide as the
+// lens (it grows with the concentration towards the focus).
+inline constexpr float kGodHazeDepth = 1400.f;
+inline constexpr float kGodConeHaze = 0.004f, kGodConeGlow = 3.f;
 
 // The 2026 epoch card's feat line of each chapter, "" for an effect the scene does not show.
 const char* lensEpochCard(show::Effect effect);
@@ -96,9 +104,23 @@ double rotozoomZoom(double t);
 // t).
 Vec3 rotozoomCentre(double t);
 
+// Until D, the 1993 lens (a disc kRotozoomLensRadius pixels in radius bouncing over the rotozoom, magnifying
+// its middle twice) as glass: LENS OF GOD's lens and bezel scaled down to `scale`, hanging at half its focal
+// length over the mosaic (so it magnifies the stones under its middle twice too), where and as large as
+// 1993's lens shows on the plan view. Its place follows 1993's lens formula without rounding to pixels.
+struct PlanLens {
+    Vec3 centre;  // world
+    float scale;  // of the god lens's mesh (kGodLensDiameter across)
+    float radius; // of its glass, world units
+};
+PlanLens planLens(double t);
+
 // The ball's centre: on row kLensRow, its contact point at texel column 40 on D and one tessera further each
 // beat.
 Vec3 lensBallCentre(const show::TimelineFrame& frame);
+// The local time of the beat nearest the accent (LENS: where the ball's caustic first lies on the tessera the
+// held camera faces, kLensFacingTile).
+double lensAccentBeat(const show::TimelineFrame& frame);
 // The direction towards LENS's sun (unit): straight ahead of the rolling ball, 45 degrees up, so that the
 // ball's light (best focus a little above the stone) lands as a spectral spot kLensTrail tesserae behind the
 // contact point.
@@ -153,6 +175,7 @@ public:
         kGodGlass,  // LENS OF GOD's flint lens
         kGold,      // its bezel
         kEmber,     // the burning tessera at LENS OF GOD's focus (camera-only emission, a receiver too)
+        kPlanGold,  // the plan view's lens's bezel (its brushing at that lens's scale)
         kMaterialCount
     };
     enum MeshIndex : std::uint32_t { kQuadMesh, kGodLensMesh, kBezelMesh, kMeshCount };

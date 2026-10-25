@@ -4,6 +4,7 @@
 #include "modern/mesh_builder.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <span>
@@ -46,11 +47,12 @@ rt::Mat34 rotationFromTo(Vec3 a, Vec3 b) {
     return rotate(axis, std::acos(c));
 }
 
-// The mosaic: tesserae of `size`, moved by `offset` tesserae.
-rt::Material mosaic(float size, rt::Pattern pattern, float roughness, Vec2 offset) {
+// The mosaic: tesserae of `size`, moved by `offset` tesserae, each stone keeping `saturation` of its pixel's
+// chroma (the 1993 plum and blue calmed to mauve marble and slate).
+rt::Material mosaic(float size, rt::Pattern pattern, float roughness, Vec2 offset, float saturation) {
     rt::Material m;
     setColor(m.baseColor, {1.f, 1.f, 1.f});
-    setColor(m.baseColor2, {offset.x, offset.y, 0.f});
+    setColor(m.baseColor2, {offset.x, offset.y, saturation});
     m.roughness = roughness;
     m.materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Checker);
     m.pattern = static_cast<std::uint32_t>(pattern);
@@ -285,22 +287,41 @@ Camera planCamera(double t) {
     return makeCamera(centre + Vec3{0.f, height, 0.f}, centre, planUp(t), kLens35, 0);
 }
 
+// LENS from D: when the camera frames the ball. It holds from D on the moment half a beat after the accent's
+// beat (the spot then lies in the middle of the tessera it has just entered, the one the camera faces), and
+// after the accent's beat eases into following the ball a bar behind it: constant acceleration over two bars,
+// then the ball's own pace.
+double lensFramingTime(const show::TimelineFrame& frame) {
+    const double beat = lensAccentBeat(frame);
+    const double held = beat + 0.5 * frame.beatSeconds;
+    const double lag = 4.0 * frame.beatSeconds;
+    const double u = frame.localSeconds - beat;
+    if (u <= 0.0)
+        return held;
+    return held + (u < 2.0 * lag ? u * u / (4.0 * lag) : u - lag);
+}
+
 Camera lensChapterCamera(const show::TimelineFrame& frame) {
     const auto t = static_cast<float>(frame.localSeconds);
     const float settle = settleOf(frame);
     if (t < settle)
         return planCamera(t);
     // From D: low, three-quarters behind the ball on its near side, 50 mm: the burning spot on the stone in
-    // the foreground, the ball beyond it lit from ahead, the horizon's reflections across the top third. The
-    // camera gains slowly on the ball as it rolls; the focus stays on the spot.
-    const float s = smoother01((t - settle) / std::max(chapterLength(frame) - settle, 1e-3f));
-    const Vec3 ball = lensBallCentre(frame), spot = lensFocusPoint(frame);
+    // the foreground, the ball beyond it lit from ahead, the horizon's reflections across the top third. Held
+    // until the spot has crossed onto the tessera in the frame's focus on the accent, then following the
+    // ball; the focus stays on the spot.
+    show::TimelineFrame framing = frame;
+    framing.localSeconds = lensFramingTime(frame);
+    framing.trackSeconds = frame.trackSeconds + (framing.localSeconds - frame.localSeconds);
+    const float s = smoother01((static_cast<float>(framing.localSeconds) - settle) /
+                               std::max(chapterLength(frame) - settle, 1e-3f));
+    const Vec3 ball = lensBallCentre(framing), spot = lensFocusPoint(framing);
     const Vec3 back = normalize(Vec3{-1.f, 0.f, 0.8f - 0.25f * s});
     const Vec3 eye = spot + back * (3.7f - 0.5f * s) + Vec3{0.f, 0.95f - 0.1f * s, 0.f};
     // The ball on the right third: aim left of it.
     const Vec3 right = normalize(cross(ball - eye, Vec3{0.f, 1.f, 0.f}));
     const Vec3 target = ball - right * 0.55f + Vec3{0.f, -0.38f, 0.f};
-    return makeCamera(eye, target, {0.f, 1.f, 0.f}, kLens50, 1, 0.012f, spot);
+    return makeCamera(eye, target, {0.f, 1.f, 0.f}, kLens50, 1, 0.012f, lensFocusPoint(frame));
 }
 
 // LENS OF GOD's frame: the sun's horizontal heading and the side across it.
@@ -443,6 +464,40 @@ Vec3 rotozoomCentre(double t) {
            kTessera;
 }
 
+PlanLens planLens(double t) {
+    // 1993's lens on its screen (continuous: 1993 rounds it to whole pixels), as an offset from the screen's
+    // middle in texels across the rotozoom's turned axes.
+    const double phase = t / 6.2 - std::floor(t / 6.2);
+    const double tri = phase < 0.5 ? 2.0 * phase : 2.0 - 2.0 * phase;
+    const double x = 48.0 + 224.0 * tri - 160.0;
+    const double y = 159.0 - 119.0 * std::abs(std::sin(kPiD * t / 2.3)) - 100.0;
+    const double a = rotozoomAngle(t), zoom = rotozoomZoom(t);
+    const double du = x * zoom * std::cos(a) - y * 1.2 * zoom * std::sin(a);
+    const double dv = x * zoom * std::sin(a) + y * 1.2 * zoom * std::cos(a);
+    // The plan camera's height over the stone (planCamera), the lens's on the stone's scale.
+    const double width = 320.0 * zoom * kTessera;
+    const double camera = width / (2.0 * std::tan(0.5 * 31.6 * kPiD / 180.0) * 16.0 / 9.0);
+    const double onStone = 48.0 * zoom * kTessera; // its radius, seen at the stone's depth
+    // It hangs at half its focal length h = focus / 2 = (focus / rim) r: seen from the camera, r and the
+    // offset shrink by (camera - h) / camera.
+    const double hang = 0.5 * godLensFocusDistance() / (0.5 * kGodLensDiameter);
+    const double radius = onStone / (1.0 + hang * onStone / camera);
+    const double height = hang * radius, shrink = (camera - height) / camera;
+    const Vec3 centre = rotozoomCentre(t) + Vec3{static_cast<float>(du * shrink), 0.f,
+                                                 static_cast<float>(dv * shrink)} * kTessera +
+                        Vec3{0.f, static_cast<float>(height), 0.f};
+    return {centre, static_cast<float>(radius / (0.5 * kGodLensDiameter)), static_cast<float>(radius)};
+}
+
+double lensAccentBeat(const show::TimelineFrame& frame) {
+    const show::BeatGridView grid = show::beatGrid(frame.track);
+    const double start = frame.trackSeconds - frame.localSeconds;
+    const double accent = start + frame.accentSeconds;
+    const int b = std::max(grid.beatAt(accent), 0);
+    const double before = grid.beatTime(b), after = grid.beatTime(std::min(b + 1, grid.count() - 1));
+    return (accent - before <= after - accent ? before : after) - start;
+}
+
 Vec3 lensBallCentre(const show::TimelineFrame& frame) {
     const auto column = static_cast<float>(40.0 + lensBeatsSinceD(frame));
     return {column * kTessera, kLensBallRadius, (static_cast<float>(kLensRow) + 0.5f) * kTessera};
@@ -557,6 +612,47 @@ double godSpotDiameter(const show::TimelineFrame& frame) {
            2.0 * focus * std::tan(0.25 * kPiD / 180.0) + 1.5;
 }
 
+// --- The sky
+// ----------------------------------------------------------------------------------------------------------
+
+namespace {
+
+// The clouds (shaders/modern/lens_clouds.comp): LENS's deck far over the mosaic, 240 to 700 m up, round a
+// clear tube along the sun's line through the ball; LENS OF GOD's deck under the lens, 40 to 165 units up,
+// round the lens's cone of light, which glows in the haze.
+constexpr std::array<std::uint32_t, 3> kLensCloudGrid = {256, 24, 256};
+constexpr std::array<std::uint32_t, 3> kGodCloudGrid = {256, 48, 256};
+
+GridMediumDesc cloudDeck(bool god, Vec3 lens, float lensRadius, Vec3 through, float clearing) {
+    const float half = god ? 1500.f : 3000.f, floor = god ? 40.f : 240.f, height = god ? 280.f : 460.f;
+    GridMediumDesc grid;
+    grid.size = god ? kGodCloudGrid : kLensCloudGrid;
+    grid.worldToMedium = mediumBox({-half, floor, -half}, {half, floor + height, half});
+    grid.densityScale = 1.f;
+    grid.albedo = {0.96f, 0.96f, 0.965f};
+    grid.phaseG = 0.6f;
+    grid.emissionScale = 1.f;
+    grid.params = {god ? kGodConeGlow : 0.f,
+                   god ? 0.46f : 0.42f,
+                   god ? 0.06f : 0.008f,
+                   god ? kGodConeHaze : 0.f,
+                   lens.x,
+                   lens.y,
+                   lens.z,
+                   lensRadius,
+                   through.x,
+                   through.y,
+                   through.z,
+                   clearing,
+                   half,
+                   floor,
+                   height,
+                   god ? 0.45f : 1.f};
+    return grid;
+}
+
+} // namespace
+
 // --- Cameras
 // ----------------------------------------------------------------------------------------------------
 
@@ -580,13 +676,14 @@ Lens::Lens(SceneDetail detail)
 
     std::vector<rt::Material>& m = static_.materials;
     m.resize(kMaterialCount);
-    m[kMosaic] = mosaic(kTessera, rt::Pattern::Tesserae, 0.045f, {0.f, 0.f});
+    m[kMosaic] = mosaic(kTessera, rt::Pattern::Tesserae, 0.045f, {0.f, 0.f}, kStoneSaturation);
     m[kMosaic].flags = rt::kMaterialCausticReceiver;
     m[kMosaic].receiver = 0;
     // The planet's mosaic, moved so that the focus (the world's origin) is the middle of kGodFocusTexel.
     m[kPlanet] =
         mosaic(kPlanetTessera, rt::Pattern::TesseraeSphere, 0.09f,
-               {static_cast<float>(kGodFocusTexel[0]) + 0.5f, static_cast<float>(kGodFocusTexel[1]) + 0.5f});
+               {static_cast<float>(kGodFocusTexel[0]) + 0.5f, static_cast<float>(kGodFocusTexel[1]) + 0.5f},
+               kStoneSaturation);
     m[kPlanet].flags = rt::kMaterialCausticReceiver;
     m[kPlanet].receiver = 0;
     m[kBallGlass] = glass(kLensBallIor, kLensBallAbbe, {0.985f, 0.99f, 1.f});
@@ -605,6 +702,8 @@ Lens::Lens(SceneDetail detail)
     m[kEmber].flags = rt::kMaterialCameraOnlyEmission | rt::kMaterialCausticReceiver;
     m[kEmber].receiver = 0;
     m[kEmber].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Pbr); // (a receiver must be)
+    m[kPlanGold] = m[kGold];
+    m[kPlanGold].patternScale = 0.6f;
 
     rt::SphereRecord ball{};
     ball.radius = kLensBallRadius;
@@ -620,6 +719,8 @@ Lens::Lens(SceneDetail detail)
     static_.capacity.materials = kMaterialCount;
     static_.capacity.spheres = kSphereCount;
     static_.capacity.causticResolution = std::max(kLensReceiverResolution, kGodReceiverResolution);
+    static_.mediumShader = "modern_lens_clouds.comp.spv";
+    static_.capacity.mediumGrid = {kGodCloudGrid[0], kGodCloudGrid[1], kGodCloudGrid[2]};
 }
 
 SceneFrame Lens::frame(const show::TimelineFrame& frame) const {
@@ -633,24 +734,42 @@ SceneFrame Lens::lensFrame(const show::TimelineFrame& frame) const {
     // The mosaic, to the horizon (its edge 3 km out).
     f.instances.push_back(
         {kQuadMesh, kMosaic, compose(rotate({1.f, 0.f, 0.f}, -0.5f * kPi), scale({6000.f, 6000.f, 1.f}))});
-    SceneInstance ball{};
-    ball.material = kBallGlass;
-    ball.kind = rt::GeometryKind::Spheres;
-    ball.firstSphere = kBallSphere;
-    ball.sphereCount = 1;
-    ball.transform = translate(lensBallCentre(frame));
-    f.instances.push_back(ball);
+    const bool plan = frame.localSeconds < settleOf(frame);
+    Vec3 spot;
+    float receiverSide = kLensReceiverSide;
+    if (plan) {
+        // 1993's lens: the hanging lens in its bezel; its light lands where the sun's line through its middle
+        // meets the stone, converging (the stone lies inside its focal length).
+        const PlanLens lens = planLens(frame.localSeconds);
+        const rt::Mat34 placed = compose(translate(lens.centre), scale({lens.scale, lens.scale, lens.scale}));
+        f.instances.push_back({kGodLensMesh, kGodGlass, placed});
+        f.instances.push_back({kBezelMesh, kPlanGold, placed});
+        const Vec3 sun = lensSunDirection();
+        spot = lens.centre - sun * (lens.centre.y / sun.y);
+        receiverSide = 3.2f * lens.radius;
+    } else {
+        SceneInstance ball{};
+        ball.material = kBallGlass;
+        ball.kind = rt::GeometryKind::Spheres;
+        ball.firstSphere = kBallSphere;
+        ball.sphereCount = 1;
+        ball.transform = translate(lensBallCentre(frame));
+        f.instances.push_back(ball);
+        spot = lensFocusPoint(frame);
+    }
 
     EnvironmentDesc& env = f.environment;
     env = environmentDefaults(EnvironmentKind::Day);
     env.discDirection = lensSunDirection();
     env.select = 1.f;
+    // Fair-weather cumulus over the horizon, mirrored in the polished stone; the sun shines on the ball
+    // through a gap.
+    f.medium = MediumFrame{std::nullopt, cloudDeck(false, spot + lensSunDirection() * 1000.f, 0.f, spot, 320.f)};
 
     CausticFrame c;
-    const Vec3 spot = lensFocusPoint(frame);
     c.receivers = {
         receiverForQuad(compose(translate({spot.x, 0.f, spot.z}), rotate({1.f, 0.f, 0.f}, -0.5f * kPi)),
-                        kLensReceiverSide, kLensReceiverSide, kLensReceiverResolution)};
+                        receiverSide, receiverSide, kLensReceiverResolution)};
     c.photons = photons_;
     c.light = -1;
     c.casterInstanceFirst = 1;
@@ -705,13 +824,15 @@ SceneFrame Lens::godFrame(const show::TimelineFrame& frame) const {
     env.ground = env.horizon; // beyond the planet's limb, seen from orbit, the sky goes on
     env.select = 1.f;
     // The planet's air: a haze layer a few hundred units deep that softens the far mosaic from orbit and in
-    // which the lens's shadow hangs as a cone.
+    // which the lens's shadow hangs; the cumulus under the lens, round its cone of light.
     FogDesc air;
-    air.density = 1.f / 3400.f;
-    air.falloff = 1.f / 380.f;
+    air.density = 1.f / kGodHazeDepth;
+    air.falloff = 1.f / 260.f;
     air.albedo = {0.93f, 0.95f, 0.98f};
     air.phaseG = 0.6f;
-    f.medium = MediumFrame{air, std::nullopt};
+    const Vec3 lensAt = godLensCentre(frame);
+    const Vec3 focal = lensAt - godSunDirection() * static_cast<float>(godLensFocusDistance());
+    f.medium = MediumFrame{air, cloudDeck(true, lensAt, 0.5f * kGodLensDiameter, focal, 6.f)};
 
     // The photon map follows the spot: wide while the lens is out of focus, tight and fine at the focus.
     const auto spot = static_cast<float>(godSpotDiameter(frame));
