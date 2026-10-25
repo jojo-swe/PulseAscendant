@@ -15,7 +15,9 @@
 //     same at one time reached by two seek paths;
 //   - the standard chapter pictures (20 %, the accent, 80 %; the accent twice, byte for byte).
 //
-// `scene_city_test --probe <show seconds> [detail]` prints a frame's camera and contents instead.
+// `scene_city_test --probe <show seconds> [detail]` prints a frame's camera and contents instead;
+// `scene_city_test --look <dir> [spp] [width height]` renders stills of every shot (tests/scene_look.hpp);
+// `scene_city_test --cpu` runs the checks without the GPU only.
 
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
@@ -25,13 +27,16 @@
 #include "modern/path_tracer.hpp"
 #include "modern/scene.hpp"
 #include "modern/scene_gpu.hpp"
+#include "modern/card_format.hpp"
 #include "modern/scenes/city.hpp"
+#include "modern/studio.hpp"
 #include "render/modern_stage.hpp"
 #include "render/renderer.hpp"
 #include "retro/city_plan.hpp"
 #include "show/timeline.hpp"
 
 #include "scene_fixture.hpp"
+#include "scene_look.hpp"
 #include "test_env.hpp"
 
 #include <algorithm>
@@ -109,10 +114,27 @@ void testCard() {
                 "static instances; built in %.2f s\n",
                 s.treeLights, s.lamps, s.beacons, s.buildings, static_cast<unsigned long long>(s.windows),
                 s.signLights, city.staticInstanceCount(), built);
+    std::printf("card: %u lamps lit in CITY NIGHT, the horizon %.1f km from METROPOLIS's crest\n",
+                s.nightLamps, modern::cityHorizonKm());
     CHECK(s.treeLights == modern::kCityCardLights);
     CHECK(s.treeLights == s.lamps + s.beacons);
+    CHECK(s.lamps == modern::kCityCardLamps);
     CHECK(s.treeLights <= 65536); // the light tree's capacity (rt::kMaxTreeLights)
-    CHECK(s.windows >= modern::kCityCardWindows);
+    CHECK(s.windows == modern::kCityCardWindows);
+    CHECK(city.staticInstanceCount() == modern::kCityCardInstances);
+    CHECK(s.nightLamps == modern::kCityNightLamps);
+    // The cards: §3's lines with these numbers.
+    CHECK(city.nowCard(show::Effect::City) ==
+          "2026 \u00B7 " + modern::groupThousands(modern::kCityCardWindows) + " WINDOWS \u00B7 " +
+              modern::groupThousands(modern::kCityCardLamps) + " LAMPS \u00B7 WET STREETS");
+    CHECK(city.nowCard(show::Effect::Ascent) == "2026 \u00B7 ASCENT \u00B7 VOLUMETRIC CLOUDS \u00B7 MOONLIGHT SHAFTS");
+    CHECK(city.nowCard(show::Effect::CityNight) ==
+          "2026 \u00B7 CITY NIGHT \u00B7 16,384 LIGHTS \u00B7 LIGHT TREE \u00B7 RAIN");
+    CHECK(city.nowCard(show::Effect::Metropolis) ==
+          "2026 \u00B7 METROPOLIS \u00B7 " + modern::groupThousands(modern::kCityCardInstances) +
+              " INSTANCES \u00B7 41,839 LIGHTS \u00B7 44 KM TO THE HORIZON");
+    for (show::Effect e : kChapters)
+        std::printf("card: %s\n", city.nowCard(e).c_str());
     const modern::SceneStatic& statics = city.staticScene();
     CHECK(statics.capacity.treeLights == s.treeLights && statics.capacity.spheres == s.treeLights);
     CHECK(statics.capacity.instances <= 200000); // the plan's per-scene TLAS capacity
@@ -137,10 +159,115 @@ void testCard() {
     const modern::City small(kTestDetail);
     CHECK(small.stats().treeLights < s.treeLights);
     std::printf(
-        "card: \"%s\"; at most %u instances in a frame (capacity %u); test detail: %u tree lights, %u "
+        "card: at most %u instances in a frame (capacity %u); test detail: %u tree lights, %u "
         "static instances\n",
-        modern::kCityCardLine, mostInstances, statics.capacity.instances, small.stats().treeLights,
+        mostInstances, statics.capacity.instances, small.stats().treeLights,
         small.staticInstanceCount());
+}
+
+// CITY NIGHT lights exactly kCityNightLamps street lamps (the card's number), the others dark; and ASCENT's
+// first frame is STUDIO NIGHT's last carried out of the Studio's window: the same eye within 0.5 m (it is
+// the same, up to the Studio's handheld millimetres), the same view within a degree, the same moon.
+void testNightLampsAndHandoff() {
+    const modern::City city({1.f});
+    const show::TimelineFrame night = show::sampleTimeline(secondsInto(show::Effect::CityNight, 12.0));
+    const modern::SceneFrame f = city.frame(night);
+    std::uint32_t lit = 0;
+    for (std::uint32_t k = 0; k < city.stats().lamps; ++k)
+        lit += f.treeLights[k].scale > 0.f;
+    std::printf("night: %u of %u lamps lit\n", lit, city.stats().lamps);
+    CHECK(lit == modern::kCityNightLamps);
+
+    const double cut = show::chapterStart(chapterOf(show::Effect::Ascent));
+    const show::TimelineFrame last = show::sampleTimeline(cut - 1.0 / 60);
+    CHECK(last.effect == show::Effect::StudioNight);
+    const modern::Camera studio = modern::studioCamera(last);
+    const modern::Camera first = modern::cityCamera(show::sampleTimeline(cut));
+    const Vec3 eye = modern::cityFromStudio(studio.eye);
+    const Vec3 view = modern::cityFromStudioDirection(modern::normalize(studio.target - studio.eye));
+    const float gap = modern::length(first.eye - eye);
+    const float turn = std::acos(std::clamp(modern::dot(view, modern::normalize(first.target - first.eye)), -1.f, 1.f));
+    std::printf("handoff: the Studio's eye at %.2f carried out (%.2f, %.2f, %.2f); ASCENT's first (%.2f, %.2f, "
+                "%.2f): %.3f m, %.2f degrees apart; fov %.1f and %.1f\n",
+                cut - 1.0 / 60, eye.x, eye.y, eye.z, first.eye.x, first.eye.y, first.eye.z, gap,
+                turn * 180.f / 3.14159265f, studio.fovYDegrees, first.fovYDegrees);
+    CHECK(gap < 0.5f);
+    CHECK(turn < 1.f * 3.14159265f / 180.f);
+    const Vec3 moon = modern::cityFromStudioDirection(modern::Studio::kMoonDirection);
+    CHECK(modern::length(modern::normalize(modern::cityEnvironment(show::Effect::Ascent).discDirection) -
+                         modern::normalize(moon)) < 1e-3f);
+}
+
+// METROPOLIS: no static thing (a building's corner, a lamp, a beacon) crosses more than 60 px of a 3840 x 2160
+// frame in 1/60 s anywhere in the chapter (cuts aside), so the export shutter's 8 slices draw streaks, not
+// rows of copies; and the camera keeps 5 m from every building.
+void testMetropolisTravel() {
+    const modern::City city({1.f});
+    const show::TimelineFrame first = head(show::Effect::Metropolis);
+    const modern::SceneFrame statics = city.frame(first);
+    std::vector<Vec3> points;
+    for (const modern::TreeLightFrame& l : statics.treeLights)
+        points.push_back(l.center);
+    struct Box {
+        Vec3 lo, hi;
+    };
+    std::vector<Box> boxes;
+    for (std::uint32_t k = 0; k < city.staticInstanceCount(); ++k) {
+        const modern::SceneInstance& in = statics.instances[k];
+        if (in.kind != evo::rt::GeometryKind::Triangles)
+            continue;
+        Vec3 lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
+        for (int c = 0; c < 8; ++c) {
+            const Vec3 corner{c & 1 ? 0.5f : -0.5f, c & 2 ? 0.5f : -0.5f, c & 4 ? 0.5f : -0.5f};
+            const Vec3 p = modern::transformPoint(in.transform, corner);
+            lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
+            hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+            points.push_back(p);
+        }
+        if (hi.x - lo.x < 500.f && hi.z - lo.z < 500.f)
+            boxes.push_back({lo, hi});
+    }
+    constexpr float kW = 3840.f, kH = 2160.f;
+    auto project = [&](const modern::Camera& c, const modern::CameraBasis& b, Vec3 p, float& x, float& y) {
+        const Vec3 d = p - c.eye;
+        const float z = modern::dot(d, b.forward);
+        if (z < 1.f)
+            return false;
+        const float t = std::tan(0.5f * c.fovYDegrees * 3.14159265f / 180.f);
+        x = (modern::dot(d, b.right) / (z * t * kW / kH) * 0.5f + 0.5f) * kW;
+        y = (0.5f - modern::dot(d, b.up) / (z * t) * 0.5f) * kH;
+        return x >= 0.f && x <= kW && y >= 0.f && y <= kH;
+    };
+    float worst = 0.f, worstAt = 0.f, nearest = 1e9f;
+    const double start = show::chapterStart(chapterOf(show::Effect::Metropolis));
+    for (int k = 0; double(k + 1) / 60.0 < first.chapterDuration; ++k) {
+        const show::TimelineFrame a = show::sampleTimeline(start + k / 60.0);
+        const show::TimelineFrame b = show::sampleTimeline(start + (k + 1) / 60.0);
+        const modern::Camera ca = modern::cityCamera(a), cb = modern::cityCamera(b);
+        for (const Box& box : boxes) {
+            const Vec3 e = ca.eye;
+            const float dx = std::max({box.lo.x - e.x, 0.f, e.x - box.hi.x});
+            const float dy = std::max({box.lo.y - e.y, 0.f, e.y - box.hi.y});
+            const float dz = std::max({box.lo.z - e.z, 0.f, e.z - box.hi.z});
+            nearest = std::min(nearest, std::sqrt(dx * dx + dy * dy + dz * dz));
+        }
+        if (ca.shot != cb.shot || k % 2 != 0)
+            continue;
+        const modern::CameraBasis ba = modern::cameraBasis(ca), bb = modern::cameraBasis(cb);
+        for (const Vec3& p : points) {
+            float x0, y0, x1, y1;
+            if (!project(ca, ba, p, x0, y0) || !project(cb, bb, p, x1, y1))
+                continue;
+            const float travel = std::hypot(x1 - x0, y1 - y0);
+            if (travel > worst)
+                worst = travel, worstAt = float(a.localSeconds);
+        }
+    }
+    std::printf("metropolis: at most %.1f px of travel per frame at 3840 x 2160 (at %.2f s); the camera at "
+                "least %.1f m from every building\n",
+                worst, worstAt, nearest);
+    CHECK(worst <= 60.f);
+    CHECK(nearest >= 5.f);
 }
 
 void testSweep() {
@@ -537,6 +664,36 @@ void probe(double seconds, float detail) {
     }
 }
 
+// --- Stills to look at
+// ---------------------------------------------------------------------------------------
+
+std::vector<evo::test::LookStill> lookStills() {
+    std::vector<evo::test::LookStill> stills;
+    auto add = [&](show::Effect e, double local, const char* name) {
+        stills.push_back({secondsInto(e, local), name});
+    };
+    // Show times per shot, by the chapters' marks (D, the accent and the bars from the beat grid).
+    const show::TimelineFrame vc = head(show::Effect::City);
+    add(show::Effect::City, 4.0, "vector_1_flight");
+    add(show::Effect::City, vc.accentSeconds + 2.0, "vector_2_puddle");
+    add(show::Effect::City, vc.chapterDuration - 1.0, "vector_3_rise");
+    const show::TimelineFrame as = head(show::Effect::Ascent);
+    add(show::Effect::Ascent, 0.0, "ascent_1_handoff");
+    add(show::Effect::Ascent, modern::cityBar(as, -1), "ascent_2_cloud");
+    add(show::Effect::Ascent, as.chapterDuration - 3.0, "ascent_3_level");
+    const show::TimelineFrame cn = head(show::Effect::CityNight);
+    add(show::Effect::CityNight, 3.0, "night_1_high");
+    add(show::Effect::CityNight, modern::cityBar(cn, -1), "night_2_puddle");
+    add(show::Effect::CityNight, cn.accentSeconds + 2.0, "night_3_walk");
+    add(show::Effect::CityNight, cn.chapterDuration - 2.0, "night_4_roofs");
+    const show::TimelineFrame me = head(show::Effect::Metropolis);
+    add(show::Effect::Metropolis, 6.0, "metro_1_avenue");
+    add(show::Effect::Metropolis, me.accentSeconds + 0.1, "metro_2_blink");
+    add(show::Effect::Metropolis, modern::cityBar(me, 7), "metro_3_pan");
+    return stills;
+}
+
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -546,6 +703,14 @@ int main(int argc, char** argv) {
             return 0;
         }
         evo::test::setEnv("EVO_SHADER_DIR", EVO_TEST_SHADER_DIR);
+        if (argc >= 3 && std::string(argv[1]) == "--look") {
+            auto ctx = gfx::Context::create({});
+            evo::test::renderLookStills(ctx, argv[2], argc >= 4 ? std::uint32_t(std::stoul(argv[3])) : 16u,
+                                        argc >= 6 ? std::uint32_t(std::stoul(argv[4])) : 480u,
+                                        argc >= 6 ? std::uint32_t(std::stoul(argv[5])) : 270u, lookStills(),
+                                        3);
+            return 0;
+        }
         const auto start = std::chrono::steady_clock::now();
         auto stamp = [&](const char* what) {
             std::printf("[%6.1f s] %s\n",
@@ -556,9 +721,16 @@ int main(int argc, char** argv) {
         stamp("card");
         testFlightMatches1993();
         testTreeLightsActive();
+        testNightLampsAndHandoff();
+        testMetropolisTravel();
+        stamp("metropolis");
         stamp("flight, tree");
         testSweep();
         stamp("sweep");
+        if (argc >= 2 && std::string(argv[1]) == "--cpu") {
+            std::printf("scene_city_test --cpu: %d checks passed\n", checksPassed);
+            return 0;
+        }
         {
             auto ctx = gfx::Context::create({.validation = true, .syncValidation = true});
             if (!ctx.validationEnabled())

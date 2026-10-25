@@ -15,6 +15,9 @@
 
 namespace evo::modern {
 
+// modern/studio.hpp's (whose lens constants would clash with this file's): ASCENT starts from its camera.
+Camera studioCamera(const show::TimelineFrame& frame);
+
 namespace {
 
 using show::Effect;
@@ -345,7 +348,9 @@ std::vector<rt::Material> buildMaterials(const Weather& w) {
     m[kPaving].coatRoughness = 0.12f;
 
     // Facades: wall, its roughness, the glass, a lit room's radiance, the floor height.
-    const Vec3 warmRoom{1.5f, 1.4f, 1.3f}, officeRoom{1.3f, 1.35f, 1.4f};
+    // A lit room's radiance (cityRoomTint warms or cools it per room): warm, and well under the lamps, so a
+    // lit window reads as a room and not as a white card.
+    const Vec3 warmRoom{0.95f, 0.88f, 0.78f}, officeRoom{0.62f, 0.64f, 0.62f};
     m[kBrick] = facade(rt::Pattern::CityPunched, {0.24f, 0.11f, 0.07f}, 0.85f, {0.02f, 0.022f, 0.025f},
                        warmRoom, 3.3f);
     m[kStone] = facade(rt::Pattern::CityPunched, {0.34f, 0.31f, 0.26f}, 0.8f, {0.02f, 0.022f, 0.025f},
@@ -496,6 +501,66 @@ float cityLampScale(bool switching, float seconds, float start, float wave, std:
 }
 
 // --- Building the city ------------------------------------------------------------------------------------
+
+namespace {
+
+// shaders/rt/city_patterns.glsl's cityBuildingSeed, cityUnit and cityDraw.
+std::uint32_t buildingSeed(const rt::Mat34& t) {
+    const auto b = [&](int row) { return std::bit_cast<std::uint32_t>(t.m[row][3]); };
+    return rt::pcgHash(b(0) ^ rt::pcgHash(b(1) ^ rt::pcgHash(b(2) + 0x632BE5ABu)));
+}
+
+float shaderDraw(std::uint32_t h, std::uint32_t k) {
+    return unitHash(rt::pcgHash(h + k * 0x9E3779B9u));
+}
+
+} // namespace
+
+std::uint64_t cityWindows(const rt::Material& m, const rt::Mat34& t) {
+    const auto style = static_cast<rt::Pattern>(m.pattern);
+    if (style != rt::Pattern::CityPunched && style != rt::Pattern::CityCurtain &&
+        style != rt::Pattern::CityBands && style != rt::Pattern::CityRound)
+        return 0;
+    constexpr float kShop = 4.6f; // kCityShopFloor
+    const float sx = length(Vec3{t.m[0][0], t.m[1][0], t.m[2][0]});
+    const float sy = length(Vec3{t.m[0][1], t.m[1][1], t.m[2][1]});
+    const float sz = length(Vec3{t.m[0][2], t.m[1][2], t.m[2][2]});
+    const float y0 = t.m[1][3] - 0.5f * sy, y1 = t.m[1][3] + 0.5f * sy;
+    const std::uint32_t building = buildingSeed(t);
+    const float floorHeight = std::max(m.patternScale, 2.5f);
+    const bool punched = style == rt::Pattern::CityPunched;
+    const float bayTarget =
+        floorHeight * (punched ? 0.95f + 0.5f * shaderDraw(building, 3) : 0.55f + 0.35f * shaderDraw(building, 3));
+    // The window's span up its cell (sill, top), by style.
+    float sill = 0.22f, top = 0.22f + 0.68f;
+    if (punched)
+        sill = 0.28f, top = 0.28f + 0.54f;
+    else if (style == rt::Pattern::CityBands)
+        sill = 0.4f, top = 0.4f + 2.f * (0.2f + 0.05f * shaderDraw(building, 5));
+    // The floors whose window lies wholly on this wall, and the shop's.
+    std::uint64_t floors = 0;
+    for (int storey = 1;; ++storey) {
+        const float base = kShop + float(storey - 1) * floorHeight;
+        if (base + sill * floorHeight < y0)
+            continue;
+        if (base + top * floorHeight > y1)
+            break;
+        ++floors;
+    }
+    const bool shop = y0 <= kShop * 0.1f && y1 >= kShop * 0.82f;
+    std::uint64_t windows = 0;
+    const auto wall = [&](float width) {
+        const auto bays = std::uint64_t(std::max(1.f, std::floor(width / bayTarget + 0.5f)));
+        const auto shopBays = std::uint64_t(std::max(1.f, std::floor(width / 5.5f + 0.5f)));
+        windows += bays * floors + (shop ? shopBays : 0);
+    };
+    if (style == rt::Pattern::CityRound) {
+        wall(kPi * sx);
+    } else {
+        wall(sz), wall(sz), wall(sx), wall(sx);
+    }
+    return windows;
+}
 
 void City::buildCity(SceneDetail detail) {
     std::vector<SceneInstance>& out = instances_;
@@ -832,11 +897,18 @@ std::vector<Sign> citySigns() {
             z += 7.f + 9.f * unitHash(h * 11u);
         }
     };
-    // CITY NIGHT's street: few signs, sodium and white; VECTOR CITY's: the 1993 city's gold, ember, white and
-    // one red.
+    // CITY NIGHT's street: few signs, sodium and white; VECTOR CITY's: the bright ends of the 1993 city's
+    // Gouraud ramps made neon (its amber as sodium gold, its pale rose as white) and one red.
     street(kNightStreetX - kKerb - 1.5f, kNightStreetX + kKerb + 1.5f, 400.f, 545.f, 0x51A1u, 14,
            {0, 1, 2, 7});
-    street(-kKerb - 1.5f, kKerb + 1.5f, 172.f, 330.f, 0x51B7u, 14, {5, 4, 1, 3, 5});
+    const std::size_t vectorFirst = signs.size();
+    street(-kKerb - 1.5f, kKerb + 1.5f, 172.f, 330.f, 0x51B7u, 14, {5, 2, 6, 5});
+    // VECTOR CITY's one red: the first blade on the left past the puddle, which the puddle mirrors.
+    for (std::size_t k = vectorFirst; k < signs.size(); ++k)
+        if (signs[k].blade && signs[k].facing.x > 0.f && signs[k].centre.z > 185.f) {
+            signs[k].material = kSign0 + 3;
+            break;
+        }
     // The red sign at the far end of CITY NIGHT's street, a blade read from down the street.
     Sign far;
     far.material = kSignFar;
@@ -886,6 +958,26 @@ City::City(SceneDetail detail) : detail_(detail) {
     }
     stats_.signLights = static_cast<std::uint32_t>(lights_.size());
 
+    // CITY NIGHT's lamps: the kCityNightLamps live ones nearest its street, the district's edge frayed by each
+    // lamp's own draw.
+    {
+        const Vec3 centre{kNightStreetX, 0.f, 470.f};
+        std::vector<std::pair<float, std::uint32_t>> order;
+        for (std::uint32_t k = 0; k < stats_.lamps; ++k) {
+            if (cityLampScale(false, 0.f, 0.f, 0.f, lampHash_[k]) <= 0.f)
+                continue; // a dead lamp
+            const rt::SphereRecord& lamp = static_.spheres[k];
+            const float d = std::hypot(lamp.center[0] - centre.x, lamp.center[2] - centre.z);
+            order.push_back({d * (0.7f + 0.6f * draw(lampHash_[k], 5)), k});
+        }
+        const std::size_t lit = std::min<std::size_t>(kCityNightLamps, order.size());
+        std::partial_sort(order.begin(), order.begin() + std::ptrdiff_t(lit), order.end());
+        nightLit_.assign(stats_.lamps, 0);
+        for (std::size_t k = 0; k < lit; ++k)
+            nightLit_[order[k].second] = 1;
+        stats_.nightLamps = static_cast<std::uint32_t>(lit);
+    }
+
     // The light tree: one sphere instance holding every lamp and beacon, the frame's light 0.
     const auto n = static_cast<std::uint32_t>(static_.spheres.size());
     SceneInstance tree{0, kLampGlass, identity()};
@@ -902,24 +994,11 @@ City::City(SceneDetail detail) : detail_(detail) {
     entry.gate = rt::kNoLight;
     lights_.insert(lights_.begin(), entry);
 
-    // Window count for the card: every face's bays times its floors (the facade pattern's own fitting).
+    // Window count for the card: the facade pattern's own cell grid on every wall of every building
+    // (cityWindows mirrors city_patterns.glsl's bays and floors).
     std::uint64_t windows = 0;
-    for (const SceneInstance& in : instances_) {
-        const rt::Material& m = static_.materials[in.material];
-        const auto p = static_cast<rt::Pattern>(m.pattern);
-        if (p != rt::Pattern::CityPunched && p != rt::Pattern::CityCurtain && p != rt::Pattern::CityBands &&
-            p != rt::Pattern::CityRound)
-            continue;
-        const Vec3 sx{in.transform.m[0][0], in.transform.m[1][0], in.transform.m[2][0]};
-        const Vec3 sy{in.transform.m[0][1], in.transform.m[1][1], in.transform.m[2][1]};
-        const Vec3 sz{in.transform.m[0][2], in.transform.m[1][2], in.transform.m[2][2]};
-        const float w = length(sx), h = length(sy), d = length(sz);
-        const float y1 = in.transform.m[1][3] + 0.5f * h;
-        const float floors = std::max(0.f, std::floor((y1 - 4.6f) / m.patternScale)) + 1.f;
-        const float perimeter = p == rt::Pattern::CityRound ? kPi * w : 2.f * (w + d);
-        const float bay = m.patternScale * (p == rt::Pattern::CityPunched ? 1.2f : 0.72f);
-        windows += static_cast<std::uint64_t>(std::max(1.f, std::floor(perimeter / bay)) * floors);
-    }
+    for (const SceneInstance& in : instances_)
+        windows += cityWindows(static_.materials[in.material], in.transform);
     stats_.windows = windows;
 
     // Capacities: the static city, the busiest chapter's traffic.
@@ -1106,6 +1185,22 @@ void City::addTraffic(SceneFrame& f, Effect effect, float seconds) const {
 
 // --- Cameras -----------------------------------------------------------------------------------------------
 
+float metropolisAvenueZ(float t, float d) {
+    // At kMetropolisSpeed, eased in over the first second, reaching the crest's start (z 695) on D, then
+    // slowing to 12 m/s over the next 3.4 s.
+    const float z0 = 695.f - kMetropolisSpeed * (d - 0.5f);
+    const float ease = 1.f;
+    if (t < ease)
+        return z0 + kMetropolisSpeed * 0.5f * t * t / ease;
+    if (t < d)
+        return z0 + kMetropolisSpeed * (t - 0.5f * ease);
+    const float slow = 3.4f, u = std::min(t - d, slow);
+    const float v1 = 12.f;
+    const float z = z0 + kMetropolisSpeed * (d - 0.5f * ease) + kMetropolisSpeed * u -
+                    (kMetropolisSpeed - v1) * u * u / (2.f * slow);
+    return z + v1 * std::max(0.f, t - d - slow);
+}
+
 namespace {
 
 struct Key {
@@ -1168,6 +1263,16 @@ constexpr float kAscentCloudTop = 380.f, kAscentCloudBase = 255.f;
 constexpr Vec3 kCloudLo{200.f, kAscentCloudBase, 250.f}, kCloudHi{1400.f, kAscentCloudTop + 30.f, 1450.f};
 
 } // namespace
+
+Vec3 cityFromStudio(Vec3 p) {
+    constexpr float kStudioWindowX = -1.25f, kStudioWindowY = 1.5f, kStudioOutside = -1.05f;
+    return {kRoomWindowX - (p.x - kStudioWindowX), kRoomWindowY + (p.y - kStudioWindowY),
+            kAscentWindowZ + (kStudioOutside - p.z)};
+}
+
+Vec3 cityFromStudioDirection(Vec3 d) {
+    return {-d.x, d.y, -d.z};
+}
 
 float cityBar(const show::TimelineFrame& frame, int bars) {
     const show::BeatGridView grid = show::beatGrid(frame.track);
@@ -1272,8 +1377,10 @@ MediumFrame cityMedium(const show::TimelineFrame& frame) {
         const Vec3 size = kCloudHi - kCloudLo;
         const float wind = 0.004f * local;
         const Vec3 climb{kRoomWindowX + 50.f, 0.f, kAscentWindowZ + 80.f}; // where the camera bursts out
-        grid.params = {0.5f,
-                       0.014f,
+        // A deck about one optical depth thick on average (three where it billows): a floor the city glows
+        // through in its gaps, with silver edges towards the moon.
+        grid.params = {0.58f,
+                       0.06f,
                        0.8f * progress * (0.55f + 0.45f * frame.kick),
                        0.f,
                        wind,
@@ -1342,14 +1449,20 @@ Camera cityCamera(const show::TimelineFrame& frame) {
         }
         // Cut on the accent: down on the main street, 24 mm, a hand's breadth over a puddle that mirrors the
         // signs, pushing in; from four bars after D it rises back to the 1993 altitude for the hand-off.
+        // The push and the rise are separate moves (one spline through both would dip the camera under the
+        // street before the rise).
         const float rise = cityBar(frame, 4);
-        const std::array<Key, 4> keys = {{
-            {accent, {-4.5f, 0.28f, 168.f}, {-2.f, 2.2f, 210.f}},
-            {rise, {-4.4f, 0.32f, 175.f}, {-1.8f, 2.6f, 216.f}},
+        const Key street0{accent, {-4.5f, 0.28f, 168.f}, {-2.f, 2.2f, 210.f}};
+        const Key street1{rise, {-4.4f, 0.32f, 175.f}, {-1.8f, 2.6f, 216.f}};
+        const std::array<Key, 3> keys = {{
+            street1,
             {rise + 0.6f * (duration - rise), {-2.f, 26.f, 186.f}, {4.f, 10.f, 236.f}},
             {duration + 0.3f, {2.f, 70.f, 200.f}, {14.f, 40.f, 262.f}},
         }};
-        const auto [eye, target] = alongTimed(keys, local);
+        const float push = smooth((local - accent) / std::max(rise - accent, 0.1f));
+        const auto [eye, target] = local < rise ? std::pair{lerp(street0.eye, street1.eye, push),
+                                                             lerp(street0.target, street1.target, push)}
+                                                : alongTimed(keys, local);
         Camera c = makeCamera(eye, target, kLens24, shot);
         // The puddle sharp, the street beyond soft; the focus pulls out over the bar the rise starts on.
         const float pull = smooth((local - rise) / std::max(cityBar(frame, 5) - rise, 0.5f));
@@ -1358,14 +1471,24 @@ Camera cityCamera(const show::TimelineFrame& frame) {
         return c;
     }
     case Effect::Ascent: {
-        // One crane, 35 mm: out of the window, over the roofs, up through the cloud deck to burst out on D,
-        // and level on the accent with the city a floor of light below.
+        // One crane, 35 mm, on from STUDIO NIGHT's last frame (the Studio's camera just out of its window,
+        // carried to this room's window: the same eye, the same view, the same moon): over the roofs, up
+        // through the cloud deck to burst out on D, and level on the accent with the city a floor of light
+        // below.
         const float W = kRoomWindowX, Y = kRoomWindowY, Z = kAscentWindowZ;
         const float below = cityBar(frame, -2);
-        const std::array<Key, 7> keys = {{
-            {0.f, {W + 0.15f, Y - 0.05f, Z - 2.4f}, {W, Y + 0.1f, Z + 10.f}},
-            {3.4f, {W, Y, Z - 0.5f}, {W, Y - 0.6f, Z + 12.f}},
-            {6.5f, {W - 0.5f, Y + 5.f, Z + 9.f}, {W + 30.f, Y - 12.f, Z + 60.f}},
+        const double cut = frame.showSeconds - frame.localSeconds;
+        auto studio = [&](double before) {
+            const Camera c = studioCamera(show::sampleTimeline(cut - before));
+            const Vec3 eye = cityFromStudio(c.eye);
+            return Key{static_cast<float>(-before), eye,
+                       eye + cityFromStudioDirection(normalize(c.target - c.eye)) * 20.f};
+        };
+        const std::array<Key, 8> keys = {{
+            studio(0.6),
+            studio(1e-4),
+            {3.4f, {W - 0.2f, Y + 2.6f, Z + 9.f}, {W + 8.f, Y - 5.f, Z + 40.f}},
+            {6.5f, {W + 2.f, Y + 9.f, Z + 20.f}, {W + 30.f, Y - 12.f, Z + 70.f}},
             {below, {W + 20.f, 150.f, Z + 40.f}, {kDowntownX - 300.f, 40.f, kDowntownZ - 300.f}},
             {d, {W + 50.f, kAscentCloudTop + 12.f, Z + 80.f}, {W + 120.f, kAscentCloudTop + 40.f, Z + 180.f}},
             {accent,
@@ -1414,38 +1537,26 @@ Camera cityCamera(const show::TimelineFrame& frame) {
     }
     default: { // METROPOLIS
         if (shot == 0) {
-            // Along the elevated avenue at 200 km/h, 24 mm; it climbs from bar 6 and crests on D, the whole
-            // city below; the camera slows over the crest and looks down on it as the windows flip on the
-            // accent.
-            constexpr float kSpeed = 55.f;
-            const float z0 = 695.f - kSpeed * d; // the crest's start on D
-            auto avenueZ = [&](float t) {
-                // Eased in over the first second, at speed to D, then slowing to 12 m/s over two bars.
-                const float ease = 1.f;
-                if (t < ease)
-                    return z0 + kSpeed * 0.5f * t * t / ease;
-                if (t < d)
-                    return z0 + kSpeed * (t - 0.5f * ease);
-                const float slow = 3.4f, u = std::min(t - d, slow);
-                const float v1 = 12.f;
-                const float z =
-                    z0 + kSpeed * (d - 0.5f * ease) + kSpeed * u - (kSpeed - v1) * u * u / (2.f * slow);
-                return z + v1 * std::max(0.f, t - d - slow);
-            };
-            const float z = avenueZ(local);
-            const float lift = smooth((local - d) / 6.f) * 40.f;
-            const Vec3 eye{kAvenueX - 2.5f, cityAvenueHeight(z) + 5.5f + lift, z};
-            const float look = smooth((local - d + 1.f) / 4.f);
-            const float ahead = 60.f + 240.f * look;
-            const Vec3 target{kAvenueX - 1.f + 40.f * look, cityAvenueHeight(z + 60.f) + 4.f - 30.f * look,
-                              z + ahead};
-            return makeCamera(eye, target, kLens24 + (kLens35 - kLens24) * look, shot);
+            // Over the elevated avenue at 200 km/h, 24 mm, high enough that nothing passes close (no object
+            // crosses more than 60 px of a 4K frame per frame: the shutter's slices stay a streak): the avenue
+            // a river of light leading to the downtown, the city to the horizon. It climbs from bar 6 and
+            // crests on D, the whole city below; the camera slows over the crest, rises and looks out over
+            // it as every window switches on at the accent.
+            const float z = metropolisAvenueZ(local, d);
+            const float lift = kMetropolisRise * smooth((local - d) / 6.f);
+            const Vec3 eye{kAvenueX - kMetropolisSide, cityAvenueHeight(z) + kMetropolisHeight + lift, z};
+            const float look = smooth((local - d + 1.f) / 5.f);
+            const Vec3 ahead{kAvenueX, cityAvenueHeight(z + 380.f) + 8.f, z + 380.f};
+            const Vec3 over{kDowntownX + 150.f, 70.f, kDowntownZ + 300.f};
+            return makeCamera(eye, lerp(ahead, over, look), kLens24, shot);
         }
-        // A slow 85 mm pan across the downtown's skyline, rising towards the stars for the hand-off.
+        // A slow 85 mm pan across the downtown's skyline from far off at the towers' height (their lit crowns
+        // against the night, the city's lights below), tilting up past their tops to the stars for the
+        // hand-off.
         const float s = smooth(into / length);
-        const Vec3 eye{kDowntownX - 760.f, 180.f + 140.f * s, kDowntownZ - 380.f + 60.f * s};
-        const Vec3 target{kDowntownX - 60.f + 120.f * s, 140.f + 260.f * s * s,
-                          kDowntownZ - 220.f + 520.f * s};
+        const Vec3 eye{kDowntownX - 1250.f, 175.f + 60.f * s, kDowntownZ - 1050.f + 120.f * s};
+        const Vec3 target{kDowntownX - 260.f + 520.f * s, 150.f + 420.f * s * s * s,
+                          kDowntownZ - 60.f + 260.f * s};
         return makeCamera(eye, target, kLens85, shot);
     }
     }
@@ -1455,7 +1566,7 @@ float cityExposureEV(const show::TimelineFrame& frame) {
     const std::uint32_t shot = cityCamera(frame).shot;
     switch (frame.effect) {
     case Effect::City:
-        return shot == 0 ? 0.3f : -0.3f; // the street shot looks into the signs and their reflections
+        return shot == 0 ? 0.7f : -0.3f; // the street shot looks into the signs and their reflections
     case Effect::CityNight:
         return shot == 1 ? 0.f : 0.6f;
     default:
@@ -1466,7 +1577,8 @@ float cityExposureEV(const show::TimelineFrame& frame) {
 EnvironmentDesc cityEnvironment(Effect) {
     // Night: a high moon over the downtown, the city's glow along the horizon.
     EnvironmentDesc sky = environmentDefaults(EnvironmentKind::NightSky);
-    sky.discDirection = normalize(Vec3{0.25f, 0.62f, 0.74f});
+    // The Studio's moon (Studio::kMoonDirection) seen out of the room's window, which faces +z here (-z there).
+    sky.discDirection = normalize(Vec3{0.2104f, 0.6913f, 0.6913f});
     sky.discAngularRadius = 0.6f * kPi / 180.f;
     sky.discRadiance = {38.f, 42.f, 48.f}; // moonlight: a faint fill under the street lights
     sky.horizon = {0.04f, 0.031f, 0.027f};
@@ -1508,6 +1620,8 @@ SceneFrame City::frame(const show::TimelineFrame& frame) const {
             l.scale = cityLampScale(effect == Effect::City, local, wave, lampWave_[k], lampHash_[k]);
             if (effect == Effect::CityNight && draw(lampHash_[k], 4) < 0.04f)
                 l.scale *= 1.f - 0.75f * frame.snare; // a tired lamp flickers on the snare
+            if (effect == Effect::CityNight && nightLit_[k] == 0)
+                l.scale = 0.f; // outside the lit district
         } else {
             // A beacon: a short red flash about once a second, each tower on its own clock; together on the
             // accent in ASCENT, and on the beat in METROPOLIS after its accent.
@@ -1522,6 +1636,10 @@ SceneFrame City::frame(const show::TimelineFrame& frame) const {
     }
 
     addTraffic(f, effect, local);
+    // Paths that find an emitter by chance after a rough bounce (a lamp mirrored in a puddle, a lit window or a
+    // light trail across the street, none of them sampled) are held near a night wall's level instead of
+    // firing as speckles: the lamps' light is next-event estimation's job.
+    f.clampIndirect = 0.25f;
     f.splats = splatsFor(frame);
     f.medium = cityMedium(frame);
     if (effect == Effect::Ascent)
@@ -1532,20 +1650,26 @@ SceneFrame City::frame(const show::TimelineFrame& frame) const {
 // --- The epoch cards
 // ----------------------------------------------------------------------------------------------
 
+double cityHorizonKm() {
+    return std::sqrt(2.0 * kEarthRadius * double(kAvenueCrest + kMetropolisEye)) / 1000.0;
+}
+
 std::string City::nowCard(show::Effect effect) const {
-    // The full city's (kCityCardLights and kCityCardWindows are pinned against the City at detail 1).
-    const std::string lights = groupThousands(kCityCardLights) + " LIGHTS";
-    const std::string windows = groupThousands(kCityCardWindows / 1'000'000) + " MILLION WINDOWS";
+    // The full city's numbers (each pinned against the City at detail 1 by the scene test).
     const std::string year = "2026";
     switch (effect) {
     case show::Effect::City:
-        return year + kCardDot + windows + kCardDot + lights + kCardDot + "WET STREETS";
+        return year + kCardDot + groupThousands(kCityCardWindows) + " WINDOWS" + kCardDot +
+               groupThousands(kCityCardLamps) + " LAMPS" + kCardDot + "WET STREETS";
     case show::Effect::Ascent:
         return year + kCardDot + "ASCENT" + kCardDot + "VOLUMETRIC CLOUDS" + kCardDot + "MOONLIGHT SHAFTS";
     case show::Effect::CityNight:
-        return year + kCardDot + "CITY NIGHT" + kCardDot + lights + kCardDot + "LIGHT TREE" + kCardDot + "RAIN";
+        return year + kCardDot + "CITY NIGHT" + kCardDot + groupThousands(kCityNightLamps) + " LIGHTS" +
+               kCardDot + "LIGHT TREE" + kCardDot + "RAIN";
     case show::Effect::Metropolis:
-        return year + kCardDot + "METROPOLIS" + kCardDot + lights + kCardDot + windows + kCardDot + "PATH TRACED";
+        return year + kCardDot + "METROPOLIS" + kCardDot + groupThousands(kCityCardInstances) + " INSTANCES" +
+               kCardDot + groupThousands(kCityCardLights) + " LIGHTS" + kCardDot +
+               groupThousands(static_cast<std::uint64_t>(cityHorizonKm())) + " KM TO THE HORIZON";
     default:
         return {};
     }
