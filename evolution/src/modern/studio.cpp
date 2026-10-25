@@ -57,10 +57,9 @@ constexpr float kLampEmitterSize = 0.08f, kLampRecess = 0.035f;
 // The moon (see Studio::kMoonDirection): an 18 cm square 4 m out, about 2.6 degrees across.
 constexpr float kMoonDistance = 4.f, kMoonSize = 0.18f;
 
-// Indirect contributions above this luminance are clamped (TraceSettings::clampIndirect). Until the path
-// tracer clamps only after a rough vertex (Task 6), this also dims light seen through chains of delta events
-// (the lamp through the glass sphere); at the Studio's exposures (EV 0.3 to 2) step 4's 2 left lamp-lit
-// surfaces sparkling at export spp (no a-trous from 16 spp), while 0.5 barely moves their mean (0.143 ->
+// Contributions after a rough vertex above this luminance are clamped (TraceSettings::clampIndirect; the
+// integrator's own default is 16, the Studio keeps the tighter value its look was tuned with); at the
+// Studio's exposures (EV 0.3 to 2) step 4's 2 left lamp-lit surfaces sparkling at export spp (no a-trous from 16 spp), while 0.5 barely moves their mean (0.143 ->
 // 0.142 in RETURN's close-up).
 constexpr float kClampIndirect = 0.5f;
 

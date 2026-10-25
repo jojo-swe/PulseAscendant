@@ -452,6 +452,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
         u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
         u.clampIndirect = settings.clampIndirect;
+        u.regularizeRoughness = settings.regularizeRoughness;
         u.seconds = settings.seconds;
         for (const rt::RectLight& light : frame.lights)
             u.lightWeightSum += std::max(light.selectWeight, 0.f);

@@ -9,6 +9,8 @@
 #include "modern/scene.hpp"
 #include "rt/gpu_types.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <numbers>
 #include <vector>
 
@@ -383,6 +385,196 @@ inline TestScene lookScene() {
     in.push_back({kSphereMesh, 7, place({-0.45f, 0.2f, 0.5f}, kY, 0, {0.2f, 0.2f, 0.2f})});
     in.erase(in.begin() + 3); // no front wall: the camera stands outside the open box
     s.frame.camera = {{0, 1, 3.4f}, {0, 0.95f, 0}, {0, 1, 0}, 38.f};
+    return s;
+}
+
+// --- Task 6 of step 5 (integrator_test): regularisation, the clamp, camera-only emitters, dispersion
+// ---------
+
+// A quad(1, 1) placed at `centre`, facing `normal` (its +z), `width` along normal x up's direction and
+// `height` along the rest (up: +y, or +z for a normal along y). Never mirrors.
+inline rt::Mat34 facing(Vec3 centre, Vec3 normal, float width, float height) {
+    const Vec3 n = modern::normalize(normal);
+    const Vec3 up = std::abs(n.y) > 0.99f ? kZ : kY;
+    const Vec3 x = modern::normalize(modern::cross(up, n));
+    const Vec3 y = modern::cross(n, x);
+    return {{{x.x * width, y.x * height, n.x, centre.x},
+             {x.y * width, y.y * height, n.y, centre.y},
+             {x.z * width, y.z * height, n.z, centre.z}}};
+}
+
+// A black box around everything (inside it nothing reflects or emits; the sky never shows).
+inline modern::SceneInstance blackEnclosure(std::uint32_t blackMaterial, Vec3 centre, Vec3 size) {
+    return {kCubeMesh, blackMaterial, place(centre, kY, 0, size)};
+}
+
+// A triangular glass prism with flat faces: an equilateral cross-section of side 1 in the xz plane, centred
+// on the origin, its base face in the plane x = -1 / (2 sqrt 3) and its apex at +x, extruded along y from
+// -height / 2 to height / 2. Counter-clockwise from outside.
+inline rt::Mesh prismMesh(float height) {
+    const float b = 0.5f / std::sqrt(3.f), apex = 1.f / std::sqrt(3.f), h = 0.5f * height;
+    const Vec3 a0{apex, -h, 0}, b0{-b, -h, 0.5f}, c0{-b, -h, -0.5f};
+    const Vec3 a1{apex, h, 0}, b1{-b, h, 0.5f}, c1{-b, h, -0.5f};
+    rt::Mesh mesh;
+    // One flat polygon (3 or 4 corners in order around it), wound so that its normal points away from the
+    // prism's axis.
+    auto face = [&](std::vector<Vec3> corners) {
+        Vec3 n = modern::normalize(modern::cross(corners[1] - corners[0], corners[2] - corners[0]));
+        Vec3 mid{0, 0, 0};
+        for (const Vec3& c : corners)
+            mid = mid + c / float(corners.size());
+        if (modern::dot(n, Vec3{mid.x, mid.y, mid.z}) < 0) {
+            std::reverse(corners.begin(), corners.end());
+            n = -n;
+        }
+        const auto first = static_cast<std::uint32_t>(mesh.vertices.size());
+        for (const Vec3& c : corners)
+            mesh.vertices.push_back({{c.x, c.y, c.z}, {n.x, n.y, n.z}, {0, 0}});
+        for (std::uint32_t i = 1; i + 1 < corners.size(); ++i)
+            mesh.indices.insert(mesh.indices.end(), {first, first + i, first + i + 1});
+    };
+    face({a0, b0, c0});
+    face({a1, b1, c1});
+    face({a0, a1, b1, b0});
+    face({b0, b1, c1, c0});
+    face({c0, c1, a1, a0});
+    return mesh;
+}
+
+// (a) The mirror caustic box: a 0.8 diffuse floor under a soft 2 x 2 ceiling panel (emission 1.5) and a small
+// lamp (0.1 x 0.1, emission kCausticLamp) 1.5 m above it, both lights facing down, and a vertical 0.95
+// mirror at x = 0.8 facing -x, all in a black box. The floor in front of the mirror is also lit by the
+// lamp's mirror image: camera -> floor -> mirror -> lamp, a caustic path NEE cannot reach through a smooth
+// mirror, found by BSDF sampling alone as rare samples of 0.76 * kCausticLamp.
+inline constexpr float kCausticLamp = 200.f;
+
+inline TestScene causticBox() {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    s.statics.materials = {lambert({0.8f, 0.8f, 0.8f}), lambert({0, 0, 0}),
+                           emitter({kCausticLamp, kCausticLamp, kCausticLamp}),
+                           metal({0.95f, 0.95f, 0.95f}, 0), emitter({1.5f, 1.5f, 1.5f})};
+    const rt::Mat34 lamp = facing({0, 1.5f, 0}, {0, -1, 0}, 0.1f, 0.1f);
+    const rt::Mat34 panel = facing({-0.5f, 2.4f, 0}, {0, -1, 0}, 2, 2);
+    s.frame.instances = {blackEnclosure(1, {0, 1.5f, 0}, {8, 4, 8}),
+                         {kQuadMesh, 0, facing({0, 0, 0}, {0, 1, 0}, 4, 4)},
+                         {kQuadMesh, 3, facing({0.8f, 0.75f, 0}, {-1, 0, 0}, 3, 1.5f)},
+                         {kQuadMesh, 2, lamp, 0},
+                         {kQuadMesh, 4, panel, 1}};
+    s.frame.lights = {modern::rectLightForQuad(lamp, 1, 1, rt::LightKind::Emitter,
+                                               {kCausticLamp, kCausticLamp, kCausticLamp}, 1.f),
+                      modern::rectLightForQuad(panel, 1, 1, rt::LightKind::Emitter, {1.5f, 1.5f, 1.5f}, 1.f)};
+    s.frame.camera = {{-0.6f, 2.f, 1.6f}, {0.2f, 0, 0}, {0, 1, 0}, 50.f};
+    return s;
+}
+
+// (b) A chrome sphere (0.95, smooth) of radius 1 at z = -4 in front of the camera, and behind the camera an
+// 8 x 8 lamp of emission `lamp` facing it (no light: only what the sphere reflects reaches it), in a black
+// box. The sphere's centre pixel sees the lamp after one delta event.
+inline TestScene chromeScene(float lamp) {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    s.statics.materials = {lambert({0, 0, 0}), metal({0.95f, 0.95f, 0.95f}, 0), emitter({lamp, lamp, lamp})};
+    s.frame.instances = {blackEnclosure(0, {0, 0, -1}, {12, 12, 12}),
+                         {kSphereMesh, 1, place({0, 0, -4}, kY, 0, {1, 1, 1})},
+                         {kQuadMesh, 2, facing({0, 0, 1.5f}, {0, 0, -1}, 8, 8)}};
+    s.frame.camera = {{0, 0, 0}, {0, 0, -1}, {0, 1, 0}, 30.f};
+    return s;
+}
+
+// (b) A clear glass slab (IOR 1.5, 0.3 thick) at z = -2 and behind it a 6 x 6 lamp of emission `lamp`
+// facing the camera: the centre pixel sees the lamp after two delta events.
+inline TestScene slabLampScene(float lamp) {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    s.statics.materials = {lambert({0, 0, 0}), glass(1.5f, 0), emitter({lamp, lamp, lamp})};
+    s.frame.instances = {blackEnclosure(0, {0, 0, -2}, {12, 12, 12}),
+                         {kCubeMesh, 1, place({0, 0, -2}, kY, 0, {3, 3, 0.3f})},
+                         {kQuadMesh, 2, facing({0, 0, -4}, {0, 0, 1}, 6, 6)}};
+    s.frame.camera = {{0, 0, 0}, {0, 0, -1}, {0, 1, 0}, 30.f};
+    return s;
+}
+
+// (c) An LED: a 0.4 x 0.4 quad of camera-only emission `led` (no light) at (0, 1, -4) facing the camera,
+// standing over a perfect mirror floor (metal 1, smooth), beside a diffuse desk block lit by a lamp (a
+// light) above and in front of it, in a black box. The camera sees the LED directly and its image in the
+// floor.
+inline const Vec3 kLedCentre{0, 1, -4}, kDeskFront{1.3f, 0.5f, -3.5f};
+inline constexpr float kLedSize = 0.4f;
+
+inline TestScene ledScene(float led) {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    rt::Material ledMaterial = emitter({led, led, led});
+    ledMaterial.flags = rt::kMaterialCameraOnlyEmission;
+    s.statics.materials = {lambert({0, 0, 0}), metal({1, 1, 1}, 0), ledMaterial, lambert({0.6f, 0.5f, 0.4f}),
+                           emitter({20, 20, 20})};
+    const rt::Mat34 lamp = facing({1.3f, 2.5f, -2.5f}, {0, -1, -0.6f}, 0.5f, 0.5f);
+    s.frame.instances = {blackEnclosure(0, {0, 2, -3}, {10, 6, 14}),
+                         {kQuadMesh, 1, facing({0, 0, -4}, {0, 1, 0}, 8, 12)},
+                         {kQuadMesh, 2, facing(kLedCentre, {0, 0, 1}, kLedSize, kLedSize)},
+                         {kCubeMesh, 3, place({1.3f, 0.5f, -4}, kY, 0, {1, 1, 1})},
+                         {kQuadMesh, 4, lamp, 0}};
+    s.frame.lights = {modern::rectLightForQuad(lamp, 1, 1, rt::LightKind::Emitter, {20, 20, 20}, 1.f)};
+    s.frame.camera = {{0, 1, 0}, {0, 0.6f, -4}, {0, 1, 0}, 60.f};
+    return s;
+}
+
+// (d) A flint prism (IOR 1.6, Abbe number `abbe`, smooth) seen against a thin white slit (emission
+// kSlitEmission, no light) in a black box. The camera looks into the prism's first face at the angle of
+// minimum deviation for IOR 1.6 (the ray inside runs parallel to the base), and the slit stands 8 m beyond
+// the second face on that deviated ray: each wavelength sees the slit at its own place.
+inline constexpr float kSlitEmission = 50.f;
+inline const Vec3 kPrismCentre{0, 0, -3};
+
+inline TestScene prismScene(float abbe) {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    s.statics.meshes.push_back(prismMesh(2.f));
+    rt::Material flint = glass(1.6f, 0);
+    flint.abbe = abbe;
+    s.statics.materials = {lambert({0, 0, 0}), flint, emitter({kSlitEmission, kSlitEmission, kSlitEmission})};
+    // Minimum deviation at IOR 1.6 through a 60 degree prism: 53.13 degrees outside, 30 inside, so the ray
+    // turns by 23.13 degrees at each face, towards the base (-x).
+    const float turn = std::asin(1.6f * 0.5f) - radians(30.f);
+    const Vec3 in{std::sin(turn), 0, -std::cos(turn)}, out{-std::sin(turn), 0, -std::cos(turn)};
+    s.frame.instances = {blackEnclosure(0, {0, 0, -4}, {30, 30, 30}),
+                         {3, 1, place(kPrismCentre, kY, 0, {1, 1, 1})},
+                         {kQuadMesh, 2, facing(kPrismCentre + out * 8.f, -out, 0.05f, 4)}};
+    s.frame.camera = {kPrismCentre - in * 3.f, kPrismCentre, {0, 1, 0}, 10.f};
+    return s;
+}
+
+// (d) A parallel slab of the same flint glass (2 x 2 x 0.4, turned 25 degrees about y) in front of a 6 x 6
+// white emitter of emission 1 (no light) in a black box: every wavelength leaves parallel to how it came.
+inline TestScene flintSlabScene(float abbe) {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    rt::Material flint = glass(1.6f, 0);
+    flint.abbe = abbe;
+    s.statics.materials = {lambert({0, 0, 0}), flint, emitter({1, 1, 1})};
+    s.frame.instances = {blackEnclosure(0, {0, 0, -3}, {14, 14, 14}),
+                         {kCubeMesh, 1, place({0, 0, -3}, kY, 25, {2, 2, 0.4f})},
+                         {kQuadMesh, 2, facing({0, 0, -6}, {0, 0, 1}, 6, 6)}};
+    s.frame.camera = {{0, 0, 0}, {0, 0, -1}, {0, 1, 0}, 20.f};
+    return s;
+}
+
+// (d) A white furnace through dispersive glass: a flint sphere (IOR 1.6, Abbe `abbe`, smooth, radius 1) at
+// z = -3 inside a box whose walls emit 1 on both sides and reflect nothing; the camera sees only the sphere.
+// Every path ends on a wall with its throughput (Fresnel splits sum to 1, the tint is white), so the lighting
+// is exactly 1 in expectation, per channel, with or without dispersion.
+inline TestScene dispersiveFurnace(float abbe) {
+    TestScene s;
+    s.statics.meshes = basicMeshes();
+    rt::Material flint = glass(1.6f, 0);
+    flint.abbe = abbe;
+    rt::Material wall = lambert({0, 0, 0});
+    wall.emission[0] = wall.emission[1] = wall.emission[2] = 1.f;
+    s.statics.materials = {wall, flint};
+    s.frame.instances = {blackEnclosure(0, {0, 0, 0}, {10, 10, 10}),
+                         {kSphereMesh, 1, place({0, 0, -3}, kY, 0, {1, 1, 1})}};
+    s.frame.camera = {{0, 0, 0}, {0, 0, -1}, {0, 1, 0}, 20.f};
     return s;
 }
 
