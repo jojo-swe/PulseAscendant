@@ -14,12 +14,6 @@ namespace {
 
 // The placeholder's exposure: fill_hdr.comp inverts the tonemap at 0 EV.
 constexpr float kPlaceholderExposureEV = 0.f;
-// post::Denoiser's images per pixel: ten RGBA16F images (the colour, moments, guides, a-trous and volume
-// ping-pong pairs, denoiser.cpp's createImages). The denoiser does not report its own size; keep this in
-// step.
-constexpr VkDeviceSize kDenoiserBytesPerPixel = 10 * 8;
-// hdr_ (RGBA16F) and image_ (RGBA8).
-constexpr VkDeviceSize kStageBytesPerPixel = 8 + 4;
 
 gfx::ImageDesc hdrDesc(std::uint32_t width, std::uint32_t height) {
     return {width, height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT, 1, "modern hdr"};
@@ -73,14 +67,19 @@ void ModernStage::prepare(modern::SceneId id) {
     // setup: the scene's geometry, BLASes and materials (SceneGpu waits for its uploads), then the shared
     // tracer and denoiser on the first scene, or the tracer's buffers grown to this scene's capacity.
     const modern::SceneStatic& statics = scene(id).staticScene();
-    gpus_[index] = std::make_unique<modern::SceneGpu>(ctx_, statics);
+    // Everything is made before anything is stored, so a constructor that throws (a missing shader, out of
+    // memory) leaves the stage as it was: never a prepared scene without a tracer, or a denoiser without one.
+    auto gpu = std::make_unique<modern::SceneGpu>(ctx_, statics);
     const modern::TracerCapacity capacity = modern::tracerCapacity(statics.capacity);
     if (!tracer_) {
-        tracer_ = std::make_unique<modern::PathTracer>(ctx_, ring_, width_, height_, capacity);
-        denoiser_ = std::make_unique<post::Denoiser>(ctx_, ring_, width_, height_);
+        auto tracer = std::make_unique<modern::PathTracer>(ctx_, ring_, width_, height_, capacity);
+        auto denoiser = std::make_unique<post::Denoiser>(ctx_, ring_, width_, height_);
+        tracer_ = std::move(tracer);
+        denoiser_ = std::move(denoiser);
     } else {
-        tracer_->reserve(capacity);
+        tracer_->reserve(capacity); // keeps the old capacity if it throws
     }
+    gpus_[index] = std::move(gpu);
 }
 
 void ModernStage::prepareAll() {
@@ -91,12 +90,13 @@ void ModernStage::prepareAll() {
 VkDeviceSize ModernStage::imageBytes() const {
     if (!tracer_)
         return 0;
-    const VkDeviceSize pixels = VkDeviceSize(width_) * height_;
-    return tracer_->imageBytes() + (kDenoiserBytesPerPixel + kStageBytesPerPixel) * pixels;
+    return tracer_->imageBytes() + denoiser_->imageBytes() + hdr_.bytes() + image_.bytes();
 }
 
 VkDeviceSize ModernStage::gpuBytes() const {
-    VkDeviceSize bytes = imageBytes();
+    if (!tracer_)
+        return 0;
+    VkDeviceSize bytes = imageBytes() + tracer_->bufferBytes();
     for (const auto& gpu : gpus_)
         if (gpu)
             bytes += gpu->bytes();
@@ -170,6 +170,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     trace.maxBounces = state.maxBounces;
     trace.frameSeed = state.frameSeed;
     trace.clampIndirect = scene.clampIndirect;
+    trace.seconds = static_cast<float>(frame.localSeconds);
     tracer_->trace(cmd, *gpus_[indexOf(id)], scene, continues ? previousCamera_ : std::nullopt, trace,
                    retroImage);
 

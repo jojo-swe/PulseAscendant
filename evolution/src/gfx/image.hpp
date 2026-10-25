@@ -85,6 +85,9 @@ public:
     VkFormat viewFormat() const { return viewFormat_; }
     VkImageAspectFlags aspect() const { return aspect_; } // DEPTH (+ STENCIL) for depth formats, else COLOR
     std::uint32_t mipLevels() const { return mipLevels_; }
+    // The device memory of its allocation (vmaGetAllocationInfo, what VMA's statistics count); 0 for an
+    // empty image.
+    VkDeviceSize bytes() const;
     // How many times generateMips() has recorded (one-level images included); for tests that pin when an
     // image is re-mipped.
     std::uint64_t mipGenerations() const { return mipGenerations_; }

@@ -2,7 +2,7 @@
 and no other act, the grid must decode to the documented layout's size, and the forced 1993 and 2026 cells of
 each row must differ, which shows that EVO_FORCE_ERA reached the captures. The tool captures at --spp 8 unless
 told otherwise, passes its --spp to every capture, and refuses a value outside 1..4096; the test runs it at
---spp 2. It empties <outdir> first, so CTest gives it build-out/storyboard_test, never the build-out/storyboard
+--spp 2 and --detail 0.004 (the lavapipe detail of the Global Constraints, passed to every capture). It empties <outdir> first, so CTest gives it build-out/storyboard_test, never the build-out/storyboard
 that README and HANDOFF have people fill."""
 
 import os
@@ -26,8 +26,12 @@ def check_spp(exe, outdir):
         sys.exit("storyboard.py: the default --spp is not 8")
     args = storyboard.parse_args(["--app", exe, "--out", outdir, "--spp", "3", "--no-crt"])
     command = storyboard.capture_command(exe, outdir, 12.5, args)
-    if command[command.index("--spp") + 1] != "3" or "--no-crt" not in command:
-        sys.exit(f"storyboard.capture_command does not pass --spp 3 and --no-crt: {command}")
+    if command[command.index("--spp") + 1] != "3" or "--no-crt" not in command or "--detail" in command:
+        sys.exit(f"storyboard.capture_command does not pass --spp 3 and --no-crt (and no --detail): {command}")
+    args = storyboard.parse_args(["--app", exe, "--out", outdir, "--detail", "0.004"])
+    command = storyboard.capture_command(exe, outdir, 12.5, args)
+    if float(command[command.index("--detail") + 1]) != 0.004:
+        sys.exit(f"storyboard.capture_command does not pass --detail 0.004: {command}")
     for bad in ("0", "4097", "x"):
         refused = subprocess.run(
             [sys.executable, os.path.join(TOOLS, "storyboard.py"), "--app", exe, "--out", outdir, "--spp", bad],
@@ -42,7 +46,8 @@ def main(exe, outdir):
     check_spp(exe, outdir)
     result = subprocess.run(
         [sys.executable, os.path.join(TOOLS, "storyboard.py"), "--app", exe, "--out", outdir, "--width",
-         str(WIDTH), "--height", str(HEIGHT), "--chapters", ",".join(map(str, CHAPTERS)), "--spp", "2"],
+         str(WIDTH), "--height", str(HEIGHT), "--chapters", ",".join(map(str, CHAPTERS)), "--spp", "2",
+         "--detail", "0.004"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=280)
     sys.stderr.write(result.stderr.decode(errors="replace"))
     if result.returncode != 0:

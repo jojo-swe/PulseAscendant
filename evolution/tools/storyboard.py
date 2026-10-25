@@ -4,6 +4,7 @@ grid per act.
 
     python3 tools/storyboard.py --app build/linux/bin/Evolution --out build/linux/build-out/storyboard
     python3 tools/storyboard.py --app EXE --out DIR --width 320 --height 180 --chapters 0,3 --no-crt --spp 2
+    python3 tools/storyboard.py --app EXE --out DIR --spp 4 --detail 0.05
 
 Each act's grid (act1.png, act2.png, act3.png; an act with no chosen chapter is skipped) has a row per
 chapter and six columns: 1993 at 20 %, accent and 80 %, then 2026 at the same three times. Every cell is the
@@ -12,8 +13,9 @@ Layout, in grid pixels: a BAND-high text band on top names the columns; each row
 (chapter number, title, transition, start-end and accent in show seconds), then the cells, then a GUTTER;
 cells sit GUTTER apart with a GUTTER before the first and after the last. See grid_size(). The path-traced
 chapters render at --spp samples per pixel (default 8: enough to judge a frame, far quicker than the app's
-export default of 64). Prints the path of every grid it writes. Needs numpy; the PNGs are read and written
-here with zlib.
+export default of 64). --detail F (0 < F <= 1) is passed to every capture: the scenes' particle, splat,
+voxel and photon counts scale with it (the app's default is 1; the lavapipe test passes 0.004). Prints the
+path of every grid it writes. Needs numpy; the PNGs are read and written here with zlib.
 """
 
 import argparse
@@ -182,6 +184,8 @@ def capture_command(app, directory, seconds, args):
                "--height", str(args.height), "--spp", str(args.spp)]
     if args.no_crt:
         command.append("--no-crt")
+    if args.detail is not None:
+        command += ["--detail", repr(args.detail)]
     return command
 
 
@@ -223,6 +227,17 @@ def spp_value(text):
     return value
 
 
+def detail_value(text):
+    """--detail: a number in (0, 1], the app's range."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected a number, got '{text}'")
+    if not 0.0 < value <= 1.0:
+        raise argparse.ArgumentTypeError(f"must be in (0, 1], got {value}")
+    return value
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--app", required=True, help="the Evolution executable")
@@ -233,6 +248,8 @@ def parse_args(argv=None):
     parser.add_argument("--no-crt", action="store_true", help="capture the 1993 picture without the CRT look")
     parser.add_argument("--spp", type=spp_value, default=DEFAULT_SPP,
                         help=f"path-traced samples per pixel, {MIN_SPP}..{MAX_SPP} (default {DEFAULT_SPP})")
+    parser.add_argument("--detail", type=detail_value,
+                        help="the scenes' detail, in (0, 1] (default: the app's, 1)")
     return parser.parse_args(argv)
 
 

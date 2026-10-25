@@ -179,6 +179,14 @@ Image& Image::operator=(Image&& other) noexcept {
     return *this;
 }
 
+VkDeviceSize Image::bytes() const {
+    if (allocation_ == VK_NULL_HANDLE)
+        return 0;
+    VmaAllocationInfo info{};
+    vmaGetAllocationInfo(ctx_->allocator(), allocation_, &info);
+    return info.size;
+}
+
 void Image::destroy() noexcept {
     if (!ctx_)
         return;

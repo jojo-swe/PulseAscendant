@@ -49,8 +49,9 @@ public:
     // Whether a static material shows the retro screen (kRetroScreenTexture): the trace then samples the
     // retro image it is given, else a black texture of the tracer's own.
     bool samplesRetro() const { return samplesRetro_; }
-    // The device memory this scene holds: vertices, indices, mesh records, the compacted BLASes and the
-    // material table.
+    // The device memory this scene holds, as allocated (VMA): vertices, indices, mesh records, the compacted
+    // BLASes and the material table. A task that adds GPU data to the scene (Task 8's sphere BLAS) adds it
+    // here: shared_tracer_test (b) compares it with the allocator's statistics around prepare().
     VkDeviceSize bytes() const;
 
 private:

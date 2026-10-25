@@ -55,11 +55,12 @@ struct SweepStats {
 
 // checkSceneSweep: every 1/60 s of each chapter of `scene`, on the CPU. Each frame's camera must be finite (a
 // positive field of view under 180 degrees, aperture >= 0, focus distance > 0) and equal camera(); within a
-// shot the eye and the target move at most limits.maxCameraStep per frame; shots run 0, 1, 2, ... in order
-// (the next frame's shot is the same or one more); everything stays within |coordinate| < 10^4; every
-// instance's transform is finite and neither mirrors nor collapses (determinant > 0); and the frame passes
-// modern::checkSceneFrame (capacities, indices, lights against their instances). Tasks 8 and 10 add the
-// particle and splat counts against the capacity here.
+// shot the eye and the target move at most limits.maxCameraStep per frame; the exposure is finite and
+// clampIndirect positive and finite; shots run 0, 1, 2, ... in order (the next frame's shot is the same or
+// one more); everything stays within |coordinate| < 10^4; every instance's transform is finite and neither
+// mirrors nor collapses (determinant > 0); and the frame passes modern::checkSceneFrame (capacities, indices,
+// lights against their instances). Tasks 8 and 10 add the particle and splat counts against the capacity
+// here.
 SweepStats checkSceneSweep(modern::SceneId scene, const SweepLimits& limits = {});
 
 } // namespace evo::test

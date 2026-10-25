@@ -3,10 +3,11 @@
 // "../../src/rt/bindings.hpp" (it declares it). Plain macros only, under an include guard (GLSL has no
 // #pragma once).
 //
-// Bindings 0-14 are step 4's. 15-25 are the step 5 feature resources (the ABI Task 1 of step 5 froze): each
-// is bound every frame, to the feature's resource when the frame has it (modern::TraceExtras) and otherwise
-// to a one-element dummy, so a scene without the feature binds the same layout. 26 is the G-buffer's volume
-// layer. Each is a binding of its own, not an array element, so synchronization validation sees it.
+// Bindings 0-14 are step 4's. 15-25 and 27 are the step 5 feature resources (the ABI Tasks 1 and 1b of step 5
+// froze): each is bound every frame, to the feature's resource when the frame has it (modern::TraceExtras, or
+// the tracer's own per-slot buffer) and otherwise to a one-element dummy, so a scene without the feature
+// binds the same layout. 26 is the G-buffer's volume layer. Each is a binding of its own, not an array
+// element, so synchronization validation sees it.
 
 #ifndef EVO_RT_BINDINGS_HPP
 #define EVO_RT_BINDINGS_HPP
@@ -38,6 +39,7 @@
 #define EVO_BINDING_CAUSTIC_MAPS 24        // sampler2DArray, RGBA16F irradiance per receiver (Task 13)
 #define EVO_BINDING_LENSING 25             // LensingUniforms (Task 25)
 #define EVO_BINDING_VOLUME 26              // storage image, RGBA16F: in-scattered radiance, transmittance
-#define EVO_BINDING_COUNT 27
+#define EVO_BINDING_CAUSTIC_RECEIVERS 27   // CausticReceiver[], Material::receiver's table (Task 13)
+#define EVO_BINDING_COUNT 28
 
 #endif

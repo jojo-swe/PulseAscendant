@@ -119,6 +119,8 @@ public:
 
     std::uint32_t width() const { return width_; }
     std::uint32_t height() const { return height_; }
+    // The device memory of the denoiser's images at the current size, as allocated (VMA).
+    VkDeviceSize imageBytes() const;
 
 private:
     void createImages();

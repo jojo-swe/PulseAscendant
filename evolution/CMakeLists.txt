@@ -183,7 +183,11 @@ target_link_libraries(evo_modern PUBLIC evo_show) # the scene interface reads sh
 
 # The path tracer's shaders (rt_<name>.<stage>.spv beside the executable), and the 2026 scenes' compute
 # shaders: every shaders/modern/<scene>_<what>.comp loads as modern_<scene>_<what>.comp.spv (a scene task adds
-# its file; the directory is globbed). Anything linking evo_modern builds them.
+# its file; the directory is globbed). The shared feature passes live there too and are globbed the same way,
+# though they are named after the feature, not a scene (splat_resolve.comp, medium_majorant.comp,
+# photons.comp, caustic_resolve.comp: Tasks 10, 11 and 13). CONFIGURE_DEPENDS re-globs on every build with
+# Ninja and Makefiles; on another generator, re-run CMake when a new file is not picked up. Anything linking
+# evo_modern builds them.
 file(GLOB EVO_MODERN_SCENE_SHADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/modern/*.comp")
 evo_add_shaders(evo_modern
     shaders/rt/pathtrace.rgen
@@ -620,46 +624,62 @@ add_test(NAME tonemap COMMAND tonemap_test)
 # emission and guides, MIS against analytic and NEE-off references, the furnace, determinism per seed, the
 # stress scene staying finite, dispatch batching (Windows TDR) and the retro screen as a textured light. Writes
 # its pictures to build-out/step4. `path_tracer_test --look <dir> [spp]` renders a larger scene to look at.
+# (i) traces the hit payload through a test-only raygen (shaders/test/payload_probe.rgen) with the real
+# closest-hits.
+add_custom_command(
+    OUTPUT "${EVO_TEST_SPIRV_DIR}/test_payload_probe.rgen.spv"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3
+            --depfile "${CMAKE_CURRENT_BINARY_DIR}/shader-deps/test_payload_probe.rgen.d"
+            -o "${EVO_TEST_SPIRV_DIR}/test_payload_probe.rgen.spv"
+            "${CMAKE_SOURCE_DIR}/shaders/test/payload_probe.rgen"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/payload_probe.rgen"
+    DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/shader-deps/test_payload_probe.rgen.d"
+    COMMENT "Compiling test shader test_payload_probe.rgen"
+    VERBATIM)
+add_custom_target(path_tracer_test_shaders DEPENDS "${EVO_TEST_SPIRV_DIR}/test_payload_probe.rgen.spv")
 add_executable(path_tracer_test tests/path_tracer_test.cpp)
 target_link_libraries(path_tracer_test PRIVATE evo_modern evo_post) # evo_post: srgbOetf for its pictures
 target_compile_definitions(path_tracer_test PRIVATE
     EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}"
+    EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}"
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
-add_dependencies(path_tracer_test evo_modern_shaders)
+add_dependencies(path_tracer_test evo_modern_shaders path_tracer_test_shaders)
 add_test(NAME path_tracer COMMAND path_tracer_test)
-set_tests_properties(path_tracer PROPERTIES TIMEOUT 300)
+set_tests_properties(path_tracer PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # These run the real executable, which finds its shaders in <exe dir>/shaders. With --validation any
 # validation warning or error makes it exit with code 3 (without the layer it warns and runs unchecked). The
-# exports path trace at --spp 2 (the default, 64, is for real exports).
+# exports path trace at --spp 2 (the default, 64, is for real exports) and --detail 0.004 (the scenes'
+# particle, splat and voxel counts at lavapipe size: Global Constraints of step 5).
 add_test(NAME render_stream
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_stream_test.py $<TARGET_FILE:Evolution>
-            --validation --spp 2)
-set_tests_properties(render_stream PROPERTIES TIMEOUT 300)
+            --validation --spp 2 --detail 0.004)
+set_tests_properties(render_stream PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 add_test(NAME capture
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/capture_test.py $<TARGET_FILE:Evolution>
-            ${CMAKE_BINARY_DIR}/build-out/capture --validation --spp 2)
-set_tests_properties(capture PROPERTIES TIMEOUT 300)
+            ${CMAKE_BINARY_DIR}/build-out/capture --validation --spp 2 --detail 0.004)
+set_tests_properties(capture PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # Seeking and export agree: in every chapter, a frame streamed after five others equals a fresh capture of the
 # same time, byte for byte (Review Focus 4 of step 3; Review Focus 2 of step 4 in the path-traced Studio
 # chapters). Two parts, so CTest runs the path-traced chapters beside the others.
 add_test(NAME stream_capture
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/stream_capture_test.py $<TARGET_FILE:Evolution>
-            ${CMAKE_BINARY_DIR}/build-out/stream_capture rest --validation --spp 2)
-set_tests_properties(stream_capture PROPERTIES TIMEOUT 600)
+            ${CMAKE_BINARY_DIR}/build-out/stream_capture rest --validation --spp 2 --detail 0.004)
+set_tests_properties(stream_capture PROPERTIES TIMEOUT 600 PROCESSORS 2)
 add_test(NAME stream_capture_studio
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/stream_capture_test.py $<TARGET_FILE:Evolution>
-            ${CMAKE_BINARY_DIR}/build-out/stream_capture_studio studio --validation --spp 2)
-set_tests_properties(stream_capture_studio PROPERTIES TIMEOUT 600)
+            ${CMAKE_BINARY_DIR}/build-out/stream_capture_studio studio --validation --spp 2 --detail 0.004)
+set_tests_properties(stream_capture_studio PROPERTIES TIMEOUT 600 PROCESSORS 2)
 
 # The storyboard tool on two chapters: one grid for Act I, of the documented size, its 1993 and 2026 cells
-# forced through EVO_FORCE_ERA (needs numpy).
+# forced through EVO_FORCE_ERA (needs numpy); the test passes --spp 2 --detail 0.004 to the tool.
 add_test(NAME storyboard
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/storyboard_test.py $<TARGET_FILE:Evolution>
             ${CMAKE_BINARY_DIR}/build-out/storyboard_test)
-set_tests_properties(storyboard PROPERTIES TIMEOUT 300)
+set_tests_properties(storyboard PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # --show-info prints the show as JSON without touching SDL video or Vulkan.
 add_test(NAME show_info COMMAND Evolution --show-info)
@@ -738,7 +758,7 @@ target_link_libraries(export_mode_test PRIVATE evo_render evo_modern)
 target_compile_definitions(export_mode_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(export_mode_test Evolution_shaders evo_modern_shaders)
 add_test(NAME export_mode COMMAND export_mode_test)
-set_tests_properties(export_mode PROPERTIES TIMEOUT 300)
+set_tests_properties(export_mode PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # The Studio (Task 10 of step 4) at 320x180 in Export, 4 spp, with the validation layer on: STUDIO NIGHT lit
 # but not blown out, the CRT lighting the room, the screen following the retro picture on the next window frame
@@ -752,7 +772,7 @@ target_compile_definitions(studio_test PRIVATE
     EVO_TEST_OUT_DIR="${CMAKE_BINARY_DIR}/build-out")
 add_dependencies(studio_test Evolution_shaders evo_modern_shaders)
 add_test(NAME studio COMMAND studio_test)
-set_tests_properties(studio PROPERTIES TIMEOUT 300)
+set_tests_properties(studio PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # Seeking with temporal accumulation on (Task 12 of step 4, Review Focus 1) at 160x90, 1 spp, Interactive:
 # after any reset (a seek forwards or backwards, a chapter change, a camera cut, time running backwards) the
@@ -763,7 +783,7 @@ target_link_libraries(seek_determinism_test PRIVATE evo_render evo_modern)
 target_compile_definitions(seek_determinism_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
 add_dependencies(seek_determinism_test Evolution_shaders evo_modern_shaders)
 add_test(NAME seek_determinism COMMAND seek_determinism_test)
-set_tests_properties(seek_determinism PROPERTIES TIMEOUT 300)
+set_tests_properties(seek_determinism PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
 # --- Step 5: the shared path tracer, the scene table and the scene tests -----------------------------------
 

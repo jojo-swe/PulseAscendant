@@ -20,6 +20,7 @@ const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;
 const uint kNoLight = 0xFFFFFFFFu;
 const uint kNoMedium = 0xFFFFFFFFu;
+const uint kNoReceiver = 0xFFFFFFFFu;
 
 const uint kMaterialCameraOnlyEmission = 1u; // Material.flags
 const uint kMaterialCausticReceiver = 2u;
@@ -75,7 +76,7 @@ struct Material { // 96 bytes
     uint flags; // kMaterial*
     float abbe;
     uint medium;
-    float pad;
+    uint receiver; // a CausticReceiver index, or kNoReceiver
 };
 
 struct RectLight { // 64 bytes: point = corner + u * edgeU + v * edgeV, emits along normalize(cross(edgeU, edgeV))
@@ -129,7 +130,7 @@ struct FrameUniforms { // 208 bytes
     uint mediumFlags;
     uint causticReceivers;
     uint lensing;
-    uint pad2;
+    float seconds; // chapter-local show time
     float shutterOffset;
     float environmentSelect;
     uint sliceIndex;
@@ -189,6 +190,13 @@ struct LightTreeNode { // 32 bytes
 
 struct LensingUniforms { // 32 bytes (Task 25 names the fields)
     uint words[8];
+};
+struct CausticReceiver { // 64 bytes
+    Mat34 worldToUv;
+    uint layer;
+    uint resolution;
+    uint pad0;
+    uint pad1;
 };
 
 #endif

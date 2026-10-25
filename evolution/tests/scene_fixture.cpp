@@ -199,6 +199,13 @@ SweepStats checkSceneSweep(modern::SceneId scene, const SweepLimits& limits) {
                 fail(where, "the camera is not finite (or its fov, aperture or focus is out of range)");
             if (!within(camera.eye) || !within(camera.target))
                 fail(where, "the camera lies beyond |coordinate| < 10^4");
+            // A NaN exposure makes the tonemap NaN; clampIndirect limits every contribution after a rough
+            // vertex, so it must be a positive number too.
+            if (!std::isfinite(frame.exposureEV))
+                fail(where, "the exposure (" + std::to_string(frame.exposureEV) + " EV) is not finite");
+            if (!(std::isfinite(frame.clampIndirect) && frame.clampIndirect > 0.f))
+                fail(where, "clampIndirect (" + std::to_string(frame.clampIndirect) +
+                                ") is not a positive finite number");
             if (previous) {
                 if (camera.shot != previous->shot && camera.shot != previous->shot + 1)
                     fail(where, "the shot goes from " + std::to_string(previous->shot) + " to " +
