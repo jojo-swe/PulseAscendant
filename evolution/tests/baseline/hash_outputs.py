@@ -10,8 +10,10 @@ tests/scene_fixture.cpp's checkChapterPictures).
 The committed SUMS and LUMINANCE files next to this script were made on lavapipe (Mesa llvmpipe). History:
 first at 4f300f6 (main after Tasks 1, 5 and 7), which Task 1b's own commits kept byte for byte; then
 regenerated after merging main d91fb09 (Tasks 2, 3 and 4), whose environments and light selection changed
-seven outputs (the lit Studio captures and streams; the merged build equals d91fb09's bytes exactly). They are
-lavapipe-only: another driver or GPU gives other bytes.
+seven outputs (the lit Studio captures and streams; the merged build equals d91fb09's bytes exactly); then
+regenerated after the NEE shadow-ray fix (150714d), which changed seven outputs again: studio_night_40,
+finale_50, studio_night_acc, return_30 and the streams stream_studio_cut, stream_finale, stream_studio_ascent.
+They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
 
