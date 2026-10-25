@@ -61,7 +61,10 @@ How later tasks use it (run from evolution/ after building the linux preset):
 
 Usage: hash_outputs.py <Evolution> <outdir> [--check SUMS] [--luminance LUMINANCE] [--write]
   --write   also writes <outdir>/SUMS and <outdir>/LUMINANCE (copy them here to update the reference).
-Exit code 1 when --check finds a difference."""
+Exit code 1 when --check finds a difference.Then regenerated after the polish merges (the city's ASCENT, the nebula, GALAXY and REBOOT's cube of stars, and the
+Studio's DOS listing): galaxy_20, nebula_40, plasma_wipe, reboot_10, reboot_60, stream_studio_ascent and
+studio_night_40 changed; the Studio's luminance moved by 0.05 % or less.
+"""
 
 import argparse
 import hashlib
