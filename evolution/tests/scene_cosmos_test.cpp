@@ -5,6 +5,8 @@
 //     16,777,216 stars, and those are the full-detail configuration (the frames' counts, the capacities) and
 //     the scene's own nowCard at any detail; the galaxy's frames splat 3x3 in the window;
 // (a) also: the text waypoint (waypointTargets) holds every particle on its pixel of the line;
+// (w) the show's waypoint spells kAscendantWaypointText over 643.97 - 644.04, at least 80 % of its glyph cells
+//     covered at 643.99, dissolved into the flight before the landing, which stays exact on 646.18;
 // (a) ASCENDANT's flight (the CPU twin): before its lift-off every particle is in the core, at the waypoint and
 //     through its hold every particle is on its waypoint formation, on the accent every particle is on its
 //     logo target, until the release it stays within the logo's sway, after it it has scattered;
@@ -242,6 +244,75 @@ void testFlight() {
             modern::logoPixel((id % (modern::kLogoPixels * modern::kLogoDepth)) % modern::kLogoPixels);
         CHECK(std::abs(target.x / cell + modern::kLogoCentreColumn - float(px.column)) <= 0.5001f);
         CHECK(std::abs(modern::kLogoCentreRow - target.y / cell - float(px.row)) <= 0.5001f);
+    }
+}
+
+// --- (w) the show's waypoint
+// ----------------------------------------------------------------------------------------------
+
+// ASCENDANT's frames spell kAscendantWaypointText (formation 1): the formation is reached on the waypoint and
+// holds for its four frames, 643.97 to 644.04 (each within a frame); at 643.99 at least 80 % of its glyph
+// cells (the lit pixels of the 8x8 font) hold a particle; half a second before the accent it has dissolved
+// into the flight; and the logo still lands on the accent (646.18) with no error, as from the vortex.
+void testWaypointText() {
+    const int chapter = chapterOf(show::Effect::Ascendant);
+    const double start = show::chapterStart(chapter);
+    const modern::AscendantTimes t = modern::ascendantTimes(at(chapter, 0.0));
+    std::printf("(w) the waypoint holds %.4f - %.4f, the logo lands on %.4f\n", start + t.waypoint,
+                start + t.waypoint + t.hold, start + t.accent);
+    CHECK(std::abs(start + t.waypoint - 643.97) <= 1.0 / 60);
+    CHECK(std::abs(start + t.waypoint + t.hold - 644.04) <= 1.0 / 60);
+    CHECK(std::abs(start + t.accent - 646.18) < 0.01);
+
+    const modern::WaypointTargets text = modern::waypointTargets(modern::kAscendantWaypointText);
+    CHECK(text.text == "HI. YES, YOU.");
+    const modern::Cosmos scene{kTestDetail};
+    const float cell = modern::kLogoCell, width = 71.f * cell;
+    const Vec3 offset{0.f, 0.12f * width, -0.35f * width}; // the formation's place behind the logo
+
+    // The share of the text's lit pixels that hold at least one particle at show time `showSeconds`.
+    const auto coverage = [&](double showSeconds) {
+        const show::TimelineFrame f = show::sampleTimeline(showSeconds);
+        CHECK(f.chapter == chapter);
+        const modern::SceneFrame frame = scene.frame(f);
+        CHECK(frame.particles.has_value());
+        const modern::ParticleFrame& p = *frame.particles;
+        CHECK(p.params[6] == 1.f);
+        CHECK(modern::decodeWaypointText({p.params[12], p.params[13], p.params[14], p.params[15]})
+                  .substr(0, text.text.size()) == text.text);
+        std::vector<int> lit(8 * 8 * modern::kWaypointGlyphs, -1); // (column, row) -> pixel
+        for (std::size_t i = 0; i < text.pixels.size(); ++i)
+            lit[text.pixels[i].row * 8 * modern::kWaypointGlyphs + text.pixels[i].column] = static_cast<int>(i);
+        std::vector<bool> covered(text.pixels.size(), false);
+        for (std::uint32_t id = 0; id < p.count; ++id) {
+            const Vec3 q = v3(modern::ascendantParticle(id, float(f.localSeconds), p.params).center) - offset;
+            const double column = std::floor(q.x / cell + text.centre.x + 0.5);
+            const double row = std::floor(text.centre.y - q.y / cell + 0.5);
+            if (std::abs(q.z) > 2.f * cell || column < 0 || row < 0 || row >= 8 ||
+                column >= 8 * modern::kWaypointGlyphs)
+                continue;
+            const int pixel = lit[std::size_t(row) * 8 * modern::kWaypointGlyphs + std::size_t(column)];
+            if (pixel >= 0)
+                covered[std::size_t(pixel)] = true;
+        }
+        return double(std::count(covered.begin(), covered.end(), true)) / double(text.pixels.size());
+    };
+    const double held = coverage(643.99);
+    const double gone = coverage(start + t.accent - 0.5);
+    std::printf("(w) \"%s\": %zu glyph cells, %.1f %% covered at 643.99, %.1f %% half a second before the "
+                "landing\n",
+                text.text.c_str(), text.pixels.size(), 100.0 * held, 100.0 * gone);
+    CHECK(held >= 0.8);
+    CHECK(gone < 0.2);
+
+    // The landing: every particle exactly on its logo target on the accent, as from the vortex.
+    const modern::ParticleFrame landing = *scene.frame(at(chapter, t.accent)).particles;
+    modern::ParticleFrame vortex = landing;
+    vortex.params[6] = 0.f;
+    for (std::uint32_t id = 0; id < landing.count; ++id) {
+        const Vec3 target = modern::ascendantTarget(id, cell);
+        CHECK(distance(v3(modern::ascendantParticle(id, t.accent, landing.params).center), target) == 0.f);
+        CHECK(distance(v3(modern::ascendantParticle(id, t.accent, vortex.params).center), target) == 0.f);
     }
 }
 
@@ -562,6 +633,7 @@ int main(int argc, char** argv) {
         };
         timed("k", [&] { testCards(); });
         timed("a", [&] { testFlight(); });
+        timed("w", [&] { testWaypointText(); });
         timed("m", [&] { testMirror(ctx); });
         timed("r", [&] { testReboot(); });
         timed("d", [&] { testDustLanes(ctx); });

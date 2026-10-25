@@ -19,8 +19,9 @@
 // kAscendantParticles traced particles (shaders/modern/cosmos_particles.comp; ascendantParticle() is the CPU
 // twin) in DOTS' identity colours across the logo (ember on the left, ivory, ice on the right; the front face
 // lighter than the sides). They lift off strand by strand from the start of shot 1 and stream towards the
-// camera in filaments, pass through a waypoint formation one bar before D (held for four frames: a vortex by
-// default, or a line of text: waypointTargets), and land on their logo targets exactly on the accent, lit by
+// camera in filaments, pass through a waypoint formation one bar before D (held for four frames, then
+// dissolving back into the flight: the show spells kAscendantWaypointText with waypointTargets, the vortex is
+// formation 0), and land on their logo targets exactly on the accent, lit by
 // the sun from camera-right while the camera orbits on a 50 mm lens.
 // From the fourth bar after D the logo's rows light up one per bar from the bottom; on the chapter's last
 // downbeat the particles release and scatter outwards as light while the frame goes to phosphor white.
@@ -56,6 +57,7 @@ inline constexpr float kLogoCell = 0.09f;              // the logo is 71 cells (
 inline constexpr Vec3 kAscendantGalaxyCentre{10.f, 34.f, -320.f};
 inline constexpr float kAscendantGalaxyRadius = 70.f, kAscendantGalaxyTilt = 1.05f, kAscendantGalaxyYaw = 0.4f;
 inline constexpr float kWaypointHold = 4.f / 60.f; // the waypoint formation holds four frames
+inline constexpr const char* kAscendantWaypointText = "HI. YES, YOU.";
 
 // The counts at a detail: round(full * scale), at least the minimum; the dust's voxels per axis scale with
 // the cube root of the detail (at least 8).

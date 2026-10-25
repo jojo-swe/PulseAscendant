@@ -725,7 +725,8 @@ SceneFrame Cosmos::frame(const show::TimelineFrame& frame) const {
     env.zenith = env.horizon = env.ground = phosphor;
     f.instances = lightInstances_;
     f.lights = lights_;
-    f.particles = ascendantParticleFrame(frame, particles_);
+    static const WaypointTargets waypoint = waypointTargets(kAscendantWaypointText);
+    f.particles = ascendantParticleFrame(frame, particles_, &waypoint);
     SceneInstance field;
     field.mesh = 0;
     field.material = kParticles;
