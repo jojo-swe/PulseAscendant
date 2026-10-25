@@ -1,0 +1,45 @@
+#version 460
+
+// Emissive splats, the resolve (step 5, Task 10): adds each pixel's fixed-point sums into the emission guide,
+// sum / fixedPointScale * (W * H) / (1920 * 1080) per channel (the sums are in reference units: radiance at
+// 1920x1080), at most 65504 (the half-float maximum); a channel whose overflow bit is set (its exact sum
+// reached 2^32) resolves to 65504. The emission bypasses the denoiser's history and filter.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r32ui) uniform readonly uimage2D accumulatorRed;
+layout(set = 0, binding = 1, r32ui) uniform readonly uimage2D accumulatorGreen;
+layout(set = 0, binding = 2, r32ui) uniform readonly uimage2D accumulatorBlue;
+layout(set = 0, binding = 3, r32ui) uniform readonly uimage2D overflowBits;
+layout(set = 0, binding = 4, rgba16f) uniform image2D emissionImage;
+
+// Must match ResolvePush in src/modern/splats.cpp (16 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    float fixedPointScale;
+    float areaScale; // (W * H) / (1920 * 1080)
+} pc;
+
+const float kSaturated = 65504.0;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
+        return;
+    }
+    uvec3 sums = uvec3(imageLoad(accumulatorRed, p).r, imageLoad(accumulatorGreen, p).r,
+                       imageLoad(accumulatorBlue, p).r);
+    uint overflow = imageLoad(overflowBits, p).r;
+    if (sums == uvec3(0u) && overflow == 0u) {
+        return; // nothing landed here: the emission stays exactly as traced
+    }
+    vec3 splats = min(vec3(sums) * (pc.areaScale / pc.fixedPointScale), vec3(kSaturated));
+    for (int c = 0; c < 3; ++c) {
+        if ((overflow & (1u << uint(c))) != 0u) {
+            splats[c] = kSaturated;
+        }
+    }
+    vec4 emission = imageLoad(emissionImage, p);
+    imageStore(emissionImage, p, vec4(min(emission.rgb + splats, vec3(kSaturated)), emission.a));
+}
