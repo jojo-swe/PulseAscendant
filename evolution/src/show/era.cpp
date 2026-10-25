@@ -122,6 +122,12 @@ void beatSwap(TimelineFrame& f, const Window& w, const BeatGridView& grid) {
 
 } // namespace
 
+TransitionMarks transitionMarks(const TimelineFrame& frame) {
+    const Window w = window(frame, beatGrid(frame.track));
+    const double offset = trackStart(frame.track);
+    return {w.start + offset, w.accent + offset, w.downbeat + offset, w.bar};
+}
+
 void applyEra(TimelineFrame& f, const BeatGridView& grid) {
     f.era = 0;
     f.wipe = 0;

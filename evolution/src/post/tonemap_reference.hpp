@@ -1,5 +1,7 @@
 #pragma once
 
+#include "post/grade.hpp"
+
 #include <array>
 #include <cstdint>
 
@@ -29,5 +31,24 @@ float tonemapDither(std::uint32_t x, std::uint32_t y);
 // The byte the tonemap writes for pixel (x, y).
 std::array<std::uint8_t, 3> tonemapReference(const float rgb[3], float exposureEV, std::uint32_t x,
                                              std::uint32_t y);
+
+// The graded tonemap (tonemap.comp with ToneInputs, no bloom) of pixel (x, y) in a width x height image: the
+// plain tonemap's steps with the vignette before PBR Neutral, the grade (post/grade.hpp) after it, the
+// palette mix after the OETF and the dither times (1 - grade.palette). `palette` is needed when
+// grade.palette > 0. With a default Grade it equals tonemapReference.
+// gradeDisplay is the same before quantisation: the encoded display value in [0, 1].
+std::array<float, 3> gradeDisplay(const float rgb[3], float exposureEV, const Grade& grade,
+                                  const GradePaletteTable* palette, std::uint32_t x, std::uint32_t y,
+                                  std::uint32_t width, std::uint32_t height);
+std::array<std::uint8_t, 3> tonemapGraded(const float rgb[3], float exposureEV, const Grade& grade,
+                                          const GradePaletteTable* palette, std::uint32_t x, std::uint32_t y,
+                                          std::uint32_t width, std::uint32_t height);
+// The grade alone on a linear display colour in [0, 1] (the S-curve to the grain), and the grain's noise of a
+// pixel in a frame (triangular, zero mean, unit standard deviation).
+std::array<float, 3> gradeLinear(const std::array<float, 3>& display, const Grade& grade, std::uint32_t x,
+                                 std::uint32_t y);
+float grainNoise(std::uint32_t x, std::uint32_t y, std::uint32_t frame);
+// The S-curve of grade.contrast on display luminance (see grade.hpp).
+float sCurve(float x, float contrast);
 
 } // namespace evo::post

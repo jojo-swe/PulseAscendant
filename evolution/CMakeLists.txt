@@ -95,6 +95,7 @@ target_link_libraries(evo_audio PUBLIC SDL3::SDL3-static)
 # The directed show: the cue sheet, the music curves sampled from the generated tables and the timeline that
 # turns a show time into everything a frame needs. No SDL or Vulkan here.
 add_library(evo_show STATIC
+    src/show/director.cpp
     src/show/era.cpp
     src/show/music_curves.cpp
     src/show/timeline.cpp)
@@ -1252,3 +1253,38 @@ set_tests_properties(render_video PROPERTIES TIMEOUT 300 PROCESSORS 2)
 # The release's NFO: its columns, its notes and its last line; the README stays plain.
 add_test(NAME nfo
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/nfo_test.py ${CMAKE_SOURCE_DIR})
+
+# --- Step 6: the 2026 picture's post (bloom and glare, the per-act look) -----------------------------------
+
+# post::Bloom, the lens PSF the tonemap mixes in (energy-conserving, threshold-free), in a library of its own
+# that evo_post's tonemap links. post::Look (the act grade, grain, the authored exposure, the palette grade
+# after a crossing) reads the show and the 1993 palettes, so it is built with the renderer.
+add_library(evo_bloom STATIC src/post/bloom.cpp)
+target_include_directories(evo_bloom PUBLIC src)
+target_link_libraries(evo_bloom PUBLIC evo_gfx)
+evo_add_shaders(evo_bloom
+    shaders/post/bloom_down.comp
+    shaders/post/bloom_spokes.comp
+    shaders/post/bloom_up.comp)
+target_link_libraries(evo_post PUBLIC evo_bloom)
+target_sources(evo_render PRIVATE src/post/look.cpp)
+
+# The bloom on uploaded HDR pictures: a constant picture comes through, a point keeps its energy with 95 % of
+# the bloom within 64 pixels at 1080p, the spokes' share and directions, a round halo without the streak and
+# a wide one with it. With the validation layer on; fails on any message.
+add_executable(bloom_test tests/bloom_test.cpp)
+target_link_libraries(bloom_test PRIVATE evo_post)
+target_compile_definitions(bloom_test PRIVATE EVO_TEST_SHADER_DIR="${EVO_SHADER_DIR}")
+add_test(NAME bloom COMMAND bloom_test)
+set_tests_properties(bloom PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP sync validation")
+
+# The look on the CPU: acts and their joins, the exposure keys (continuous, a key on every event, zero slope,
+# jumps on cuts only), the bloom around a crossing, the palette weight and the crossing palettes.
+add_executable(look_test tests/look_test.cpp)
+target_link_libraries(look_test PRIVATE evo_render)
+add_test(NAME look COMMAND look_test)
+
+# The denoiser's first frame on the Studio's dark walls (STUDIO NIGHT, 4 spp against a 256 spp reference) needs
+# the scene and the stages.
+target_link_libraries(denoiser_test PRIVATE evo_render evo_modern)
+add_dependencies(denoiser_test Evolution_shaders evo_modern_shaders)

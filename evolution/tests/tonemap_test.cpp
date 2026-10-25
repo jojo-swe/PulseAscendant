@@ -8,8 +8,11 @@
 // red, the sRGB OETF) hold on the CPU and the GPU; the hue is kept (exactly below the knee, in the plane of
 // the input and white above it); negative light counts as 0 and non-finite light is black. Then the scene
 // registry and the modern stage's placeholder through the HDR path: its picture must match the old direct
-// RGBA8 fill within 1 per channel wherever the curve can reach the fill's colour. Runs with the validation
-// layer on and fails on any message it reports.
+// RGBA8 fill within 1 per channel wherever the curve can reach the fill's colour. The graded tonemap
+// (post::Look's grade) against tonemapGraded byte for byte on a 64x64 ramp for every act with and without
+// grain and the palette weights 0, 0.5 and 1 (rounding ties aside); Act I's black stays 0, Act II's is lifted
+// to 0.004 in blue; the grain's spread and mean; at each CRT crossing's D every pixel is a palette entry; the
+// bloom keeps a constant picture. Runs with the validation layer on and fails on any message it reports.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -18,10 +21,13 @@
 #include "gfx/image.hpp"
 #include "gfx/readback.hpp"
 #include "modern/modern_scene.hpp"
+#include "post/look.hpp"
 #include "post/tonemap.hpp"
 #include "post/tonemap_reference.hpp"
 #include "render/modern_stage.hpp"
+#include "rt/random.hpp"
 #include "show/cues.hpp"
+#include "show/era.hpp"
 #include "show/timeline.hpp"
 
 #include "test_env.hpp"
@@ -163,19 +169,29 @@ HdrPicture uniformPicture(float value) {
 
 class Gpu {
 public:
-    explicit Gpu(Context& ctx)
-        : hdr_(ctx, {kWidth, kHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
+    explicit Gpu(Context& ctx, std::uint32_t width = kWidth, std::uint32_t height = kHeight)
+        : width_(width), height_(height),
+          hdr_(ctx, {width, height, VK_FORMAT_R16G16B16A16_SFLOAT,
                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, "test hdr"}),
-          ldr_(ctx, {kWidth, kHeight, VK_FORMAT_R8G8B8A8_UNORM,
+          ldr_(ctx, {width, height, VK_FORMAT_R8G8B8A8_UNORM,
                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1, "test ldr"}),
-          staging_(ctx, {std::size_t{kWidth} * kHeight * 8, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true,
+          staging_(ctx, {std::size_t{width} * height * 8, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true,
                          "test hdr upload"}),
-          readback_(ctx, kWidth, kHeight), ring_(ctx), tonemap_(ctx, ring_) {}
+          readback_(ctx, width, height), ring_(ctx), tonemap_(ctx, ring_) {}
 
     // Tone maps the picture at exposureEV; the RGB bytes.
     std::vector<std::uint8_t> run(const HdrPicture& picture, float exposureEV) {
+        evo::post::ToneInputs inputs;
+        inputs.exposureEV = exposureEV;
+        return run(picture, inputs);
+    }
+
+    // Tone maps (and grades) the picture with the inputs; the RGB bytes. With `bloom`, the tonemap's own
+    // bloom of the picture is mixed in at inputs.bloomWeight.
+    std::vector<std::uint8_t> run(const HdrPicture& picture, const evo::post::ToneInputs& inputs,
+                                  bool bloom = false) {
         auto* halves = static_cast<std::uint16_t*>(staging_.mapped());
-        for (std::size_t i = 0; i < std::size_t{kWidth} * kHeight; ++i) {
+        for (std::size_t i = 0; i < std::size_t{width_} * height_; ++i) {
             for (int c = 0; c < 3; ++c)
                 halves[i * 4 + c] = floatToHalf(picture.rgb[i * 3 + c]);
             halves[i * 4 + 3] = floatToHalf(1.f);
@@ -187,10 +203,13 @@ public:
                         VK_ACCESS_2_TRANSFER_WRITE_BIT);
         VkBufferImageCopy region{};
         region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        region.imageExtent = {kWidth, kHeight, 1};
+        region.imageExtent = {width_, height_, 1};
         vkCmdCopyBufferToImage(cmd, staging_.handle(), hdr_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                                &region);
-        tonemap_.record(cmd, hdr_, ldr_, exposureEV);
+        evo::post::ToneInputs tone = inputs;
+        if (bloom)
+            tone.bloom = &tonemap_.recordBloom(cmd, hdr_, 0.f);
+        tonemap_.record(cmd, hdr_, ldr_, tone);
         readback_.record(cmd, ldr_);
         ring_.wait(ring_.submit());
         return readback_.rgb();
@@ -198,8 +217,10 @@ public:
 
     evo::post::Tonemap& tonemap() { return tonemap_; }
     FrameRing& ring() { return ring_; }
+    Image& hdr() { return hdr_; }
 
 private:
+    std::uint32_t width_, height_;
     Image hdr_, ldr_;
     evo::gfx::Buffer staging_;
     evo::gfx::Readback readback_;
@@ -672,6 +693,224 @@ void testPlaceholderUnchanged(Context& ctx) {
     CHECK(off * 100 <= channels);
 }
 
+// --- The graded tonemap (post::Look's grade) -----------------------------------------------------------------
+
+constexpr std::uint32_t kRamp = 64;
+
+std::uint8_t rampByte(const std::vector<std::uint8_t>& rgb, std::uint32_t width, std::uint32_t x, std::uint32_t y,
+                      int c) {
+    return rgb[(std::size_t{y} * width + x) * 3 + c];
+}
+
+// The 64x64 ramp: x the light (0, then log spaced from 2^-10 to 16), y the colour, eight rows each of grey,
+// tungsten, moonlight, red, green, blue, skin and sodium.
+HdrPicture gradeRamp() {
+    constexpr std::array<std::array<float, 3>, 8> kTints = {{{1, 1, 1},
+                                                            {1, .62f, .3f},
+                                                            {.55f, .7f, 1},
+                                                            {1, .05f, .03f},
+                                                            {.04f, 1, .1f},
+                                                            {.05f, .1f, 1},
+                                                            {.9f, .55f, .42f},
+                                                            {1, .45f, .05f}}};
+    HdrPicture picture(kRamp, kRamp);
+    for (std::uint32_t y = 0; y < kRamp; ++y)
+        for (std::uint32_t x = 0; x < kRamp; ++x) {
+            const float light = x == 0 ? 0.f : std::exp2(-10.f + 14.f * static_cast<float>(x - 1) / (kRamp - 2));
+            const auto& tint = kTints[y / 8];
+            picture.set(x, y, tint[0] * light, tint[1] * light, tint[2] * light);
+        }
+    return picture;
+}
+
+// A 256-colour test palette: black, the 6x6x6 cube, then greys.
+evo::post::GradePalette testPalette() {
+    evo::post::GradePalette palette{};
+    std::size_t i = 1;
+    for (int r = 0; r < 6; ++r)
+        for (int g = 0; g < 6; ++g)
+            for (int b = 0; b < 6; ++b)
+                if (r + g + b > 0)
+                    palette[i++] = 0xff000000u | std::uint32_t(b * 51) << 16 | std::uint32_t(g * 51) << 8 |
+                                   std::uint32_t(r * 51);
+    for (std::uint32_t k = 1; i < palette.size(); ++i, ++k) {
+        const std::uint32_t v = k * 6;
+        palette[i] = 0xff000000u | v << 16 | v << 8 | v;
+    }
+    palette[0] = 0xff000000u;
+    return palette;
+}
+
+evo::post::Grade actGrade(int act, bool grain, float palette, std::uint32_t frame = 1234) {
+    evo::post::Grade grade = evo::post::actLook(act).grade;
+    if (!grain)
+        grade.grain = 0.f;
+    grade.grainFrame = frame;
+    grade.palette = palette;
+    return grade;
+}
+
+// (i) The graded tonemap equals tonemapGraded byte for byte: 3 acts x grain on and off x the palette weight
+// 0, 0.5 and 1, on the 64x64 ramp, at +0.5 EV. The only exception allowed is a tie: a channel whose value
+// before rounding lies within 1e-4 of a level's edge, where one ulp of the device's pow decides (about 1 in
+// 10^5 channels; the plain tonemap's ramps happen to have none).
+void testGradedMatchesReference(Context& ctx) {
+    Gpu gpu(ctx, kRamp, kRamp);
+    const HdrPicture picture = gradeRamp();
+    const evo::post::GradePalette palette = testPalette();
+    const evo::post::GradePaletteTable table = evo::post::gradePaletteTable(palette);
+    int configurations = 0, worst = 0, off = 0, ties = 0;
+    for (int act = 1; act <= 3; ++act)
+        for (bool grain : {false, true})
+            for (float weight : {0.f, .5f, 1.f}) {
+                evo::post::ToneInputs inputs;
+                inputs.exposureEV = .5f;
+                inputs.grade = actGrade(act, grain, weight);
+                inputs.palette = &palette;
+                const std::vector<std::uint8_t> rgb = gpu.run(picture, inputs);
+                for (std::uint32_t y = 0; y < kRamp; ++y)
+                    for (std::uint32_t x = 0; x < kRamp; ++x) {
+                        const auto want = evo::post::tonemapGraded(picture.at(x, y), inputs.exposureEV,
+                                                                   inputs.grade, &table, x, y, kRamp, kRamp);
+                        for (int c = 0; c < 3; ++c) {
+                            const int diff = std::abs(rampByte(rgb, kRamp, x, y, c) - int(want[c]));
+                            const float unrounded =
+                                evo::post::gradeDisplay(picture.at(x, y), inputs.exposureEV, inputs.grade, &table,
+                                                        x, y, kRamp, kRamp)[c] *
+                                    255.f +
+                                evo::post::tonemapDither(x, y) * (1.f - weight) + .5f;
+                            const bool tie = std::abs(unrounded - std::round(unrounded)) <= 1e-4f;
+                            worst = std::max(worst, diff);
+                            off += diff != 0 && !tie ? 1 : 0;
+                            ties += diff != 0 && tie ? 1 : 0;
+                        }
+                    }
+                ++configurations;
+            }
+    std::printf("(i) graded GPU vs reference: %d configurations x %u channels, %d differ off a tie, %d on one "
+                "(worst %d)\n",
+                configurations, kRamp * kRamp * 3, off, ties, worst);
+    CHECK(off == 0 && worst <= 1);
+    CHECK(ties * 10000 <= configurations * int(kRamp * kRamp * 3));
+    // An ungraded Grade is the plain tonemap, byte for byte.
+    for (std::uint32_t y = 0; y < kRamp; y += 7)
+        for (std::uint32_t x = 0; x < kRamp; ++x)
+            CHECK(evo::post::tonemapGraded(picture.at(x, y), .5f, {}, nullptr, x, y, kRamp, kRamp) ==
+                  evo::post::tonemapReference(picture.at(x, y), .5f, x, y));
+}
+
+// (j) Blacks and grain: Act I keeps black at 0; Act II lifts it to 0.004 (+-1e-4) in blue with less red and
+// green; the grain's standard deviation is within 15 % of its act's and moves the mean by at most 0.1 levels;
+// the same frame repeats, the next differs.
+void testGradeBlacksAndGrain(Context& ctx) {
+    Gpu gpu(ctx, kRamp, kRamp);
+    HdrPicture black(kRamp, kRamp), grey(kRamp, kRamp);
+    for (std::uint32_t y = 0; y < kRamp; ++y)
+        for (std::uint32_t x = 0; x < kRamp; ++x)
+            grey.set(x, y, .3f, .3f, .3f);
+    evo::post::ToneInputs inputs;
+    inputs.grade = actGrade(1, true, 0.f);
+    const std::vector<std::uint8_t> actOneBlack = gpu.run(black, inputs);
+    CHECK(std::all_of(actOneBlack.begin(), actOneBlack.end(), [](std::uint8_t v) { return v == 0; }));
+
+    const std::array<float, 3> lifted = evo::post::gradeLinear({0.f, 0.f, 0.f}, actGrade(2, true, 0.f), 3, 5);
+    std::printf("(j) Act II black: linear (%.5f, %.5f, %.5f)\n", lifted[0], lifted[1], lifted[2]);
+    CHECK(std::abs(lifted[2] - .004f) <= 1e-4f && lifted[0] < lifted[1] && lifted[1] < lifted[2]);
+    inputs.grade = actGrade(2, true, 0.f);
+    const std::vector<std::uint8_t> actTwoBlack = gpu.run(black, inputs);
+    for (std::size_t i = 0; i < actTwoBlack.size(); i += 3)
+        CHECK(actTwoBlack[i] > 0 && actTwoBlack[i] < actTwoBlack[i + 1] && actTwoBlack[i + 1] < actTwoBlack[i + 2]);
+
+    for (int act = 1; act <= 3; ++act) {
+        const evo::post::Grade with = actGrade(act, true, 0.f), without = actGrade(act, false, 0.f);
+        // The grain's relative spread, before quantisation.
+        double sum = 0, sumSquares = 0;
+        const int n = 256 * 256;
+        for (std::uint32_t y = 0; y < 256; ++y)
+            for (std::uint32_t x = 0; x < 256; ++x) {
+                const float plain = evo::post::gradeLinear({.4f, .4f, .4f}, without, x, y)[1];
+                const float grained = evo::post::gradeLinear({.4f, .4f, .4f}, with, x, y)[1];
+                const double r = grained / plain - 1.0;
+                sum += r;
+                sumSquares += r * r;
+            }
+        const double mean = sum / n, deviation = std::sqrt(sumSquares / n - mean * mean);
+        // The GPU bytes: the mean shift in levels.
+        inputs.grade = with;
+        const std::vector<std::uint8_t> a = gpu.run(grey, inputs), again = gpu.run(grey, inputs);
+        inputs.grade.grainFrame += 1;
+        const std::vector<std::uint8_t> next = gpu.run(grey, inputs);
+        inputs.grade = without;
+        const std::vector<std::uint8_t> clean = gpu.run(grey, inputs);
+        double shift = 0;
+        for (std::size_t i = 0; i < a.size(); ++i)
+            shift += int(a[i]) - int(clean[i]);
+        shift /= double(a.size());
+        std::printf("    Act %d grain: relative std %.5f (target %.4f), mean %+.1e; on the GPU the mean moves %+.3f "
+                    "levels\n",
+                    act, deviation, with.grain, mean, shift);
+        CHECK(std::abs(deviation / with.grain - 1) <= .15);
+        CHECK(std::abs(shift) <= .1);
+        CHECK(a == again && a != next);
+    }
+}
+
+// (k) At each crossing's D the 2026 picture is all palette: every pixel of a 16x16 crop, through the frame's
+// own look, is an entry of the 1993 effect's palette, byte for byte.
+void testCrossingPalette(Context& ctx) {
+    constexpr std::uint32_t kCrop = 16;
+    Gpu gpu(ctx, kCrop, kCrop);
+    HdrPicture picture(kCrop, kCrop);
+    for (std::uint32_t y = 0; y < kCrop; ++y)
+        for (std::uint32_t x = 0; x < kCrop; ++x) {
+            const std::uint32_t h = evo::rt::pcgHash(x * 131u + y * 7919u);
+            picture.set(x, y, float(h & 255u) / 64.f, float((h >> 8) & 255u) / 96.f, float((h >> 16) & 255u) / 128.f);
+        }
+    for (int chapter : {1, 4, 10, 20}) {
+        const double middle = 0.5 * (evo::show::chapterStart(chapter) + evo::show::chapterStart(chapter + 1));
+        const double d = evo::show::transitionMarks(evo::show::sampleTimeline(middle)).downbeat;
+        const evo::post::Look look = evo::post::lookFor(evo::show::sampleTimeline(d));
+        CHECK(look.grade.palette == 1.f);
+        evo::post::ToneInputs inputs;
+        inputs.grade = look.grade;
+        inputs.palette = &look.palette;
+        const std::vector<std::uint8_t> rgb = gpu.run(picture, inputs);
+        int members = 0;
+        for (std::size_t i = 0; i < rgb.size(); i += 3) {
+            const std::uint32_t colour =
+                0xff000000u | std::uint32_t(rgb[i + 2]) << 16 | std::uint32_t(rgb[i + 1]) << 8 | rgb[i];
+            members += std::find(look.palette.begin(), look.palette.end(), colour) != look.palette.end() ? 1 : 0;
+        }
+        std::printf("(k) chapter %d at D %.2f: %d of %u pixels are palette entries\n", chapter, d, members,
+                    kCrop * kCrop);
+        CHECK(members == int(kCrop * kCrop));
+    }
+}
+
+// (l) The bloom through the tonemap: a constant picture comes out as without it (within 1, the same bytes
+// almost everywhere); a bright point spreads into its neighbours.
+void testBloomThroughTonemap(Context& ctx) {
+    Gpu gpu(ctx, kRamp, kRamp);
+    HdrPicture flat(kRamp, kRamp), point(kRamp, kRamp);
+    for (std::uint32_t y = 0; y < kRamp; ++y)
+        for (std::uint32_t x = 0; x < kRamp; ++x)
+            flat.set(x, y, .25f, .2f, .15f);
+    point.set(32, 32, 2000.f, 2000.f, 2000.f);
+    evo::post::ToneInputs plain, bloom;
+    bloom.bloomWeight = .035f;
+    const std::vector<std::uint8_t> a = gpu.run(flat, plain), b = gpu.run(flat, bloom, true);
+    int worst = 0, off = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        worst = std::max(worst, std::abs(int(a[i]) - int(b[i])));
+        off += a[i] != b[i] ? 1 : 0;
+    }
+    std::printf("(l) bloom on a constant picture: worst %d, %d of %zu channels differ\n", worst, off, a.size());
+    CHECK(worst <= 1 && off * 100 <= int(a.size()));
+    const std::vector<std::uint8_t> sharp = gpu.run(point, plain), soft = gpu.run(point, bloom, true);
+    CHECK(rampByte(sharp, kRamp, 40, 32, 0) == 0 && rampByte(soft, kRamp, 40, 32, 0) > 0);
+    CHECK(rampByte(soft, kRamp, 32, 32, 0) == 255);
+}
+
 } // namespace
 
 int main() {
@@ -695,6 +934,10 @@ int main() {
                 testRejectsWrongImages(ctx, gpu);
             }
             testPlaceholderUnchanged(ctx);
+            testGradedMatchesReference(ctx);
+            testGradeBlacksAndGrain(ctx);
+            testCrossingPalette(ctx);
+            testBloomThroughTonemap(ctx);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(evo::gfx::validationMessagesReported() == 0);

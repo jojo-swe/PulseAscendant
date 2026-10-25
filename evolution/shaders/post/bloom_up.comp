@@ -1,0 +1,55 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// One step up post::Bloom's chain, in place: level k's pixel becomes
+//   halo * (fineWeight * level_k + coarseScale * bilinear(level_k+1)) [+ bilinear(spokes)]
+// where level_k+1 already holds the sum of the coarser levels (the first step reads the coarsest level as it
+// is, scaled by its own weight) and the spokes picture (quarter size) is added on the last step only, onto
+// the half-size picture. Bilinear upsampling by 2 (pixel p reads the coarse picture at p / 2 - 0.25) gives
+// every coarse pixel a weight of 4 in all, so it keeps the energy per area, like the way down.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform image2D fine;                 // level k, read then written
+layout(set = 0, binding = 1, rgba16f) uniform readonly image2D coarse;      // level k + 1
+layout(set = 0, binding = 2, rgba16f) uniform readonly image2D spokesImage; // quarter size
+
+// Must match UpPush in src/post/bloom.cpp (24 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width; // level k's size
+    uint height;
+    float fineWeight;
+    float coarseScale;
+    float halo;     // the halo's share of the bloom (the last step; else 1)
+    uint addSpokes; // the last step: add the spokes picture
+} pc;
+
+// Bilinear upsampling by 2 of one of the two coarser pictures, clamped to its edge.
+#define UPSAMPLE(image, p, result)                                                                          \
+    {                                                                                                       \
+        ivec2 high = imageSize(image) - 1;                                                                  \
+        vec2 base = vec2(p) * 0.5 - 0.25;                                                                   \
+        ivec2 origin = ivec2(floor(base));                                                                  \
+        vec2 f = base - vec2(origin);                                                                       \
+        vec3 a = imageLoad(image, clamp(origin, ivec2(0), high)).rgb;                                       \
+        vec3 b = imageLoad(image, clamp(origin + ivec2(1, 0), ivec2(0), high)).rgb;                         \
+        vec3 c = imageLoad(image, clamp(origin + ivec2(0, 1), ivec2(0), high)).rgb;                         \
+        vec3 d = imageLoad(image, clamp(origin + ivec2(1, 1), ivec2(0), high)).rgb;                         \
+        result = (a * (1.0 - f.x) + b * f.x) * (1.0 - f.y) + (c * (1.0 - f.x) + d * f.x) * f.y;            \
+    }
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
+        return;
+    }
+    vec3 up;
+    UPSAMPLE(coarse, p, up)
+    vec3 result = pc.halo * (pc.fineWeight * imageLoad(fine, p).rgb + pc.coarseScale * up);
+    if (pc.addSpokes != 0u) {
+        vec3 spokes;
+        UPSAMPLE(spokesImage, p, spokes)
+        result += spokes;
+    }
+    imageStore(fine, p, vec4(result, 1.0));
+}

@@ -8,6 +8,7 @@
 #include "modern/shutter.hpp"
 #include "modern/splats.hpp"
 #include "post/denoiser.hpp"
+#include "post/look.hpp"
 #include "post/upscale.hpp"
 #include "rt/particles.hpp"
 #include "rt/random.hpp"
@@ -437,8 +438,23 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         upscaler_->record(cmd, traceHdr_, g.depth, g.motion, upscale, hdr_, &g.emission);
         endScope(cmd);
     }
+    // The look (post::Look): the act's grade and grain, the authored exposure, the bloom, the palette grade
+    // after a crossing.
+    const post::Look look = post::lookFor(frame);
+    post::ToneInputs tone;
+    tone.exposureEV = scene.exposureEV + look.exposureOffset;
+    tone.grade = look.grade;
+    tone.grade.vignette = scene.vignette;
+    if (tone.grade.palette > 0.f)
+        tone.palette = &look.palette;
+    if (look.bloom > 0.f) {
+        beginScope(cmd, "bloom");
+        tone.bloom = &tonemap_.recordBloom(cmd, hdr_, scene.anamorphic);
+        tone.bloomWeight = look.bloom;
+        endScope(cmd);
+    }
     beginScope(cmd, "tonemap");
-    tonemap_.record(cmd, hdr_, image_, scene.exposureEV);
+    tonemap_.record(cmd, hdr_, image_, tone);
     endScope(cmd);
     previousCamera_ = scene.camera;
     previousInstances_ = scene.instances;

@@ -158,6 +158,43 @@ float neighbourhoodTemporalVariance(ivec2 p, vec2 motion, float alpha) {
 // all-zero 5x5 is not), returned negative: the sign tells the first à-trous pass to filter this pixel by
 // depth and normal only. The later passes see the magnitude, carried as usual, and stop at real lighting
 // edges again; the first pass blurs a shadow edge in a sparse region by two pixels at most.
+// Heavy-tailed first frames (M2: the Studio's dark walls at 4 spp): no sample is 0, but the light that counts
+// arrives on few paths, so most pixels hold the dim floor and a few hold several times the mean. The minimum
+// estimator then finds a quadrant or direction with none of the bright ones and calls the neighbourhood
+// noise-free, and the luminance stop weights the bright samples down: the frame came out up to 20 % dark
+// (denoiser_test's heavy-tailed frame). Such bright samples stand alone, where a lighting edge's bright side
+// is a connected region: so a neighbourhood whose samples above twice the mean are largely isolated (no 4-
+// neighbour above it too; kIsolatedShare of their weight, and at least kMinIsolated of it, so one glint or
+// one outlier of plain noise does not count) counts as sparse.
+const float kIsolatedShare = 1.0 / 3.0;
+const float kMinIsolated = 1.5;
+
+bool isolatedBrightSamples(float mean) {
+    float brightWeight = 0.0, isolatedWeight = 0.0;
+    float threshold = 2.0 * mean;
+    for (int dy = -kSpatialRadius; dy <= kSpatialRadius; ++dy) {
+        for (int dx = -kSpatialRadius; dx <= kSpatialRadius; ++dx) {
+            int i = neighbourIndex(dx, dy);
+            if (neighbourWeight[i] <= 0.0 || neighbourLuminance[i] <= threshold) {
+                continue;
+            }
+            bool alone = true;
+            const ivec2 sides[4] = ivec2[4](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1));
+            for (int k = 0; k < 4; ++k) {
+                ivec2 q = ivec2(dx, dy) + sides[k];
+                if (abs(q.x) > kSpatialRadius || abs(q.y) > kSpatialRadius) {
+                    continue;
+                }
+                int j = neighbourIndex(q.x, q.y);
+                alone = alone && !(neighbourWeight[j] > 0.0 && neighbourLuminance[j] > threshold);
+            }
+            brightWeight += neighbourWeight[i];
+            isolatedWeight += alone ? neighbourWeight[i] : 0.0;
+        }
+    }
+    return isolatedWeight >= max(kIsolatedShare * brightWeight, kMinIsolated);
+}
+
 float spatialVariance() {
     float sumWeight = 0.0, zeroWeight = 0.0, sum = 0.0;
     for (int i = 0; i < kSpatialWidth * kSpatialWidth; ++i) {
@@ -165,7 +202,7 @@ float spatialVariance() {
         zeroWeight += neighbourLuminance[i] <= 0.0 ? neighbourWeight[i] : 0.0;
         sum += neighbourWeight[i] * neighbourLuminance[i];
     }
-    if (zeroWeight >= kSparseShare * sumWeight) { // sumWeight >= 1: the centre
+    if (zeroWeight >= kSparseShare * sumWeight || isolatedBrightSamples(sum / sumWeight)) { // sumWeight >= 1
         float mean = sum / sumWeight, spread = 0.0;
         for (int i = 0; i < kSpatialWidth * kSpatialWidth; ++i) {
             float d = neighbourLuminance[i] - mean;
