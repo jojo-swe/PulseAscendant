@@ -1,0 +1,310 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The City's splats (step 5, Task 23; src/modern/scenes/city.hpp): the glow of the night air around the street
+// lamps near the camera, and CITY NIGHT's rain. Every point is a pure function of (id, seconds, params) and the
+// frame's camera; the lamps are found from the grid as the C++ side builds them (cityLampHead, cityLampScale,
+// the lamp's colour and radiance: mirrored here).
+//
+// The glow is single scattering in a thin homogeneous haze (in-scattering coefficient sigma, isotropic phase)
+// of each lamp's light, as a point source of intensity I: a ray passing at distance b from it gathers
+// L(b) = sigma I pi / (4 pi b), and over a disc of radius B about the lamp (in the plane across the view) the
+// glow's flux is 2 pi^2 sigma I B / (4 pi D^2) in solid angle. Its points are spread over the plane with a
+// density falling as exp(-b / B) / b (b exponential, a uniform angle: the 1 / b with a soft edge, whose flux
+// is the disc's), each carrying an equal share, and each is depth tested where it lies, so a lamp behind a
+// wall shows no glow. Near lamps get up to `near points` points, as many as keep them about 2 px apart; the
+// glow's reach is cut to kMaxGlowPixels on the picture, its visible core.
+//
+// Rain: drops falling at about 9 m/s with a little wind in a box that moves with the camera (wrapped around
+// it, so they are always there), each a streak of eight points along its velocity relative to the camera over
+// a 1/30 s exposure, as bright as the lamps near it make it (a drop reflects and refracts a few percent of the
+// light around it towards the camera).
+//
+// params[0] = (lamp glow sigma, near points per lamp, rain drops, kept radius: 0 every lot)
+// params[1] = (camera velocity xyz, 1 in VECTOR CITY: its lamps switch on in a wave)
+// params[2] = (the wave's start (D) in seconds, rain area half size, rain height, rain brightness)
+// params[3] = (glow window in lots, unused, unused, unused)
+
+#include "splat_common.glsl"
+
+const float kCell = 42.0;
+const float kStreet = 12.0;
+const float kLampHeight = 8.2;   // kCityLampHeight
+const float kLampRadius = 0.2;   // kCityLampRadius
+const uint kLampsPerLot = 8u;
+const int kMinLotI = -24, kMaxLotI = 48, kMinLotM = -20, kMaxLotM = 52;
+const float kDowntownX = 1281.0, kDowntownZ = 1281.0, kDowntownRadius = 520.0;
+const float kWaveX = 0.0, kWaveZ = 160.0, kWaveSpeed = 420.0;
+const uint kCitySeed = 0x19930714u; // retro::kCitySeed
+const uint kSalt = 0x23C17u;        // the City's salts (city.cpp)
+const int kNearLots = 2;            // the near lamps: lots within 2 of the camera's lot
+const float kMaxGlowPixels = 40.0;  // at the 1080-row reference
+const uint kRainPoints = 8u;        // points along a drop's streak
+
+// retro::cityHash, bit for bit.
+uint cityHash(int i, int m, uint salt) {
+    uint h = uint(i) * 0x9e3779b1u;
+    h ^= uint(m) * 0x85ebca77u + 0x632be5abu;
+    h ^= salt * 0xc2b2ae3du + kCitySeed;
+    h ^= h >> 15;
+    h *= 0x2c1b3c6du;
+    h ^= h >> 12;
+    h *= 0x297a2d39u;
+    h ^= h >> 15;
+    return h;
+}
+
+uint lotHash(int i, int m, uint salt) {
+    return cityHash(i, m, kSalt + salt);
+}
+
+float unitHash(uint h) {
+    return float(h >> 8u) * (1.0 / 16777216.0);
+}
+
+// Draw k of hash h, independent of its other draws (see city_patterns.glsl's cityDraw).
+float draw(uint h, uint k);
+
+uint pcg(uint v) {
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float draw(uint h, uint k) {
+    return unitHash(pcg(h + k * 0x9E3779B9u));
+}
+
+float smoothUnit(float t) {
+    t = clamp(t, 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+float downtownLift(float x, float z) {
+    float d = length(vec2(x - kDowntownX, z - kDowntownZ)) / kDowntownRadius;
+    return 1.0 + 6.0 * smoothUnit(1.0 - d) * smoothUnit(1.0 - d) + 0.6 * smoothUnit(1.35 - d);
+}
+
+// cityLampHead.
+vec3 lampHead(int i, int m, uint k) {
+    float x0 = kCell * float(i) + 0.5 * kStreet, z0 = kCell * float(m) + 0.5 * kStreet;
+    float span = kCell - kStreet;
+    uint side = (k / 2u) % 4u;
+    float along = ((k % 2u) == 0u ? 0.25 : 0.75) * span + ((side % 2u) == 1u ? 3.5 : 0.0);
+    float over = 1.65;
+    if (side == 0u) {
+        return vec3(x0 + along, kLampHeight, z0 - over);
+    } else if (side == 1u) {
+        return vec3(x0 + along, kLampHeight, z0 + span + over);
+    } else if (side == 2u) {
+        return vec3(x0 - over, kLampHeight, z0 + along);
+    }
+    return vec3(x0 + span + over, kLampHeight, z0 + along);
+}
+
+// The lamp's radiance (its sphere's colour * emission, city.cpp).
+vec3 lampRadiance(int i, int m, uint k) {
+    uint h = lotHash(i, m, 100u + k);
+    float cx = kCell * (float(i) + 0.5), cz = kCell * (float(m) + 0.5);
+    bool modern = downtownLift(cx, cz) > 1.4 || unitHash(h) < 0.15;
+    vec3 c = modern ? vec3(1.0, 0.9, 0.76) : vec3(1.0, 0.5, 0.15);
+    return c * (0.85 + 0.3 * draw(h, 1u)) * (modern ? 300.0 : 380.0);
+}
+
+// cityLampScale.
+float lampScale(int i, int m, uint k, vec3 head, float seconds, float accent, bool dusk) {
+    uint hash = lotHash(i, m, 200u + k);
+    float on = 1.0;
+    if (dusk) {
+        float wave = length(vec2(head.x - kWaveX, head.z - kWaveZ));
+        float at = accent + wave / kWaveSpeed + 0.25 * unitHash(hash);
+        float strike = clamp((seconds - at) / 0.35, 0.0, 1.0);
+        bool flickering = strike > 0.0 && strike < 1.0;
+        float flicker = flickering && sin(90.0 * seconds + 7.0 * draw(hash, 1u)) <= 0.0 ? 0.3 : 1.0;
+        on = draw(hash, 2u) < 0.12 ? 1.0 : strike * flicker;
+    }
+    return draw(hash, 3u) < 0.015 ? 0.0 : on;
+}
+
+// cityLotKept: the chapters' camera paths (city.cpp's kPaths), within `radius` (0: every lot).
+float segmentDistance(vec2 p, vec2 a, vec2 b) {
+    vec2 d = b - a;
+    float len2 = dot(d, d);
+    float t = len2 > 0.0 ? clamp(dot(p - a, d) / len2, 0.0, 1.0) : 0.0;
+    return length(p - a - t * d);
+}
+
+bool lotKept(int i, int m, float radius) {
+    if (i < kMinLotI || i >= kMaxLotI || m < kMinLotM || m >= kMaxLotM) {
+        return false;
+    }
+    if (radius <= 0.0) {
+        return true;
+    }
+    vec2 p = vec2(kCell * (float(i) + 0.5), kCell * (float(m) + 0.5));
+    const vec4 paths[7] = vec4[7](vec4(0.0, -60.0, 0.0, 160.0), vec4(0.0, 160.0, 330.0, 470.0),
+                                  vec4(525.0, 525.0, 760.0, 820.0), vec4(252.0, 180.0, 252.0, 560.0),
+                                  vec4(1260.0, 200.0, 1260.0, 1500.0), vec4(1260.0, 1500.0, 1260.0, 1900.0),
+                                  vec4(1081.0, 1081.0, 1481.0, 1481.0));
+    for (int s = 0; s < 7; ++s) {
+        if (segmentDistance(p, paths[s].xy, paths[s].zw) < radius) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const SplatPoint kNothing = SplatPoint(vec3(0.0), vec3(0.0), 0.0);
+
+float maxComponent3(vec3 v) {
+    return max(v.x, max(v.y, v.z));
+}
+
+// The reference pixel's solid angle at the frame's lens, and the world size of one trace pixel at depth z.
+float referencePixelSolidAngle() {
+    float p = 2.0 * pc.tanHalfFovY / 1080.0;
+    return p * p;
+}
+
+float tracePixelAt(float z) {
+    return 2.0 * z * pc.tanHalfFovY / float(pc.height);
+}
+
+// Point j of the glow around a lamp: `points` is how many ids the lamp has.
+SplatPoint glowPoint(vec3 head, vec3 radiance, float sigma, uint j, uint points, uint seed) {
+    vec3 toLamp = head - pc.cameraPosition;
+    float z = dot(toLamp, pc.cameraForward);
+    if (!(z > 0.5)) {
+        return kNothing;
+    }
+    float dist = length(toLamp);
+    float intensity = maxComponent3(radiance) > 0.0 ? 3.14159265 * kLampRadius * kLampRadius : 0.0;
+    // The glow's radius: 3 m, cut to its visible core on the picture.
+    float maxWorld = kMaxGlowPixels * 2.0 * z * pc.tanHalfFovY / 1080.0;
+    float glow = min(3.0, maxWorld);
+    // As many points as keep them ~2 trace pixels apart over the disc (at least 1, at most `points`).
+    float glowPixels = 0.6 * glow / tracePixelAt(z); // where most of the points fall
+    uint used = uint(clamp(3.14159265 * glowPixels * glowPixels / 2.0, 1.0, float(points)));
+    if (j >= used) {
+        return kNothing;
+    }
+    float flux = 2.0 * 3.14159265 * 3.14159265 * sigma * intensity * (glow / 3.0) / (4.0 * 3.14159265 * dist * dist) /
+                 referencePixelSolidAngle();
+    uint h = pcg(seed + j * 0x9E3779B9u);
+    // b from an exponential of scale glow / 3: a density of exp(-3 b / glow) / b over the plane, the 1 / b of
+    // single scattering with a soft edge (whose flux is that of a hard disc of radius glow / 3, as above).
+    float b = -glow / 3.0 * log(1.0 - 0.995 * draw(h, 1u));
+    float a = 6.2831853 * draw(h, 2u);
+    vec3 up = cross(pc.cameraRight, pc.cameraForward);
+    SplatPoint s;
+    s.position = head + (cos(a) * pc.cameraRight + sin(a) * up) * b - pc.cameraForward * 0.3;
+    s.flux = radiance * (flux / float(used));
+    s.radius = used == 1u ? glow * 0.4 : 1.6 * tracePixelAt(z);
+    return s;
+}
+
+SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
+    float sigma = params[0].x;
+    uint nearPoints = uint(params[0].y);
+    uint drops = uint(params[0].z);
+    float keptRadius = params[0].w;
+    bool dusk = params[1].w > 0.5;
+    float accent = params[2].x;
+    int window = int(params[3].x);
+
+    int ci = int(floor(pc.cameraPosition.x / kCell));
+    int cm = int(floor(pc.cameraPosition.z / kCell));
+    uint nearSide = uint(2 * kNearLots + 1);
+    uint nearIds = nearSide * nearSide * kLampsPerLot * nearPoints;
+    uint farSide = uint(2 * window + 1);
+    uint farIds = sigma > 0.0 ? farSide * farSide * kLampsPerLot : 0u;
+    if (sigma > 0.0 && id < nearIds) {
+        // A near lamp's glow.
+        uint lamp = id / nearPoints, j = id % nearPoints;
+        uint lot = lamp / kLampsPerLot, k = lamp % kLampsPerLot;
+        int i = ci - kNearLots + int(lot % nearSide), m = cm - kNearLots + int(lot / nearSide);
+        if (!lotKept(i, m, keptRadius)) {
+            return kNothing;
+        }
+        vec3 head = lampHead(i, m, k);
+        vec3 radiance = lampRadiance(i, m, k) * lampScale(i, m, k, head, seconds, accent, dusk);
+        return glowPoint(head, radiance, sigma, j, nearPoints, lotHash(i, m, 300u + k));
+    }
+    if (sigma > 0.0 && id < nearIds + farIds) {
+        // A farther lamp's glow: one point (its glow is a few pixels at most).
+        uint lamp = id - nearIds;
+        uint lot = lamp / kLampsPerLot, k = lamp % kLampsPerLot;
+        int di = int(lot % farSide) - window, dm = int(lot / farSide) - window;
+        if (abs(di) <= kNearLots && abs(dm) <= kNearLots) {
+            return kNothing; // a near lamp
+        }
+        int i = ci + di, m = cm + dm;
+        if (!lotKept(i, m, keptRadius)) {
+            return kNothing;
+        }
+        vec3 head = lampHead(i, m, k);
+        vec3 radiance = lampRadiance(i, m, k) * lampScale(i, m, k, head, seconds, accent, dusk);
+        return glowPoint(head, radiance, sigma, 0u, 1u, lotHash(i, m, 300u + k));
+    }
+    if (sigma <= 0.0) {
+        id += nearIds + farIds; // no glow ids: all rain
+    }
+    uint rainId = id - nearIds - farIds;
+    if (rainId >= drops * kRainPoints) {
+        return kNothing;
+    }
+    // A raindrop: one of the points along its streak.
+    uint drop = rainId / kRainPoints, j = rainId % kRainPoints;
+    uint h = pcg(drop * 0x9E3779B9u + 0x7A1Bu);
+    float halfSize = params[2].y, height = params[2].z;
+    float speed = 8.0 + 2.5 * draw(h, 4u);
+    vec3 wind = vec3(0.9, 0.0, 0.25);
+    vec3 base = vec3(draw(h, 1u), draw(h, 2u), draw(h, 3u));
+    vec3 cam = pc.cameraPosition;
+    float fall = mod(base.y * height + speed * seconds, height);
+    vec3 p;
+    p.y = cam.y + 0.75 * height - fall;
+    vec2 drift = wind.xz * seconds;
+    p.x = cam.x + (fract(base.x + (drift.x - cam.x) / (2.0 * halfSize)) - 0.5) * 2.0 * halfSize;
+    p.z = cam.z + (fract(base.z + (drift.y - cam.z) / (2.0 * halfSize)) - 0.5) * 2.0 * halfSize;
+    if (p.y < 0.02) {
+        return kNothing;
+    }
+    vec3 velocity = vec3(wind.x, -speed, wind.z) - params[1].xyz;
+    float exposure = 1.0 / 30.0;
+    p += velocity * exposure * (float(j) / float(kRainPoints - 1u) - 0.5);
+    vec3 v = p - cam;
+    float z = dot(v, pc.cameraForward);
+    if (!(z > 2.5)) {
+        return kNothing; // nearer drops are a blur in front of the lens
+    }
+    // The light on the drop: the lamps of the four lots around its nearest street corner.
+    int i0 = int(floor(p.x / kCell + 0.5)) - 1, m0 = int(floor(p.z / kCell + 0.5)) - 1;
+    vec3 light = vec3(0.004, 0.0045, 0.006); // the night sky's glow
+    for (int dm = 0; dm < 2; ++dm) {
+        for (int di = 0; di < 2; ++di) {
+            int i = i0 + di, m = m0 + dm;
+            if (!lotKept(i, m, keptRadius)) {
+                continue;
+            }
+            for (uint k = 0u; k < kLampsPerLot; ++k) {
+                vec3 head = lampHead(i, m, k);
+                vec3 d = head - p;
+                float d2 = max(dot(d, d), 1.0);
+                light += lampRadiance(i, m, k) * (3.14159265 * kLampRadius * kLampRadius / d2);
+            }
+        }
+    }
+    // A drop of 2 mm smeared over its streak: its radiance (a few percent of the light around it) times its
+    // streak's area in reference pixels, split over the streak's points.
+    // Far drops are lost in the dark: only those near a light or near the lens read as rain.
+    float near = clamp(1.4 - length(v) / 10.0, 0.15, 1.0);
+    light *= near;
+    float streak = length(velocity) * exposure;
+    float area = streak * 0.002 / (dot(v, v) * referencePixelSolidAngle());
+    SplatPoint s;
+    s.position = p;
+    s.flux = light * (params[2].w * 0.15 / 3.14159265) * area / float(kRainPoints);
+    s.radius = 0.0;
+    return s;
+}

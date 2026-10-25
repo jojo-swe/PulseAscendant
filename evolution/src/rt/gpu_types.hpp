@@ -23,7 +23,22 @@ namespace evo::rt {
 // --- Materials and lights ----------------------------------------------------------------------------------
 
 enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Checker = 3 }; // = hit group
-enum class Pattern : std::uint32_t { None = 0, WoodPlanks = 1, BrushedMetal = 2, Concrete = 3 };
+// The City's patterns (Task 23 of step 5, shaders/rt/city_patterns.glsl) start at 16: the facades of its
+// towers (punched windows, a curtain wall, ribbon bands, a round curtain wall), its streets, and on Emissive
+// materials the light trails of its traffic and the lettering of its signs.
+enum class Pattern : std::uint32_t {
+    None = 0,
+    WoodPlanks = 1,
+    BrushedMetal = 2,
+    Concrete = 3,
+    CityPunched = 16,
+    CityCurtain = 17,
+    CityBands = 18,
+    CityRound = 19,
+    CityStreet = 20,
+    CityTrail = 21,
+    CitySign = 22
+};
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;
 

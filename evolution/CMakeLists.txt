@@ -1092,3 +1092,15 @@ target_compile_definitions(light_tree_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TES
 add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders evo_modern_sphere_shaders
                  evo_modern_intersection_shaders)
 evo_gpu_test(light_tree light_tree_test)
+
+# --- Step 5 Task 23: the City (VECTOR CITY, ASCENT, CITY NIGHT, METROPOLIS) ----------------------------------
+
+# A night city on the 1993 city's grid: towers under procedural facades with millions of windows, wet
+# streets, tens of thousands of street lamps and beacons in the light tree, signs as rect lights, traffic
+# light trails, and the splats of the lamps' glow in the haze and of the rain (src/modern/scenes/city.cpp,
+# shaders/rt/city_patterns.glsl, shaders/modern/city_splats.comp). Its scene test: the standard picture and
+# sweep checks, the card's numbers, the 1993 flight, the wet street's reflection, the tree lights per chapter
+# and the windows' blinking at one time reached by two seek paths.
+target_sources(evo_modern PRIVATE src/modern/scenes/city.cpp)
+evo_scene_test(city)
+add_dependencies(scene_city_test evo_modern_sphere_shaders evo_modern_intersection_shaders)

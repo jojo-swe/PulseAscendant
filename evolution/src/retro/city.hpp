@@ -1,5 +1,6 @@
 #pragma once
 
+#include "retro/city_plan.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
 #include "show/timeline.hpp"
@@ -24,38 +25,7 @@ namespace evo::retro {
 // implementation-defined). Only the cells within kCityDrawDistance of the eye are drawn, fading through a
 // distance haze into the background, so a frame draws about 300 polygons (at most about 400): walls, roofs,
 // street tiles, markings and lit windows, drawn as triangles through addTriangle, which clips and culls them.
-inline constexpr std::uint32_t kCityRetroRate = 35;
-inline constexpr std::uint32_t kCitySeed = 0x19930714u;
-inline constexpr double kCityCell = 42;
-inline constexpr double kCityStreet = 12;
-inline constexpr double kCitySidewalk = 1.5; // between a lot's edge and its buildings
-inline constexpr double kCityAlley = 1.5;    // between the buildings of one lot
-inline constexpr double kCityMaxHeight = 54; // no roof, set-back tower included, is higher
-inline constexpr double kCityDrawDistance = 190;
-inline constexpr double kCityHazeNear = 70; // the haze starts here and is total at kCityDrawDistance
-
-// The flight, on t = retroFrame / 35 seconds and A = accentSeconds clamped to [kCityMinAccent,
-// kCityMaxAccent]. The chapter wipes to 2026 over the two bars before its accent, so the flight is anchored
-// to A: down the main street at kCityFlightHeight, climbing (smoothstep) to kCityCruiseHeight between
-// kCityClimb[0] A and kCityClimb[1] A while the view tilts down to kCityCruisePitch, and turning right from
-// kCityTurn[0] A, its yaw rate easing (smoothstep) up to kCityTurnRate by kCityTurn[1] A; the bank (roll) is
-// kCityBank times the yaw rate over kCityTurnRate (plus a 1.5 degree sway while in the street). After A the
-// turn eases out over kCityTurnEase seconds and the camera flies on level. The speed is kCitySpeed
-// throughout. The heading is closed form; the position is integrated from the heading by Simpson's rule
-// (steps of at most 1/200 s) from the turn's start on every call, so it too is a pure function of t.
-inline constexpr double kCityMinAccent = 5, kCityMaxAccent = 40;
-inline constexpr double kCitySpeed = 24;   // units a second
-inline constexpr double kCityStartZ = -30; // where the camera is at retro frame 0, on the main street
-inline constexpr double kCityFlightHeight = 3.5;
-inline constexpr double kCityCruiseHeight = 70;
-inline constexpr double kCityFlightPitch = -2;  // degrees
-inline constexpr double kCityCruisePitch = -24; // degrees
-inline constexpr std::array<double, 2> kCityClimb = {0.42, 0.85};
-inline constexpr std::array<double, 2> kCityTurn = {0.62, 0.85};
-inline constexpr double kCityTurnRate = 13; // degrees a second
-inline constexpr double kCityBank = 32;     // degrees
-inline constexpr double kCityTurnEase = 3;  // seconds
-inline constexpr double kCityFovY = 64;     // degrees
+// The layout (kCityCell, cityLot) and the flight (cityPoseAt) live in retro/city_plan.hpp.
 
 // The palette (the rest black): a 48-step sky from the hazy horizon through orange, pink and purple to deep
 // indigo at the zenith; the sun's 8 steps; two 48-step building ramps, warm (A) and purple (B), from near
@@ -78,29 +48,8 @@ inline constexpr std::uint8_t kCityWindow = 200;  // 200..215
 inline constexpr std::uint8_t kCityGroundShades = 16;
 inline constexpr std::uint8_t kCityMarkingShades = 8;
 
-// The city's hash: 32 well-mixed bits of (i, m, salt) and kCitySeed, in plain unsigned arithmetic.
-std::uint32_t cityHash(std::int32_t i, std::int32_t m, std::uint32_t salt);
 
-// One box of a building: x0 < x1, y0 < y1, z0 < z1; ramp 0 (A) or 1 (B).
-struct CityBox {
-    double x0, x1, y0, y1, z0, z1;
-    int ramp;
-};
-// A building of lot (i, m): its box, standing on the ground, and maybe a set-back tower on the box's roof.
-// It covers columns sx0..sx1 and rows sz0..sz1 of the lot's 2 x 2 grid (0 the lower x or z half).
-struct CityBuilding {
-    CityBox base;
-    bool tower;
-    CityBox top;
-    int sx0, sx1, sz0, sz1;
-};
-std::vector<CityBuilding> cityLot(std::int32_t i, std::int32_t m);
-
-// The camera at a retro frame (see the flight above).
-struct CityPose {
-    double x, y, z;          // the eye
-    double yaw, pitch, roll; // radians: yaw 0 down +z, positive to the right (+x); roll positive to the right
-};
+// The camera at a retro frame (see the flight in retro/city_plan.hpp): cityPoseAt(frame, retroFrame / 35).
 CityPose cityPose(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 Camera cityCamera(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 

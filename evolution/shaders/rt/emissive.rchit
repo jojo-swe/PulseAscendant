@@ -17,6 +17,7 @@
 
 #include "hit.glsl"
 #include "screen.glsl"
+#include "city_patterns.glsl"
 
 // The four taps in pixels from the pixel's centre (rotated-grid supersampling, x right, y down).
 const vec2 kScreenTaps[4] = vec2[4](vec2(0.125, -0.375), vec2(0.375, 0.125), vec2(-0.125, 0.375),
@@ -96,6 +97,11 @@ void main() {
         bool primary = payload.coneSpread >= 0.0 && payload.coneWidth == 0.0;
         emission = (primary ? primaryScreenPicture(h, lod) : retroScreenPicture(h.uv, lod)) * m.emissionScale;
         h.normal = crtGlassNormal(h);
+    } else if (m.pattern == kPatternCityTrail) {
+        emission *= cityTrail(h.uv); // Task 23: a car's light trail
+    } else if (m.pattern == kPatternCitySign && payload.coneSpread >= 0.0) {
+        // Task 23: a sign's lettering, to the camera and along delta chains; its mean is the light's emission.
+        emission *= citySign(h.uv, vec2(length(h.dPdu), length(h.dPdv)), cityBuildingSeed());
     }
     // A camera-only emitter (an indicator LED, whose glow belongs to the bloom) lights nothing: it shows to
     // the camera and along a chain of delta events, never after a rough vertex (coneSpread < 0 there), where

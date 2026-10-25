@@ -16,6 +16,13 @@ const uint kPatternNone = 0u;
 const uint kPatternWoodPlanks = 1u;
 const uint kPatternBrushedMetal = 2u;
 const uint kPatternConcrete = 3u;
+const uint kPatternCityPunched = 16u; // the City's patterns (city_patterns.glsl, Task 23)
+const uint kPatternCityCurtain = 17u;
+const uint kPatternCityBands = 18u;
+const uint kPatternCityRound = 19u;
+const uint kPatternCityStreet = 20u;
+const uint kPatternCityTrail = 21u;
+const uint kPatternCitySign = 22u;
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;
