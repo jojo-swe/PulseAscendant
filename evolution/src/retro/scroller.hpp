@@ -93,10 +93,11 @@ std::vector<text::Item> creditsText(const show::TimelineFrame& frame, std::uint3
 
 // FLYBY's 1993 side (retro/flyby.hpp) scrolls this greeting along the bottom of the frame, below the ship
 // (whose lowest vertex stays above y = 136 px), so it only crosses stars: white (index 255 of FLYBY's
-// palette, which only the greeting uses) with a black drop shadow. Its lowest row, shadow included, is 186,
-// above the epoch card the HUD draws bottom-left (from about row 190 in a 16:9 output).
+// palette, which only the greeting uses) with a black drop shadow. Its lowest row, shadow included, is 185,
+// above the 1993 epoch card drawn bottom-left in the picture (render/epoch_cards.hpp: from row 186.7 at
+// 640x360, about 191 at 1080p and above).
 inline constexpr std::string_view kFlybyText = "WE WERE THERE IN 1993 ...";
-inline constexpr float kFlybyBaseY = 172;
+inline constexpr float kFlybyBaseY = 171;
 inline constexpr float kFlybySpeed = 60;
 inline constexpr float kFlybyAmplitude = 6;
 inline constexpr float kFlybyWavelength = 30;

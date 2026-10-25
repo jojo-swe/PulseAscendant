@@ -62,7 +62,6 @@ private:
     gfx::ComputePipeline pipeline_;
     gfx::Image dummyBloom_; // 1x1, bound (never read) when there is no bloom
     gfx::Buffer palette_;   // a GradePaletteTable
-    bool paletteUsed_ = false;
     std::unique_ptr<Bloom> bloom_;
 };
 

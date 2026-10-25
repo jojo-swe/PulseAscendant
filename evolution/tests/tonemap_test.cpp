@@ -601,14 +601,14 @@ void testRejectsWrongImages(Context& ctx, Gpu& gpu) {
     CHECK(thrown == 3);
 }
 
-// (f) The scene registry: FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the Studio (Task 10), and no
+// (f) The scene registry: FLYBY, FINALE, PORTAL, STUDIO NIGHT, RETURN and REBOOT show the Studio, and no
 // other effect does (scene_table_test pins the mapping in full).
 void testSceneRegistry() {
     using evo::show::Effect;
     for (std::size_t effect = 0; effect < evo::show::kEffectCount; ++effect) {
         const auto e = static_cast<Effect>(effect);
-        const bool studio = e == Effect::Finale || e == Effect::Portal || e == Effect::StudioNight ||
-                            e == Effect::Return || e == Effect::Reboot;
+        const bool studio = e == Effect::Flyby || e == Effect::Finale || e == Effect::Portal ||
+                            e == Effect::StudioNight || e == Effect::Return || e == Effect::Reboot;
         CHECK((evo::modern::sceneFor(e) == evo::modern::SceneId::Studio) == studio);
     }
 }

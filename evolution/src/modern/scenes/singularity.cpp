@@ -156,10 +156,11 @@ SceneFrame Singularity::frame(const show::TimelineFrame& f) const {
     EnvironmentDesc& env = frame.environment;
     env = environmentDefaults(EnvironmentKind::Space);
     env.starBrightness = 1.1f;
-    // The bright star that becomes the Einstein ring.
+    // The bright star that becomes the Einstein ring. Bright enough for the ring to clip to white, and no more:
+    // the bloom spreads a share of every pixel's light, and a brighter ring floods the accent's frame.
     env.discDirection = ringStarDirection(f);
     env.discAngularRadius = 0.12f * kDegrees;
-    env.discRadiance = {60000.f, 64000.f, 72000.f};
+    env.discRadiance = {3000.f, 3200.f, 3600.f};
     env.select = 0.f;
     // Deep space is never quite black; over the last two bars the sky burns to white.
     const Bars b = barsOf(f);

@@ -59,15 +59,15 @@ def main(exe, extra):
         sys.exit(f"STUDIO NIGHT at scale 0.67 must time the trace and the upscale: {ms}")
     print(f"bench: {json.dumps(studio)}")
 
-    # Two chapters in the order given, at scale 1: no upscale pass; PLASMA's 2026 side is the placeholder.
-    records = bench(exe, extra, ["--chapters", "11,3", "--bench-frames", "2", "--trace-scale", "1"])
-    if [r["chapter"] for r in records] != [11, 3]:
-        sys.exit(f"expected chapters 11 and 3 in order, got {records}")
+    # Two chapters in the order given, at scale 1: no upscale pass; BOOT has no 2026 scene (the placeholder).
+    records = bench(exe, extra, ["--chapters", "11,0", "--bench-frames", "2", "--trace-scale", "1"])
+    if [r["chapter"] for r in records] != [11, 0]:
+        sys.exit(f"expected chapters 11 and 0 in order, got {records}")
     check(records[0], 11, 2, 1, (96, 54))
-    check(records[1], 3, 2, 1, (96, 54))
+    check(records[1], 0, 2, 1, (96, 54))
     if records[0]["gpuMs"]["upscale"] != 0 or records[1]["scene"] != "Placeholder":
-        sys.exit(f"scale 1 must not upscale, PLASMA must be the placeholder: {records}")
-    print(f"bench: chapters 11 and 3 at scale 1: {[r['gpuMs']['total'] for r in records]} ms")
+        sys.exit(f"scale 1 must not upscale, BOOT must be the placeholder: {records}")
+    print(f"bench: chapters 11 and 0 at scale 1: {[r['gpuMs']['total'] for r in records]} ms")
 
     # A chapter the show does not have.
     result = subprocess.run([exe, "--bench", "--chapters", "99", "--width", "96", "--height", "54"],

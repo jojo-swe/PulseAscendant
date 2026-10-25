@@ -860,7 +860,9 @@ double chapterTime(int chapter, double fraction) {
 // and 0.15723; Task 14 of step 5 relit the Studio (STUDIO NIGHT: the lamp off, the CRT the key light, a low
 // wide dolly; REBOOT: a dark modern room, the CRT's light rig and exposure).
 // Re-measured on the merge of Task 14 with the NEE shadow-ray fix (d91fb09 and later), which lit REBOOT more.
-constexpr double kStudioNightBaseline = 0.07627, kRebootBaseline = 0.13525;
+// Re-measured again with the Studio's takes (STUDIO NIGHT's dolly back to the night wide, REBOOT's close-up)
+// and the per-act grade (Act II's lifted blacks): 0.07627 and 0.13525 before.
+constexpr double kStudioNightBaseline = 0.20728, kRebootBaseline = 0.23459;
 constexpr int kStudioNight = 11, kReboot = 20;
 
 void testStudio(gfx::Context& ctx) {
