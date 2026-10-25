@@ -1,4 +1,5 @@
 #version 460
+#extension GL_GOOGLE_include_directive : require
 
 // The 1993 picture on the output: the 320x200 image fills a centred 4:3 rectangle (the output height times
 // 4/3 wide, or the width times 3/4 high when the output is narrower than 4:3); everything outside it is
@@ -28,12 +29,7 @@ layout(push_constant) uniform PushConstants {
     uint visible; // bit 0 retro, bit 1 modern; without bit 0 the compositor skips this pass
 } pc;
 
-const ivec2 kRetroSize = ivec2(320, 200);
-const float kBarrel = 0.02;
-const float kBloom = 0.15;
-const float kScanline = 0.75;
-const float kMask = 0.06;
-const float kVignette = 0.10;
+#include "crt_common.glsl"
 
 vec3 source(ivec2 pixel) {
     return imageLoad(retroImage, clamp(pixel, ivec2(0), kRetroSize - 1)).rgb;
@@ -45,13 +41,9 @@ void main() {
         return;
     }
 
-    uvec2 content = uvec2(pc.width, pc.height);
-    if (pc.width * 3u >= pc.height * 4u) {
-        content.x = pc.height * 4u / 3u;
-    } else {
-        content.y = pc.width * 3u / 4u;
-    }
-    uvec2 origin = (uvec2(pc.width, pc.height) - content) / 2u;
+    uvec4 rect = crtContentRect(pc.width, pc.height);
+    uvec2 origin = rect.xy;
+    uvec2 content = rect.zw;
     if (any(lessThan(pixel, origin)) || any(greaterThanEqual(pixel, origin + content))) {
         imageStore(screen, ivec2(pixel), vec4(0.0, 0.0, 0.0, 1.0));
         return;
@@ -66,7 +58,7 @@ void main() {
 
     vec2 centred = uv * 2.0 - 1.0;
     float r2 = dot(centred, centred); // 2 in the corners
-    vec2 bulged = centred * (1.0 + kBarrel * r2) / (1.0 + 2.0 * kBarrel);
+    vec2 bulged = crtBulge(centred);
     ivec2 nearest = ivec2(floor((bulged * 0.5 + 0.5) * vec2(kRetroSize)));
     nearest = clamp(nearest, ivec2(0), kRetroSize - 1);
 

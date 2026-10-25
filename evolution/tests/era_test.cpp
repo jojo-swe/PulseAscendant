@@ -1,4 +1,5 @@
 #include "show/cues.hpp"
+#include "show/director.hpp"
 #include "show/era.hpp"
 #include "show/music_curves.hpp"
 #include "show/timeline.hpp"
@@ -338,6 +339,64 @@ void checkFinite() {
     }
 }
 
+// (g) transitionMarks: era.cpp's window in show seconds, agreeing with the landmarks worked out above.
+void checkTransitionMarks() {
+    for (int chapter = 0; chapter < evo::show::chapterCount(); ++chapter) {
+        const Transition transition = evo::show::cues[chapter].transition;
+        if (transition == Transition::Cut)
+            continue;
+        const Marks m = marks(chapter);
+        const auto got = evo::show::transitionMarks(at(m, m.start + .01));
+        CHECK(std::abs(got.start - (m.offset + m.start)) < 1e-6);
+        CHECK(std::abs(got.accent - (m.offset + m.accent)) < 1e-6);
+        CHECK(got.downbeat <= got.accent && got.downbeat >= got.start - 1e-6);
+        // Every chapter with a transition has a beat before its accent, so D and the bar are the grid's.
+        CHECK(std::abs(got.downbeat - (m.offset + m.downbeat)) < 1e-6);
+        CHECK(std::abs(got.bar - m.bar) < 1e-6);
+        // The same marks from any frame of the chapter.
+        const auto late = evo::show::transitionMarks(at(m, m.end - .01));
+        CHECK(same(got.downbeat, late.downbeat) && same(got.bar, late.bar));
+    }
+    // FLYBY's directed downbeat.
+    const auto flyby = evo::show::transitionMarks(sampleTimeline(evo::show::chapterStart(1) + .01));
+    CHECK(std::abs(flyby.downbeat - 20.30) < .02);
+}
+
+// (h) portalPhase: the CRT crossing around D, zero outside Portal chapters.
+void checkPortalPhase() {
+    using evo::show::portalPhase;
+    const auto flyby = evo::show::transitionMarks(sampleTimeline(evo::show::chapterStart(1) + .01));
+    const double d = flyby.downbeat, bar = flyby.bar;
+    CHECK(portalPhase(sampleTimeline(d)).glass == 1.f);
+    CHECK(portalPhase(sampleTimeline(d)).sinceGlass == 0.0);
+    CHECK(portalPhase(sampleTimeline(d - 2 * bar)).approach == 0.f);
+    CHECK(portalPhase(sampleTimeline(d - .5)).approach == 1.f);
+    CHECK(portalPhase(sampleTimeline(d - .5)).glass == 0.f);
+    CHECK(portalPhase(sampleTimeline(d + .5)).glass == 0.f);
+    CHECK(portalPhase(sampleTimeline(d + .5)).inside == 0.f);
+    CHECK(portalPhase(sampleTimeline(d + 2 * bar)).inside == 1.f);
+    CHECK(std::abs(portalPhase(sampleTimeline(d - .25)).glass - .5f) < 1e-4f);
+
+    for (int chapter = 0; chapter < evo::show::chapterCount(); ++chapter) {
+        const Marks m = marks(chapter);
+        const bool portal = evo::show::cues[chapter].transition == Transition::Portal;
+        for (double t = m.start + .005; t < m.end; t += .05) {
+            const TimelineFrame frame = at(m, t);
+            const auto phase = portalPhase(frame);
+            CHECK(phase.approach >= 0.f && phase.approach <= 1.f);
+            CHECK(phase.glass >= 0.f && phase.glass <= 1.f);
+            CHECK(phase.inside >= 0.f && phase.inside <= 1.f);
+            if (!portal) {
+                CHECK(phase.approach == 0.f && phase.glass == 0.f && phase.inside == 0.f &&
+                      phase.sinceGlass == 0.0);
+            } else {
+                // The phases follow one another: never two at once except at their shared edges.
+                CHECK(phase.glass == 0.f || (phase.approach == 1.f && phase.inside == 0.f));
+            }
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -350,6 +409,8 @@ int main() {
         checkDegenerateGrids();
         checkCut();
         checkFinite();
+        checkTransitionMarks();
+        checkPortalPhase();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED after %d checks: %s\n", checksPassed, error.what());
         return 1;

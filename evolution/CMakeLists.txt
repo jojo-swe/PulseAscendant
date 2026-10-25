@@ -95,6 +95,7 @@ target_link_libraries(evo_audio PUBLIC SDL3::SDL3-static)
 # The directed show: the cue sheet, the music curves sampled from the generated tables and the timeline that
 # turns a show time into everything a frame needs. No SDL or Vulkan here.
 add_library(evo_show STATIC
+    src/show/director.cpp
     src/show/era.cpp
     src/show/music_curves.cpp
     src/show/timeline.cpp)

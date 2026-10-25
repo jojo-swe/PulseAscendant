@@ -19,4 +19,13 @@ namespace evo::show {
 // Chapters too short for the full window start it at the chapter start (BeatSwap then flips on every beat).
 void applyEra(TimelineFrame& frame, const BeatGridView& grid);
 
+// The landmarks of a frame's chapter transition in show seconds (applyEra's window): the chapter start, the
+// accent A, the downbeat D at or before A (A itself when no beat lies between the start and A), the bar at D.
+// bar is a length (four beats measured at D), not a time. Uses the frame's chapter, track and accentSeconds
+// and the beat grid of its track.
+struct TransitionMarks {
+    double start, accent, downbeat, bar;
+};
+TransitionMarks transitionMarks(const TimelineFrame& frame);
+
 } // namespace evo::show
