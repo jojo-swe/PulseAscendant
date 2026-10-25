@@ -3,7 +3,7 @@
 // ray-query probe casts a grid of rays along -z and each hit (distance, custom index, primitive, facing,
 // instance index, SBT record offset) must equal a CPU intersection of the same instances, also with a cull
 // mask that leaves instances out and with the cull-back-facing ray flag (which every instance's
-// FACING_CULL_DISABLE overrides). A TLAS refuses a second build in one frame. Review Focus 3: 64 frames with
+// FACING_CULL_DISABLE overrides). A TLAS refuses a second build in one frame. 64 frames with
 // two in flight while one instance moves, each frame's probe equal to its own transform. Runs with the
 // validation layer and its synchronization validation on and fails on any message.
 
@@ -486,7 +486,7 @@ void testProbeMatchesReference(gfx::Context& ctx, const std::array<rt::Mesh, 2>&
     ring.wait(ring.submit());
 }
 
-// (c) Review Focus 3: 64 frames, two in flight, the quad moving 0.1 to the right each frame; the TLAS is
+// (c) 64 frames, two in flight, the quad moving 0.1 to the right each frame; the TLAS is
 // rebuilt every frame (while the previous frame may still trace it) and each frame's probe, read after its
 // own wait, equals the CPU intersection at that frame's transform.
 void testMovingInstanceTwoFramesInFlight(gfx::Context& ctx, const std::array<rt::Mesh, 2>& meshes) {

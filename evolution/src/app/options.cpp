@@ -204,7 +204,7 @@ Options parseOptions(const std::vector<std::string>& args) {
     if (benchOnly && !options.bench) {
         throw std::runtime_error("--chapters and --bench-frames need --bench");
     }
-    // Exports trace at the output size (Decision 7 of step 5), so a window frame after a reset at scale 1
+    // Exports trace at the output size, so a window frame after a reset at scale 1
     // and an export frame agree.
     if (options.traceScale && exporting) {
         throw std::runtime_error(

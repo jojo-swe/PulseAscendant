@@ -28,7 +28,7 @@ struct SbtLayout {
 // size equal to its stride); miss at raygen.size with stride a and size alignUp(missCount * a,
 // baseAlignment); hit right after miss by the same rule. So every region starts on the base alignment, and
 // the miss and hit strides are multiples of the handle alignment. Pure: a layout for any device's properties
-// (lavapipe 32/16/32 and RTX 32/32/64 differ; Review Focus 4).
+// (lavapipe 32/16/32 and RTX 32/32/64 differ).
 //
 // Throws std::invalid_argument for a handle size of 0, a handle or base alignment that is not a power of two,
 // a base alignment below the handle alignment, or a record stride a over maxShaderGroupStride.

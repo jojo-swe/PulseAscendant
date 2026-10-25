@@ -124,14 +124,6 @@ private:
     Edit edit_;
 };
 
-modern::SceneFactory edited(EditedLens::Edit edit) {
-    return [edit](SceneId id, modern::SceneDetail detail) -> std::unique_ptr<modern::ModernScene> {
-        if (id == SceneId::Lens)
-            return std::make_unique<EditedLens>(detail, edit);
-        return modern::makeScene(id, detail);
-    };
-}
-
 // --- Rendering and measuring
 // --------------------------------------------------------------------------------
 
@@ -150,26 +142,52 @@ struct Picture {
     }
 };
 
-Picture render(gfx::Context& ctx, const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height,
-               std::uint32_t spp, modern::SceneDetail detail, const modern::SceneFactory& factory = {}) {
-    render::RenderSettings settings{width, height};
-    settings.hud = false;
-    settings.mode = render::RenderMode::Export;
-    settings.spp = spp;
-    settings.detail = detail;
-    settings.sceneFactory = factory;
-    gfx::FrameRing ring(ctx);
-    gfx::Readback readback(ctx, width, height);
-    render::Renderer renderer(ctx, ring, settings);
-    const show::TimelineFrame f = forced2026(frame);
-    VkCommandBuffer cmd = ring.begin();
-    renderer.render(cmd, f);
-    readback.record(cmd, renderer.output());
-    ring.wait(ring.submit());
-    Picture picture{width, height, readback.rgb()};
-    idle(ctx);
-    return picture;
-}
+// One Export renderer (160x90, spp 4, detail 1/16) for every picture the checks render, so the pipelines
+// are made once: its Lens scene's frames go through whichever edit the next render() names.
+class Shots {
+public:
+    static constexpr std::uint32_t kWidth = 160, kHeight = 90;
+
+    explicit Shots(gfx::Context& ctx)
+        : ctx_(ctx), edit_(std::make_shared<EditedLens::Edit>()), readback_(ctx, kWidth, kHeight), ring_(ctx),
+          renderer_(ctx, ring_, settings(edit_)) {}
+
+    Picture render(const show::TimelineFrame& frame, EditedLens::Edit edit = {}) {
+        *edit_ = std::move(edit);
+        VkCommandBuffer cmd = ring_.begin();
+        renderer_.render(cmd, forced2026(frame));
+        readback_.record(cmd, renderer_.output());
+        ring_.wait(ring_.submit());
+        Picture picture{kWidth, kHeight, readback_.rgb()};
+        idle(ctx_);
+        return picture;
+    }
+
+private:
+    static render::RenderSettings settings(std::shared_ptr<EditedLens::Edit> edit) {
+        render::RenderSettings s{kWidth, kHeight};
+        s.hud = false;
+        s.mode = render::RenderMode::Export;
+        s.spp = 4;
+        s.detail = {1.f / 16};
+        s.sceneFactory = [edit](SceneId id,
+                                modern::SceneDetail detail) -> std::unique_ptr<modern::ModernScene> {
+            if (id != SceneId::Lens)
+                return modern::makeScene(id, detail);
+            return std::make_unique<EditedLens>(detail, [edit](modern::SceneFrame& f) {
+                if (*edit)
+                    (*edit)(f);
+            });
+        };
+        return s;
+    }
+
+    gfx::Context& ctx_;
+    std::shared_ptr<EditedLens::Edit> edit_;
+    gfx::Readback readback_;
+    gfx::FrameRing ring_;
+    render::Renderer renderer_; // last: its destructor waits for the ring
+};
 
 // Where a world point lands in the picture (pixel centres at whole numbers), and how many pixels one unit
 // across the view spans at its depth.
@@ -452,15 +470,15 @@ void testRotozoomMatch() {
 // ---------------------------------------------------------
 
 // A frame of LENS from D on (the ball rolling, the camera low) seen from `camera` instead.
-modern::SceneFactory lookingFrom(Camera camera, std::function<void(modern::SceneFrame&)> more = {}) {
-    return edited([camera, more](modern::SceneFrame& f) {
+EditedLens::Edit lookingFrom(Camera camera, std::function<void(modern::SceneFrame&)> more = {}) {
+    return [camera, more](modern::SceneFrame& f) {
         f.camera = camera;
         if (more)
             more(f);
-    });
+    };
 }
 
-void testFocusSpot(gfx::Context& ctx) {
+void testFocusSpot(Shots& shots) {
     constexpr std::uint32_t kW = 160, kH = 90;
     const double local = 9.0;
     const show::TimelineFrame frame = at(show::Effect::Lens, local);
@@ -471,20 +489,18 @@ void testFocusSpot(gfx::Context& ctx) {
     above.target = spot;
     above.up = {1.f, 0.f, 0.f};
     above.fovYDegrees = 30.f;
-    const modern::SceneDetail detail{1.f / 16};
     std::printf("(f) the focus under the ball (export, spp 4, %ux%u)\n", kW, kH);
     // Three stops down, so that the spot stays where the tonemap is linear.
     const auto darker = [](modern::SceneFrame& f) { f.exposureEV -= 3.f; };
-    const double lit = spotOverRing(render(ctx, frame, kW, kH, 4, detail, lookingFrom(above, darker)), above,
-                                    spot, 2.5, 0.17, 0.3, 0.4 * modern::kTessera);
+    const double lit = spotOverRing(shots.render(frame, lookingFrom(above, darker)), above, spot, 2.5, 0.17,
+                                    0.3, 0.4 * modern::kTessera);
     std::printf("    with the photon map: %.1fx the shadow ring\n", lit);
     CHECK(lit >= 3.0);
-    const double dark = spotOverRing(render(ctx, frame, kW, kH, 4, detail,
-                                            lookingFrom(above,
-                                                        [darker](modern::SceneFrame& f) {
-                                                            darker(f);
-                                                            f.caustics->photons = 0;
-                                                        })),
+    const double dark = spotOverRing(shots.render(frame, lookingFrom(above,
+                                                                     [darker](modern::SceneFrame& f) {
+                                                                         darker(f);
+                                                                         f.caustics->photons = 0;
+                                                                     })),
                                      above, spot, 2.5, 0.17, 0.3, 0.4 * modern::kTessera);
     std::printf("    without photons: %.2fx\n", dark);
     CHECK(dark < 1.5);
@@ -524,7 +540,7 @@ std::pair<double, double> channelRadii(const Picture& lit, const Picture& dark) 
             std::sqrt(moment[2] / std::max(weight[2], 1e-9))};
 }
 
-void testFringes(gfx::Context& ctx) {
+void testFringes(Shots& shots) {
     constexpr std::uint32_t kW = 160, kH = 90;
     const show::TimelineFrame frame = at(show::Effect::Lens, 9.0);
     const Vec3 spot = modern::lensFocusPoint(frame);
@@ -535,8 +551,7 @@ void testFringes(gfx::Context& ctx) {
     above.target = spot;
     above.up = {1.f, 0.f, 0.f};
     above.fovYDegrees = 20.f;
-    const modern::SceneDetail detail{1.f / 4};
-    std::printf("(d) the spot's colours from above (export, spp 8, %ux%u)\n", kW, kH);
+    std::printf("(d) the spot's colours from above (export, spp 4, %ux%u)\n", kW, kH);
     const auto withAbbe = [&](float abbe, bool photons) {
         return lookingFrom(above, [abbe, photons](modern::SceneFrame& f) {
             f.exposureEV -= 2.f;
@@ -548,10 +563,10 @@ void testFringes(gfx::Context& ctx) {
             f.materials[modern::Lens::kBallGlass].abbe = abbe;
         });
     };
-    const Picture dispersive = render(ctx, frame, kW, kH, 8, detail, withAbbe(-1.f, true));
-    const Picture plain = render(ctx, frame, kW, kH, 8, detail, withAbbe(0.f, true));
-    const Picture dark = render(ctx, frame, kW, kH, 8, detail, withAbbe(-1.f, false));
-    const Picture darkPlain = render(ctx, frame, kW, kH, 8, detail, withAbbe(0.f, false));
+    const Picture dispersive = shots.render(frame, withAbbe(-1.f, true));
+    const Picture plain = shots.render(frame, withAbbe(0.f, true));
+    const Picture dark = shots.render(frame, withAbbe(-1.f, false));
+    const Picture darkPlain = shots.render(frame, withAbbe(0.f, false));
     if (const char* dir = std::getenv("EVO_LENS_TEST_OUT")) {
         std::filesystem::create_directories(dir);
         image::writePng(std::filesystem::path(dir) / "spot_abbe22.png", int(kW), int(kH),
@@ -571,14 +586,14 @@ void testFringes(gfx::Context& ctx) {
 // --- (g) LENS OF GOD's focus on the accent
 // ----------------------------------------------------------------------
 
-void testGodFocus(gfx::Context& ctx) {
+void testGodFocus(Shots& shots) {
     constexpr std::uint32_t kW = 160, kH = 90;
     const show::TimelineFrame head = at(show::Effect::LensOfGod, 0.0);
     const show::TimelineFrame frame = at(show::Effect::LensOfGod, head.accentSeconds);
     const Camera camera = modern::lensCamera(frame);
     std::printf("(g) LENS OF GOD's focus on the accent (export, spp 4, %ux%u)\n", kW, kH);
-    const double ratio = spotOverRing(render(ctx, frame, kW, kH, 4, {1.f / 16}), camera,
-                                      modern::godFocusPoint(frame), 1.6, 18.0, 40.0);
+    const double ratio =
+        spotOverRing(shots.render(frame), camera, modern::godFocusPoint(frame), 1.6, 18.0, 40.0);
     std::printf("    %.1fx the lens's shadow round it\n", ratio);
     CHECK(ratio >= 8.0);
 }
@@ -686,9 +701,11 @@ int main(int argc, char** argv) {
             const test::SweepStats stats = test::checkSceneSweep(SceneId::Lens, limits);
             CHECK(stats.frames > 2500 && stats.shots == 6);
         });
-        timed("f", [&] { testFocusSpot(ctx); });
-        timed("d", [&] { testFringes(ctx); });
-        timed("g", [&] { testGodFocus(ctx); });
+        std::optional<Shots> shots;
+        timed("f", [&] { testFocusSpot(shots ? *shots : shots.emplace(ctx)); });
+        timed("d", [&] { testFringes(shots ? *shots : shots.emplace(ctx)); });
+        timed("g", [&] { testGodFocus(shots ? *shots : shots.emplace(ctx)); });
+        shots.reset();
         timed("p", [&] { test::checkChapterPictures(ctx, SceneId::Lens); });
         CHECK(ctx.validationMessageCount() == 0);
     } catch (const std::exception& error) {

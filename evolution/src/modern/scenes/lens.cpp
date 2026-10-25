@@ -704,6 +704,14 @@ SceneFrame Lens::godFrame(const show::TimelineFrame& frame) const {
     env.haze = 0.55f;
     env.ground = env.horizon; // beyond the planet's limb, seen from orbit, the sky goes on
     env.select = 1.f;
+    // The planet's air: a haze layer a few hundred units deep that softens the far mosaic from orbit and in
+    // which the lens's shadow hangs as a cone.
+    FogDesc air;
+    air.density = 1.f / 3400.f;
+    air.falloff = 1.f / 380.f;
+    air.albedo = {0.93f, 0.95f, 0.98f};
+    air.phaseG = 0.6f;
+    f.medium = MediumFrame{air, std::nullopt};
 
     // The photon map follows the spot: wide while the lens is out of focus, tight and fine at the focus.
     const auto spot = static_cast<float>(godSpotDiameter(frame));

@@ -1,7 +1,7 @@
 // The scene table (Task 1 of step 5), on the CPU:
 //   - every effect has a row in kSceneOfEffect, and an effect past the last throws;
 //   - the five Studio effects (FINALE, PORTAL, STUDIO NIGHT, RETURN, REBOOT) show the Studio; every other
-//     effect shows the placeholder or its planned scene (the plan's chapter -> scene map, kPlannedScene),
+//     effect shows the placeholder or its planned scene (the chapter -> scene map, kPlannedScene),
 //     and the effects of one planned scene move together, so a scene task flips its rows in scenes.cpp
 //     without editing this test;
 //   - sceneTable()[id].id == id, names are unique and round-trip through the table, and every scene an
@@ -44,7 +44,7 @@ bool isStudio(Effect e) {
            e == Effect::Reboot;
 }
 
-// The scene each effect's 2026 side will show (the step 5 plan's chapter -> scene map, Tasks 16-25): the
+// The scene each effect's 2026 side will show (the chapter -> scene map, Tasks 16-25): the
 // placeholder for BOOT, CREDITS and THE END, which keep it.
 SceneId plannedScene(Effect e) {
     switch (e) {

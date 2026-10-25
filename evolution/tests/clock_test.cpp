@@ -105,7 +105,7 @@ void checkSilentClock() {
     CHECK(late.now() < 0.5);
 }
 
-// Any problem with the music leaves the clock silent with the reason in its status (Review Focus 2).
+// Any problem with the music leaves the clock silent with the reason in its status.
 void checkRefusedMusic(const std::filesystem::path& dir) {
     const std::filesystem::path missing = dir / "missing.wav";
     std::filesystem::remove(missing);

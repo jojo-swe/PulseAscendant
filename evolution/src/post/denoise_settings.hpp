@@ -14,7 +14,7 @@ struct DenoiseSettings {
     std::uint32_t maxHistory = 64;
     float sigmaDepth = 1.f, sigmaNormal = 128.f, sigmaLuminance = 4.f;
     std::uint32_t resetAtrousIterations = 5; // at history length <= 3 (when atrousIterations > 0)
-    bool fireflyFilter = false;              // exports at spp >= 16 (Decision 16)
+    bool fireflyFilter = false;              // exports at spp >= 16
     float fireflyK = 4.f;
     std::uint32_t volumeAtrousIterations = 4;
     // false: the frame has no participating medium, so the G-buffer's volume layer is (0, 0, 0, 1) and the

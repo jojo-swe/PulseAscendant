@@ -70,7 +70,7 @@ void testStudioNight() {
 void testBeatSwap() {
     const TimelineFrame then = frameOf(2, Effect::Dots, Transition::BeatSwap, 0.f);
     CHECK(planIs(planStages(then, RenderMode::Export, false), true, false, true, false));
-    // The window keeps the hidden 2026 side warm (Decision 7).
+    // The window keeps the hidden 2026 side warm.
     CHECK(planIs(planStages(then, RenderMode::Interactive, false), true, false, true, true));
 
     const TimelineFrame now = frameOf(2, Effect::Dots, Transition::BeatSwap, 1.f);
@@ -381,7 +381,7 @@ void testResetSpp() {
 }
 
 // The window: temporal, a-trous always, no firefly filter at any spp. Exports: no history, a-trous below
-// 16 spp, the firefly filter from 16 (Decision 16). Both: 5 a-trous iterations at history length <= 3 and 4
+// 16 spp, the firefly filter from 16. Both: 5 a-trous iterations at history length <= 3 and 4
 // on the volume layer.
 void testDenoiseSettings() {
     using evo::render::denoiseSettingsFor;

@@ -68,8 +68,8 @@ Vec3 transformNormalFree(const rt::Mat34& m, Vec3 v) {
 
 // NEE uses a light's emission, area, kind and facing; a BSDF ray that hits the light's instance uses that
 // instance's material and facing. Multiple importance sampling weighs the two as estimators of one integral,
-// so they must describe the same emitter, or the picture is silently biased (step 4, Task 7 review I1). A
-// camera-only emitter (Task 6 of step 5) is never a light: the integrator ignores its emission after a rough
+// so they must describe the same emitter, or the picture is silently biased. A
+// camera-only emitter is never a light: the integrator ignores its emission after a rough
 // vertex, where NEE would add it. Expects the instances' mesh, material and light indices checked.
 void checkLights(const SceneFrame& frame, const std::vector<rt::Material>& materials) {
     for (std::size_t i = 0; i < frame.lights.size(); ++i) {
@@ -338,6 +338,23 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
     checkTreeLights(scene, frame, materials);
     packEnvironment(frame.environment); // throws for an invalid environment
     checkSplats(frame.splats, capacity.splats, scene.splatShader);
+    if (frame.medium) {
+        // Task 11: valid media; a grid needs the scene's bake shader and fits its capacity.
+        packMedium(*frame.medium); // throws for invalid media
+        if (frame.medium->grid) {
+            if (scene.mediumShader.empty())
+                throw std::invalid_argument("the frame has a grid medium, but the scene no medium shader");
+            const std::array<std::uint32_t, 3>& size = frame.medium->grid->size;
+            for (int a = 0; a < 3; ++a)
+                if (size[a] > capacity.mediumGrid[a])
+                    throw std::length_error("a grid medium of " + std::to_string(size[0]) + "x" +
+                                            std::to_string(size[1]) + "x" + std::to_string(size[2]) +
+                                            " voxels, more than the scene's capacity of " +
+                                            std::to_string(capacity.mediumGrid[0]) + "x" +
+                                            std::to_string(capacity.mediumGrid[1]) + "x" +
+                                            std::to_string(capacity.mediumGrid[2]));
+        }
+    }
 }
 
 SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)

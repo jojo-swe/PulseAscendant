@@ -1,4 +1,4 @@
-// Seeking with temporal accumulation on (Task 12 of step 4, Review Focus 1). The window renders Interactive:
+// Seeking with temporal accumulation on (Task 12 of step 4). The window renders Interactive:
 // 1 spp per frame (4 on the frame of a history reset and 2 on the next: Task 7 of step 5), accumulated over
 // the frames since the last history reset. Whenever the user seeks (keys
 // <- / -> and 1-9, 0 jump to chapter starts; the show loops at its end), the first frame after the reset must
@@ -15,7 +15,7 @@
 //   - a duplicated frame (dt = 0) continues the history, a step of -1/60 s resets it (TimeJump: time running
 //     backwards, as at the show's loop) and equals a fresh renderer there;
 //   - BeatSwap in the window: on the 1993 beats of DOTS (placeholder) and FINALE (the Studio) the modern
-//     stage keeps running unseen (Decision 7) and the history never resets, while exports skip it and
+//     stage keeps running unseen and the history never resets, while exports skip it and
 //     report Skipped when it runs again; the window's 1993 beats equal the export's bytes.
 // Runs with the validation layer on and fails on any message it reports. With an argument, the trace scale
 // of both modes (Task 4 of step 5: CTest runs it again at the window's 0.67, where the window jitters its
@@ -71,6 +71,7 @@ RenderSettings settings(RenderMode mode) {
     RenderSettings s{kWidth, kHeight}; // CRT and HUD on; the window's spp (1) and bounces (0 = the mode's)
     s.mode = mode;
     s.traceScale = gTraceScale;
+    s.detail = {1.f / 256}; // the scenes' particle counts at test size (DOTS' field)
     return s;
 }
 
@@ -138,7 +139,7 @@ void checkSeek(Harness& seeker, double start, const std::vector<Frame>& referenc
     }
 }
 
-// The plan's case and its journey through the show: every seek lands on a fresh renderer's frames.
+// The reference case and its journey through the show: every seek lands on a fresh renderer's frames.
 void testSeeks(evo::gfx::Context& ctx) {
     const double night = chapterTime(kStudioNight, 0.4); // shot 0, the dolly towards the desk
     const double reboot = chapterTime(kReboot, 0.73);    // the portal: 1993 and the Studio both visible
@@ -231,7 +232,7 @@ double firstFrameWithEra(int chapter, double from, float era) {
     throw std::runtime_error("no frame with that era in the chapter");
 }
 
-// BeatSwap in the window (Decision 7): the hidden 2026 side keeps tracing on the 1993 beats, so the history
+// BeatSwap in the window: the hidden 2026 side keeps tracing on the 1993 beats, so the history
 // never resets across the swaps; exports skip it there and report Skipped when it runs again. A 1993 beat
 // looks the same in both modes.
 void testBeatSwap(evo::gfx::Context& ctx) {

@@ -152,7 +152,7 @@ float neighbourhoodTemporalVariance(ivec2 p, vec2 motion, float alpha) {
 // Sparse first frames (step 5): at 1-4 spp much of the lighting is exactly 0 (a light sample that missed, a
 // shadow ray that hit). Then an all-zero quadrant makes the minimum claim no noise, so holes survive the
 // filter; and any luminance stop on such skewed raw samples weights the rare bright ones down, which darkens
-// the frame (the plan's plain 3x3 variance: 9 % in denoiser_test at p = 0.3, more for sparser light). So
+// the frame (a plain 3x3 variance: 9 % in denoiser_test at p = 0.3, more for sparser light). So
 // while the history is too short for temporal moments and at least kSparseShare of the 5x5 neighbourhood's
 // weight has zero luminance, the variance is the plain weighted 5x5 variance (an all-zero 3x3 is common, an
 // all-zero 5x5 is not), returned negative: the sign tells the first à-trous pass to filter this pixel by
