@@ -1,5 +1,6 @@
 #pragma once
 
+#include "retro/flyby_flight.hpp"
 #include "retro/palette.hpp"
 #include "retro/scene.hpp"
 #include "retro/vec3.hpp"
@@ -18,10 +19,9 @@ namespace evo::retro {
 // Over the chapter (progress = retroFrame / (chapterDuration * 35), eased) the camera swoops from behind and
 // below the ship to a three-quarter view of its right side, a little above it, while the ship banks gently.
 // The ship keeps to the upper part of the frame, clear of the epoch card bottom-left.
-inline constexpr std::uint32_t kFlybyRetroRate = 35;
-// The vertical field of view of the ship's camera and of the stars, degrees (PORTAL keeps it, so its stars
-// stream as FLYBY's do).
-inline constexpr double kFlybyFovY = 42;
+// kFlybyRetroRate (35) and kFlybyFovY (42 degrees, the vertical field of view of the ship's camera and of the
+// stars, which PORTAL keeps, so its stars stream as FLYBY's do) live in retro/flyby_flight.hpp, with the
+// flight itself (the ship's attitude and the camera's path), which the 2026 Ship scene flies too.
 
 // FLYBY's palette layout: 16-shade ramps, dark to light, for the ship's faces (shade = flat Lambert
 // intensity from one directional light, plus ambient), the engine glow (orange to white; the nozzles and

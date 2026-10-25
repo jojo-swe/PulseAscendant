@@ -40,17 +40,26 @@ struct SceneStatic;
 struct SceneFrame;
 
 inline constexpr std::uint32_t kMaxCausticReceivers = 2;  // array layers of the maps
-inline constexpr std::uint32_t kMaxPhotonDeltaEvents = 6; // per photon, and per excluded camera path
+inline constexpr std::uint32_t kMaxPhotonDeltaEvents = 10; // per photon, and per excluded camera path
 inline constexpr std::uint32_t kExportPhotonFactor = 4;   // photons x this at >= kExportPhotonSpp spp
 inline constexpr std::uint32_t kExportPhotonSpp = 16;
+// Such exports also resolve each receiver at this times its resolution (and chroma radius) where the maps
+// hold it: 2048^2 for a scene that asks for 1024^2 and has the capacity.
+inline constexpr std::uint32_t kExportMapFactor = 2;
+inline constexpr std::uint32_t kMaxChromaRadius = 32; // CausticReceiver::chromaRadius, in texels
 
 // A receiver: worldToUv's rows 0 and 1 map a world point of the receiver's plane to its map's uv in
 // [0, 1]^2 (row 2 is free; receiverForQuad puts the distance to the plane there). The plane must contain
 // the directions of rows 0 and 1 (its normal is row 0 x row 1), as receiverForQuad makes it: the world area
 // of the uv square is then 1 / |row 0 x row 1|. The map holds resolution^2 texels.
+//
+// chromaRadius (texels; 0: off) turns on the resolve's chroma filter (shaders/modern/caustic_resolve.comp):
+// the tent's luminance with the colour of a window about 2 chromaRadius + 1 texels wide, for the rainbows of
+// dispersive glass, whose single-wavelength photons leave hue noise long after the brightness has converged.
 struct CausticReceiver {
     rt::Mat34 worldToUv;
     std::uint32_t resolution = 1024;
+    std::uint32_t chromaRadius = 0;
 };
 
 // The receiver of a modern::quad(width, height) placed by `transform`: u along the quad's x, v along its y,
@@ -77,13 +86,17 @@ struct CasterBounds {
 CasterBounds casterBounds(const SceneStatic& scene, const SceneFrame& frame);
 
 // The frame's caustics against its scene: at most kMaxCausticReceivers receivers of a resolution in
-// [1, maxResolution] with a non-degenerate uv map; the light an Emitter rect light of the frame, or (-1) an
-// environment with a disc of light; a non-empty range of caster instances, none of them the particle field;
+// [1, maxResolution] with a non-degenerate uv map and a chroma radius of at most kMaxChromaRadius; the light
+// an Emitter rect light of the frame, or (-1) an environment with a disc of light; a non-empty range of caster instances, none of them the particle field;
 // every material flagged kMaterialCausticReceiver (the frame's table, or the static one) naming a receiver
 // and opaque with a Lambert lobe (transmission <= 0.5, metallic < 1). Throws std::invalid_argument, or
 // std::length_error for too many receivers or a resolution above maxResolution. Without
 // SceneFrame::caustics there is nothing to check.
 void checkCausticFrame(const SceneStatic& scene, const SceneFrame& frame, std::uint32_t maxResolution);
+
+// An export's caustics (see kExportMapFactor): every receiver at kExportMapFactor times its resolution and
+// chroma radius, where that stays within maxResolution; the rest unchanged.
+CausticFrame exportCaustics(const CausticFrame& frame, std::uint32_t maxResolution);
 
 // The resources of a traced frame the photon pass reads, as the path tracer binds them: the frame's TLAS,
 // this slot's instance records, lights and environment, the material table, the scene's geometry and
@@ -165,6 +178,7 @@ private:
     float unitsPerFlux_ = 0, sourceDistance_ = 0;
     std::array<float, kMaxCausticReceivers> irradianceScale_{}; // flux unit / texel area per receiver
     std::array<std::uint32_t, kMaxCausticReceivers> receiverResolution_{};
+    std::array<std::uint32_t, kMaxCausticReceivers> receiverChroma_{};
     gfx::FrameRing::Subscription ringBegin_;
 };
 

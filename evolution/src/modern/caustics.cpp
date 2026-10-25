@@ -55,8 +55,9 @@ const std::array<gfx::Binding, 2> kResolveBindings = {
 struct ResolvePush {
     std::uint32_t layer, resolution, mapSize;
     float irradianceScale;
+    std::uint32_t chromaRadius;
 };
-static_assert(sizeof(ResolvePush) == 16);
+static_assert(sizeof(ResolvePush) == 20);
 
 constexpr VkDeviceSize kTableBytes = sizeof(rt::CausticReceiver) * (kMaxCausticReceivers + 1);
 
@@ -168,6 +169,16 @@ CasterBounds casterBounds(const SceneStatic& scene, const SceneFrame& frame) {
     return all;
 }
 
+CausticFrame exportCaustics(const CausticFrame& frame, std::uint32_t maxResolution) {
+    CausticFrame out = frame;
+    for (CausticReceiver& r : out.receivers)
+        if (std::uint64_t(r.resolution) * kExportMapFactor <= maxResolution) {
+            r.resolution *= kExportMapFactor;
+            r.chromaRadius = std::min(r.chromaRadius * kExportMapFactor, kMaxChromaRadius);
+        }
+    return out;
+}
+
 void checkCausticFrame(const SceneStatic& scene, const SceneFrame& frame, std::uint32_t maxResolution) {
     if (!frame.caustics)
         return;
@@ -189,6 +200,9 @@ void checkCausticFrame(const SceneStatic& scene, const SceneFrame& frame, std::u
                     refuse("a receiver's uv map is not finite");
         if (!(uvSquareArea(r) > 0))
             refuse("a receiver's uv map is degenerate (rows 0 and 1 parallel or zero)");
+        if (r.chromaRadius > kMaxChromaRadius)
+            refuse("a receiver's chroma radius of " + std::to_string(r.chromaRadius) + " texels, more than " +
+                   std::to_string(kMaxChromaRadius));
     }
     if (c.light < 0) {
         const EnvironmentDesc& e = frame.environment;
@@ -337,6 +351,7 @@ void CausticMaps::prepare(const SceneStatic& scene, const SceneFrame& frame, std
     receiverCount_ = static_cast<std::uint32_t>(c.receivers.size());
     for (std::uint32_t i = 0; i < kMaxCausticReceivers; ++i) {
         receiverResolution_[i] = i < receiverCount_ ? c.receivers[i].resolution : 0;
+        receiverChroma_[i] = i < receiverCount_ ? c.receivers[i].chromaRadius : 0;
         const float texelArea = i < receiverCount_
                                     ? uvSquareArea(c.receivers[i]) /
                                           (float(receiverResolution_[i]) * float(receiverResolution_[i]))
@@ -395,7 +410,8 @@ void CausticMaps::record(VkCommandBuffer cmd, const PhotonScene& scene) {
             gfx::DescriptorWrite::image(1, {VK_NULL_HANDLE, maps_.view(), VK_IMAGE_LAYOUT_GENERAL}),
         };
         resolve_.bind(cmd, ring_, writes);
-        const ResolvePush push{layer, receiverResolution_[layer], resolution_, irradianceScale_[layer]};
+        const ResolvePush push{layer, receiverResolution_[layer], resolution_, irradianceScale_[layer],
+                               receiverChroma_[layer]};
         resolve_.push(cmd, &push, sizeof push);
         resolve_.dispatch(cmd, resolution_, resolution_, 8, 8);
     }

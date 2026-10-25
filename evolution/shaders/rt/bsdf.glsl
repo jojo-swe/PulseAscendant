@@ -447,4 +447,30 @@ bool bsdfSample(Surface s, vec3 n, vec3 wo, vec3 u, out vec3 wi, out vec3 weight
     return true;
 }
 
+
+// A thin-walled dielectric (Material flag kMaterialThinWalled: a pane of stained glass with no thickness to
+// refract across): the light that crosses it leaves along -wo, tinted by baseColor once, and what it reflects
+// is the mirror direction, with the reflectance of the two faces and the light bouncing between them,
+// R + T^2 R / (1 - R^2) = 2R / (1 + R) for one face's R at the given IOR. Both are delta events: no NEE, no
+// MIS; regularisation leaves the pane smooth (it has no lobe to widen). u picks the event.
+void thinDielectricSample(Surface s, vec3 n, vec3 wo, float u, out vec3 wi, out vec3 weight) {
+    float cosI = abs(dot(wo, n));
+    float r = fresnelDielectric(cosI, 1.0 / bsdfIor(s));
+    float reflectance = 2.0 * r / (1.0 + r);
+    if (u < reflectance) {
+        vec3 facing = dot(wo, n) < 0.0 ? -n : n;
+        wi = 2.0 * dot(wo, facing) * facing - wo;
+        weight = vec3(1.0);
+    } else {
+        wi = -wo;
+        weight = clamp(s.baseColor, 0.0, 1.0);
+    }
+}
+
+// Beer-Lambert: the share of light a dielectric's interior lets through over `distance`, for its absorption
+// coefficient per unit length (Material::baseColor2 on a dielectric; 0: clear glass).
+vec3 dielectricTransmittance(vec3 absorption, float distance) {
+    return exp(-max(absorption, vec3(0.0)) * max(distance, 0.0));
+}
+
 #endif

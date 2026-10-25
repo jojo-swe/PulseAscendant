@@ -92,7 +92,7 @@ bool pickTreeLight(uint random, uint count, vec3 p, vec3 n, bool transmissive, b
 }
 
 // The probability that pickTreeLight at (p, n, transmissive) returns `light`: the same choices along its
-// trail (Review Focus 2: the pdf of the light a BSDF ray hits, evaluated at the vertex the ray left).
+// trail (the pdf of the light a BSDF ray hits, evaluated at the vertex the ray left).
 float treeLightPdf(uint light, uint count, vec3 p, vec3 n, bool transmissive, bool uniformSelection) {
     if (light >= count) {
         return 0.0;

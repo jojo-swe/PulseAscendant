@@ -192,7 +192,7 @@ vec3 treeHitEmission(uint sphere, bool front, vec3 fallback) {
 
 // The density with which next-event estimation at the shading point (p, n, transmissive) reaches a direction
 // that hits `sphere` of tree `entry`: the entry's choice, the walk to its light, and the light's cone. The MIS
-// partner of a BSDF ray that hits it, evaluated at the vertex the ray left (Review Focus 2); 0 for a sphere
+// partner of a BSDF ray that hits it, evaluated at the vertex the ray left; 0 for a sphere
 // that is no tree light.
 float treeHitPdf(uint entry, uint sphere, vec3 p, vec3 n, bool transmissive) {
     uint k = treeLightOfSphere(sphere);

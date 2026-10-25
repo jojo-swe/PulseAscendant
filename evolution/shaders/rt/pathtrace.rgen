@@ -30,9 +30,21 @@
 // - Camera-only emission (kMaterialCameraOnlyEmission, an LED): counted at the primary hit and along a delta
 //   chain only, never after a rough vertex; such a surface is never a light (checkSceneFrame).
 // - Dispersion: at the path's first dielectric with abbe > 0 it picks a hero wavelength, uniform in
-//   [380, 780] nm from the bounce's dimension 7, and multiplies its throughput by spectralRgb(lambda)
-//   (spectral.glsl: mean (1, 1, 1), so the estimate stays unbiased per channel); every dispersive surface on
-//   the path then has the IOR dispersiveIor(ior, abbe, lambda). abbe 0 leaves glass as it was.
+//   [380, 780] nm (heroWavelength: the pixel's samples spread evenly over the spectrum), and multiplies its
+//   throughput by spectralRgb(lambda) (spectral.glsl: mean (1, 1, 1), so the estimate stays unbiased per
+//   channel); every dispersive surface on the path then has the IOR dispersiveIor(ior, abbe, lambda). abbe 0
+//   leaves glass as it was.
+//
+// Glass interiors and panes (Task 20 of step 5). A segment that ends on the inside of a solid dielectric
+// (the ray leaves along its outward geometric normal) crossed its interior: the throughput takes its
+// Beer-Lambert transmittance exp(-absorption * t) (payload.absorption, Material.baseColor2 on a dielectric;
+// clear glass has none, and nested glass counts the inner body's absorption on its own segments). A
+// thin-walled dielectric (kMaterialThinWalled, stained glass) does not refract: thinDielectricSample()
+// passes light straight through, tinted, or mirrors it. Passing straight through, a pane is a filter on the
+// segment, not a vertex of the path: the path keeps the vertex before it for MIS (prevP, previousPdf, the
+// distance to a light), the caustic exclusion ignores it, and shadow rays pass through panes too, taking
+// their tint (shadowTransmittance: panes are their own TLAS mask). So next-event estimation reaches lights
+// through stained glass, and its coloured light is sampled, not found by chance.
 //
 // Step 5's hooks, each with a stub that keeps step 4's picture byte for byte until its task fills it:
 // environment.glsl (the sky a miss sees, and environment sampling: Task 2), lights.glsl (per-point light
@@ -108,8 +120,43 @@ bool unoccluded(vec3 origin, vec3 direction, float tMax) {
     shadowVisible = 0u;
     traceRayEXT(tlas,
                 gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
-                0xFF, 0, 0, kMissIndexShadow, origin, 0.0, direction, tMax, 1);
+                kInstanceMaskSolid, 0, 0, kMissIndexShadow, origin, 0.0, direction, tMax, 1);
     return shadowVisible != 0u;
+}
+
+// What a shadow ray lets through: 0 when a solid surface is in the way, else the product of the thin panes'
+// transmission it crosses (each its tint times 1 - R', thinDielectricSample's), at most 8 of them. It traces
+// the panes with the main payload, which it restores.
+const uint kMaxShadowPanes = 8u;
+vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
+    if (!unoccluded(origin, direction, tMax)) {
+        return vec3(0.0);
+    }
+    vec3 through = vec3(1.0);
+    if ((frame.flags & kTraceFlagThinPanes) == 0u) {
+        return through;
+    }
+    HitPayload hit = payload;
+    float t0 = 0.0;
+    for (uint i = 0u; i < kMaxShadowPanes && maxComponent(through) > 0.0; ++i) {
+        payload.coneWidth = 0.0;
+        payload.coneSpread = -1.0;
+        traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, kInstanceMaskPane, 0, 0, kMissIndexSky, origin, t0, direction,
+                    tMax, 0);
+        if (payload.t < 0.0) {
+            payload = hit;
+            return through;
+        }
+        float r = fresnelDielectric(abs(dot(direction, payload.normal)), 1.0 / clamp(payload.ior, 1.0, 4.0));
+        through *= clamp(payload.baseColor, 0.0, 1.0) * ((1.0 - r) / (1.0 + r));
+        t0 = payload.t + 1e-4 * (1.0 + payload.t);
+        if (!(t0 < tMax)) {
+            payload = hit;
+            return through;
+        }
+    }
+    payload = hit;
+    return maxComponent(through) > 0.0 ? vec3(0.0) : through; // more panes than any window has
 }
 
 // A ray origin off the surface, on the side the new direction leaves to, scaled with the position's size.
@@ -175,6 +222,14 @@ void addContribution(inout vec3 radiance, vec3 c, bool rough) {
     radiance += c;
 }
 
+// The hero wavelength's uniform at a bounce: the pixel's samples walk the spectrum in golden-ratio steps from
+// one random start per pixel and frame (a rotated Kronecker sequence: each sample is still uniform, but the
+// samples of a pixel cover [0, 1) evenly), so dispersive glass converges to its colours, not to chroma noise.
+float heroWavelength(uint bounce) {
+    float start = randomFloat(frame.frameSeed, gPixel, 0u, 4u + bounce * kDimsPerBounce + 7u);
+    return fract(start + float(gSample) * 0.6180339887);
+}
+
 // Next-event estimation towards the environment: one direction from sampleEnvironment(), one shadow ray to
 // infinity, weighted against the BSDF with the whole NEE density of an escaping direction (escapePdf).
 vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, bool transmissive,
@@ -199,10 +254,11 @@ vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bo
     if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
         return vec3(0.0);
     }
-    if (!unoccluded(origin, wi, kRayMax)) {
+    vec3 through = shadowTransmittance(origin, wi, kRayMax);
+    if (!(maxComponent(through) > 0.0)) {
         return vec3(0.0);
     }
-    return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, kRayMax);
+    return f * le * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, kRayMax);
 }
 
 // Next-event estimation towards the light tree (Task 12), chosen with probability selectPdf: one sphere
@@ -240,10 +296,11 @@ vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, v
     vec3 q = p + dist * wi;
     vec3 toTarget = offsetOrigin(q, safeNormalize(q - light.center, -wi), -wi) - origin;
     float tMax = length(toTarget);
-    if (!(tMax > 0.0) || !unoccluded(origin, toTarget / tMax, tMax)) {
+    vec3 through = tMax > 0.0 ? shadowTransmittance(origin, toTarget / tMax, tMax) : vec3(0.0);
+    if (!(maxComponent(through) > 0.0)) {
         return vec3(0.0);
     }
-    return f * light.emission * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+    return f * light.emission * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
            mediumTransmittance(origin, toTarget / tMax, tMax);
 }
 
@@ -319,11 +376,12 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         }
         shadowDirection = toTarget / tMax;
     }
-    if (!unoccluded(origin, shadowDirection, tMax)) {
+    vec3 through = shadowTransmittance(origin, shadowDirection, tMax);
+    if (!(maxComponent(through) > 0.0)) {
         return vec3(0.0);
     }
     vec3 le = lightRadiance(l, uv, wi);
-    return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+    return f * le * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
            mediumTransmittance(origin, shadowDirection, tMax);
 }
 
@@ -360,6 +418,7 @@ SampleResult tracePath() {
     float coneWidth = 0.0;
     float coneSpread = frame.pixelSpread;
     bool previousDelta = true; // nothing to weigh the camera ray's hit against
+    bool passedPane = false;   // the ray left prevP and has since only passed straight through thin panes
     float previousPdf = 0.0;
     // The vertex the current ray left, where NEE chose its light: the MIS partner of what the ray finds is
     // that vertex's NEE density.
@@ -444,7 +503,16 @@ SampleResult tracePath() {
         vec3 n = payload.normal;
         vec3 ng = payload.geometricNormal;
         vec3 wo = -direction;
-        causticPathHit(caustic, payloadSurface(), payload.materialFlags); // Task 13
+        bool thinPane = isDielectric(s) && (payload.materialFlags & kMaterialThinWalled) != 0u;
+        float hitT = payload.t; // NEE's shadow rays reuse the payload
+        // Seen through panes since the last vertex: the distance from it (prevP) to this hit.
+        float fromPrevious = passedPane ? length(p - prevP) : hitT;
+        if (bounce > 0u && dot(direction, ng) > 0.0 && maxComponent(payload.absorption) > 0.0) {
+            throughput *= dielectricTransmittance(payload.absorption, payload.t); // inside the glass
+        }
+        if (!thinPane) {
+            causticPathHit(caustic, payloadSurface(), payload.materialFlags); // Task 13
+        }
         if (bounce == 0u) {
             r.emission = s.emission;
             r.albedo = demodulationAlbedo(s);
@@ -459,7 +527,7 @@ SampleResult tracePath() {
                     lightPdf = treeHitPdf(payload.light, payload.primitive, prevP, prevN, prevTransmissive);
                 } else if (l.area > 0.0 && cosLight > 0.0) {
                     lightPdf = lightChoicePdf(payload.light, prevP, prevN, prevTransmissive) *
-                               rectSolidAnglePdf(l, payload.t, cosLight);
+                               rectSolidAnglePdf(l, fromPrevious, cosLight);
                 }
                 w = powerHeuristic(previousPdf, lightPdf);
             }
@@ -476,13 +544,14 @@ SampleResult tracePath() {
         }
         if (isDielectric(s) && payload.abbe > 0.0) {
             if (lambda < 0.0) {
-                lambda = kSpectralMinNm + kSpectralRangeNm * bounceRand(bounce, 7u);
+                lambda = kSpectralMinNm + kSpectralRangeNm * heroWavelength(bounce);
                 throughput *= spectralRgb(lambda);
             }
             s.ior = dispersiveIor(s.ior, payload.abbe, lambda);
         }
 
-        if (nee && (frame.lightCount > 0u || frame.environmentSelect > 0.0) && bsdfHasNonDeltaLobe(s)) {
+        if (nee && (frame.lightCount > 0u || frame.environmentSelect > 0.0) && !thinPane &&
+            bsdfHasNonDeltaLobe(s)) {
             addContribution(r.lighting,
                             throughput * sampleLight(s, p, n, ng, wo, bounce) *
                                 causticNeeKeep(caustic, s, p, n, wo, bounce), // Task 13
@@ -494,10 +563,20 @@ SampleResult tracePath() {
         vec3 weight;
         float pdf;
         bool delta;
-        if (!bsdfSample(s, n, wo, u, wi, weight, pdf, delta) || !sidesAgree(n, ng, wo, wi)) {
+        if (thinPane) {
+            thinDielectricSample(s, n, wo, u.x, wi, weight);
+            pdf = 0.0;
+            delta = true;
+        } else if (!bsdfSample(s, n, wo, u, wi, weight, pdf, delta)) {
             break;
         }
-        causticPathScatter(caustic, s, n, wo, wi, delta); // Task 13
+        if (!sidesAgree(n, ng, wo, wi)) {
+            break;
+        }
+        bool passing = thinPane && dot(wi, wo) < 0.0; // straight through the pane
+        if (!thinPane) {
+            causticPathScatter(caustic, s, n, wo, wi, delta); // Task 13
+        }
         throughput *= weight;
         rough = rough || !delta;
         if (roulette && bounce >= 3u) {
@@ -513,16 +592,19 @@ SampleResult tracePath() {
 
         // The ray cone: its width grows with distance; after a rough bounce textures use a fixed level.
         if (coneSpread >= 0.0) {
-            coneWidth += coneSpread * payload.t;
+            coneWidth += coneSpread * hitT;
         }
         if (!delta) {
             coneSpread = -1.0;
         }
-        previousDelta = delta;
-        previousPdf = pdf;
-        prevP = p;
-        prevN = selectionNormal(n, wo);
-        prevTransmissive = isDielectric(s);
+        passedPane = passing;
+        if (!passing) {
+            previousDelta = delta;
+            previousPdf = pdf;
+            prevP = p;
+            prevN = selectionNormal(n, wo);
+            prevTransmissive = isDielectric(s);
+        }
         origin = offsetOrigin(p, ng, wi);
         direction = wi;
     }

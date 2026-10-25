@@ -23,7 +23,22 @@ namespace evo::rt {
 // --- Materials and lights ----------------------------------------------------------------------------------
 
 enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Checker = 3 }; // = hit group
-enum class Pattern : std::uint32_t { None = 0, WoodPlanks = 1, BrushedMetal = 2, Concrete = 3 };
+// Tesserae and TesseraeSphere are the Checker class's (shaders/rt/checker.rchit, shaders/rt/tesserae.glsl):
+// the 1993 rotozoom's 128x128 texture laid as a polished stone mosaic, one tessera of patternScale per texel
+// in the pixel's palette colour (marble, basalt or gold leaf), in the world's xz plane (Tesserae) or over a
+// sphere about its instance's origin along great circles from the point above its centre (TesseraeSphere);
+// baseColor2's x and y move the mosaic by that many tesserae (baseColor is unused).
+// Hull and Planet are the Ship's (step 5, Task 16; shaders/rt/pbr.rchit documents what they read).
+enum class Pattern : std::uint32_t {
+    None = 0,
+    WoodPlanks = 1,
+    BrushedMetal = 2,
+    Concrete = 3,
+    Tesserae = 4,
+    TesseraeSphere = 5,
+    Hull = 6,
+    Planet = 7
+};
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;
 
@@ -31,7 +46,8 @@ inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight
 //   CameraOnlyEmission  the emission counts only as seen from the camera or along a chain of delta events
 //                       from it, never after a rough vertex, and the surface is never a light (Task 6)
 //   CausticReceiver     the surface receives the caustic photon map (Task 13)
-//   ThinWalled          a dielectric of no thickness: transmission without refraction (stained glass)
+//   ThinWalled          a dielectric of no thickness: transmission without refraction (stained glass), always
+//                       smooth (bsdf.glsl's thinDielectricSample; the raygen and the photons, Task 20)
 inline constexpr std::uint32_t kMaterialCameraOnlyEmission = 1u, kMaterialCausticReceiver = 2u,
                                kMaterialThinWalled = 4u;
 
@@ -57,7 +73,10 @@ struct Material { // 96 bytes, scalar
     std::uint32_t pattern = static_cast<std::uint32_t>(Pattern::None);
     std::uint32_t texture = kNoTexture;
     float patternScale = 1.f;
-    float baseColor2[3] = {0.f, 0.f, 0.f}; // the pattern's second colour
+    // The pattern's second colour; on a dielectric (transmission > 0.5, not thin-walled) its absorption
+    // coefficient per unit length instead (Beer-Lambert: exp(-baseColor2 * d) after d inside; Task 20 of step
+    // 5), 0 for clear glass.
+    float baseColor2[3] = {0.f, 0.f, 0.f};
     std::uint32_t materialClass = static_cast<std::uint32_t>(MaterialClass::Pbr);
     std::uint32_t flags = 0;          // kMaterial*
     float abbe = 0.f;                 // dispersion: the Abbe number of a dielectric, 0 for none (Task 6)
@@ -107,7 +126,10 @@ constexpr std::uint32_t hitGroupFor(MaterialClass c, GeometryKind k) {
 // FrameUniforms::flags. FixedLightSelection: choose lights by their fixed selectWeight alone (step 4), not by
 // their importance at the shading point (Task 3 of step 5); for comparisons and tests.
 inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u,
-                               kTraceFlagFixedLightSelection = 4u;
+                               kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u;
+// TLAS instance masks (Task 20): a thin-walled glass pane is a filter, not an occluder; shadow rays trace the
+// solid instances, then the panes in their way for their tint.
+inline constexpr std::uint8_t kInstanceMaskSolid = 1u, kInstanceMaskPane = 2u;
 
 // What the path tracer's raygen reads once per frame (one buffer per ring slot). The camera is an orthonormal
 // basis: right, up and forward unit vectors (forward looks into the picture, up is the picture's up); a pixel

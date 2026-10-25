@@ -2,7 +2,7 @@
 #define EVO_RT_MEDIUM_PATH_GLSL
 
 // The participating-media integrator (step 5, Task 11), built on medium.glsl. pathtrace.rgen includes it after
-// its own helpers (traceScene, unoccluded, sampleLight, addContribution, bounceRand, ...) and calls it from
+// its own helpers (traceScene, shadowTransmittance, sampleLight, addContribution, bounceRand, ...) and calls it from
 // its hooks marked "[medium]", all behind mediumActive():
 // - mediumStep() after every trace of a path: at bounce 0 mediumPrimary(), the primary segment's
 //   transmittance and in-scattered radiance into gMediumVolume (the volume layer) and the start of its
@@ -165,11 +165,14 @@ vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWor
     }
     float c = dot(travel, wi);
     vec3 f = mediumPhaseValue(ph, c);
-    if (!(lightPdf > 0.0) || !isFinite(lightPdf) || !(maxComponent(f) > 0.0) ||
-        !unoccluded(x, shadowDirection, tMax)) {
+    if (!(lightPdf > 0.0) || !isFinite(lightPdf) || !(maxComponent(f) > 0.0)) {
         return vec3(0.0);
     }
-    return f * le * (powerHeuristic(lightPdf, mediumPhasePdf(ph, c)) / lightPdf) *
+    vec3 through = shadowTransmittance(x, shadowDirection, tMax); // stained glass colours the shafts
+    if (!(maxComponent(through) > 0.0)) {
+        return vec3(0.0);
+    }
+    return f * le * through * (powerHeuristic(lightPdf, mediumPhasePdf(ph, c)) / lightPdf) *
            mediumTransmittance(x, shadowDirection, tMax);
 }
 

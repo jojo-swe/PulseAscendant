@@ -93,6 +93,9 @@ const uint kMissIndexShadow = 1u;
 //                  tree light index is primitive - firstSphere)
 //   prevPosition   the hit point under the instance's previous transform (Task 9; = position until then; a
 //                  sphere's: the same point of it around its prevCenter, Task 8)
+//   absorption     a dielectric's absorption coefficient per unit length (Material.baseColor2 on a glass
+//                  that is not thin-walled, times a sphere's colour; 0 for every other surface): the raygen
+//                  attenuates a segment that ends on the inside of a glass by exp(-absorption * t)
 struct HitPayload {
     vec3 position;
     float t;
@@ -116,6 +119,7 @@ struct HitPayload {
     uint medium;
     uint primitive;
     vec3 prevPosition;
+    vec3 absorption;
 };
 
 // Texture level for anything seen after a rough bounce, and for NEE towards a textured light.

@@ -45,10 +45,11 @@ bool isStudio(Effect e) {
 }
 
 // The scene each effect's 2026 side will show (the chapter -> scene map, Tasks 16-25): the
-// placeholder for BOOT, CREDITS and THE END, which keep it.
+// placeholder for BOOT, CREDITS and THE END, which keep it, and for FLYBY, whose 2026 side is the pull-out
+// from the screen into the room. The starship crosses in WORMHOLE.
 SceneId plannedScene(Effect e) {
     switch (e) {
-    case Effect::Flyby:
+    case Effect::Wormhole:
         return SceneId::Ship;
     case Effect::Dots:
     case Effect::Ocean:
@@ -58,7 +59,6 @@ SceneId plannedScene(Effect e) {
     case Effect::PlasmaPlanet:
         return SceneId::Nebula;
     case Effect::Tunnel:
-    case Effect::Wormhole:
         return SceneId::Tunnel;
     case Effect::Glenz:
     case Effect::Cathedral:
