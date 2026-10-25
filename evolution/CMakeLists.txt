@@ -1141,10 +1141,12 @@ target_compile_definitions(medium_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SP
 add_dependencies(medium_test medium_test_shaders)
 evo_gpu_test(medium medium_test)
 
-# --- Step 5 Task 16: the Ship (FLYBY) ----------------------------------------------------------------------
+# --- Step 5 Task 16: the Ship (WORMHOLE) -------------------------------------------------------------------
 
-# The procedural starship over a planet under a star field of splats (src/modern/scenes/ship.cpp,
-# shaders/modern/ship_*.comp), and its scene test: the standard picture and sweep checks, the card's numbers,
-# the 1993 flight match, the crossing's motion blur and the plumes' volume.
-target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp)
+# The starship as an asset any scene can fly (src/modern/scenes/ship_asset.cpp: the hull, its plumes as a grid
+# medium, the star splats; shaders/modern/ship_{plumes,splats}.comp) and the Ship scene that stages it in
+# WORMHOLE (src/modern/scenes/ship.cpp), with its test: the standard picture and sweep checks, the card's
+# numbers, the plumes' blackbody ramp, the rings on the beat, the crossing's motion blur and the plumes'
+# volume. `scene_ship_test --look <dir> [spp] [width height]` renders stills.
+target_sources(evo_modern PRIVATE src/modern/scenes/ship.cpp src/modern/scenes/ship_asset.cpp)
 evo_scene_test(ship)

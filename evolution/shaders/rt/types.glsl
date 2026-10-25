@@ -16,6 +16,8 @@ const uint kPatternNone = 0u;
 const uint kPatternWoodPlanks = 1u;
 const uint kPatternBrushedMetal = 2u;
 const uint kPatternConcrete = 3u;
+const uint kPatternHull = 4u;
+const uint kPatternPlanet = 5u;
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;

@@ -23,7 +23,15 @@ namespace evo::rt {
 // --- Materials and lights ----------------------------------------------------------------------------------
 
 enum class MaterialClass : std::uint32_t { Pbr = 0, Glass = 1, Emissive = 2, Checker = 3 }; // = hit group
-enum class Pattern : std::uint32_t { None = 0, WoodPlanks = 1, BrushedMetal = 2, Concrete = 3 };
+// Hull and Planet are the Ship's (step 5, Task 16; shaders/rt/pbr.rchit documents what they read).
+enum class Pattern : std::uint32_t {
+    None = 0,
+    WoodPlanks = 1,
+    BrushedMetal = 2,
+    Concrete = 3,
+    Hull = 4,
+    Planet = 5
+};
 inline constexpr std::uint32_t kNoTexture = 0, kRetroScreenTexture = 1, kNoLight = ~0u, kNoMedium = ~0u,
                                kNoReceiver = ~0u;
 

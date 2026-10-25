@@ -41,7 +41,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
 // and stay on the placeholder; each scene task moves its own chapters' rows to its scene (the comment).
 constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEffect{{
     {Effect::Boot, SceneId::Placeholder},
-    {Effect::Flyby, SceneId::Ship},
+    {Effect::Flyby, SceneId::Placeholder}, // the Studio's pull-out
     {Effect::Dots, SceneId::Particles},
     {Effect::Plasma, SceneId::Placeholder}, // Nebula
     {Effect::Tunnel, SceneId::Placeholder}, // Tunnel
@@ -63,7 +63,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Reboot, SceneId::Studio},
     {Effect::Galaxy, SceneId::Placeholder},       // Cosmos
     {Effect::PlasmaPlanet, SceneId::Placeholder}, // Nebula
-    {Effect::Wormhole, SceneId::Placeholder},     // Tunnel
+    {Effect::Wormhole, SceneId::Ship},            // the ship's crossing; the wormhole is Tunnel's
     {Effect::CrystalCity, SceneId::Placeholder},  // Glass
     {Effect::LensOfGod, SceneId::Placeholder},    // Lens
     {Effect::RaytraceInfinity, SceneId::Spheres}, // Spheres

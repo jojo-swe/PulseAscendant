@@ -1,698 +1,22 @@
 #include "modern/scenes/ship.hpp"
 
 #include "modern/environment.hpp"
-#include "modern/mesh_builder.hpp"
 #include "retro/flyby_flight.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstring>
-#include <map>
 #include <numbers>
-#include <span>
-#include <tuple>
-#include <utility>
 
 namespace evo::modern {
 
 namespace {
 
-constexpr float kPi = std::numbers::pi_v<float>;
 constexpr double kPiD = std::numbers::pi;
 
-float smooth(float x) {
-    x = std::clamp(x, 0.f, 1.f);
-    return x * x * (3.f - 2.f * x);
+double smoothD(double x) {
+    x = std::clamp(x, 0.0, 1.0);
+    return x * x * (3 - 2 * x);
 }
-
-float lerp(float a, float b, float t) {
-    return a + (b - a) * t;
-}
-
-// --- A shape: shared positions, triangles with a material slot, smooth normals up to a crease angle ----------
-
-struct Shape {
-    std::vector<Vec3> positions;
-    std::vector<std::array<std::uint32_t, 3>> triangles;
-    std::vector<std::uint32_t> slots; // per triangle: which material (and so which mesh) it belongs to
-};
-
-std::uint32_t addPoint(Shape& s, Vec3 p) {
-    s.positions.push_back(p);
-    return static_cast<std::uint32_t>(s.positions.size() - 1);
-}
-
-void addTriangle(Shape& s, std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t slot) {
-    s.triangles.push_back({a, b, c});
-    s.slots.push_back(slot);
-}
-
-// Rows of closed loops (each `columns` points, the same count on every row), joined by quads; slot(row, column)
-// names each quad's material (row: the quad between row and row + 1). Returns the index of the first point.
-template <typename SlotOf>
-std::uint32_t addLoops(Shape& s, const std::vector<std::vector<Vec3>>& rows, SlotOf slotOf) {
-    const auto first = static_cast<std::uint32_t>(s.positions.size());
-    const auto columns = static_cast<std::uint32_t>(rows.front().size());
-    for (const auto& row : rows)
-        for (const Vec3& p : row)
-            addPoint(s, p);
-    for (std::uint32_t i = 0; i + 1 < rows.size(); ++i)
-        for (std::uint32_t j = 0; j < columns; ++j) {
-            const std::uint32_t jn = (j + 1) % columns;
-            const std::uint32_t a = first + i * columns + j, b = first + i * columns + jn;
-            const std::uint32_t c = first + (i + 1) * columns + jn, d = first + (i + 1) * columns + j;
-            const std::uint32_t slot = slotOf(i, j);
-            addTriangle(s, a, b, c, slot);
-            addTriangle(s, a, c, d, slot);
-        }
-    return first;
-}
-
-// A fan from a new apex point to a loop of `columns` points starting at `first`.
-void addFan(Shape& s, Vec3 apex, std::uint32_t first, std::uint32_t columns, std::uint32_t slot) {
-    const std::uint32_t centre = addPoint(s, apex);
-    for (std::uint32_t j = 0; j < columns; ++j)
-        addTriangle(s, centre, first + (j + 1) % columns, first + j, slot);
-}
-
-// Twice the signed volume of the triangles from `begin` on (positive: they wind counter-clockwise seen from
-// outside, the convention of every mesh here).
-double signedVolume(const Shape& s, std::size_t begin) {
-    double volume = 0;
-    for (std::size_t t = begin; t < s.triangles.size(); ++t) {
-        const Vec3 a = s.positions[s.triangles[t][0]], b = s.positions[s.triangles[t][1]],
-                   c = s.positions[s.triangles[t][2]];
-        volume += double(dot(a, cross(b, c)));
-    }
-    return volume;
-}
-
-// Turns the closed part made of the triangles from `begin` on to face outwards (inwards when asked: a glass
-// shell's inner wall faces into the cavity, out of the glass).
-void orient(Shape& s, std::size_t begin, bool inwards = false) {
-    if ((signedVolume(s, begin) < 0) != inwards)
-        for (std::size_t t = begin; t < s.triangles.size(); ++t)
-            std::swap(s.triangles[t][1], s.triangles[t][2]);
-}
-
-// The shape's meshes, one per slot (slotCount of them; an empty slot gives an empty mesh): smooth normals,
-// area-weighted over the triangles around a point whose faces lie within `creaseDegrees` of each other (a
-// sharper edge stays sharp). uvs are 0: no material here reads them.
-std::vector<rt::Mesh> toMeshes(const Shape& s, std::uint32_t slotCount, float creaseDegrees) {
-    const std::size_t triangles = s.triangles.size();
-    std::vector<Vec3> faceCross(triangles), faceUnit(triangles);
-    std::vector<std::vector<std::uint32_t>> around(s.positions.size());
-    for (std::size_t t = 0; t < triangles; ++t) {
-        const auto& tri = s.triangles[t];
-        const Vec3 n = cross(s.positions[tri[1]] - s.positions[tri[0]], s.positions[tri[2]] - s.positions[tri[0]]);
-        faceCross[t] = n;
-        const float len = length(n);
-        faceUnit[t] = len > 0 ? n / len : Vec3{};
-        for (const std::uint32_t p : tri)
-            around[p].push_back(static_cast<std::uint32_t>(t));
-    }
-    const float cosCrease = std::cos(creaseDegrees * kPi / 180.f);
-    std::vector<rt::Mesh> meshes(slotCount);
-    std::vector<std::map<std::tuple<std::uint32_t, float, float, float>, std::uint32_t>> seen(slotCount);
-    for (std::size_t t = 0; t < triangles; ++t) {
-        const std::uint32_t slot = s.slots[t];
-        rt::Mesh& mesh = meshes[slot];
-        std::array<std::uint32_t, 3> out{};
-        for (int k = 0; k < 3; ++k) {
-            const std::uint32_t p = s.triangles[t][k];
-            Vec3 sum{};
-            for (const std::uint32_t o : around[p])
-                if (dot(faceUnit[o], faceUnit[t]) >= cosCrease)
-                    sum = sum + faceCross[o];
-            const float len = length(sum);
-            const Vec3 n = len > 0 ? sum / len : faceUnit[t];
-            const auto key = std::make_tuple(p, n.x, n.y, n.z);
-            const auto found = seen[slot].find(key);
-            if (found != seen[slot].end()) {
-                out[k] = found->second;
-                continue;
-            }
-            const Vec3 q = s.positions[p];
-            mesh.vertices.push_back({{q.x, q.y, q.z}, {n.x, n.y, n.z}, {0.f, 0.f}});
-            out[k] = static_cast<std::uint32_t>(mesh.vertices.size() - 1);
-            seen[slot].emplace(key, out[k]);
-        }
-        mesh.indices.insert(mesh.indices.end(), out.begin(), out.end());
-    }
-    return meshes;
-}
-
-// --- The ship's design (1993 model units; kShipScale metres each) -------------------------------------------
-//
-// The 1993 fighter's layout (retro/flyby.cpp): a fuselage from a needle nose at z = 2.5 through its widest
-// section at z = -0.3 to the tail at z = -1.9, a canopy on its back ahead of the widest section, two wings
-// swept back hard with a little dihedral, and an engine pod hung under each wing with its nozzle at z = -2.05.
-
-constexpr float S = kShipScale;
-
-// The fuselage's scale along z (0 at the nose; 1 at the widest section), a Catmull-Rom curve through the 1993
-// sections (nose 0 at 2.5, 0.58 at 1.0, 1 at -0.3, 0.85 at -1.9), smoothed into an ogive.
-struct Knot {
-    float z, scale;
-};
-constexpr std::array<Knot, 10> kFuselageKnots = {{
-    {2.62f, 0.f},
-    {2.35f, 0.17f},
-    {1.9f, 0.34f},
-    {1.0f, 0.62f},
-    {0.3f, 0.87f},
-    {-0.3f, 1.f},
-    {-0.9f, 0.99f},
-    {-1.5f, 0.93f},
-    {-1.9f, 0.86f},
-    {-2.0f, 0.84f},
-}};
-
-float fuselageScale(float z) {
-    // Knots run from the nose (high z) to the tail.
-    const std::size_t n = kFuselageKnots.size();
-    if (z >= kFuselageKnots.front().z)
-        return 0.f;
-    if (z <= kFuselageKnots.back().z)
-        return kFuselageKnots.back().scale;
-    std::size_t i = 0;
-    while (i + 2 < n && z < kFuselageKnots[i + 1].z)
-        ++i;
-    const float z0 = kFuselageKnots[i].z, z1 = kFuselageKnots[i + 1].z;
-    const float t = (z0 - z) / (z0 - z1);
-    const float p0 = kFuselageKnots[i == 0 ? 0 : i - 1].scale, p1 = kFuselageKnots[i].scale,
-                p2 = kFuselageKnots[i + 1].scale, p3 = kFuselageKnots[std::min(i + 2, n - 1)].scale;
-    const float t2 = t * t, t3 = t2 * t;
-    return std::max(0.f, 0.5f * ((2.f * p1) + (-p0 + p2) * t + (2.f * p0 - 5.f * p1 + 4.f * p2 - p3) * t2 +
-                                 (-p0 + 3.f * p1 - 3.f * p2 + p3) * t3));
-}
-
-// A point of the fuselage's section at z, angle theta (0 to starboard, pi / 2 on top): a superellipse, flatter
-// on its back than its keel, like the 1993 hexagon rounded off.
-constexpr float kFuselageHalfWidth = 0.34f, kFuselageTop = 0.30f, kFuselageKeel = 0.24f;
-constexpr float kFuselageExponent = 2.5f;
-
-Vec3 fuselagePoint(float z, float theta, float inflate = 1.f) {
-    const float k = std::max(fuselageScale(z), 0.012f) * inflate;
-    const float c = std::cos(theta), s = std::sin(theta);
-    const float e = 2.f / kFuselageExponent;
-    const float x = kFuselageHalfWidth * k * std::copysign(std::pow(std::abs(c), e), c);
-    const float y = (s >= 0 ? kFuselageTop : kFuselageKeel) * k * std::copysign(std::pow(std::abs(s), e), s);
-    return Vec3{x, y, z} * S;
-}
-
-// The canopy: an ellipsoid on the fuselage's back (its lower half sunk into the hull), longer behind its
-// widest point than ahead of it; a shell kCanopyWall thick.
-constexpr Vec3 kCanopyCentre{0.f, 0.245f, 0.38f};
-constexpr float kCanopyHalfWidth = 0.15f, kCanopyHeight = 0.135f, kCanopyFront = 0.55f, kCanopyBack = 0.75f;
-constexpr float kCanopyWall = 0.008f;
-
-// The wings: swept back hard, with dihedral; the 1993 root and tip edges.
-constexpr float kWingRootX = 0.16f, kWingTipX = 1.86f;
-
-float wingLeadingZ(float x) {
-    return 0.60f + (x - 0.225f) * (-1.25f - 0.60f) / (1.80f - 0.225f);
-}
-float wingTrailingZ(float x) {
-    return -1.70f + (x - 0.28f) * (-1.85f + 1.70f) / (1.95f - 0.28f);
-}
-float wingDihedralY(float x) {
-    return 0.10f * (x - kWingRootX) / (kWingTipX - kWingRootX);
-}
-float wingThickness(float x) {
-    return lerp(0.11f, 0.026f, (x - kWingRootX) / (kWingTipX - kWingRootX));
-}
-
-// NACA 4-digit half thickness at chord fraction u (closed trailing edge) for a maximum thickness `t`.
-float nacaHalfThickness(float u, float t) {
-    return 5.f * t *
-           (0.2969f * std::sqrt(u) - 0.1260f * u - 0.3516f * u * u + 0.2843f * u * u * u -
-            0.1036f * u * u * u * u);
-}
-
-// The engine pods: under each wing, the 1993 pod's centre line, a revolved nacelle.
-constexpr float kPodX = 0.74f, kPodY = -0.13f;
-constexpr float kNozzleExitZ = -2.07f;
-// The nacelle's profile (radius, z) from the intake spinner's tip to the nozzle throat's centre, and the
-// material of each segment (the segment after point i).
-struct ProfilePoint {
-    float r, z;
-};
-constexpr std::array<ProfilePoint, 24> kPodProfile = {{
-    {0.f, -0.32f},     // 0 spinner tip
-    {0.022f, -0.35f},  // 1
-    {0.04f, -0.40f},   // 2
-    {0.05f, -0.46f},   // 3 spinner base
-    {0.074f, -0.47f},  // 4 duct floor
-    {0.084f, -0.41f},  // 5 duct wall
-    {0.094f, -0.36f},  // 6 lip inner
-    {0.104f, -0.338f}, // 7 lip front
-    {0.114f, -0.342f}, // 8
-    {0.121f, -0.365f}, // 9 lip outer
-    {0.124f, -0.42f},  // 10 body
-    {0.126f, -0.8f},   // 11
-    {0.126f, -1.2f},   // 12
-    {0.123f, -1.55f},  // 13
-    {0.117f, -1.74f},  // 14 collar
-    {0.111f, -1.80f},  // 15 nozzle start
-    {0.113f, -1.92f},  // 16
-    {0.119f, -2.07f},  // 17 nozzle exit
-    {0.110f, -2.075f}, // 18 exit lip inner
-    {0.097f, -2.0f},   // 19 inner wall
-    {0.08f, -1.93f},   // 20
-    {0.064f, -1.885f}, // 21 throat
-    {0.03f, -1.88f},   // 22
-    {0.f, -1.879f},    // 23 throat plate centre
-}};
-
-// --- Meshes and materials -----------------------------------------------------------------------------------
-
-enum Material : std::uint32_t {
-    kTitanium,
-    kCeramic,
-    kChrome,
-    kDuct,
-    kNozzle,
-    kNozzleInner,
-    kThroat,
-    kPanelLines,
-    kCanopyGlass,
-    kCockpit,
-    kDialAmber,
-    kDialCyan,
-    kNavRed,
-    kNavGreen,
-    kStrobe,
-    kOcean,
-    kMaterialCount
-};
-
-enum Mesh : std::uint32_t {
-    kFuselageTitanium,
-    kFuselageCeramic,
-    kWingTitanium,
-    kWingCeramic,
-    kPodChrome,
-    kPodDuct,
-    kPodTitanium,
-    kPodNozzle,
-    kPodNozzleInner,
-    kPodThroat,
-    kCanopy,
-    kPanelLineMesh,
-    kCockpitTub,
-    kSeat,
-    kHeadrest,
-    kConsole,
-    kDial,
-    kNavLight,
-    kMeshCount
-};
-
-rt::Material plastic(Vec3 color, float roughness) {
-    rt::Material m;
-    m.baseColor[0] = color.x, m.baseColor[1] = color.y, m.baseColor[2] = color.z;
-    m.roughness = roughness;
-    return m;
-}
-
-rt::Material metal(Vec3 color, float roughness) {
-    rt::Material m = plastic(color, roughness);
-    m.metallic = 1.f;
-    return m;
-}
-
-rt::Material emitter(Vec3 color, float scale) {
-    rt::Material m = plastic({0.02f, 0.02f, 0.02f}, 0.4f);
-    m.emission[0] = color.x, m.emission[1] = color.y, m.emission[2] = color.z;
-    m.emissionScale = scale;
-    m.materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
-    m.flags = rt::kMaterialCameraOnlyEmission; // seen, never sampled as a light (Task 6)
-    return m;
-}
-
-// Base emission scales the per-frame table modulates.
-constexpr float kPanelEmission = 2.2f, kStrobeEmission = 60.f, kNavEmission = 14.f;
-
-std::vector<rt::Material> buildMaterials() {
-    std::vector<rt::Material> m(kMaterialCount);
-    m[kTitanium] = metal({0.56f, 0.53f, 0.50f}, 0.3f); // titanium's F0, brushed across the span
-    m[kTitanium].pattern = static_cast<std::uint32_t>(rt::Pattern::BrushedMetal);
-    m[kTitanium].patternScale = 2.f;
-    m[kCeramic] = plastic({0.035f, 0.038f, 0.045f}, 0.55f); // dark ceramic tiles under a satin coat
-    m[kCeramic].coat = 0.35f;
-    m[kCeramic].coatRoughness = 0.18f;
-    m[kChrome] = metal({0.95f, 0.95f, 0.96f}, 0.06f);
-    m[kDuct] = metal({0.12f, 0.12f, 0.13f}, 0.45f);
-    m[kNozzle] = metal({0.33f, 0.26f, 0.24f}, 0.32f); // heat-tinted
-    m[kNozzleInner] = emitter({1.f, 0.38f, 0.1f}, 2.5f); // the bell's inner wall, glowing orange
-    m[kThroat] = emitter({0.85f, 0.9f, 1.f}, 40.f);      // white-hot
-    m[kPanelLines] = emitter({0.25f, 0.8f, 1.f}, kPanelEmission);
-    m[kCanopyGlass] = plastic({0.93f, 0.96f, 1.f}, 0.f);
-    m[kCanopyGlass].transmission = 1.f;
-    m[kCanopyGlass].ior = 1.5f;
-    m[kCanopyGlass].materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Glass);
-    m[kCockpit] = plastic({0.025f, 0.027f, 0.03f}, 0.6f);
-    m[kDialAmber] = emitter({1.f, 0.55f, 0.12f}, 3.f);
-    m[kDialCyan] = emitter({0.2f, 0.85f, 1.f}, 3.f);
-    m[kNavRed] = emitter({1.f, 0.06f, 0.03f}, kNavEmission);
-    m[kNavGreen] = emitter({0.05f, 1.f, 0.2f}, kNavEmission);
-    m[kStrobe] = emitter({1.f, 1.f, 1.f}, kStrobeEmission);
-    // The planet's ocean: deep blue under a glossy coat (the sun's glint).
-    m[kOcean] = plastic({0.012f, 0.05f, 0.11f}, 0.5f);
-    m[kOcean].coat = 1.f;
-    m[kOcean].coatRoughness = 0.07f;
-    return m;
-}
-
-// The fuselage, its panel lines and the canopy's opening. Slots: titanium 0, ceramic belly 1.
-constexpr int kFuselageRows = 120, kFuselageColumns = 112;
-constexpr float kFuselageNoseZ = 2.6f, kFuselageTailZ = -2.0f;
-// The belly's ceramic lies below sin(theta) = kBellyLine; the upper panel line along the side.
-constexpr float kBellyLine = -0.32f, kSideLine = 0.2f;
-
-float rowZ(int i) {
-    // Denser towards the nose, where the curvature is.
-    const float u = static_cast<float>(i) / static_cast<float>(kFuselageRows - 1);
-    const float w = 1.f - (1.f - u) * (1.f - u) * 0.6f - 0.4f * (1.f - u);
-    return lerp(kFuselageNoseZ - 0.02f, kFuselageTailZ, w);
-}
-
-float columnTheta(int j) {
-    return 2.f * kPi * static_cast<float>(j) / static_cast<float>(kFuselageColumns);
-}
-
-void buildFuselage(Shape& s) {
-    const std::size_t begin = s.triangles.size();
-    std::vector<std::vector<Vec3>> rows;
-    for (int i = 0; i < kFuselageRows; ++i) {
-        std::vector<Vec3> row;
-        for (int j = 0; j < kFuselageColumns; ++j)
-            row.push_back(fuselagePoint(rowZ(i), columnTheta(j)));
-        rows.push_back(std::move(row));
-    }
-    // A tail ring inset for the tail cap's bevel.
-    {
-        std::vector<Vec3> row;
-        for (int j = 0; j < kFuselageColumns; ++j)
-            row.push_back(fuselagePoint(kFuselageTailZ, columnTheta(j), 0.78f) + Vec3{0, 0, -0.06f * S});
-        rows.push_back(std::move(row));
-    }
-    const auto columns = static_cast<std::uint32_t>(kFuselageColumns);
-    const std::uint32_t first = addLoops(s, rows, [](std::uint32_t, std::uint32_t j) {
-        const float mid = columnTheta(int(j)) + kPi / static_cast<float>(kFuselageColumns);
-        return std::sin(mid) < kBellyLine ? 1u : 0u;
-    });
-    addFan(s, Vec3{0, 0, kFuselageNoseZ} * S, first, columns, 0);
-    const std::uint32_t last = first + columns * static_cast<std::uint32_t>(rows.size() - 1);
-    const Vec3 tail = fuselagePoint(kFuselageTailZ, 0.f, 0.f) + Vec3{0, 0, -0.06f * S};
-    addFan(s, Vec3{0.f, tail.y, tail.z}, last, columns, 1);
-    orient(s, begin);
-}
-
-// A wing (side +1 starboard, -1 port). Slots: titanium 0 (leading edge and underside), ceramic 1 (the top).
-constexpr int kWingRows = 40, kWingColumns = 56;
-
-Vec3 wingPoint(float x, int k) {
-    const float le = wingLeadingZ(x), te = wingTrailingZ(x), chord = le - te;
-    const float phi = 2.f * kPi * static_cast<float>(k) / static_cast<float>(kWingColumns);
-    const float u = 0.5f * (1.f + std::cos(phi)); // 1 at the trailing edge (k = 0), 0 at the leading edge
-    const float half = nacaHalfThickness(u, wingThickness(x));
-    const float y = wingDihedralY(x) + (std::sin(phi) >= 0 ? half : -half);
-    return Vec3{x, y, le - u * chord};
-}
-
-bool wingTop(int k) {
-    const float phi = 2.f * kPi * (static_cast<float>(k) + 0.5f) / static_cast<float>(kWingColumns);
-    return std::sin(phi) > 0 && std::cos(phi) > -0.86f; // the top, but for the leading edge's band
-}
-
-void buildWing(Shape& s, float side) {
-    const std::size_t begin = s.triangles.size();
-    std::vector<std::vector<Vec3>> rows;
-    for (int i = 0; i < kWingRows; ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(kWingRows - 1);
-        const float x = lerp(kWingRootX, kWingTipX, 1.f - (1.f - t) * (1.f - t) * 0.3f - 0.7f * (1.f - t));
-        std::vector<Vec3> row;
-        for (int k = 0; k < kWingColumns; ++k) {
-            const Vec3 p = wingPoint(x, k);
-            row.push_back(Vec3{side * p.x, p.y, p.z} * S);
-        }
-        rows.push_back(std::move(row));
-    }
-    const auto columns = static_cast<std::uint32_t>(kWingColumns);
-    const std::uint32_t first =
-        addLoops(s, rows, [](std::uint32_t, std::uint32_t k) { return wingTop(int(k)) ? 1u : 0u; });
-    // Caps: the root (inside the fuselage) and the tip.
-    const auto centre = [&](const std::vector<Vec3>& row) {
-        Vec3 c{};
-        for (const Vec3& p : row)
-            c = c + p;
-        return c / static_cast<float>(row.size());
-    };
-    addFan(s, centre(rows.front()), first, columns, 0);
-    addFan(s, centre(rows.back()), first + columns * static_cast<std::uint32_t>(kWingRows - 1), columns, 0);
-    orient(s, begin);
-}
-
-// An engine pod (side +1 starboard, -1 port) revolved about its axis. Slots: chrome 0, duct 1, titanium 2,
-// nozzle 3, nozzle inner 4, throat 5.
-constexpr int kPodSegments = 96;
-
-std::uint32_t podSlot(std::size_t segment) {
-    if (segment < 3)
-        return 0; // spinner
-    if (segment < 6)
-        return 1; // duct
-    if (segment < 10)
-        return 0; // intake lip
-    if (segment < 15)
-        return 2; // body
-    if (segment < 18)
-        return 3; // nozzle outside
-    if (segment < 21)
-        return 4; // nozzle inside
-    return 5;     // throat
-}
-
-void buildPod(Shape& s, float side) {
-    const std::size_t begin = s.triangles.size();
-    const Vec3 axis{side * kPodX, kPodY, 0.f};
-    const auto columns = static_cast<std::uint32_t>(kPodSegments);
-    const auto ring = [&](const ProfilePoint& p) {
-        std::vector<Vec3> row;
-        for (int j = 0; j < kPodSegments; ++j) {
-            const float a = 2.f * kPi * static_cast<float>(j) / static_cast<float>(kPodSegments);
-            row.push_back((axis + Vec3{p.r * std::cos(a), p.r * std::sin(a), p.z}) * S);
-        }
-        return row;
-    };
-    // The rings of the profile points off the axis; the two ends are poles.
-    std::vector<std::vector<Vec3>> rows;
-    for (std::size_t i = 1; i + 1 < kPodProfile.size(); ++i)
-        rows.push_back(ring(kPodProfile[i]));
-    const std::uint32_t first =
-        addLoops(s, rows, [](std::uint32_t row, std::uint32_t) { return podSlot(row + 1); });
-    addFan(s, (axis + Vec3{0, 0, kPodProfile.front().z}) * S, first, columns, podSlot(0));
-    addFan(s, (axis + Vec3{0, 0, kPodProfile.back().z}) * S,
-           first + columns * static_cast<std::uint32_t>(rows.size() - 1), columns,
-           podSlot(kPodProfile.size() - 2));
-    orient(s, begin);
-}
-
-// One wall of the canopy: an ellipsoid shrunk by `inset` on every axis.
-void buildCanopyWall(Shape& s, float inset, bool inner) {
-    const std::size_t begin = s.triangles.size();
-    constexpr int kRings = 44, kColumns = 72;
-    const float a = kCanopyHalfWidth - inset, b = kCanopyHeight - inset;
-    const float front = kCanopyFront - inset, back = kCanopyBack - inset;
-    std::vector<std::vector<Vec3>> rows;
-    for (int i = 1; i < kRings; ++i) {
-        const float zeta = std::cos(kPi * static_cast<float>(i) / static_cast<float>(kRings)); // 1 front .. -1
-        const float rho = std::sqrt(std::max(0.f, 1.f - zeta * zeta));
-        const float z = kCanopyCentre.z + (zeta > 0 ? zeta * front : zeta * back);
-        std::vector<Vec3> row;
-        for (int j = 0; j < kColumns; ++j) {
-            const float theta = 2.f * kPi * static_cast<float>(j) / static_cast<float>(kColumns);
-            row.push_back(Vec3{a * rho * std::cos(theta), kCanopyCentre.y + b * rho * std::sin(theta), z} * S);
-        }
-        rows.push_back(std::move(row));
-    }
-    const std::uint32_t first = addLoops(s, rows, [](std::uint32_t, std::uint32_t) { return 0u; });
-    const auto columns = static_cast<std::uint32_t>(kColumns);
-    addFan(s, Vec3{0, kCanopyCentre.y, kCanopyCentre.z + front} * S, first, columns, 0);
-    addFan(s, Vec3{0, kCanopyCentre.y, kCanopyCentre.z - back} * S,
-           first + columns * static_cast<std::uint32_t>(rows.size() - 1), columns, 0);
-    orient(s, begin, inner);
-}
-
-// A ribbon (a thin strip of quads, both sides drawn by the tracer) through `centre` points, `halfWidth` to
-// either side along `across`.
-void addRibbon(Shape& s, const std::vector<Vec3>& centre, const std::vector<Vec3>& across, float halfWidth) {
-    const auto first = static_cast<std::uint32_t>(s.positions.size());
-    for (std::size_t i = 0; i < centre.size(); ++i) {
-        addPoint(s, centre[i] - across[i] * halfWidth);
-        addPoint(s, centre[i] + across[i] * halfWidth);
-    }
-    for (std::uint32_t i = 0; i + 1 < centre.size(); ++i) {
-        const std::uint32_t a = first + 2 * i;
-        addTriangle(s, a, a + 1, a + 3, 0);
-        addTriangle(s, a, a + 3, a + 2, 0);
-    }
-}
-
-// The glowing panel lines: along the fuselage's sides (at the belly's edge and higher up), around the canopy's
-// base, and spanwise over each wing's top.
-void buildPanelLines(Shape& s) {
-    const float lift = 1.012f; // off the hull, so they never fight it
-    const float halfWidth = 0.006f * S;
-    for (const float side : {1.f, -1.f}) {
-        for (const auto& [line, from, to] :
-             {std::tuple{kBellyLine, 1.25f, -1.85f}, std::tuple{kSideLine, -0.45f, -1.8f}}) {
-            const float theta = side > 0 ? std::asin(line) : kPi - std::asin(line);
-            std::vector<Vec3> centre, across;
-            for (int i = 0; i <= 80; ++i) {
-                const float z = lerp(from, to, static_cast<float>(i) / 80.f);
-                const Vec3 a = fuselagePoint(z, theta - 0.01f, lift), b = fuselagePoint(z, theta + 0.01f, lift);
-                centre.push_back((a + b) * 0.5f);
-                across.push_back(normalize(b - a));
-            }
-            addRibbon(s, centre, across, halfWidth);
-        }
-        // Two lines along each wing's top, at a quarter and two thirds of the chord.
-        for (const float u : {0.22f, 0.68f}) {
-            std::vector<Vec3> centre, across;
-            for (int i = 0; i <= 40; ++i) {
-                const float x = lerp(0.42f, 1.72f, static_cast<float>(i) / 40.f);
-                const float le = wingLeadingZ(x), te = wingTrailingZ(x);
-                const float y = wingDihedralY(x) + nacaHalfThickness(u, wingThickness(x)) + 0.004f;
-                centre.push_back(Vec3{side * x, y, le - u * (le - te)} * S);
-                across.push_back(Vec3{0.f, 0.f, 1.f});
-            }
-            addRibbon(s, centre, across, halfWidth);
-        }
-    }
-    // A ring at the canopy's base, a little above where the canopy meets the hull, and two across the back.
-    for (const float z : {-0.62f, -1.15f}) {
-        std::vector<Vec3> centre, across;
-        for (int j = 0; j <= 48; ++j) {
-            const float theta = lerp(std::asin(kSideLine), kPi - std::asin(kSideLine), static_cast<float>(j) / 48.f);
-            centre.push_back(fuselagePoint(z, theta, lift));
-            across.push_back(Vec3{0.f, 0.f, 1.f});
-        }
-        addRibbon(s, centre, across, halfWidth);
-    }
-}
-
-// The scene's meshes; `triangles` gets the ship's triangle count as instanced (both sides, every part).
-std::vector<rt::Mesh> buildMeshes() {
-    std::vector<rt::Mesh> meshes(kMeshCount);
-    {
-        Shape s;
-        buildFuselage(s);
-        auto parts = toMeshes(s, 2, 34.f);
-        meshes[kFuselageTitanium] = std::move(parts[0]);
-        meshes[kFuselageCeramic] = std::move(parts[1]);
-    }
-    {
-        Shape s;
-        buildWing(s, 1.f);
-        buildWing(s, -1.f);
-        auto parts = toMeshes(s, 2, 40.f);
-        meshes[kWingTitanium] = std::move(parts[0]);
-        meshes[kWingCeramic] = std::move(parts[1]);
-    }
-    {
-        Shape s;
-        buildPod(s, 1.f);
-        buildPod(s, -1.f);
-        auto parts = toMeshes(s, 6, 38.f);
-        meshes[kPodChrome] = std::move(parts[0]);
-        meshes[kPodDuct] = std::move(parts[1]);
-        meshes[kPodTitanium] = std::move(parts[2]);
-        meshes[kPodNozzle] = std::move(parts[3]);
-        meshes[kPodNozzleInner] = std::move(parts[4]);
-        meshes[kPodThroat] = std::move(parts[5]);
-    }
-    {
-        Shape s;
-        buildCanopyWall(s, 0.f, false);
-        buildCanopyWall(s, kCanopyWall, true);
-        meshes[kCanopy] = std::move(toMeshes(s, 1, 50.f)[0]);
-    }
-    {
-        Shape s;
-        buildPanelLines(s);
-        meshes[kPanelLineMesh] = std::move(toMeshes(s, 1, 80.f)[0]);
-    }
-    meshes[kCockpitTub] = bevelBox(Vec3{0.11f, 0.05f, 0.42f} * S, 0.02f * S, 2);
-    meshes[kSeat] = bevelBox(Vec3{0.055f, 0.03f, 0.05f} * S, 0.012f * S, 2);
-    meshes[kHeadrest] = bevelBox(Vec3{0.05f, 0.06f, 0.015f} * S, 0.01f * S, 2);
-    meshes[kConsole] = bevelBox(Vec3{0.1f, 0.025f, 0.06f} * S, 0.01f * S, 2);
-    meshes[kDial] = quad(0.026f * S, 0.018f * S);
-    meshes[kNavLight] = uvSphere(0.018f * S, 12, 24);
-    return meshes;
-}
-
-// The cockpit's parts relative to the canopy's centre (model units), and its dials.
-struct Dial {
-    float x, z;
-    std::uint32_t material;
-};
-constexpr std::array<Dial, 6> kDials = {{
-    {-0.06f, 0.0f, kDialCyan},
-    {-0.03f, 0.f, kDialAmber},
-    {0.f, 0.f, kDialCyan},
-    {0.03f, 0.f, kDialAmber},
-    {0.06f, 0.f, kDialCyan},
-    {0.f, 0.03f, kDialAmber},
-}};
-
-rt::Mat34 inMetres(Vec3 unitsPosition) {
-    return translate(unitsPosition * S);
-}
-
-std::vector<SceneInstance> buildShipInstances() {
-    std::vector<SceneInstance> out;
-    const auto add = [&](std::uint32_t mesh, std::uint32_t material, const rt::Mat34& m = identity()) {
-        out.push_back({mesh, material, m});
-    };
-    add(kFuselageTitanium, kTitanium);
-    add(kFuselageCeramic, kCeramic);
-    add(kWingTitanium, kTitanium);
-    add(kWingCeramic, kCeramic);
-    add(kPodChrome, kChrome);
-    add(kPodDuct, kDuct);
-    add(kPodTitanium, kTitanium);
-    add(kPodNozzle, kNozzle);
-    add(kPodNozzleInner, kNozzleInner);
-    add(kPodThroat, kThroat);
-    add(kCanopy, kCanopyGlass);
-    add(kPanelLineMesh, kPanelLines);
-    // The cockpit under the canopy: a tub, the seat with its headrest, the console and its dials.
-    const Vec3 c = kCanopyCentre;
-    add(kCockpitTub, kCockpit, inMetres(c + Vec3{0.f, -0.045f, -0.02f}));
-    add(kSeat, kCockpit, inMetres(c + Vec3{0.f, 0.02f, -0.2f}));
-    add(kHeadrest, kCockpit,
-        compose(inMetres(c + Vec3{0.f, 0.07f, -0.27f}), rotate({1, 0, 0}, 0.25f)));
-    const rt::Mat34 console = compose(inMetres(c + Vec3{0.f, 0.03f, 0.2f}), rotate({1, 0, 0}, 0.45f));
-    add(kConsole, kCockpit, console);
-    for (const Dial& d : kDials)
-        add(kDial, d.material,
-            compose(console, compose(translate(Vec3{d.x, 0.0255f, d.z} * S), rotate({1, 0, 0}, -0.5f * kPi))));
-    // Navigation lights: red to port, green to starboard at the wing tips, the strobe on the tail.
-    const float tipX = kWingTipX - 0.01f;
-    const float tipZ = 0.5f * (wingLeadingZ(tipX) + wingTrailingZ(tipX));
-    add(kNavLight, kNavGreen, inMetres({tipX, wingDihedralY(tipX), tipZ}));
-    add(kNavLight, kNavRed, inMetres({-tipX, wingDihedralY(tipX), tipZ}));
-    add(kNavLight, kStrobe, inMetres({0.f, fuselagePoint(-1.85f, 0.5f * kPi).y / S + 0.01f, -1.85f}));
-    return out;
-}
-
-// --- The flight -------------------------------------------------------------------------------------------
-
-constexpr double kRetroRate = retro::kFlybyRetroRate;
 
 struct DVec3 {
     double x = 0, y = 0, z = 0;
@@ -706,371 +30,531 @@ DVec3 operator-(DVec3 a, DVec3 b) {
 DVec3 operator*(DVec3 a, double s) {
     return {a.x * s, a.y * s, a.z * s};
 }
-
-struct DPose {
-    DVec3 position;
-    double r[3][3]; // model to world, rows
-};
-
-DPose pose(double t) {
-    DPose p;
-    p.position = {0, 0, double(kShipSpeed) * t};
-    const retro::FlybyAttitude a = retro::flybyAttitude(t);
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            p.r[i][j] = a.m[i][j];
-    return p;
+DVec3 mix(DVec3 a, DVec3 b, double t) {
+    return a + (b - a) * t;
 }
-
-// R^T d.
-DVec3 toModel(const DPose& p, DVec3 d) {
-    return {p.r[0][0] * d.x + p.r[1][0] * d.y + p.r[2][0] * d.z, p.r[0][1] * d.x + p.r[1][1] * d.y + p.r[2][1] * d.z,
-            p.r[0][2] * d.x + p.r[1][2] * d.y + p.r[2][2] * d.z};
-}
-
 Vec3 single(DVec3 v) {
     return {static_cast<float>(v.x), static_cast<float>(v.y), static_cast<float>(v.z)};
 }
 
-// The world's camera, positions relative to the ship (world axes), metres.
-struct RelativeCamera {
-    DVec3 eye, target;
-    float fov;
-    float aperture = 0, focus = 1;
-    std::uint32_t shot;
-    bool modelLocked = false; // eye and target in model space (riding with the ship) instead of world axes
+// --- The beat grid
+// ------------------------------------------------------------------------------------------
+
+struct Grid {
+    show::BeatGridView view;
+    double start; // the chapter's start in track seconds
 };
 
-DVec3 spherical(double azimuth, double elevation, double distance) {
-    return {distance * std::cos(elevation) * std::sin(azimuth), distance * std::sin(elevation),
-            -distance * std::cos(elevation) * std::cos(azimuth)};
+Grid gridOf(const show::TimelineFrame& f) {
+    return {show::beatGrid(f.track), f.trackSeconds - f.localSeconds};
 }
 
-double smoothD(double x) {
-    x = std::clamp(x, 0.0, 1.0);
-    return x * x * (3 - 2 * x);
+// The chapter's downbeats in chapter seconds.
+std::vector<double> downbeats(const Grid& g, double duration) {
+    std::vector<double> out;
+    for (int b = std::max(g.view.beatAt(g.start), 0); b < g.view.count(); ++b) {
+        const double t = g.view.beatTime(b) - g.start;
+        if (t > duration)
+            break;
+        if (t >= -1e-9 && g.view.bar(b) == 0)
+            out.push_back(t);
+    }
+    return out;
 }
 
-struct ShotTimes {
-    double accent, crossingEnd, duration;
-};
-
-ShotTimes shotTimes(const show::TimelineFrame& f) {
-    const double duration = std::max(f.chapterDuration, 1e-3);
-    const double accent = std::clamp(f.accentSeconds, 0.0, duration);
-    const double crossingEnd = accent + std::min<double>(kShipCrossingSeconds, 0.5 * (duration - accent));
-    return {accent, crossingEnd, duration};
+// Beats since chapter second `from` (a beat of the grid) to `t`, fractional.
+double beatsBetween(const Grid& g, double from, double t) {
+    const auto at = [&](double local) {
+        const int beat = g.view.beatAt(g.start + local);
+        if (beat < 0 || beat + 1 >= g.view.count())
+            return double(std::max(beat, 0));
+        const double a = g.view.beatTime(beat), b = g.view.beatTime(beat + 1);
+        return double(beat) + std::clamp((g.start + local - a) / std::max(b - a, 1e-6), 0.0, 1.0);
+    };
+    return at(t) - at(from);
 }
 
-std::uint32_t shotAt(const ShotTimes& s, double local) {
-    return local < s.accent ? 0u : local < s.crossingEnd ? 1u : 2u;
+// --- The world
+// ------------------------------------------------------------------------------------------------
+
+// The planet below the crossing: an ocean world, the ship 380 m over it as it passes, its centre ahead.
+constexpr double kPlanetAltitude = 380.0;
+const DVec3 kPlanetCentre{0.0, -double(kPlanetRadius) - kPlanetAltitude, 900.0};
+// The planet's own frame turned so its pole lies far off the flight (no pole under the camera).
+constexpr double kPlanetVisible = 9500.0; // drawn while its centre is nearer than this
+
+// The sun: 0.6 degrees across, a 5800 K white.
+constexpr float kSunAngularRadius = 0.3f * std::numbers::pi_v<float> / 180.f;
+constexpr float kSunRadiance = 48000.f;
+
+// Lenses (36 mm equivalent, vertical fields of view at 16:9): 24 mm and 35 mm.
+constexpr float kLens24 = 45.7f, kLens35 = 32.3f;
+
+// The pose: the attitude's rows.
+std::array<Vec3, 3> attitudeRows(double local) {
+    const retro::FlybyAttitude a = retro::flybyAttitude(local);
+    std::array<Vec3, 3> rows;
+    for (int i = 0; i < 3; ++i)
+        rows[i] = {float(a.m[i][0]), float(a.m[i][1]), float(a.m[i][2])};
+    return rows;
 }
 
-RelativeCamera relativeCamera(const show::TimelineFrame& f) {
-    const ShotTimes times = shotTimes(f);
-    const double local = std::clamp(f.localSeconds, 0.0, times.duration);
-    const std::uint32_t shot = shotAt(times, local);
-    RelativeCamera c{};
-    c.shot = shot;
-    c.fov = static_cast<float>(retro::kFlybyFovY);
-    if (shot == 0) {
-        // The chase: behind and above, drifting a little round to the right; from 4.2 s before the accent it
-        // swings round onto the 1993 camera, which it holds from 1.2 s before the accent (the portal opens a
-        // second before it), so both eras show the same picture while they cross-fade.
-        const retro::FlybyView v93 = retro::flybyView(times.duration, local * kRetroRate);
-        const DVec3 eye93{v93.eye[0] * S, v93.eye[1] * S, v93.eye[2] * S};
-        const DVec3 target93{v93.target[0] * S, v93.target[1] * S, v93.target[2] * S};
-        const double w = smoothD((local - (times.accent - 4.2)) / 3.0);
-        if (w >= 1.0) {
-            c.eye = eye93;
-            c.target = target93;
-            return c;
+// R^T d: world to the render frame.
+DVec3 toRender(const std::array<Vec3, 3>& r, DVec3 d) {
+    return {r[0].x * d.x + r[1].x * d.y + r[2].x * d.z, r[0].y * d.x + r[1].y * d.y + r[2].y * d.z,
+            r[0].z * d.x + r[1].z * d.y + r[2].z * d.z};
+}
+
+// The rigid transform of a part placed in the world at `centre` with the rotation `world` (rows), carried
+// into the render frame: R^T world, R^T (centre - P).
+rt::Mat34 inRender(const std::array<Vec3, 3>& r, double shipZ, DVec3 centre,
+                   const std::array<Vec3, 3>& world = {Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}}) {
+    rt::Mat34 m{};
+    for (int j = 0; j < 3; ++j) {
+        const DVec3 column{world[0].x * (j == 0) + world[0].y * (j == 1) + world[0].z * (j == 2),
+                           world[1].x * (j == 0) + world[1].y * (j == 1) + world[1].z * (j == 2),
+                           world[2].x * (j == 0) + world[2].y * (j == 1) + world[2].z * (j == 2)};
+        const DVec3 c = toRender(r, column);
+        m.m[0][j] = float(c.x), m.m[1][j] = float(c.y), m.m[2][j] = float(c.z);
+    }
+    const DVec3 t = toRender(r, centre - DVec3{0, 0, shipZ});
+    m.m[0][3] = float(t.x), m.m[1][3] = float(t.y), m.m[2][3] = float(t.z);
+    return m;
+}
+
+// The ring: a torus about z, radius kWormholeRingRadius, tube kWormholeRingTube; uv in metres (u around the
+// ring, v around the tube), the seams duplicated.
+rt::Mesh ringMesh() {
+    constexpr int kAround = 192, kTube = 20;
+    rt::Mesh m;
+    const float big = kWormholeRingRadius, small = kWormholeRingTube;
+    for (int i = 0; i <= kAround; ++i) {
+        const float a = 2.f * std::numbers::pi_v<float> * float(i) / float(kAround);
+        const Vec3 radial{std::cos(a), std::sin(a), 0.f};
+        for (int j = 0; j <= kTube; ++j) {
+            const float b = 2.f * std::numbers::pi_v<float> * float(j) / float(kTube);
+            const Vec3 n = radial * std::cos(b) + Vec3{0.f, 0.f, std::sin(b)};
+            const Vec3 p = radial * big + n * small;
+            m.vertices.push_back({{p.x, p.y, p.z}, {n.x, n.y, n.z}, {big * a, small * b}});
         }
-        const double drift = local / std::max(times.accent, 1e-3);
-        const double chaseAzimuth = (-12.0 + 18.0 * smoothD(drift)) * kPiD / 180.0;
-        const double chaseElevation = (15.0 - 3.0 * drift) * kPiD / 180.0;
-        const double chaseDistance = 7.0 * S - 0.6 * S * drift;
-        const DVec3 chaseTarget = DVec3{0.0, -0.15, 2.4} * S;
-        const double azimuth93 = std::atan2(eye93.x, -eye93.z);
-        const double distance93 = std::sqrt(eye93.x * eye93.x + eye93.y * eye93.y + eye93.z * eye93.z);
-        const double elevation93 = std::asin(eye93.y / distance93);
-        const auto mix = [w](double a, double b) { return a + (b - a) * w; };
-        c.eye = spherical(mix(chaseAzimuth, azimuth93), mix(chaseElevation, elevation93),
-                          mix(chaseDistance, distance93));
-        c.target = chaseTarget * (1 - w) + target93 * w;
-        return c;
     }
-    if (shot == 1) {
-        // The crossing: a camera standing in space beside the flight path, a little below it, that the ship
-        // passes kShipPassSeconds after the accent. It turns after the ship more slowly than the ship flies
-        // past (its bearing is the ship's seen from kLag times further off), so the ship sweeps across the
-        // frame, streaked by the shutter, and then recedes into the distance as the camera catches up.
-        constexpr double kSide = 13.0, kBelow = 3.4, kLag = 2.2;
-        const double pass = times.accent + kShipPassSeconds;
-        const DPose now = pose(local);
-        const DVec3 camera = pose(pass).position + DVec3{kSide, -kBelow, 0.0};
-        const double along = double(kShipSpeed) * (local - pass);
-        c.eye = camera - now.position;
-        c.target = c.eye + DVec3{-kSide * kLag, kBelow * kLag * 0.85, along};
-        c.fov = 46.f;
-        return c;
-    }
-    // The orbit past the canopy, riding with the ship: from ahead and to the right round to its left, above
-    // the canopy, which reflects the sun and the planet.
-    const double s = smoothD((local - times.crossingEnd) / std::max(times.duration - times.crossingEnd, 1e-3));
-    const double azimuth = (38.0 - 92.0 * s) * kPiD / 180.0; // from +z (ahead), positive to starboard
-    const double elevation = (17.0 + 9.0 * s) * kPiD / 180.0;
-    const double distance = (3.6 - 0.5 * std::sin(kPiD * s)) * 1.0;
-    const DVec3 centre{0.0, (kCanopyCentre.y + 0.02) * S, (kCanopyCentre.z - 0.05) * S};
-    c.eye = centre + DVec3{distance * std::cos(elevation) * std::sin(azimuth), distance * std::sin(elevation),
-                           distance * std::cos(elevation) * std::cos(azimuth)};
-    c.target = centre + DVec3{0.0, -0.25, -0.9};
-    c.fov = 40.f;
-    c.modelLocked = true;
-    return c;
+    const auto at = [](int i, int j) { return std::uint32_t(i * (kTube + 1) + j); };
+    for (int i = 0; i < kAround; ++i)
+        for (int j = 0; j < kTube; ++j) {
+            const std::uint32_t a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
+            m.indices.insert(m.indices.end(), {a, c, b, a, d, c}); // counter-clockwise from outside
+        }
+    return m;
 }
 
-Camera carry(const RelativeCamera& rc, const DPose& p) {
-    Camera c;
-    if (rc.modelLocked) {
-        c.eye = single(rc.eye);
-        c.target = single(rc.target);
-    } else {
-        c.eye = single(toModel(p, rc.eye));
-        c.target = single(toModel(p, rc.target));
+// The ring's light: a band round its inside, facing the axis, kBandWidth wide along z.
+constexpr float kBandRadius = kWormholeRingRadius - kWormholeRingTube - 0.5f, kBandWidth = 7.f;
+
+rt::Mesh bandMesh() {
+    constexpr int kAround = 192;
+    rt::Mesh m;
+    for (int i = 0; i <= kAround; ++i) {
+        const float a = 2.f * std::numbers::pi_v<float> * float(i) / float(kAround);
+        const Vec3 radial{std::cos(a), std::sin(a), 0.f};
+        for (const float z : {-0.5f * kBandWidth, 0.5f * kBandWidth}) {
+            const Vec3 p = radial * kBandRadius + Vec3{0.f, 0.f, z};
+            const Vec3 n = radial * -1.f;
+            m.vertices.push_back({{p.x, p.y, p.z}, {n.x, n.y, n.z}, {kBandRadius * a, z}});
+        }
     }
-    c.up = single(toModel(p, {0, 1, 0}));
-    c.fovYDegrees = rc.fov;
-    c.aperture = rc.aperture;
-    c.focusDistance = rc.focus;
-    c.shot = rc.shot;
-    return c;
+    for (int i = 0; i < kAround; ++i) {
+        const std::uint32_t a = std::uint32_t(2 * i), b = a + 2, c = a + 3, d = a + 1;
+        m.indices.insert(m.indices.end(), {a, b, c, a, c, d}); // facing the axis
+    }
+    return m;
 }
 
-// --- The planet and the sky ----------------------------------------------------------------------------------
-
-// The planet's centre in the world: below the ship's path, the ship kPlanetAltitude above the ocean half way
-// through FLYBY (about 10 s in).
-const DVec3 kPlanetCentre{0.0, -double(kPlanetRadius) - double(kPlanetAltitude), double(kShipSpeed) * 10.0};
-
-// The sun: 0.6 degrees across, warm white, bright enough that sunlit titanium sits near white at EV 0.
-constexpr float kSunAngularRadius = 0.3f * kPi / 180.f;
-constexpr Vec3 kSunRadiance{52000.f, 46000.f, 38000.f};
-
-// A quaternion (x, y, z, w) of the rotation R^T (world to model).
-std::array<float, 4> quaternionOf(const DPose& p) {
-    // m = R^T: m[i][j] = r[j][i].
-    const auto m = [&](int i, int j) { return p.r[j][i]; };
-    const double trace = m(0, 0) + m(1, 1) + m(2, 2);
-    double x, y, z, w;
-    if (trace > 0) {
-        const double s = 0.5 / std::sqrt(trace + 1.0);
-        w = 0.25 / s;
-        x = (m(2, 1) - m(1, 2)) * s;
-        y = (m(0, 2) - m(2, 0)) * s;
-        z = (m(1, 0) - m(0, 1)) * s;
-    } else if (m(0, 0) > m(1, 1) && m(0, 0) > m(2, 2)) {
-        const double s = 2.0 * std::sqrt(1.0 + m(0, 0) - m(1, 1) - m(2, 2));
-        w = (m(2, 1) - m(1, 2)) / s;
-        x = 0.25 * s;
-        y = (m(0, 1) + m(1, 0)) / s;
-        z = (m(0, 2) + m(2, 0)) / s;
-    } else if (m(1, 1) > m(2, 2)) {
-        const double s = 2.0 * std::sqrt(1.0 + m(1, 1) - m(0, 0) - m(2, 2));
-        w = (m(0, 2) - m(2, 0)) / s;
-        x = (m(0, 1) + m(1, 0)) / s;
-        y = 0.25 * s;
-        z = (m(1, 2) + m(2, 1)) / s;
-    } else {
-        const double s = 2.0 * std::sqrt(1.0 + m(2, 2) - m(0, 0) - m(1, 1));
-        w = (m(1, 0) - m(0, 1)) / s;
-        x = (m(0, 2) + m(2, 0)) / s;
-        y = (m(1, 2) + m(2, 1)) / s;
-        z = 0.25 * s;
-    }
-    return {float(x), float(y), float(z), float(w)};
-}
+enum SceneMaterial : std::uint32_t { kRing, kPlanet, kBand, kSceneMaterials };
+enum SceneMesh : std::uint32_t { kRingMesh, kBandMesh, kSceneMeshes };
 
 std::uint32_t scaled(std::uint32_t count, SceneDetail detail) {
     const double n = std::round(double(count) * std::clamp(double(detail.scale), 0.0, 1.0));
     return std::max<std::uint32_t>(1, static_cast<std::uint32_t>(n));
 }
 
-std::uint32_t triangleCount(const std::vector<rt::Mesh>& meshes, const std::vector<SceneInstance>& instances) {
-    std::uint32_t total = 0;
-    for (const SceneInstance& in : instances)
-        if (in.kind == rt::GeometryKind::Triangles)
-            total += static_cast<std::uint32_t>(meshes[in.mesh].indices.size() / 3);
-    return total;
+// --- The cameras
+// ----------------------------------------------------------------------------------------------
+
+struct WorldCamera {
+    DVec3 eye, target; // relative to the ship's position, world axes
+    float fov = kLens24, aperture = 0, focus = 1;
+    std::uint32_t shot = 0;
+};
+
+// A direction from yaw (about +y, 0 along +z, positive towards +x) and pitch.
+DVec3 heading(double yaw, double pitch) {
+    return {std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)};
+}
+
+// How far a follower that starts at rest and reaches `speed` after `ramp` seconds (a smoothstep) has gone.
+double follow(double s, double speed, double ramp) {
+    if (s <= 0)
+        return 0;
+    if (s >= ramp)
+        return speed * ramp * 0.5 + speed * (s - ramp);
+    const double x = s / ramp;
+    return speed * ramp * (x * x * x - 0.5 * x * x * x * x);
+}
+
+WorldCamera worldCamera(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    const double local = std::clamp(f.localSeconds, 0.0, t.duration);
+    const double ship = shipDistance(f);
+    WorldCamera c;
+    const double v0 = kShipCruise;
+    if (local < t.crossing) {
+        // The gate: looking down the flight path at the first ring, the planet's limb across the lower third
+        // and the sun high on the right; a slow push.
+        const double u = smoothD(local / std::max(t.crossing, 1e-3));
+        const double eyeZ = v0 * t.pass - 160.0 + 40.0 * u;
+        c.eye = DVec3{9.0, 3.4, eyeZ - ship};
+        const DVec3 gate = DVec3{0.0, -60.0, 1000.0 + v0 * t.pass - ship} - c.eye;
+        const double yaw = std::atan2(gate.x, gate.z), pitch = std::atan2(gate.y, std::hypot(gate.x, gate.z));
+        c.target = c.eye + heading(yaw, pitch - 0.1) * 20.0;
+        c.fov = kLens24;
+        c.shot = 0;
+        return c;
+    }
+    if (local < t.tunnel) {
+        // The crossing: a camera locked off 22 m beside the path, aimed where the ship will be on the
+        // downbeat. The ship comes in from the right at 300 m/s, crosses the picture (the export shutter's
+        // motion blur), engines trailing fire, and on the downbeat is at its centre; then the camera pans
+        // after it towards the gate and follows it. After the pass the camera gets up to speed behind the
+        // ship (it falls about 90 m back), then gains on it until it rides 40 m behind, the planet's limb low
+        // in the picture.
+        const double s = local - t.pass;
+        const DVec3 aim{0.0, 0.0, v0 * t.pass};
+        const double w = smoothD((s - 0.05) / 0.7);
+        const double lag = s > 0 ? s - follow(s, 1.0, 0.7) : 0.0;
+        const double eyeZ =
+            v0 * t.pass - 11.0 + v0 * (std::max(s, 0.0) - lag) + 50.0 * smoothD((s - 0.6) / 1.8);
+        const DVec3 side = mix(DVec3{22.0, 4.0, 0.0}, DVec3{6.0, 4.5, 0.0}, smoothD((s - 0.2) / 1.8));
+        const DVec3 eye{side.x, side.y, eyeZ};
+        const DVec3 shipAt{0.0, 0.0, ship};
+        const DVec3 look = mix(aim, shipAt, w);
+        c.eye = eye - shipAt;
+        c.target = look - shipAt + DVec3{0.0, -1.0 * w, 0.0};
+        c.fov = kLens24;
+        c.shot = 1;
+        return c;
+    }
+    if (local < t.drop) {
+        // Into the tunnel: behind and above, falling back as the ship accelerates away.
+        const double u = smoothD((local - t.tunnel) / std::max(t.drop - t.tunnel, 1e-3));
+        c.eye = DVec3{2.0, 4.6, -24.0 - 16.0 * u};
+        c.target = DVec3{0.0, -1.0, 40.0};
+        c.fov = kLens24;
+        c.shot = 2;
+        return c;
+    }
+    if (local < t.release) {
+        // Riding: from D the camera closes in behind the ship, a little above it, opposite the low sun, so
+        // the sun's reflection runs along the brushed titanium (the anisotropic streak) while the rings come
+        // at them out of the light; from the accent it holds there, drifting slowly round the tail.
+        const double w = smoothD((local - t.drop) / std::max(t.accent - t.drop, 0.25));
+        const double u = smoothD((local - t.accent) / std::max(t.release - t.accent, 1e-3));
+        const DVec3 start{10.0, 9.0, -48.0};
+        const double yaw = (206.0 - 22.0 * u) * kPiD / 180.0;
+        const DVec3 riding = heading(yaw, 0.27) * 30.0 + DVec3{0.0, 0.6, 0.0};
+        c.eye = mix(start, riding, w);
+        c.target = DVec3{0.0, -0.8, 5.0 + 2.0 * u};
+        c.fov = kLens35;
+        c.aperture = 0.06f;
+        c.focus = static_cast<float>(std::sqrt(c.eye.x * c.eye.x + c.eye.y * c.eye.y + c.eye.z * c.eye.z));
+        c.shot = 3;
+        return c;
+    }
+    // Into the light: the camera lets the ship go; it pulls away into the sun.
+    const double u = smoothD((local - t.release) / std::max(t.duration - t.release, 1e-3));
+    c.eye = DVec3{-2.5 * (1 - u), 3.0 - 1.0 * u, -14.0 - 80.0 * u * u};
+    c.target = c.eye + DVec3{0.0, -0.08, 1.0} * 60.0;
+    c.fov = kLens35;
+    c.shot = 4;
+    return c;
+}
+
+Camera carry(const WorldCamera& wc, const std::array<Vec3, 3>& rows) {
+    Camera c;
+    c.eye = single(toRender(rows, wc.eye));
+    c.target = single(toRender(rows, wc.target));
+    c.up = single(toRender(rows, {0, 1, 0}));
+    c.fovYDegrees = wc.fov;
+    c.aperture = wc.aperture;
+    c.focusDistance = wc.focus;
+    c.shot = wc.shot;
+    return c;
 }
 
 } // namespace
 
-// --- Public functions ---------------------------------------------------------------------------------------
+// --- Times and the flight
+// -------------------------------------------------------------------------------------
+
+ShipTimes shipTimes(const show::TimelineFrame& f) {
+    ShipTimes t;
+    t.duration = std::max(f.chapterDuration, 1e-3);
+    t.accent = std::clamp(f.accentSeconds, 0.0, t.duration);
+    const Grid g = gridOf(f);
+    const std::vector<double> bars = downbeats(g, t.duration);
+    const auto firstAfter = [&](double at, double otherwise) {
+        for (const double b : bars)
+            if (b >= at)
+                return b;
+        return otherwise;
+    };
+    t.drop = t.accent;
+    for (const double b : bars)
+        if (b <= t.accent + 1e-6)
+            t.drop = b;
+    t.pass = std::min(firstAfter(0.21 * t.duration, 0.21 * t.duration), t.drop - 2.0);
+    t.crossing = 0.6 * t.pass;
+    for (const double b : bars)
+        if (b < t.pass - 1.2)
+            t.crossing = b;
+    t.tunnel = std::clamp(firstAfter(0.3 * t.duration, 0.32 * t.duration), t.pass + 1.0, t.drop - 1.0);
+    t.release = t.drop + 0.25 * (t.duration - t.drop);
+    int after = 0;
+    for (const double b : bars)
+        if (b > t.drop + 1e-6 && ++after == 4) {
+            t.release = b;
+            break;
+        }
+    t.release = std::min(t.release, t.duration - 1.0);
+    t.whiteout =
+        std::min(firstAfter(t.release + 1e-6, t.release + 0.4 * (t.duration - t.release)), t.duration - 0.5);
+    const int dropBeat = g.view.beatAt(g.start + t.drop + 1e-6);
+    if (dropBeat >= 0 && dropBeat + 1 < g.view.count())
+        t.beat = std::clamp(g.view.beatTime(dropBeat + 1) - g.view.beatTime(dropBeat), 0.2, 1.0);
+    return t;
+}
+
+std::vector<ShipShot> shipShots(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    return {{0, t.crossing},
+            {t.crossing, t.tunnel},
+            {t.tunnel, t.drop},
+            {t.drop, t.release},
+            {t.release, t.duration}};
+}
+
+double shipDistance(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    const double local = std::clamp(f.localSeconds, 0.0, t.duration);
+    const double v0 = kShipCruise;
+    if (local < t.tunnel)
+        return v0 * local;
+    // Through the tunnel the ship accelerates (a cubic in time) to one ring per beat at D, covering whole
+    // kilometres, so the rings pass on the beats from D on.
+    const double z1 = v0 * t.tunnel, span = t.drop - t.tunnel;
+    const double v1 = double(kWormholeRingSpacing) / t.beat;
+    const double rings = std::max(1.0, std::round(0.5 * (v0 + v1) * span / kWormholeRingSpacing));
+    const double dz = rings * kWormholeRingSpacing;
+    if (local < t.drop) {
+        const double s = (local - t.tunnel) / span, s2 = s * s, s3 = s2 * s;
+        return z1 + (s3 - 2 * s2 + s) * span * v0 + (-2 * s3 + 3 * s2) * dz + (s3 - s2) * span * v1;
+    }
+    return z1 + dz + kWormholeRingSpacing * beatsBetween(gridOf(f), t.drop, local);
+}
+
+double shipRingZ(const show::TimelineFrame& f, int k) {
+    const ShipTimes t = shipTimes(f);
+    show::TimelineFrame atDrop = f;
+    atDrop.trackSeconds = f.trackSeconds - f.localSeconds + t.drop;
+    atDrop.localSeconds = t.drop;
+    return shipDistance(atDrop) + double(k) * kWormholeRingSpacing;
+}
+
+ShipPose shipPose(const show::TimelineFrame& f) {
+    return {shipDistance(f), attitudeRows(std::clamp(f.localSeconds, 0.0, f.chapterDuration))};
+}
+
+Camera shipCamera(const show::TimelineFrame& f) {
+    return carry(worldCamera(f), shipPose(f).rows);
+}
+
+float shipThrottle(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    const double local = f.localSeconds;
+    const float flutter = 0.08f * std::clamp(f.bass, 0.f, 1.f);
+    if (local < t.tunnel)
+        return 0.7f + flutter;
+    const auto flash = [&](double at, double size) {
+        return local >= at ? size * std::exp(-(local - at) / 0.25) : 0.0;
+    };
+    const double burner = 1.0 + flash(t.tunnel, 0.55) + flash(t.drop, 0.45);
+    return static_cast<float>(burner) + flutter;
+}
+
+float shipExposureEV(const show::TimelineFrame& f) {
+    const ShipTimes t = shipTimes(f);
+    const double local = f.localSeconds;
+    if (local < t.tunnel)
+        return 0.2f;
+    if (local < t.drop)
+        return 0.f;
+    if (local < t.whiteout)
+        return 0.5f;
+    const double w = smoothD((local - t.whiteout) / std::max(t.duration - t.whiteout, 1e-3));
+    return static_cast<float>(7.0 * w * w);
+}
 
 ShipStats shipStats(SceneDetail detail) {
     return Ship(detail).stats();
 }
 
-std::vector<ShipShot> shipShots(const show::TimelineFrame& frame) {
-    const ShotTimes t = shotTimes(frame);
-    return {{0.f, float(t.accent)}, {float(t.accent), float(t.crossingEnd)}, {float(t.crossingEnd), float(t.duration)}};
-}
-
-ShipPose shipPose(double localSeconds) {
-    const DPose p = pose(localSeconds);
-    ShipPose out;
-    out.position = single(p.position);
-    for (int i = 0; i < 3; ++i)
-        out.rows[i] = {float(p.r[i][0]), float(p.r[i][1]), float(p.r[i][2])};
-    return out;
-}
-
-Camera shipWorldCamera(const show::TimelineFrame& frame) {
-    const RelativeCamera rc = relativeCamera(frame);
-    const DPose p = pose(frame.localSeconds);
-    Camera c;
-    const auto world = [&](DVec3 v) {
-        if (!rc.modelLocked)
-            return single(p.position + v);
-        const DVec3 w{p.r[0][0] * v.x + p.r[0][1] * v.y + p.r[0][2] * v.z,
-                      p.r[1][0] * v.x + p.r[1][1] * v.y + p.r[1][2] * v.z,
-                      p.r[2][0] * v.x + p.r[2][1] * v.y + p.r[2][2] * v.z};
-        return single(p.position + w);
-    };
-    c.eye = world(rc.eye);
-    c.target = world(rc.target);
-    c.up = {0, 1, 0};
-    c.fovYDegrees = rc.fov;
-    c.aperture = rc.aperture;
-    c.focusDistance = rc.focus;
-    c.shot = rc.shot;
-    return c;
-}
-
-Camera shipCamera(const show::TimelineFrame& frame) {
-    return carry(relativeCamera(frame), pose(frame.localSeconds));
-}
-
-Vec3 shipRenderPoint(const ShipPose& pose, Vec3 world) {
-    return shipRenderDirection(pose, world - pose.position);
-}
-
-Vec3 shipRenderDirection(const ShipPose& pose, Vec3 d) {
-    // R^T d: the columns of R dotted with d.
-    return {pose.rows[0].x * d.x + pose.rows[1].x * d.y + pose.rows[2].x * d.z,
-            pose.rows[0].y * d.x + pose.rows[1].y * d.y + pose.rows[2].y * d.z,
-            pose.rows[0].z * d.x + pose.rows[1].z * d.y + pose.rows[2].z * d.z};
-}
-
-float shipExposureEV(std::uint32_t shot) {
-    switch (shot) {
-    case 1:
-        return 0.f;
-    case 2:
-        return -0.2f;
-    default:
-        return 0.f;
-    }
-}
-
-std::array<Vec3, 2> shipNozzles() {
-    return {Vec3{kPodX, kPodY, kNozzleExitZ} * S, Vec3{-kPodX, kPodY, kNozzleExitZ} * S};
-}
+// --- The scene
+// ------------------------------------------------------------------------------------------------
 
 Ship::Ship(SceneDetail detail) {
-    static_.meshes = buildMeshes();
-    static_.materials = buildMaterials();
-    shipInstances_ = buildShipInstances();
-    // The planet: one analytic sphere, placed every frame.
-    rt::SphereRecord planet{};
-    planet.radius = kPlanetRadius;
-    planet.color[0] = planet.color[1] = planet.color[2] = 1.f;
-    planet.material = kOcean;
-    static_.spheres = {planet};
-    stars_ = scaled(kShipStars, detail);
-    limb_ = scaled(kShipLimbSplats, detail);
-    static_.splatShader = "modern_ship_splats.comp.spv";
-    static_.capacity.instances = static_cast<std::uint32_t>(shipInstances_.size() + 1);
-    static_.capacity.lights = 0;
-    static_.capacity.materials = kMaterialCount;
+    static_.meshes = {ringMesh(), bandMesh()};
+    static_.materials.resize(kSceneMaterials);
+    // The rings: basalt-black ceramic, its seams glowing gold.
+    rt::Material& ring = static_.materials[kRing];
+    ring.baseColor[0] = 0.035f, ring.baseColor[1] = 0.034f, ring.baseColor[2] = 0.033f;
+    ring.roughness = 0.5f;
+    ring.coat = 0.4f;
+    ring.coatRoughness = 0.15f;
+    ring.pattern = static_cast<std::uint32_t>(rt::Pattern::Hull);
+    ring.patternScale = 8.f;
+    ring.baseColor2[0] = 0.08f, ring.baseColor2[1] = 0.075f, ring.baseColor2[2] = 0.07f;
+    ring.emission[0] = 1.f, ring.emission[1] = 0.72f, ring.emission[2] = 0.3f;
+    ring.emissionScale = 5.f;
+    ring.flags = rt::kMaterialCameraOnlyEmission;
+    // The band of gold light inside each ring (seen, not sampled: as an unsampled emitter it would sparkle
+    // on the hull).
+    rt::Material& band = static_.materials[kBand];
+    band.baseColor[0] = band.baseColor[1] = band.baseColor[2] = 0.02f;
+    band.emission[0] = 1.f, band.emission[1] = 0.74f, band.emission[2] = 0.38f;
+    band.emissionScale = 2.5f;
+    band.materialClass = static_cast<std::uint32_t>(rt::MaterialClass::Emissive);
+    band.flags = rt::kMaterialCameraOnlyEmission;
+    // The planet: ocean under clouds, the air thickening to the limb.
+    rt::Material& planet = static_.materials[kPlanet];
+    planet.baseColor[0] = 0.012f, planet.baseColor[1] = 0.034f, planet.baseColor[2] = 0.07f;
+    planet.roughness = 0.12f;
+    planet.baseColor2[0] = 0.8f, planet.baseColor2[1] = 0.82f, planet.baseColor2[2] = 0.85f;
+    planet.pattern = static_cast<std::uint32_t>(rt::Pattern::Planet);
+    planet.patternScale = 42.f;
+    planet.emission[0] = 0.12f, planet.emission[1] = 0.24f, planet.emission[2] = 0.52f;
+    planet.emissionScale = 0.6f;
+    planet.flags = rt::kMaterialCameraOnlyEmission;
+    rt::SphereRecord sphere{};
+    sphere.radius = kPlanetRadius;
+    sphere.color[0] = sphere.color[1] = sphere.color[2] = 1.f;
+    sphere.material = kPlanet;
+    static_.spheres = {sphere};
     static_.capacity.spheres = 1;
-    static_.capacity.splats = stars_ + limb_ + 1;
+
+    stars_ = scaled(kShipStars, detail);
+    air_ = scaled(kShipAirSplats, detail);
+    asset_ = std::make_unique<ShipAsset>(static_, detail, stars_ + air_ + 1);
+    static_.capacity.instances = asset_->counts().instances + 40;
+    static_.capacity.lights = 1;
 
     stats_.stars = stars_;
-    stats_.limbSplats = limb_;
-    stats_.splats = stars_ + limb_ + 1;
-    stats_.plumeVoxels = kShipPlumeVoxels; // the grid's size does not scale (yet)
-    stats_.triangles = triangleCount(static_.meshes, shipInstances_);
-    stats_.meshes = kMeshCount;
-    stats_.materials = kMaterialCount;
+    stats_.airSplats = air_;
+    stats_.splats = stars_ + air_ + 1;
+    stats_.plumeGrid = asset_->plumeGrid();
+    stats_.plumeVoxels = stats_.plumeGrid[0] * stats_.plumeGrid[1] * stats_.plumeGrid[2];
+    stats_.triangles = asset_->counts().triangles;
 }
 
-std::uint32_t Ship::panelMaterial() const {
-    return kPanelLines;
-}
-
-std::uint32_t Ship::strobeMaterial() const {
-    return kStrobe;
+std::uint32_t Ship::ringMaterial() const {
+    return kRing;
 }
 
 std::vector<rt::Material> Ship::materials(const show::TimelineFrame& f) const {
     std::vector<rt::Material> m = static_.materials;
-    // The panel lines breathe with the kick; the strobe flashes on every beat; the nozzles flicker with the
-    // bass.
-    m[kPanelLines].emissionScale = kPanelEmission * (0.35f + 1.9f * std::clamp(f.kick, 0.f, 1.f));
-    const float beat = std::clamp(f.beatPhase, 0.f, 1.f);
-    m[kStrobe].emissionScale = beat < 0.1f ? kStrobeEmission : 0.f;
-    const float throb = 0.85f + 0.3f * std::clamp(f.bass, 0.f, 1.f);
-    m[kThroat].emissionScale *= throb;
-    m[kNozzleInner].emissionScale *= throb;
+    asset_->animate(m, f, shipThrottle(f));
+    const ShipTimes t = shipTimes(f);
+    const float kick = std::clamp(f.kick, 0.f, 1.f);
+    m[kRing].emissionScale = 5.f * (1.f + 1.4f * kick) * (f.localSeconds >= t.drop ? 1.6f : 1.f);
+    m[kBand].emissionScale = 2.5f * (1.f + 0.8f * kick);
     return m;
 }
 
 SceneFrame Ship::frame(const show::TimelineFrame& f) const {
     SceneFrame out;
-    const DPose p = pose(f.localSeconds);
-    out.camera = carry(relativeCamera(f), p);
-    out.instances = shipInstances_;
-    // The planet in the ship's frame: R^T (C - P), rotated with the world.
-    {
-        const DVec3 centre = toModel(p, kPlanetCentre - p.position);
-        rt::Mat34 m{};
-        for (int i = 0; i < 3; ++i)
-            for (int j = 0; j < 3; ++j)
-                m.m[i][j] = static_cast<float>(p.r[j][i]);
-        m.m[0][3] = static_cast<float>(centre.x);
-        m.m[1][3] = static_cast<float>(centre.y);
-        m.m[2][3] = static_cast<float>(centre.z);
-        SceneInstance planet{0, kOcean, m};
-        planet.kind = rt::GeometryKind::Spheres;
-        planet.firstSphere = 0;
-        planet.sphereCount = 1;
-        out.instances.push_back(planet);
-    }
+    const ShipPose pose = shipPose(f);
+    const WorldCamera wc = worldCamera(f);
+    out.camera = carry(wc, pose.rows);
+    asset_->place(out, identity());
     out.materials = materials(f);
+    out.medium = MediumFrame{std::nullopt, asset_->plumes(shipThrottle(f), identity())};
+    out.exposureEV = shipExposureEV(f);
+    // The plumes are lights nothing samples: a hull path that happens on their white-hot core would sparkle,
+    // so contributions after a rough vertex are held lower than the default.
+    out.clampIndirect = 3.f;
 
-    const Vec3 sun = normalize(single(toModel(p, {kShipSunDirection.x, kShipSunDirection.y, kShipSunDirection.z})));
+    // The rings from the gate on, from just behind the ship to 9 km ahead.
+    const ShipTimes t = shipTimes(f);
+    show::TimelineFrame atTunnel = f;
+    atTunnel.trackSeconds = f.trackSeconds - f.localSeconds + t.tunnel;
+    atTunnel.localSeconds = t.tunnel;
+    const double ring0 = shipRingZ(f, 0);
+    const int gate = int(std::ceil((shipDistance(atTunnel) + 400.0 - ring0) / kWormholeRingSpacing));
+    const int first = std::max(gate, int(std::floor((pose.z - 600.0 - ring0) / kWormholeRingSpacing)));
+    for (int k = first;; ++k) {
+        const double z = ring0 + double(k) * kWormholeRingSpacing;
+        if (z - pose.z > 9000.0)
+            break;
+        const rt::Mat34 at = inRender(pose.rows, pose.z, {0.0, 0.0, z});
+        out.instances.push_back({kRingMesh, kRing, at});
+        out.instances.push_back({kBandMesh, kBand, at});
+    }
+
+    // The planet while it is near: its own frame turned (local y to world x) so no pole lies under the
+    // flight.
+    const DVec3 toPlanet = kPlanetCentre - DVec3{0, 0, pose.z};
+    const double planetDistance =
+        std::sqrt(toPlanet.x * toPlanet.x + toPlanet.y * toPlanet.y + toPlanet.z * toPlanet.z);
+    const bool planet = planetDistance < kPlanetVisible;
+    if (planet) {
+        SceneInstance in{
+            0, kPlanet,
+            inRender(pose.rows, pose.z, kPlanetCentre, {Vec3{0, 1, 0}, Vec3{-1, 0, 0}, Vec3{0, 0, 1}})};
+        in.kind = rt::GeometryKind::Spheres;
+        in.firstSphere = 0;
+        in.sphereCount = 1;
+        out.instances.push_back(in);
+    }
+
+    // The sky: a 5800 K sun disc ahead (the key light), the stars as splats fixed to the world.
+    const Vec3 sun = normalize(
+        single(toRender(pose.rows, {kShipSunDirection.x, kShipSunDirection.y, kShipSunDirection.z})));
     EnvironmentDesc env = environmentDefaults(EnvironmentKind::Space);
     env.discDirection = sun;
     env.discAngularRadius = kSunAngularRadius;
-    env.discRadiance = kSunRadiance;
-    env.starDensity = 0.f; // the stars are splats, fixed to the world as the ship turns
-    env.select = 1.f;      // no rect lights: next-event estimation samples the sun
+    const Vec3 white = shipBlackbody(5800.f);
+    env.discRadiance = white / std::max({white.x, white.y, white.z}) * kSunRadiance;
+    env.starDensity = 0.f;
+    // A faint glacial-blue glow all round (the wormhole's light); in the white-out it floods to white.
+    const Vec3 fill{0.0015f, 0.0024f, 0.0045f};
+    const ShipTimes t0 = shipTimes(f);
+    const double flood = smoothD((f.localSeconds - t0.whiteout) / std::max(t0.duration - t0.whiteout, 1e-3));
+    env.zenith = env.horizon = env.ground =
+        fill + (Vec3{2.4f, 2.3f, 2.15f} - fill) * float(flood * flood * flood);
+    env.select = 0.9f; // the rest samples the cockpit's dash light
     out.environment = env;
-    out.exposureEV = shipExposureEV(out.camera.shot);
 
-    // The splats (shaders/modern/ship_splats.comp): stars, the planet's limb and the sun's spikes.
-    SplatFrame splats;
-    splats.count = stars_ + limb_ + 1;
-    const std::array<float, 4> q = quaternionOf(p);
-    const DVec3 planet = toModel(p, kPlanetCentre - p.position);
-    splats.params = {out.camera.eye.x, out.camera.eye.y, out.camera.eye.z, float(stars_),
-                     q[0], q[1], q[2], q[3],
-                     float(planet.x), float(planet.y), float(planet.z), float(limb_),
-                     sun.x, sun.y, sun.z, kPlanetRadius};
-    splats.fixedPointScale = 16384.f;
-    out.splats = splats;
+    ShipSky sky;
+    sky.stars = stars_;
+    sky.air = planet ? air_ : 0;
+    sky.eye = out.camera.eye;
+    std::array<Vec3, 3> renderRows; // R^T as rows: the columns of R
+    renderRows[0] = {pose.rows[0].x, pose.rows[1].x, pose.rows[2].x};
+    renderRows[1] = {pose.rows[0].y, pose.rows[1].y, pose.rows[2].y};
+    renderRows[2] = {pose.rows[0].z, pose.rows[1].z, pose.rows[2].z};
+    sky.worldToRender = quaternionOfRows(renderRows);
+    sky.sun = sun;
+    sky.planetCentre = single(toRender(pose.rows, toPlanet));
+    sky.planetRadius = kPlanetRadius;
+    out.splats = shipSplats(sky);
     return out;
 }
 

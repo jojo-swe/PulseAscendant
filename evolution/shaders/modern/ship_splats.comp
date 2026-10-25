@@ -143,7 +143,7 @@ SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
     }
     // The sun: its spikes and a soft core of glare (the disc itself is the environment's).
     s.position = params[0].xyz + normalize(params[3].xyz) * kStarDistance;
-    s.flux = vec3(1.0, 0.9, 0.78) * 900.0;
+    s.flux = vec3(1.0, 0.93, 0.84) * 160.0;
     return s;
 }
 
@@ -151,7 +151,7 @@ vec2 splatSpikes(uint id, SplatPoint s, vec4 params[4]) {
     uint stars = uint(params[0].w);
     uint limb = uint(params[2].w);
     if (id >= stars + limb) {
-        return vec2(0.82, 520.0); // the sun
+        return vec2(0.0); // the sun: a soft core only, no starburst
     }
     if (id >= stars) {
         return vec2(0.0);

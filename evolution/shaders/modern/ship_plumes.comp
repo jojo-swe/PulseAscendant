@@ -1,0 +1,112 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The starship's two plumes (src/modern/scenes/ship_asset.cpp, ShipAsset::plumes): a grid medium baked every
+// frame, a pure function of (uvw, seconds, params). The box is in the ship's model space (metres):
+//   params[0] = (the box's low corner, throttle)
+//   params[1] = (the box's high corner, peak density per metre)
+//   params[2] = (the +x nozzle's exit centre, the exit radius); the other mirrors it in x
+//   params[3] = (the exhaust's speed in metres per second, 0, 0, 0)
+// Each plume is a turbulent cone behind its nozzle: fractal noise advected along -z widens it and tears its
+// edge, the density falls off along the axis, and the emission is Planck's law at the plume's temperature
+// (ShipAsset's shipPlumeTemperature and shipPlumeEmission, mirrored here): white-blue at the exit, orange
+// along the middle, dark at the end, with shock diamonds on the axis under the afterburner.
+
+#include "medium_common.glsl"
+
+uint hashU(uint v) {
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float hash01(uint v) {
+    return float(hashU(v) >> 8u) * (1.0 / 16777216.0);
+}
+
+float valueNoise(vec3 p, uint seed) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    vec3 s = f * f * (3.0 - 2.0 * f);
+    uvec3 c = uvec3(ivec3(i));
+    uint base = c.x * 0x8DA6B343u + c.y * 0xD8163841u + c.z * 0xCB1AB31Fu + seed;
+    float n000 = hash01(base);
+    float n100 = hash01(base + 0x8DA6B343u);
+    float n010 = hash01(base + 0xD8163841u);
+    float n110 = hash01(base + 0x8DA6B343u + 0xD8163841u);
+    float n001 = hash01(base + 0xCB1AB31Fu);
+    float n101 = hash01(base + 0x8DA6B343u + 0xCB1AB31Fu);
+    float n011 = hash01(base + 0xD8163841u + 0xCB1AB31Fu);
+    float n111 = hash01(base + 0x8DA6B343u + 0xD8163841u + 0xCB1AB31Fu);
+    return mix(mix(mix(n000, n100, s.x), mix(n010, n110, s.x), s.y),
+               mix(mix(n001, n101, s.x), mix(n011, n111, s.x), s.y), s.z);
+}
+
+float fbm(vec3 p, uint seed) {
+    float sum = 0.0, weight = 0.5, total = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        sum += weight * valueNoise(p, seed + uint(i) * 0x1F123BB5u);
+        total += weight;
+        p = p * 2.07 + vec3(5.1, 9.7, 3.3);
+        weight *= 0.5;
+    }
+    return sum / total;
+}
+
+float plumeLength(float throttle) {
+    return 6.0 + 10.0 * throttle;
+}
+
+float plumeTemperature(float behind, float radial, float throttle) {
+    float reach = plumeLength(throttle);
+    float exitKelvin = 5600.0 + 3400.0 * throttle;
+    float core = exp(-max(behind, 0.0) / (0.3 * reach)) * (1.0 - 0.45 * min(radial * radial, 1.0));
+    float spacing = 0.75 + 0.45 * throttle;
+    float diamonds = 0.0;
+    for (int k = 1; k <= 5; ++k) {
+        float d = (behind - spacing * float(k)) / 0.14;
+        diamonds += exp(-d * d) * exp(-0.5 * float(k));
+    }
+    float burner = 2.0 * clamp(throttle - 0.5, 0.0, 1.0);
+    return 900.0 + (exitKelvin - 900.0) * core + 3200.0 * burner * diamonds * exp(-4.0 * radial * radial);
+}
+
+// Planck's law at 610, 550 and 465 nm relative to 6500 K.
+vec3 blackbody(float kelvin) {
+    const vec3 lambda = vec3(0.610, 0.550, 0.465);
+    float t = max(kelvin, 300.0);
+    vec3 l5 = lambda * lambda * lambda * lambda * lambda;
+    vec3 b = 1.0 / (l5 * (exp(14387.77 / (lambda * t)) - 1.0));
+    vec3 reference = 1.0 / (l5 * (exp(14387.77 / (lambda * 6500.0)) - 1.0));
+    return b / reference;
+}
+
+vec3 plumeEmission(float kelvin) {
+    vec3 b = blackbody(kelvin);
+    float luminance = dot(b, vec3(0.2126, 0.7152, 0.0722));
+    return luminance > 0.0 ? b * pow(luminance, -0.45) : vec3(0.0);
+}
+
+vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
+    vec3 p = mix(params[0].xyz, params[1].xyz, uvw);
+    float throttle = params[0].w, peak = params[1].w;
+    float side = p.x >= 0.0 ? 1.0 : -1.0;
+    vec3 exit = vec3(side * params[2].x, params[2].y, params[2].z);
+    float exitRadius = params[2].w;
+    float behind = exit.z - p.z;
+    if (behind < -0.08) {
+        return vec4(0.0);
+    }
+    float b = max(behind, 0.0);
+    float reach = plumeLength(throttle);
+    float radius = exitRadius * (1.0 + 0.085 * b + 0.0025 * b * b);
+    // Turbulence, carried back with the exhaust; it grows over the first metres.
+    vec3 q = vec3(p.x * 1.6 + side * 13.0, p.y * 1.6, (p.z + params[3].x * seconds) * 0.5);
+    float n = fbm(q, side > 0.0 ? 0x51u : 0x93u);
+    float grow = smoothstep(0.0, 3.0, b);
+    float radial = length(p.xy - exit.xy) / radius * (1.0 + 0.5 * (n - 0.5) * grow);
+    float profile = exp(-2.2 * radial * radial);
+    float axial = smoothstep(-0.08, 0.2, behind) * smoothstep(reach * 1.1, reach * 0.4, b) * exp(-b / (1.3 * reach));
+    float density = peak * profile * axial * mix(1.0, 0.45 + 1.1 * n, grow);
+    return vec4(density, plumeEmission(plumeTemperature(b, radial, throttle)));
+}

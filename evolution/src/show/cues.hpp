@@ -64,7 +64,7 @@ inline constexpr std::array<Cue, 31> cues = {{
     // Act I: Amiga Trance Demo, 1993 against 2026.
     {0, Effect::Boot, Transition::Cut, .2f, 0, "BOOT", "1993 · MS-DOS · 320×200", ""},
     {8, Effect::Flyby, Transition::Portal, .6f, 0, "FLYBY",
-        "1993 · 320×200 · 256 COLORS · FLAT SHADING", "2026 · PATH TRACED · VOLUMETRIC TRAILS"},
+        "1993 · 320×200 · 256 COLORS · FLAT SHADING", "2026 · PATH TRACED · THE ROOM IS LIT BY THE SCREEN"},
     {26, Effect::Dots, Transition::BeatSwap, .8f, 0, "DOTS",
         "1993 · 512 POINTS", "2026 · 2,097,152 PARTICLES"},
     {44, Effect::Plasma, Transition::Wipe, .7f, 0, "PLASMA",
@@ -106,7 +106,8 @@ inline constexpr std::array<Cue, 31> cues = {{
     {430.4, Effect::Galaxy, Transition::Cut, .7f, 1, "GALAXY", "", "2026 · GALAXY · 16,777,216 POINTS"},
     {458.4, Effect::PlasmaPlanet, Transition::Cut, .7f, 1, "PLASMA PLANET", "",
         "2026 · PLASMA PLANET · VOLUMETRIC"},
-    {486.4, Effect::Wormhole, Transition::Cut, .9f, 1, "WORMHOLE", "", "2026 · WORMHOLE"},
+    {486.4, Effect::Wormhole, Transition::Cut, .9f, 1, "WORMHOLE", "",
+        "2026 · WORMHOLE · 1 KM RINGS · VOLUMETRIC · MOTION BLUR"},
     {514.4, Effect::CrystalCity, Transition::Cut, .8f, 1, "CRYSTAL CITY", "",
         "2026 · CRYSTAL CITY · REFRACTION"},
     {542.4, Effect::LensOfGod, Transition::Cut, .7f, 1, "LENS OF GOD", "", "2026 · LENS · PLANETARY SCALE"},
