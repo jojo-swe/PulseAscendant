@@ -229,6 +229,7 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
     checkStaticSphereClasses(scene, frame, materials);
     checkLights(frame, materials);
     packEnvironment(frame.environment); // throws for an invalid environment
+    checkSplats(frame.splats, capacity.splats, scene.splatShader);
     if (frame.medium) {
         // Task 11: valid media; a grid needs the scene's bake shader and fits its capacity.
         packMedium(*frame.medium); // throws for invalid media

@@ -21,6 +21,7 @@ namespace evo::modern {
 class MediumVolume;
 class PathTracer;
 class SceneGpu;
+class SplatPass;
 } // namespace evo::modern
 
 namespace evo::post {
@@ -64,7 +65,7 @@ bool validTraceScale(float scale);
 // the denoiser follows denoiseSettingsFor(state) (stage_plan.hpp): Interactive denoises temporally with 3
 // a-trous iterations; Export has no temporal history and filters with 3 below 16 spp and not at all from 16
 // (Decision 6), where the firefly filter clamps lone fireflies instead (step 5 Decision 16); 5 iterations
-// at history length <= 2 either way. The denoiser's history starts over
+// at history length <= 3 either way. The denoiser's history starts over
 // whenever state.reset is not None, and the motion guide uses the previous frame's camera only while the
 // history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the history
 // and the filter, so the screen stays sharp and current (Review Focus 5).
@@ -83,13 +84,20 @@ bool validTraceScale(float scale);
 // capacity.particles prepared), at the frame's chapter-local time (prevCenter at the previous frame's while
 // the history continues, else at the same time), then traces with that slot's spheres and BLAS.
 //
+// Emissive splats (Task 10 of step 5): a frame with SceneFrame::splats runs the scene's splat shader after
+// the trace and before the denoiser (modern::SplatPass), adding into the G-buffer's emission guide at the
+// trace size, depth-tested against the depth guide; like the CRT's picture they bypass the denoiser's history
+// and filter (and the upscaler's history). One SplatPass serves every scene: it is made when the first scene
+// with a splat shader is prepared, with the accumulators at the trace size, and loads each such scene's
+// shader on its prepare. It keeps nothing between frames.
+//
 // A frame with a grid medium (Task 11) first bakes it with its scene's medium shader into the stage's one
 // modern::MediumVolume (made on the first prepared scene with a medium shader and grown to the largest
 // capacity.mediumGrid prepared), at the frame's chapter-local time, then traces with its density and
 // majorant; the denoiser filters the volume layer only for a frame with a medium (hasMedium).
 //
 // GPU timers (setTimers): "particles" (the particle field), "medium" (the grid's bake), "tlas" and "trace"
-// (the tracer), "denoise",
+// (the tracer), "splats" (a frame with splats), "denoise",
 // "upscale" (below scale 1), "tonemap"; "fill" and "tonemap" for the placeholder.
 //
 // A scene's GPU side is built by prepare(id) (or prepareAll()), which the window and the exports call before
@@ -125,7 +133,8 @@ public:
     VkDeviceSize gpuBytes() const;
     // The images path tracing adds, whatever the number of scenes, as allocated: the tracer's G-buffer and
     // the denoiser's images (at the trace size), below scale 1 the denoised trace-size picture and the
-    // upscaler's history, and the stage's HDR and display images (0 before the first prepare).
+    // upscaler's history, the splat accumulators once a scene with splats is prepared, and the stage's HDR
+    // and display images (0 before the first prepare).
     VkDeviceSize imageBytes() const;
     // Recreates the images at the new size. The caller makes sure no submitted frame still uses the old ones.
     void resize(std::uint32_t width, std::uint32_t height);
@@ -197,6 +206,7 @@ private:
     std::unique_ptr<post::Denoiser> denoiser_;
     std::unique_ptr<post::Upscaler> upscaler_;
     gfx::Image traceHdr_; // the denoised picture at the trace size, below scale 1 (else empty)
+    std::unique_ptr<modern::SplatPass> splats_; // once a scene with a splat shader is prepared
     std::unique_ptr<modern::PathTracer> tracer_;
     std::optional<modern::Camera> previousCamera_; // the last frame's, while the history continues
     double previousSeconds_ = 0;                   // the last traced frame's chapter-local time

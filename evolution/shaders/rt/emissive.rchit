@@ -3,8 +3,10 @@
 
 // Hit group 2 (MaterialClass Emissive): an emitting surface over the material's BSDF. With texture
 // kRetroScreenTexture the emission is the live 1993 picture as the CRT shows it (screen.glsl: decoded to
-// linear light by its sRGB view, barrel-warped, scanlines) times emissionScale, at the mip level of the ray
-// cone's footprint; else emission * emissionScale. Never traces.
+// linear light by its sRGB view, barrel-warped, the beam's lines and the phosphor mask) times emissionScale,
+// at the mip level of the ray cone's footprint, over the CRT's curved glass (crtGlassNormal); else emission *
+// emissionScale, which a material flagged kMaterialCameraOnlyEmission shows only to the camera and along
+// delta chains. Never traces.
 //
 // The camera's own ray on the screen (the primary hit: no cone width yet) takes the picture at four fixed
 // points of its pixel (a rotated grid) instead of at the one jittered point, each through the same lens point
@@ -40,7 +42,7 @@ vec3 primaryScreenPicture(HitPoint h, float lod) {
     if (!(gram > 0.0)) {
         return retroScreenPicture(h.uv, lod);
     }
-    float tapLod = max(lod - 1.0, 0.0); // each tap covers half the footprint across
+    float tapLod = lod - 1.0; // each tap covers half the footprint across
     vec3 sum = vec3(0.0);
     for (int i = 0; i < 4; ++i) {
         vec3 direction = focusPoint(kScreenTaps[i]) - origin;
@@ -57,14 +59,49 @@ vec3 primaryScreenPicture(HitPoint h, float lod) {
     return 0.25 * sum;
 }
 
+// The mip level of the retro picture for this hit, as coneTextureLod (hit.glsl) but not clamped at 0: the
+// screen's beam profile and phosphor mask need to know how far below level 0 the footprint is.
+float screenTextureLod(HitPoint h) {
+    if (payload.coneSpread < 0.0) {
+        return kDiffuseTextureLod;
+    }
+    float width = abs(payload.coneWidth + payload.coneSpread * gl_HitTEXT);
+    vec2 size = vec2(textureSize(retroScreen, 0));
+    float texelsPerArea = h.uvPerWorldArea * size.x * size.y;
+    if (!(texelsPerArea > 0.0) || !(width > 0.0)) {
+        return 0.0;
+    }
+    float cosine = max(abs(dot(gl_WorldRayDirectionEXT, h.geometricNormal)), 1e-3);
+    return max(0.5 * log2(texelsPerArea) + log2(width / cosine), -8.0);
+}
+
+// The CRT's curved glass (Task 14 of step 5): the coat's shading normal bulges towards the viewer like a
+// sphere of kCrtGlassRadius about a point behind the picture's centre, so the glass reflects the room the way
+// a tube's face does, while the quad (and the light's NEE on it) stays flat (Decision 10 of step 4).
+const float kCrtGlassRadius = 0.5;
+
+vec3 crtGlassNormal(HitPoint h) {
+    vec3 offset = (h.uv.x - 0.5) * h.dPdu + (h.uv.y - 0.5) * h.dPdv;
+    vec3 tangential = offset - dot(offset, h.geometricNormal) * h.geometricNormal;
+    vec3 bulged = safeNormalize(h.geometricNormal * kCrtGlassRadius + tangential, h.geometricNormal);
+    return dot(h.normal, h.geometricNormal) < 0.0 ? -bulged : bulged; // on the shading normal's side
+}
+
 void main() {
     HitPoint h = hitPoint();
     Material m = h.material;
     vec3 emission = materialEmission(m);
     if (m.texture == kRetroScreenTexture) {
-        float lod = coneTextureLod(h, vec2(textureSize(retroScreen, 0)));
+        float lod = screenTextureLod(h);
         bool primary = payload.coneSpread >= 0.0 && payload.coneWidth == 0.0;
         emission = (primary ? primaryScreenPicture(h, lod) : retroScreenPicture(h.uv, lod)) * m.emissionScale;
+        h.normal = crtGlassNormal(h);
+    }
+    // A camera-only emitter (an indicator LED, whose glow belongs to the bloom) lights nothing: it shows to
+    // the camera and along a chain of delta events, never after a rough vertex (coneSpread < 0 there), where
+    // a BSDF ray would find it as a firefly that next-event estimation can never sample.
+    if ((m.flags & kMaterialCameraOnlyEmission) != 0u && payload.coneSpread < 0.0) {
+        emission = vec3(0.0);
     }
     writeSurface(h, m.baseColor, m.roughness, m.transmission, emission);
 }

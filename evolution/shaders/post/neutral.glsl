@@ -41,8 +41,10 @@ const float kNeutralMaxLight = 16384.0;
 // The light pbrNeutral maps to `display` (linear, in [0, 1]): Khronos' analytic inverse (lut-writer.mjs,
 // inverseNeutral). PBR Neutral is not onto: above the knee its desaturation leaves every component at least
 // g(peak) * peak, so a bright colour with a low minimum (normalised by its peak, below g) has no light. That
-// colour gets the light of the nearest colour the curve can show with the same hue and the same shape t =
-// display / peak: the peak lowered until g(peak) equals min(t). Light >= 0 and finite.
+// colour gets the light of the nearest colour the curve can show with the same hue and saturation (the same
+// shape t = display / peak) at a lower peak: the peak lowered until g(peak) equals min(t). Light >= 0 and
+// finite. Round trips are exact below the knee; above it such colours come back darker (on the placeholder's
+// palette at most 4 levels; for fully saturated primaries near white, about 30).
 vec3 pbrNeutralInverse(vec3 display) {
     vec3 color = clamp(display, 0.0, 1.0);
     float peak = max(color.r, max(color.g, color.b));

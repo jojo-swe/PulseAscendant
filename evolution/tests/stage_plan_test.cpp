@@ -381,7 +381,7 @@ void testResetSpp() {
 }
 
 // The window: temporal, a-trous always, no firefly filter at any spp. Exports: no history, a-trous below
-// 16 spp, the firefly filter from 16 (Decision 16). Both: 5 a-trous iterations at history length <= 2 and 4
+// 16 spp, the firefly filter from 16 (Decision 16). Both: 5 a-trous iterations at history length <= 3 and 4
 // on the volume layer.
 void testDenoiseSettings() {
     using evo::render::denoiseSettingsFor;

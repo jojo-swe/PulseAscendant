@@ -250,6 +250,7 @@ void main() {
     putU(kPatternNone);
     putU(kPatternWoodPlanks);
     putU(kPatternBrushedMetal);
+    putU(kPatternConcrete);
     putU(kNoTexture);
     putU(kRetroScreenTexture);
     putU(kNoLight);

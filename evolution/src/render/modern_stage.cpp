@@ -4,6 +4,7 @@
 #include "modern/medium_volume.hpp"
 #include "modern/path_tracer.hpp"
 #include "modern/scene_gpu.hpp"
+#include "modern/splats.hpp"
 #include "post/denoiser.hpp"
 #include "post/upscale.hpp"
 #include "rt/particles.hpp"
@@ -26,8 +27,14 @@ constexpr std::uint32_t kMinTraceSize = 16;
 constexpr float kUpscaleFeedback = 0.9f;
 constexpr float kUpscaleClipGamma = 1.f;
 
+// Transfer source too: tests read the HDR picture back (splat_test).
 gfx::ImageDesc hdrDesc(std::uint32_t width, std::uint32_t height) {
-    return {width, height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT, 1, "modern hdr"};
+    return {width,
+            height,
+            VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            1,
+            "modern hdr"};
 }
 
 // Transfer source too: tests read the 2026 picture back on its own.
@@ -111,6 +118,13 @@ void ModernStage::prepare(modern::SceneId id) {
     if (hasParticles && !particles_)
         particles =
             std::make_unique<rt::ParticleField>(ctx_, ring_, particleCapacity, statics.particleShader);
+    // The splat pass with the first scene that has a splat shader, which it loads now (Task 10).
+    std::unique_ptr<modern::SplatPass> splats;
+    if (!statics.splatShader.empty()) {
+        if (!splats_)
+            splats = std::make_unique<modern::SplatPass>(ctx_, ring_, traceWidth_, traceHeight_);
+        (splats ? *splats : *splats_).prepare(statics.splatShader);
+    }
     // The one medium volume (Task 11), made for the first scene with a medium shader, grown for a later one.
     const bool hasMedium = !statics.mediumShader.empty();
     std::array<std::uint32_t, 3> mediumCapacity = statics.capacity.mediumGrid;
@@ -140,6 +154,8 @@ void ModernStage::prepare(modern::SceneId id) {
     }
     if (particles)
         particles_ = std::move(particles);
+    if (splats)
+        splats_ = std::move(splats);
     if (hasMedium && medium_) {
         medium_->setShader(statics.mediumShader);
         medium_->reserve(mediumCapacity); // keeps the old images if it throws
@@ -158,7 +174,7 @@ VkDeviceSize ModernStage::imageBytes() const {
     if (!tracer_)
         return 0;
     return tracer_->imageBytes() + denoiser_->imageBytes() + traceHdr_.bytes() + upscaler_->imageBytes() +
-           hdr_.bytes() + image_.bytes();
+           (splats_ ? splats_->imageBytes() : 0) + hdr_.bytes() + image_.bytes();
 }
 
 VkDeviceSize ModernStage::gpuBytes() const {
@@ -198,6 +214,8 @@ void ModernStage::resizeTraced() {
     denoiser_->resize(traceWidth_, traceHeight_);
     upscaler_->resize(traceWidth_, traceHeight_, width_, height_);
     traceHdr_ = upscales() ? gfx::Image(ctx_, hdrDesc(traceWidth_, traceHeight_)) : gfx::Image();
+    if (splats_)
+        splats_->resize(traceWidth_, traceHeight_);
     previousCamera_.reset();
 }
 
@@ -318,6 +336,14 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         upscaler_->resetHistory();
     }
     modern::GBuffer& g = tracer_->gbuffer();
+    // The splats add into the emission guide, after the trace and before the denoiser (the tracer checked
+    // them against the scene's capacity and shader, so the pass exists).
+    if (scene.splats && scene.splats->count > 0) {
+        beginScope(cmd, "splats");
+        splats_->record(cmd, object.staticScene().splatShader, *scene.splats, scene.camera, g.depth,
+                        g.emission, frame.localSeconds);
+        endScope(cmd);
+    }
     beginScope(cmd, "denoise");
     post::DenoiseSettings denoise = denoiseSettingsFor(state);
     denoise.hasMedium = scene.medium.has_value(); // without one the volume layer is (0, 0, 0, 1): skip it

@@ -10,8 +10,8 @@
 // (c) MIS stays unbiased: a Cornell box with three lights of powers 1 : 30 : 900 has the same mean with
 //     NEE + MIS as with BSDF sampling alone, and its per-pixel variance is at most 0.6 of step 4's fixed
 //     selection weights;
-// (d) the Studio: at desk points the DOS screen (nearly black) gets under 5 % of the samples (step 4: 30 %),
-//     an all-white picture over 20 %;
+// (d) the Studio in RETURN (the lamp on): at desk points the DOS screen (nearly black) gets under 8 % of the
+//     samples (step 4: 30 %), an all-white picture over 20 %;
 // (e) the Studio's moon is only chosen where the segment to it crosses the window.
 //
 // With --measure <dir> it renders the Studio at 1 spp with per-point and with fixed selection against a
@@ -534,7 +534,7 @@ void testCornellThreeLights(gfx::Context& ctx) {
 // --- (d), (e): the Studio
 // -----------------------------------------------------------------------------------
 
-constexpr int kStudioNight = 11;
+constexpr int kStudioNight = 11, kReturn = 19;
 constexpr float kDeskTop = 0.75f; // studio.cpp's desk top
 
 show::TimelineFrame chapterAt(int chapter, double fraction) {
@@ -563,7 +563,9 @@ private:
 void testStudioScreen(gfx::Context& ctx, Probe& probe, gfx::Image& dos) {
     const auto start = std::chrono::steady_clock::now();
     const modern::Studio studio;
-    const std::vector<rt::RectLight> lights = studio.frame(chapterAt(kStudioNight, 0.2)).lights;
+    // RETURN: the DOS prompt with the lamp on (Task 14 of step 5 turns the lamp off in STUDIO NIGHT, where
+    // the dark screen is then rightly the desk's main light).
+    const std::vector<rt::RectLight> lights = studio.frame(chapterAt(kReturn, 0.2)).lights;
     gfx::Image white = makeRetro(ctx, [](std::uint32_t, std::uint32_t) { return Rgb8{255, 255, 255}; });
     // On the desk: in front of the keyboard, right of it, and in the lamp's pool left of the monitor.
     const std::vector<ProbePoint> desk = {probePoint({0.f, kDeskTop + 5e-4f, -0.03f}, {0, 1, 0}, false),
@@ -582,7 +584,8 @@ void testStudioScreen(gfx::Context& ctx, Probe& probe, gfx::Image& dos) {
             k, 100 * dark[k].pdf[screen], 100 * lit[k].pdf[screen], 100 * fixed[k].pdf[screen],
             100 * dark[k].pdf[modern::Studio::kLampLight], 100 * lit[k].pdf[modern::Studio::kLampLight],
             100 * dark[k].pdf[modern::Studio::kMoonLight], 100 * dark[k].pdf[modern::Studio::kWindowLight]);
-        CHECK(dark[k].pdf[screen] > 0.f && dark[k].pdf[screen] < 0.05f);
+        // Under 8 %: Task 14 of step 5 raised RETURN's screen from 1.2 to 1.5 (5.6 % right of the keyboard).
+        CHECK(dark[k].pdf[screen] > 0.f && dark[k].pdf[screen] < 0.08f);
     }
     CHECK(lit[0].pdf[screen] > 0.2f);
     // Step 4's fixed selection is selectWeight / sum (a quarter now that the moon is a fourth light).
