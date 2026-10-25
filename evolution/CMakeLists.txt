@@ -1061,3 +1061,34 @@ target_link_libraries(caustics_test PRIVATE evo_render evo_modern evo_post)
 target_include_directories(caustics_test PRIVATE tests)
 add_dependencies(caustics_test evo_modern_sphere_shaders evo_modern_intersection_shaders)
 evo_gpu_test(caustics caustics_test)
+
+# --- Step 5 Task 12: the light tree ---------------------------------------------------------------------------
+
+# Next-event estimation over up to 65,536 emissive sphere lights: the tree is built (or refit) on the CPU per
+# frame and walked in shaders/rt/light_tree.glsl.
+target_sources(evo_rt PRIVATE src/rt/light_tree.cpp)
+
+# The tree's build, refit and walk on the CPU (sums of the pdf, the pick histogram, determinism, 65,536 lights
+# in budget); the walk on the GPU against them (a test-only compute probe); NEE + MIS over sphere lights
+# against the analytic sum, NEE on and off, with and without blinking; the variance against uniform
+# selection; 4096 lights in time; seeks; refusals. `light_tree_test --look <dir> [spp]` renders a small city
+# at night to look at.
+set(lightTreeProbe "${EVO_TEST_SPIRV_DIR}/test_light_tree_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${lightTreeProbe}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_light_tree_probe.comp.d" -o "${lightTreeProbe}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/light_tree_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/light_tree_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_light_tree_probe.comp.d"
+    COMMENT "Compiling test shader test_light_tree_probe.comp"
+    VERBATIM)
+add_custom_target(light_tree_test_shaders DEPENDS "${lightTreeProbe}")
+add_executable(light_tree_test tests/light_tree_test.cpp)
+target_link_libraries(light_tree_test PRIVATE evo_render evo_modern evo_post)
+target_include_directories(light_tree_test PRIVATE tests)
+target_compile_definitions(light_tree_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(light_tree_test light_tree_test_shaders spheres_test_shaders evo_modern_sphere_shaders
+                 evo_modern_intersection_shaders)
+evo_gpu_test(light_tree light_tree_test)

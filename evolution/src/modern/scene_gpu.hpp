@@ -23,12 +23,14 @@ namespace evo::modern {
 // (std::length_error), an instance naming a mesh, material or light that does not exist (std::out_of_range),
 // a material whose class is no hit group, a per-frame table that shows the retro screen in a scene whose
 // static table does not, a sphere instance that is not one of the scene's sphere ranges (or, dynamic, not
-// the frame's whole particle field with its material) or that is a light, a static sphere whose material
+// the frame's whole particle field with its material) or that is a light other than the light tree, a
+// static sphere whose material
 // does not exist (std::out_of_range) or has another class than its instance's, a particle field beyond
 // capacity.particles (std::length_error), without a particle shader or with a material that does not exist
-// (std::out_of_range), a light of no LightKind or of kind Tree (Task 12), whose
-// area is not |edgeU x edgeV| or whose gate is no Portal light, and a light that disagrees with the instance
-// that is its surface (see SceneInstance). CPU only: PathTracer::trace() runs it before recording anything,
+// (std::out_of_range), a light of no LightKind, whose area is not |edgeU x edgeV| or whose gate is no Portal
+// light, a light that disagrees with the instance that is its surface (see SceneInstance), and a light tree
+// (Task 12) whose tree lights are not its instance's spheres (see TreeLightFrame; more than
+// capacity.treeLights: std::length_error). CPU only: PathTracer::trace() runs it before recording anything,
 // and every scene task's sweep (checkSceneSweep) runs it over every frame of its chapters.
 void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame);
 

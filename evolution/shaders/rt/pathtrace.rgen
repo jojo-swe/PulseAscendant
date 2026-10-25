@@ -197,6 +197,48 @@ vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bo
     return f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, kRayMax);
 }
 
+// Next-event estimation towards the light tree (Task 12), chosen with probability selectPdf: one sphere
+// light by the walk (light_tree.glsl; its own random word, dimension 7), one direction in its cone, one
+// shadow ray to the sphere's near surface lifted off it, weighted against the BSDF.
+vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, vec3 facing, bool transmissive,
+                     float selectPdf) {
+    uint k;
+    float treePdf;
+    uint word = randomHash(frame.frameSeed, gPixel, gSample, 4u + bounce * kDimsPerBounce + 7u);
+    if (!pickTreeLight(word, frame.treeLightCount, p, facing, transmissive, treeUniformSelection(), k, treePdf)) {
+        return vec3(0.0);
+    }
+    TreeLight light = treeLights[k];
+    vec3 wi;
+    float dist;
+    float conePdf;
+    if (!sampleSphereCone(p, light.center, light.radius, vec2(bounceRand(bounce, 4u), bounceRand(bounce, 5u)), wi,
+                          dist, conePdf)) {
+        return vec3(0.0);
+    }
+    if (!sidesAgree(n, ng, wo, wi)) {
+        return vec3(0.0);
+    }
+    float bsdfPdf;
+    vec3 f = bsdfEval(s, n, wo, wi, bsdfPdf);
+    if (!(maxComponent(f) > 0.0)) {
+        return vec3(0.0);
+    }
+    float lightPdf = selectPdf * treePdf * conePdf;
+    if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
+        return vec3(0.0);
+    }
+    vec3 origin = offsetOrigin(p, ng, wi);
+    vec3 q = p + dist * wi;
+    vec3 toTarget = offsetOrigin(q, safeNormalize(q - light.center, -wi), -wi) - origin;
+    float tMax = length(toTarget);
+    if (!(tMax > 0.0) || !unoccluded(origin, toTarget / tMax, tMax)) {
+        return vec3(0.0);
+    }
+    return f * light.emission * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+           mediumTransmittance(origin, wi, tMax);
+}
+
 // Next-event estimation at a surface: the environment with probability frame.environmentSelect, else one
 // rect light chosen at this point, one point on it, one shadow ray, weighted against the BSDF.
 vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
@@ -215,6 +257,9 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
     }
     selectPdf *= 1.0 - environmentSelect;
     RectLight l = lights[index];
+    if (l.kind == kLightTree) {
+        return sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf); // Task 12
+    }
     if (!(l.area > 0.0)) {
         return vec3(0.0);
     }
@@ -333,6 +378,10 @@ SampleResult tracePath() {
         }
 
         Surface s = payloadSurface();
+        if (payload.light != kNoLight && lights[payload.light].kind == kLightTree) {
+            // Task 12: a sphere of the light tree shows its tree light's radiance (this frame's scale).
+            s.emission = treeHitEmission(payload.primitive, payload.frontFace != 0u, s.emission);
+        }
         vec3 p = payload.position;
         vec3 n = payload.normal;
         vec3 ng = payload.geometricNormal;
@@ -348,7 +397,9 @@ SampleResult tracePath() {
                 RectLight l = lights[payload.light];
                 float cosLight = abs(dot(direction, lightNormal(l)));
                 float lightPdf = 0.0;
-                if (l.area > 0.0 && cosLight > 0.0) {
+                if (l.kind == kLightTree) { // Task 12: the tree's density of this sphere, from prevP
+                    lightPdf = treeHitPdf(payload.light, payload.primitive, prevP, prevN, prevTransmissive);
+                } else if (l.area > 0.0 && cosLight > 0.0) {
                     lightPdf = lightChoicePdf(payload.light, prevP, prevN, prevTransmissive) *
                                rectSolidAnglePdf(l, payload.t, cosLight);
                 }

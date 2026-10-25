@@ -1,0 +1,66 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_scalar_block_layout : require
+
+// Test fixture for light_tree_test (compiled for the test only): runs shaders/rt/light_tree.glsl, the walk
+// the path tracer's next-event estimation and MIS share, on the tree the test built on the CPU. Per query:
+//   flags & 4 (pick): pickTreeLight(arg, ...) -> (light, pdf, treeLightPdf(light, ...), picked);
+//   else: (arg, treeLightPdf(arg, ...), treeNodeImportance(root, ...), 1);
+// flags & 1: a transmissive surface, flags & 2: uniform selection.
+
+#include "../rt/types.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, scalar) readonly buffer Nodes { LightTreeNode treeNodes[]; };
+layout(set = 0, binding = 1, scalar) readonly buffer Lights { TreeLight treeLights[]; };
+
+#include "../rt/light_tree.glsl"
+
+struct Query { // 32 bytes
+    vec3 p;
+    uint flags;
+    vec3 n;
+    uint arg;
+};
+
+struct Result { // 16 bytes
+    uint light;
+    float pdf;
+    float again;
+    uint picked;
+};
+
+layout(set = 0, binding = 2, scalar) readonly buffer Queries { Query queries[]; };
+layout(set = 0, binding = 3, scalar) writeonly buffer Results { Result results[]; };
+
+layout(push_constant) uniform Push {
+    uint lightCount;
+    uint queryCount;
+} pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.queryCount) {
+        return;
+    }
+    Query q = queries[i];
+    bool transmissive = (q.flags & 1u) != 0u;
+    bool uniformSelection = (q.flags & 2u) != 0u;
+    Result r;
+    if ((q.flags & 4u) != 0u) {
+        uint light;
+        float pdf;
+        bool picked = pickTreeLight(q.arg, pc.lightCount, q.p, q.n, transmissive, uniformSelection, light, pdf);
+        r.light = light;
+        r.pdf = pdf;
+        r.again = picked ? treeLightPdf(light, pc.lightCount, q.p, q.n, transmissive, uniformSelection) : 0.0;
+        r.picked = picked ? 1u : 0u;
+    } else {
+        r.light = q.arg;
+        r.pdf = treeLightPdf(q.arg, pc.lightCount, q.p, q.n, transmissive, uniformSelection);
+        r.again = treeNodeImportance(treeNodes[0], q.p, q.n, transmissive);
+        r.picked = 1u;
+    }
+    results[i] = r;
+}
