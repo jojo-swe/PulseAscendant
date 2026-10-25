@@ -18,6 +18,8 @@ const uint kPatternBrushedMetal = 2u;
 const uint kPatternConcrete = 3u;
 const uint kPatternTesserae = 4u;       // Checker class: the 1993 rotozoom texture as stone, in the xz plane
 const uint kPatternTesseraeSphere = 5u; // the same over a sphere about its instance's origin
+const uint kPatternHull = 6u;           // Pbr class: the ship's panelled skin
+const uint kPatternPlanet = 7u;         // Pbr class: an ocean planet under clouds
 
 const uint kNoTexture = 0u;
 const uint kRetroScreenTexture = 1u;

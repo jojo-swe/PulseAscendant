@@ -3,6 +3,7 @@
 #include "modern/scenes/glass.hpp"
 #include "modern/scenes/lens.hpp"
 #include "modern/scenes/particles.hpp"
+#include "modern/scenes/ship.hpp"
 #include "modern/scenes/spheres.hpp"
 #include "modern/studio.hpp"
 
@@ -25,7 +26,7 @@ template <typename Scene> std::unique_ptr<ModernScene> make(SceneDetail detail) 
 constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
     {SceneId::Placeholder, "Placeholder", nullptr},
     {SceneId::Studio, "Studio", &make<Studio>},
-    {SceneId::Ship, "Ship", nullptr},                    // Task 16
+    {SceneId::Ship, "Ship", &make<Ship>},                // Task 16
     {SceneId::Particles, "Particles", &make<Particles>}, // Task 17
     {SceneId::Nebula, "Nebula", nullptr},                // Task 18
     {SceneId::Tunnel, "Tunnel", nullptr},                // Task 19
@@ -42,7 +43,7 @@ constexpr std::array<SceneEntry, kSceneCount> kSceneTable{{
 // and stay on the placeholder; each scene task moves its own chapters' rows to its scene (the comment).
 constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEffect{{
     {Effect::Boot, SceneId::Placeholder},
-    {Effect::Flyby, SceneId::Placeholder}, // Ship
+    {Effect::Flyby, SceneId::Placeholder}, // the Studio's pull-out
     {Effect::Dots, SceneId::Particles},
     {Effect::Plasma, SceneId::Placeholder}, // Nebula
     {Effect::Tunnel, SceneId::Placeholder}, // Tunnel
@@ -64,7 +65,7 @@ constexpr std::array<std::pair<Effect, SceneId>, show::kEffectCount> kSceneOfEff
     {Effect::Reboot, SceneId::Studio},
     {Effect::Galaxy, SceneId::Placeholder},       // Cosmos
     {Effect::PlasmaPlanet, SceneId::Placeholder}, // Nebula
-    {Effect::Wormhole, SceneId::Placeholder},     // Tunnel
+    {Effect::Wormhole, SceneId::Ship},            // the ship's crossing; the wormhole is Tunnel's
     {Effect::CrystalCity, SceneId::Glass},
     {Effect::LensOfGod, SceneId::Lens},
     {Effect::RaytraceInfinity, SceneId::Spheres}, // Spheres
