@@ -19,6 +19,7 @@
 #include <vector>
 
 namespace evo::modern {
+class MediumVolume;
 class CausticMaps;
 class PathTracer;
 class SceneGpu;
@@ -105,9 +106,14 @@ bool validTraceScale(float scale);
 // the TLAS build: seeded by frameSeedFor(showSeconds, 0) alone, so the map is a pure function of the show
 // time, with kExportPhotonFactor times the frame's photons in an export of kExportPhotonSpp spp or more.
 //
-// GPU timers (setTimers): "particles" (the particle field), "tlas" and "trace" (the tracer), "splats" (a
-// frame with splats), "denoise", "upscale" (below scale 1), "tonemap"; "fill" and "tonemap" for the
-// placeholder.
+// A frame with a grid medium (Task 11) first bakes it with its scene's medium shader into the stage's one
+// modern::MediumVolume (made on the first prepared scene with a medium shader and grown to the largest
+// capacity.mediumGrid prepared), once per frame at the middle slice's time, then traces every slice with
+// its density and majorant; the denoiser filters the volume layer only for a frame with a medium.
+//
+// GPU timers (setTimers): "particles" (the particle field), "medium" (the grid's bake), "tlas" and "trace"
+// (the tracer), "splats" (a frame with splats), "denoise", "upscale" (below scale 1), "tonemap"; "fill" and
+// "tonemap" for the placeholder.
 //
 // A scene's GPU side is built by prepare(id) (or prepareAll()), which the window and the exports call before
 // their first frame, so that no chapter hitches. A stage that was not prepared builds it on the first frame
@@ -137,8 +143,8 @@ public:
     void prepareAll();
     // The device memory of what the stage holds for path tracing, as allocated (VMA statistics count the
     // same): every prepared scene's SceneGpu::bytes(), plus imageBytes() and the tracer's bufferBytes()
-    // (TLAS, per-slot buffers, SBT, dummies) once one is prepared, and the particle field's bytes() once a
-    // scene with particles is; 0 before.
+    // (TLAS, per-slot buffers, SBT, dummies) once one is prepared, and the particle field's and the medium
+    // volume's bytes() once a scene with particles or a medium shader is; 0 before.
     VkDeviceSize gpuBytes() const;
     // The images path tracing adds, whatever the number of scenes, as allocated: the tracer's G-buffer and
     // the denoiser's images (at the trace size), below scale 1 the denoised trace-size picture and the
@@ -182,6 +188,8 @@ public:
     const rt::ParticleField* particles() const { return particles_.get(); }
     // The caustic maps every scene with caustics shares (Task 13); null until one is prepared.
     const modern::CausticMaps* caustics() const { return caustics_.get(); }
+    // The grid medium's volume every scene with a medium shader shares (Task 11); null until one is prepared.
+    const modern::MediumVolume* medium() const { return medium_.get(); }
 
 private:
     // The scene object of an id, built on first use (CPU only).
@@ -212,6 +220,7 @@ private:
     std::array<std::unique_ptr<modern::SceneGpu>, modern::kSceneCount> gpus_;
     std::unique_ptr<rt::ParticleField> particles_;  // its BLASes outlive the tracer's TLAS
     std::unique_ptr<modern::CausticMaps> caustics_; // Task 13: sized to the largest causticResolution
+    std::unique_ptr<modern::MediumVolume> medium_;  // the grid medium's images (Task 11)
     std::unique_ptr<post::Denoiser> denoiser_;
     std::unique_ptr<post::Upscaler> upscaler_;
     gfx::Image traceHdr_; // the denoised picture at the trace size, below scale 1 (else empty)

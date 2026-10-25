@@ -231,6 +231,7 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
     for (std::uint32_t slot = 0; slot < gfx::FrameRing::kFramesInFlight; ++slot) {
         uniforms_[slot] = slotBuffer(ctx, sizeof(rt::FrameUniforms), 1, "frame uniforms");
         environments_[slot] = slotBuffer(ctx, sizeof(rt::EnvironmentUniforms), 1, "environment uniforms");
+        media_[slot] = slotBuffer(ctx, sizeof(rt::MediumUniforms), 1, "medium uniforms");
     }
     FrameBuffers buffers = createFrameBuffers(capacity_);
     instanceRecords_ = std::move(buffers.instanceRecords);
@@ -254,8 +255,8 @@ PathTracer::FrameBuffers PathTracer::createFrameBuffers(const TracerCapacity& ca
         b.materials[slot] = slotBuffer(ctx_, sizeof(rt::Material), capacity.materials, "frame materials");
         b.previousTransforms[slot] =
             slotBuffer(ctx_, sizeof(rt::Mat34), capacity.instances, "previous transforms");
-        b.treeNodes[slot] = slotBuffer(ctx_, sizeof(rt::LightTreeNode), treeNodeCount(capacity.treeLights),
-                                       "tree nodes");
+        b.treeNodes[slot] =
+            slotBuffer(ctx_, sizeof(rt::LightTreeNode), treeNodeCount(capacity.treeLights), "tree nodes");
         b.treeLights[slot] = slotBuffer(ctx_, sizeof(rt::TreeLight), capacity.treeLights, "tree lights");
     }
     return b;
@@ -314,7 +315,7 @@ VkDeviceSize PathTracer::bufferBytes() const {
                          dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
     for (const SlotBuffers* buffers :
          {&uniforms_, &instanceRecords_, &lights_, &materials_, &previousTransforms_, &environments_,
-          &treeNodes_, &treeLights_})
+          &treeNodes_, &treeLights_, &media_})
         for (const gfx::Buffer& buffer : *buffers)
             bytes += buffer.bytes();
     return bytes;
@@ -417,6 +418,20 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                 "PathTracer::trace(): the frame has caustics, but no caustic maps, receiver "
                 "table and photon pass come with it (TraceExtras)");
         checkCausticFrame(scene.source(), frame, ~0u);
+        // Task 11: a grid medium samples the medium volume's images, which must hold it.
+        if (frame.medium && frame.medium->grid) {
+            if (extras.density == nullptr || extras.majorant == nullptr)
+                throw std::invalid_argument(
+                    "PathTracer::trace(): the frame has a grid medium, but no density "
+                    "and majorant images come with it (TraceExtras)");
+            const std::array<std::uint32_t, 3>& size = frame.medium->grid->size;
+            const std::array<std::uint32_t, 3> cells = majorantSize(size);
+            const VkExtent2D d = extras.density->extent(), m = extras.majorant->extent();
+            if (size[0] > d.width || size[1] > d.height || size[2] > extras.density->depth() ||
+                cells[0] > m.width || cells[1] > m.height || cells[2] > extras.majorant->depth())
+                throw std::length_error("PathTracer::trace(): the frame's grid medium is larger than its "
+                                        "density and majorant images");
+        }
     }
 
     // Each slice's tables, written to its region of this slot's buffers: the ring's begin() waited for the
@@ -424,16 +439,19 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
     const std::uint32_t slot = ring_.slot();
     const VkDeviceSize uniformStride = regionStride(sizeof(rt::FrameUniforms), 1);
     const VkDeviceSize environmentStride = regionStride(sizeof(rt::EnvironmentUniforms), 1);
+    const VkDeviceSize mediumStride = regionStride(sizeof(rt::MediumUniforms), 1);
     const VkDeviceSize instanceStride = regionStride(sizeof(rt::InstanceRecord), capacity_.instances);
     const VkDeviceSize previousStride = regionStride(sizeof(rt::Mat34), capacity_.instances);
     const VkDeviceSize lightStride = regionStride(sizeof(rt::RectLight), capacity_.lights);
     const VkDeviceSize materialStride = regionStride(sizeof(rt::Material), capacity_.materials);
-    const VkDeviceSize treeNodeStride = regionStride(sizeof(rt::LightTreeNode), treeNodeCount(capacity_.treeLights));
+    const VkDeviceSize treeNodeStride =
+        regionStride(sizeof(rt::LightTreeNode), treeNodeCount(capacity_.treeLights));
     const VkDeviceSize treeLightStride = regionStride(sizeof(rt::TreeLight), capacity_.treeLights);
     std::vector<std::vector<rt::Instance>> sliceInstances(sliceCount);
     for (std::uint32_t k = 0; k < sliceCount; ++k) {
         const SceneFrame& frame = slices[k];
         const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
+        const rt::MediumUniforms medium = frame.medium ? packMedium(*frame.medium) : rt::MediumUniforms{};
         const std::vector<rt::Material>& materials =
             frame.materials.empty() ? scene.source().materials : frame.materials;
         std::vector<rt::Instance>& instances = sliceInstances[k];
@@ -506,6 +524,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         // receivers (Task 13).
         u.environmentSelect = frame.environment.select;
         u.treeLightCount = static_cast<std::uint32_t>(frame.treeLights.size()); // Task 12
+        u.mediumFlags = frame.medium ? mediumFlags(*frame.medium) : 0u;         // Task 11
         u.causticReceivers =
             frame.caustics ? static_cast<std::uint32_t>(frame.caustics->receivers.size()) : 0u;
         u.shutterOffset = settings.sliceOffsets[k];
@@ -514,6 +533,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
 
         writeRegion(uniforms_[slot], uniformStride, k, &u, sizeof u);
         writeRegion(environments_[slot], environmentStride, k, &environment, sizeof environment);
+        writeRegion(media_[slot], mediumStride, k, &medium, sizeof medium);
         writeRegion(instanceRecords_[slot], instanceStride, k, records.data(),
                     records.size() * sizeof(rt::InstanceRecord));
         writeRegion(previousTransforms_[slot], previousStride, k, previousTransforms.data(),
@@ -533,9 +553,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                         tree.lights.size() * sizeof(rt::TreeLight));
         }
     }
-    for (const gfx::Buffer* buffer : {&uniforms_[slot], &environments_[slot], &instanceRecords_[slot],
-                                      &previousTransforms_[slot], &lights_[slot], &materials_[slot],
-                                      &treeNodes_[slot], &treeLights_[slot]})
+    for (const gfx::Buffer* buffer :
+         {&uniforms_[slot], &environments_[slot], &instanceRecords_[slot], &previousTransforms_[slot],
+          &lights_[slot], &materials_[slot], &treeNodes_[slot], &treeLights_[slot], &media_[slot]})
         buffer->flush();
     tracedThisFrame_ = true; // nothing is refused from here on
 
@@ -598,8 +618,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                 ? storageBuffer(EVO_BINDING_ENVIRONMENT, *extras.environment)
                 : regionBuffer(EVO_BINDING_ENVIRONMENT, regionInfo(environments_[slot], environmentStride, k,
                                                                    sizeof(rt::EnvironmentUniforms), 1)),
-            // The tree's buffers: the frame's slice (a non-null TraceExtras pointer replaces them, a hook), or
-            // the dummy.
+            // The tree's buffers: the frame's slice (a non-null TraceExtras pointer replaces them, a hook),
+            // or the dummy.
             extras.treeNodes || frame.treeLights.empty()
                 ? extraBuffer(EVO_BINDING_TREE_NODES, extras.treeNodes)
                 : regionBuffer(EVO_BINDING_TREE_NODES,
@@ -610,7 +630,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                 : regionBuffer(EVO_BINDING_TREE_LIGHTS,
                                regionInfo(treeLights_[slot], treeLightStride, k, sizeof(rt::TreeLight),
                                           capacity_.treeLights)),
-            extraBuffer(EVO_BINDING_MEDIUM, extras.medium),
+            extras.medium ? storageBuffer(EVO_BINDING_MEDIUM, *extras.medium)
+                          : regionBuffer(EVO_BINDING_MEDIUM, regionInfo(media_[slot], mediumStride, k,
+                                                                        sizeof(rt::MediumUniforms), 1)),
             sampledImage(EVO_BINDING_DENSITY, density),
             sampledImage(EVO_BINDING_MAJORANT, majorant),
             extras.previousTransforms
@@ -681,10 +703,11 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             pipeline_.bind(cmd, ring_, writesFor(k));
             boundSlice = k;
         }
-        for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo})
+        // The volume layer keeps a running mean too while the frame has a medium (Task 11).
+        for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo, &gbuffer_.volume})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               kReadWrite);
-        for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion, &gbuffer_.volume})
+        for (gfx::Image* image : {&gbuffer_.normal, &gbuffer_.depth, &gbuffer_.motion})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         const bool firstOfSlice = d == 0 || sliceOfDispatch(d - 1, dispatches, sliceCount) != k;

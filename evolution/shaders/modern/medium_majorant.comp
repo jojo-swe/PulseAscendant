@@ -1,0 +1,60 @@
+#version 460
+
+// The grid medium's majorant (step 5, Task 11; modern::MediumVolume records it after the bake): for every
+// kMajorantCell^3 cell of the baked voxels, the largest density over the cell and a one-voxel apron (the
+// voxels a trilinear lookup inside the cell can reach), rounded up to half precision, so that it bounds every
+// density the tracer samples in the cell. Two cells per invocation, packed as halves into one word of the
+// staging buffer that MediumVolume copies into the R16F majorant image (an R16F storage image is not a
+// format Vulkan requires).
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly image3D density;
+layout(set = 0, binding = 1, std430) writeonly buffer MajorantWords { uint words[]; };
+
+layout(push_constant) uniform MajorantPush {
+    uvec3 size;  // the voxels baked
+    uint pairs;  // ceil(cells / 2)
+    uvec3 cells; // ceil(size / 8)
+    uint pad;
+} pc;
+
+const int kCell = 8; // modern::kMajorantCell
+
+float cellMaximum(uint index) {
+    uvec3 cell = uvec3(index % pc.cells.x, (index / pc.cells.x) % pc.cells.y, index / (pc.cells.x * pc.cells.y));
+    ivec3 lo = max(ivec3(cell) * kCell - 1, ivec3(0));
+    ivec3 hi = min(ivec3(cell) * kCell + kCell, ivec3(pc.size) - 1);
+    float most = 0.0;
+    for (int z = lo.z; z <= hi.z; ++z) {
+        for (int y = lo.y; y <= hi.y; ++y) {
+            for (int x = lo.x; x <= hi.x; ++x) {
+                most = max(most, imageLoad(density, ivec3(x, y, z)).r);
+            }
+        }
+    }
+    return most;
+}
+
+// The half at or above v (v >= 0).
+uint halfAbove(float v) {
+    uint h = packHalf2x16(vec2(v, 0.0)) & 0xFFFFu;
+    if (unpackHalf2x16(h).x < v && h < 0x7BFFu) {
+        h += 1u;
+    }
+    return h;
+}
+
+void main() {
+    uint pair = gl_GlobalInvocationID.x;
+    if (pair >= pc.pairs) {
+        return;
+    }
+    uint total = pc.cells.x * pc.cells.y * pc.cells.z;
+    uint first = 2u * pair;
+    uint word = halfAbove(cellMaximum(first));
+    if (first + 1u < total) {
+        word |= halfAbove(cellMaximum(first + 1u)) << 16;
+    }
+    words[pair] = word;
+}

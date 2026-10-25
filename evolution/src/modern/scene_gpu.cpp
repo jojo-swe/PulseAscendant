@@ -338,6 +338,23 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
     checkTreeLights(scene, frame, materials);
     packEnvironment(frame.environment); // throws for an invalid environment
     checkSplats(frame.splats, capacity.splats, scene.splatShader);
+    if (frame.medium) {
+        // Task 11: valid media; a grid needs the scene's bake shader and fits its capacity.
+        packMedium(*frame.medium); // throws for invalid media
+        if (frame.medium->grid) {
+            if (scene.mediumShader.empty())
+                throw std::invalid_argument("the frame has a grid medium, but the scene no medium shader");
+            const std::array<std::uint32_t, 3>& size = frame.medium->grid->size;
+            for (int a = 0; a < 3; ++a)
+                if (size[a] > capacity.mediumGrid[a])
+                    throw std::length_error("a grid medium of " + std::to_string(size[0]) + "x" +
+                                            std::to_string(size[1]) + "x" + std::to_string(size[2]) +
+                                            " voxels, more than the scene's capacity of " +
+                                            std::to_string(capacity.mediumGrid[0]) + "x" +
+                                            std::to_string(capacity.mediumGrid[1]) + "x" +
+                                            std::to_string(capacity.mediumGrid[2]));
+        }
+    }
 }
 
 SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)
