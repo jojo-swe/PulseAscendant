@@ -29,20 +29,14 @@ Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the cit
 changed; every other output, the Studio's included, stayed byte for byte.
 Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
 Then galaxy_20 changed when GALAXY moved from the placeholder to the Cosmos scene; nothing else moved.
-Then regenerated for the bloom, the per-act grade and the authored exposure, with the denoiser's first frame on
-heavy-tailed light: every output with a path-traced 2026 picture changed (studio_night_40, finale_50,
-studio_night_acc, return_30, nebula_40, plasma_wipe, raytrace_2026 and the four streams; Act II's lifted blacks,
-and for studio_night_acc STUDIO NIGHT's +0.7 EV from D, raise the Studio's mean display luminance by 35-42 %); the
-1993-only and placeholder outputs stayed byte for byte.
-Then regenerated for the 1993 screens (phosphor, BOOT, RETURN, REBOOT, the FINALE grid, PORTAL's prompt):
-boot_50, finale_50, portal_50, reboot_10, reboot_60, return_30, stream_finale and stream_studio_cut changed.
-Then regenerated for the epoch cards (the 1993 card through the CRT, the 2026 card in the stroke face in the
-left margin, in place of the 8x8 cards with drop shadows): every output changed in its card's area only.
-Then regenerated for the FINALE megamix's director: after D the room carries the 1993 card, so finale_50 and
-stream_finale changed (mean luminance -0.13 %); no other output moved.
-Then regenerated for the Studio's new takes and the Portal crossings: every Studio capture and the three Studio
-streams changed (new cameras and handheld), and flyby_2026, now the Studio; every 1993 and non-Studio output
-stayed byte for byte.
+Then regenerated once for the epoch cards, the post grade and bloom, the 1993 screens, the FINALE megamix and
+the Studio's takes with the Portal crossings: every output changed. The cards changed every output in its card
+area (the 1993 card through the CRT, the 2026 card in the stroke face in the left margin); the grade and bloom
+every path-traced 2026 picture; the 1993 screens (phosphor, BOOT, RETURN, REBOOT, the FINALE grid, PORTAL's
+prompt) boot_50, finale_50, portal_50, the REBOOT and RETURN captures and two streams; the megamix finale_50 and
+stream_finale; the Studio's new cameras every Studio capture and stream, and flyby_2026, now the Studio. The
+Studio's mean display luminance rose by up to 714 % (reboot_60, now REBOOT's close-up on the screen) and fell by
+up to 81 % (portal_50, the CRT nearly dark once the grid has switched off).
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
