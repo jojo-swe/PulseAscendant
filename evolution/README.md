@@ -566,3 +566,34 @@ Evolution --bench --chapters 11,19 --bench-frames 60
 Exit codes: 0 on success, 1 for bad usage or a runtime error, 2 when the machine cannot run EVOLUTION
 (no Vulkan loader, no Vulkan 1.3 driver, no GPU, or a missing extension or feature; stderr names what is
 missing), and 3 when `--validation` reported any warning or error during an otherwise successful run.
+
+### Release and the 4K video
+
+**The video.** `tools/render_video.py` pipes `--render-stream` into ffmpeg and muxes the show's music:
+3840 × 2160, 60 fps, 64 samples per pixel, H.264 High at CRF 12 in BT.709 (TV range, tagged), AAC-LC
+384 kb/s at 48 kHz, `+faststart`. It renders in 10-second chunks (`--chunk`) into `<out>.parts/`, each written
+as `.part` and renamed when complete, and every chunk starts with `--first-frame` so its frames are exactly
+those of one long stream. Interrupted, the same command resumes: chunks whose frame count checks out
+(ffprobe) are kept. `--codec hevc_nvenc` encodes on an NVIDIA GPU, `--codec ffv1` losslessly into Matroska,
+`--start`/`--end` render a range, and `--bench` times one export frame at each chapter's accent and prints the
+seconds per frame and an estimate for the whole render. ffmpeg and ffprobe must be on the PATH.
+
+One command configures, builds Release, checks for ffmpeg and renders into `dist/render/`; run it again to
+resume:
+
+```sh
+tools/render_4k.sh                       # Linux
+tools\render_4k.ps1                      # Windows (PowerShell)
+tools/render_4k.sh --bench               # estimate first
+```
+
+At the export budget (2.5 s a frame at 4K and 64 spp on an RTX 4090) the 42,670 frames take about 30 hours. A
+software Vulkan driver (lavapipe) is far too slow for the full video; use it for short ranges and checks.
+
+**Chapters.** `tools/video_chapters.py --exe build/linux/bin/Evolution` prints one `M:SS TITLE` line per
+chapter, from 0:00, joining a chapter shorter than 10 s to the next (`0:00 BOOT / FLYBY`).
+
+**The release zip.** `tools/package_release.py --bin build/linux/bin` (or `--bin build/windows/bin --os
+windows`) writes `dist/EVOLUTION-v1.0-<os>.zip`: the executable, its shaders, the music in
+`assets/music/show.wav`, `EVOLUTION.NFO` (in `assets/`), the licence and the third-party notices, in one
+`EVOLUTION/` folder, reproducibly (fixed order and dates).

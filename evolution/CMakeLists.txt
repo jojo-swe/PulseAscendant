@@ -1200,3 +1200,6 @@ add_test(NAME secret_part COMMAND secret_part_test)
 add_test(NAME render_video
     COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/render_video_test.py $<TARGET_FILE:Evolution>)
 set_tests_properties(render_video PROPERTIES TIMEOUT 300 PROCESSORS 2)
+# The release's NFO: its columns, its notes and its last line; the README stays plain.
+add_test(NAME nfo
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/nfo_test.py ${CMAKE_SOURCE_DIR})
