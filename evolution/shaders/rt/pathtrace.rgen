@@ -125,6 +125,13 @@ bool sidesAgree(vec3 n, vec3 ng, vec3 wo, vec3 wi) {
     return (dot(wi, n) * dot(wo, n) > 0.0) == (dot(wi, ng) * dot(wo, ng) > 0.0);
 }
 
+// The normal light selection weighs a light's orientation against (lights.glsl): the shading normal turned
+// to wo's side, where the BSDF reflects (it mirrors its frame so that wo is above it). NEE and the MIS weight
+// of the next hit (prevN) both use it.
+vec3 selectionNormal(vec3 n, vec3 wo) {
+    return dot(n, wo) < 0.0 ? -n : n;
+}
+
 // Adds a contribution produced by the scattering at `bounce` (0: direct light of the primary hit), clamped to
 // frame.clampIndirect in luminance after the first bounce.
 void addContribution(inout vec3 radiance, vec3 c, uint bounce) {
@@ -139,7 +146,8 @@ void addContribution(inout vec3 radiance, vec3 c, uint bounce) {
 
 // Next-event estimation towards the environment: one direction from sampleEnvironment(), one shadow ray to
 // infinity, weighted against the BSDF with the whole NEE density of an escaping direction (escapePdf).
-vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, bool transmissive) {
+vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, bool transmissive,
+                            vec3 facing) {
     vec2 uv = vec2(bounceRand(bounce, 4u), bounceRand(bounce, 5u));
     vec3 wi;
     vec3 le;
@@ -156,7 +164,7 @@ vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bo
         return vec3(0.0);
     }
     vec3 origin = offsetOrigin(p, ng, wi);
-    float lightPdf = escapePdf(origin, wi, p, n, transmissive);
+    float lightPdf = escapePdf(origin, wi, p, facing, transmissive);
     if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
         return vec3(0.0);
     }
@@ -170,14 +178,15 @@ vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bo
 // rect light chosen at this point, one point on it, one shadow ray, weighted against the BSDF.
 vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
     bool transmissive = isDielectric(s);
+    vec3 facing = selectionNormal(n, wo);
     float choice = bounceRand(bounce, 3u);
     float environmentSelect = frame.environmentSelect;
     if (choice < environmentSelect) {
-        return sampleEnvironmentLight(s, p, n, ng, wo, bounce, transmissive);
+        return sampleEnvironmentLight(s, p, n, ng, wo, bounce, transmissive, facing);
     }
     uint index;
     float selectPdf;
-    if (!pickLight((choice - environmentSelect) / (1.0 - environmentSelect), p, n, transmissive, index,
+    if (!pickLight((choice - environmentSelect) / (1.0 - environmentSelect), p, facing, transmissive, index,
                    selectPdf)) {
         return vec3(0.0);
     }
@@ -214,7 +223,7 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         // NEE then reaches this direction through each of them, so its density is the sum over every portal
         // the direction crosses plus the environment's, the same sum that weighs a BSDF ray escaping this
         // way. With this portal's density alone the weights of the two strategies would not sum to one.
-        lightPdf = escapePdf(origin, wi, p, n, transmissive);
+        lightPdf = escapePdf(origin, wi, p, facing, transmissive);
     }
     if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
         return vec3(0.0);
@@ -340,7 +349,7 @@ SampleResult tracePath() {
         previousDelta = delta;
         previousPdf = pdf;
         prevP = p;
-        prevN = n;
+        prevN = selectionNormal(n, wo);
         prevTransmissive = isDielectric(s);
         origin = offsetOrigin(p, ng, wi);
         direction = wi;

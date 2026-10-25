@@ -842,3 +842,27 @@ target_include_directories(environment_test PRIVATE tests)
 target_compile_definitions(environment_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
 add_dependencies(environment_test environment_test_shaders)
 evo_gpu_test(environment environment_test)
+
+# Per-point light selection (Task 3 of step 5): the CPU reference in evo_modern, and a test that holds
+# shaders/rt/lights.glsl to it through a compute probe (with the path tracer's own bindings), checks pickLight's
+# frequencies, MIS against BSDF sampling with three lights of very different power, and the Studio's screen and
+# moon. `light_selection_test --measure <dir>` prints the Studio's 1 spp noise with per-point and fixed
+# selection.
+target_sources(evo_modern PRIVATE src/modern/light_select.cpp)
+set(lightSelectProbe "${EVO_TEST_SPIRV_DIR}/test_light_select_probe.comp.spv")
+add_custom_command(
+    OUTPUT "${lightSelectProbe}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVO_TEST_SPIRV_DIR}" "${CMAKE_BINARY_DIR}/shader-deps"
+    COMMAND "${EVO_GLSLANG}" -V --target-env vulkan1.3 --depfile
+            "${CMAKE_BINARY_DIR}/shader-deps/test_light_select_probe.comp.d" -o "${lightSelectProbe}"
+            "${CMAKE_SOURCE_DIR}/shaders/test/light_select_probe.comp"
+    DEPENDS "${CMAKE_SOURCE_DIR}/shaders/test/light_select_probe.comp"
+    DEPFILE "${CMAKE_BINARY_DIR}/shader-deps/test_light_select_probe.comp.d"
+    COMMENT "Compiling test shader test_light_select_probe.comp"
+    VERBATIM)
+add_custom_target(light_selection_test_shaders DEPENDS "${lightSelectProbe}")
+add_executable(light_selection_test tests/light_selection_test.cpp)
+target_link_libraries(light_selection_test PRIVATE evo_render evo_modern)
+target_compile_definitions(light_selection_test PRIVATE EVO_TEST_SPIRV_DIR="${EVO_TEST_SPIRV_DIR}")
+add_dependencies(light_selection_test light_selection_test_shaders)
+evo_gpu_test(light_selection light_selection_test)

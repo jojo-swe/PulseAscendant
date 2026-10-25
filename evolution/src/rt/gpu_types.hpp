@@ -99,8 +99,10 @@ constexpr std::uint32_t hitGroupFor(MaterialClass c, GeometryKind k) {
 
 // --- The path tracer's frame -------------------------------------------------------------------------------
 
-// FrameUniforms::flags.
-inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u;
+// FrameUniforms::flags. FixedLightSelection: choose lights by their fixed selectWeight alone (step 4), not by
+// their importance at the shading point (Task 3 of step 5); for comparisons and tests.
+inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u,
+                               kTraceFlagFixedLightSelection = 4u;
 
 // What the path tracer's raygen reads once per frame (one buffer per ring slot). The camera is an orthonormal
 // basis: right, up and forward unit vectors (forward looks into the picture, up is the picture's up); a pixel
@@ -134,7 +136,7 @@ struct FrameUniforms { // 208 bytes, scalar
     std::uint32_t lightCount;
     std::uint32_t instanceCount;
     float clampIndirect;            // luminance limit of one contribution after the first bounce
-    float lightWeightSum;           // the sum of every light's selectWeight
+    float lightWeightSum;           // the sum of every light's selectWeight (no shader reads it since Task 3)
     float regularizeRoughness;      // the least roughness of every lobe after the first rough vertex (Task 6)
     std::uint32_t treeLightCount;   // the lights of the light tree (Task 12)
     std::uint32_t mediumFlags;      // which media the frame has (Task 11)

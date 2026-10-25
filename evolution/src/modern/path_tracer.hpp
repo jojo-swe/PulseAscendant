@@ -31,6 +31,9 @@ struct TraceSettings {
     bool nee = true;
     bool russianRoulette = true; // from bounce 3
     float clampIndirect = 64.f;  // luminance limit of a contribution after the first bounce
+    // Choose lights by their fixed selectWeight alone, as step 4 did, instead of by their importance at each
+    // shading point (power, distance, orientation, gate); only for comparisons.
+    bool fixedLightSelection = false;
 };
 
 // Samples per trace dispatch: an export at many spp is split so that no dispatch runs long enough to trip a
