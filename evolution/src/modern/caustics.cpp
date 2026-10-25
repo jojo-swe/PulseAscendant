@@ -238,7 +238,8 @@ CausticMaps::CausticMaps(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t 
 }
 
 CausticMaps::~CausticMaps() {
-    ring_.waitAll(); // a frame in flight may still use the maps, the tables and the descriptor sets
+    // A frame in flight may still use the maps, the tables and the descriptor sets.
+    ring_.waitAll(); // shutdown
 }
 
 void CausticMaps::createMaps() {
