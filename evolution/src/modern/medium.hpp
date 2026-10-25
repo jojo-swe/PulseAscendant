@@ -19,11 +19,14 @@
 // The integrator (shaders/rt/medium.glsl, shaders/rt/medium_path.glsl and the marked hooks in
 // pathtrace.rgen):
 // - the primary segment (camera to the first surface, or to infinity): a residual ratio-tracking walk gives
-//   the transmittance T, and kPrimaryScatterSamples points sampled along the segment (a mixture of the fog's
-//   collision density and the grid's majorant) each add their emission and a next-event estimate, so the
-//   in-scattered radiance is dense (every pixel gets an estimate, which the denoiser's volume history clamp
-//   needs); one of them, chosen uniformly, continues as a full path (multiple scattering). The volume layer
-//   gets (L_v, T); the surface path is traced unattenuated and the denoiser's combine pass computes
+//   the transmittance T and, on the same walk, the grid's emission as a quadrature at the grid's resolution
+//   (about one sub-step per voxel, the control's exponential against the source linear between its ends),
+//   so a glowing grid shows no sampling noise of its own; kPrimaryScatterSamples points sampled along the
+//   segment (a mixture of the fog's collision density, the grid's majorant and, in a frame with 1 to
+//   kEquiangularMaxLights tree lights, equiangular sampling towards them) each add a next-event estimate, so
+//   the in-scattered radiance is dense (every pixel gets an estimate, which the denoiser's volume history
+//   clamp needs); one of them, chosen uniformly, continues as a full path (multiple scattering). The volume
+//   layer gets (L_v, T); the surface path is traced unattenuated and the denoiser's combine pass computes
 //   T * surface + L_v;
 // - every later segment: delta tracking (the fog analytically, the grid against its majorant cells), with
 //   the collision estimator for the grid's emission, a scatter at a real collision (HG sampling, the albedo
@@ -75,6 +78,9 @@ inline constexpr std::uint32_t kMajorantCell = 8;
 inline constexpr std::uint32_t kMaxMediumGrid = 1024;
 // Points sampled on the primary segment per path sample (shaders/rt/medium_path.glsl).
 inline constexpr std::uint32_t kPrimaryScatterSamples = 4;
+// The most tree lights a frame may have for its primary segments to sample points equiangularly towards
+// them (half the points; shaders/rt/medium_path.glsl).
+inline constexpr std::uint32_t kEquiangularMaxLights = 64;
 
 // The flags of a frame's media (0 for none).
 std::uint32_t mediumFlags(const MediumFrame& medium);
