@@ -79,7 +79,7 @@ double beatsBetween(const Grid& g, double from, double t) {
 
 // The planet below the crossing: an ocean world, the ship 380 m over it as it passes, its centre ahead.
 constexpr double kPlanetAltitude = 380.0;
-const DVec3 kPlanetCentre{0.0, -double(kPlanetRadius) - kPlanetAltitude, 900.0};
+const DVec3 kPlanetCentre{0.0, -double(kShipPlanetRadius) - kPlanetAltitude, 900.0};
 // The planet's own frame turned so its pole lies far off the flight (no pole under the camera).
 constexpr double kPlanetVisible = 9500.0; // drawn while its centre is nearer than this
 
@@ -444,7 +444,7 @@ Ship::Ship(SceneDetail detail) {
     planet.emissionScale = 0.6f;
     planet.flags = rt::kMaterialCameraOnlyEmission;
     rt::SphereRecord sphere{};
-    sphere.radius = kPlanetRadius;
+    sphere.radius = kShipPlanetRadius;
     sphere.color[0] = sphere.color[1] = sphere.color[2] = 1.f;
     sphere.material = kPlanet;
     static_.spheres = {sphere};
@@ -553,7 +553,7 @@ SceneFrame Ship::frame(const show::TimelineFrame& f) const {
     sky.worldToRender = quaternionOfRows(renderRows);
     sky.sun = sun;
     sky.planetCentre = single(toRender(pose.rows, toPlanet));
-    sky.planetRadius = kPlanetRadius;
+    sky.planetRadius = kShipPlanetRadius;
     out.splats = shipSplats(sky);
     return out;
 }
