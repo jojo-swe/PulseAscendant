@@ -221,17 +221,17 @@ void checkTreeLights(const SceneStatic& scene, const SceneFrame& frame,
     if (lights.size() > rt::kMaxTreeLights)
         throw std::length_error(std::to_string(lights.size()) + " tree lights, more than " +
                                 std::to_string(rt::kMaxTreeLights));
-    const SceneInstance* owner = nullptr;
+    const SceneInstance* treeInstance = nullptr;
     for (const SceneInstance& in : frame.instances)
         if (in.light == tree) {
-            if (owner)
+            if (treeInstance)
                 throw std::invalid_argument(what +
                                             "is more than one instance (its lights are one set of spheres)");
-            owner = &in;
+            treeInstance = &in;
         }
-    if (!owner)
+    if (!treeInstance)
         throw std::invalid_argument(what + "is no instance's light (its spheres are the tree's lights)");
-    const SceneInstance& in = *owner;
+    const SceneInstance& in = *treeInstance;
     const std::uint32_t available = in.dynamicSpheres ? frame.particles->count : in.sphereCount;
     if (lights.size() > available)
         throw std::invalid_argument(what + "has " + std::to_string(lights.size()) +
