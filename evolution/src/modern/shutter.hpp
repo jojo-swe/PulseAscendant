@@ -1,6 +1,6 @@
 #pragma once
 
-// The export shutter (step 5, Task 9): a frame's picture is the average of up to kMaxShutterSlices
+// The export shutter: a frame's picture is the average of up to kMaxShutterSlices
 // sub-pictures, each traced at its own time within the shutter interval, which gives motion blur. The window
 // has no shutter (one slice at the frame's time). Everything here is a pure function of (time, fps, spp), so
 // a frame stays a pure function of the show time.

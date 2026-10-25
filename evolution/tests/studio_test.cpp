@@ -1,10 +1,10 @@
-// The Studio (Task 10 of step 4, polished by Task 14 of step 5): the path-traced room around a 1993 PC whose
+// The Studio (the Studio, polished by the Studio light rig): the path-traced room around a 1993 PC whose
 // CRT shows the retro picture and lights the room. At 320x180 in Export with 4 spp unless a test says
 // otherwise, with the validation layer on; fails on any message it reports. Captures go to
 // <EVO_TEST_OUT_DIR>/step4.
 //   (a) STUDIO NIGHT 0.6 s and 4 s in (its opening frame and the night wide): lit but not blown out, the
 //       screen brighter than the room's mean, each frame under 30 s;
-//   (b) the CRT is STUDIO NIGHT's key light (Task 14 (a)): a white retro picture against a black one
+//   (b) the CRT is STUDIO NIGHT's key light (the Studio light rig (a)): a white retro picture against a black one
 //   brightens
 //       the screen, and the desk in front of it by at least 40 % (step 4: 10 % in RETURN), and changes a wall
 //       patch the screen cannot see by under 0.002 in linear display light (step 4's bound
@@ -17,11 +17,11 @@
 //   screen: C:\DEMO> with BOOT's 2 Hz cursor, a pure function of the retro frame; (h) the CRT stays sharp in
 //   the window (RETURN's close-up): every shot that shows the screen focuses on its plane
 //       with a small aperture; at 1 spp the same frame shown twice barely changes in the screen, and the
-//       30th window frame's screen matches a 32 spp export of the same time (64 until Task 14 of step 5,
+//       30th window frame's screen matches a 32 spp export of the same time (64 until the Studio light rig,
 //       which halved it for the time budget: the screen differs from either by 0.003, the bound is 0.025);
 //   (i) the Studio's clampIndirect (0.5; step 4: 2) reaches the path tracer: its lighting equals a trace at
-//       0.5, not at 16, the default of every other scene (since Task 6 of step 5);
-// Task 14 of step 5 (its letters in brackets):
+//       0.5, not at 16, the default of every other scene (since the integrator);
+// the Studio light rig (its letters in brackets):
 //   (j) [b] the light rig: the lamp's material emits nothing in STUDIO NIGHT and does in RETURN and REBOOT;
 //       in every chapter the frame's material table carries studioRig's levels and every light's emission is
 //       its material's (the screen's (s, s, s));
@@ -1006,7 +1006,7 @@ void testClampIndirect(gfx::Context& ctx) {
     std::printf("(i) the Studio traces with clampIndirect 0.5 (16 changes its lighting)\n");
 }
 
-// --- (j) - (n): Task 14 of step 5
+// --- (j) - (n): the Studio light rig
 // ----------------------------------------------------------------------------------
 
 void testRig() {

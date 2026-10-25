@@ -19,12 +19,12 @@
 // plus the environment's share) with the power heuristic; after a delta lobe (no NEE there) it keeps weight 1.
 // Russian roulette from bounce 3; a non-finite sample contributes 0.
 //
-// Noise at its sources (Task 6 of step 5). The path is `rough` once it has scattered off a non-delta lobe;
+// Noise at its sources (the integrator). The path is `rough` once it has scattered off a non-delta lobe;
 // until then it is a delta chain from the camera (the camera -> mirror -> light paths).
 // - Regularisation: at every vertex after the first rough one each lobe, the coat too, has a roughness of at
 //   least frame.regularizeRoughness. The surface is changed before NEE and BSDF sampling, so bsdfEval (NEE),
 //   bsdfSample and the pdf the next hit weighs against all see the same BSDF: MIS stays consistent. Diffuse ->
-//   mirror -> small light paths become glossy, which NEE reaches (caustics come from Task 13's photons).
+//   mirror -> small light paths become glossy, which NEE reaches (caustics come from caustic photon maps's photons).
 // - The clamp: a contribution made after a rough vertex is clamped to a luminance of frame.clampIndirect. The
 //   primary hit's NEE and camera -> delta chain -> light are never clamped.
 // - Camera-only emission (kMaterialCameraOnlyEmission, an LED): counted at the primary hit and along a delta
@@ -35,7 +35,7 @@
 //   channel); every dispersive surface on the path then has the IOR dispersiveIor(ior, abbe, lambda). abbe 0
 //   leaves glass as it was.
 //
-// Glass interiors and panes (Task 20 of step 5). A segment that ends on the inside of a solid dielectric
+// Glass interiors and panes (glass). A segment that ends on the inside of a solid dielectric
 // (the ray leaves along its outward geometric normal) crossed its interior: the throughput takes its
 // Beer-Lambert transmittance exp(-absorption * t) (payload.absorption, Material.baseColor2 on a dielectric;
 // clear glass has none, and nested glass counts the inner body's absorption on its own segments). A
@@ -47,10 +47,10 @@
 // through stained glass, and its coloured light is sampled, not found by chance.
 //
 // Step 5's hooks, each with a stub that keeps step 4's picture byte for byte until its task fills it:
-// environment.glsl (the sky a miss sees, and environment sampling: Task 2), lights.glsl (per-point light
-// selection: Task 3; the light tree: Task 12), medium.glsl and medium_path.glsl (participating media and the
-// volume layer: Task 11, behind mediumActive() at the hooks marked "[medium]"), caustics.glsl (Task 13) and
-// lensing.glsl (bent main rays: Task 25). Task 13's caustic photon maps also exclude, in caustic_paths.glsl,
+// environment.glsl (the sky a miss sees, and environment sampling: scene environments), lights.glsl (per-point light
+// selection: per-point light selection; the light tree: the light tree), medium.glsl and medium_path.glsl (participating media and the
+// volume layer: participating media, behind mediumActive at the hooks marked "[medium]"), caustics.glsl (caustic photon maps) and
+// lensing.glsl (bent main rays: gravitational lensing). caustic photon maps photon maps also exclude, in caustic_paths.glsl,
 // the light the maps already hold (a receiver's non-delta bounce, then only delta surfaces, then the photons'
 // light): without caustics in the frame that changes nothing.
 //
@@ -107,7 +107,7 @@ void traceMain(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
 
 #include "lensing.glsl" // after the payload and rand(), which its traceLensed() uses
 
-// Every main ray: bent around a black hole while the frame has lensing (Task 25), else straight (traceLensed
+// Every main ray: bent around a black hole while the frame has lensing (gravitational lensing), else straight (traceLensed
 // is then traceMain's very trace; one call site keeps lavapipe's inlined pipeline small).
 void traceScene(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
     traceLensed(origin, direction, coneWidth, coneSpread);
@@ -258,7 +258,7 @@ vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bo
     return f * le * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, kRayMax);
 }
 
-// Next-event estimation towards the light tree (Task 12), chosen with probability selectPdf: one sphere
+// Next-event estimation towards the light tree, chosen with probability selectPdf: one sphere
 // light by the walk (light_tree.glsl; its own random word, dimension 7), one direction in its cone, one
 // shadow ray to the sphere's near surface lifted off it, weighted against the BSDF.
 vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, vec3 facing, bool transmissive,
@@ -320,7 +320,7 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
     selectPdf *= 1.0 - environmentSelect;
     RectLight l = lights[index];
     if (l.kind == kLightTree) {
-        return sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf); // Task 12
+        return sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf); // the light tree
     }
     if (!(l.area > 0.0)) {
         return vec3(0.0);
@@ -382,9 +382,9 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
            mediumTransmittance(origin, shadowDirection, tMax);
 }
 
-// Task 13: the caustic photon maps' double-count exclusion (every use below is marked "Task 13").
+// caustic photon maps: the caustic photon maps' double-count exclusion (every use below is marked "caustic photon maps").
 #include "caustic_paths.glsl"
-// [medium] The participating-media integrator (Task 11): needs the helpers above.
+// [medium] The participating-media integrator (participating media): needs the helpers above.
 #include "medium_path.glsl"
 
 struct SampleResult {
@@ -424,8 +424,8 @@ SampleResult tracePath() {
     bool prevTransmissive = false;
     bool rough = false;   // the path has scattered off a non-delta lobe (else: a delta chain from the camera)
     float lambda = -1.0;  // the hero wavelength in nm, once the path has met dispersive glass
-    CausticPath caustic = causticPathStart(); // Task 13
-    // [medium] This sample's media stream and volume layer (Task 11).
+    CausticPath caustic = causticPathStart(); // caustic photon maps
+    // [medium] This sample's media stream and volume layer (participating media).
     if (mediumActive()) {
         mediumSeed(randomHash(frame.frameSeed, gPixel, gSample, kMediumSeedDimension));
         gMediumVolume = vec4(0.0, 0.0, 0.0, 1.0);
@@ -484,7 +484,7 @@ SampleResult tracePath() {
                 if (nee && !previousDelta) {
                     w = powerHeuristic(previousPdf, escapePdf(origin, direction, prevP, prevN, prevTransmissive));
                 }
-                // Task 13: the photon map's share of the source disc is excluded.
+                // caustic photon maps: the photon map's share of the source disc is excluded.
                 addContribution(r.lighting, throughput * causticEscape(caustic, prevP, direction, sky) * w,
                                 rough);
             }
@@ -493,7 +493,7 @@ SampleResult tracePath() {
 
         Surface s = payloadSurface();
         if (payload.light != kNoLight && lights[payload.light].kind == kLightTree) {
-            // Task 12: a sphere of the light tree shows its tree light's radiance (this frame's scale).
+            // the light tree: a sphere of the light tree shows its tree light's radiance (this frame's scale).
             s.emission = treeHitEmission(payload.primitive, payload.frontFace != 0u, s.emission);
         }
         vec3 p = payload.position;
@@ -508,7 +508,7 @@ SampleResult tracePath() {
             throughput *= dielectricTransmittance(payload.absorption, payload.t); // inside the glass
         }
         if (!thinPane) {
-            causticPathHit(caustic, payloadSurface(), payload.materialFlags); // Task 13
+            causticPathHit(caustic, payloadSurface(), payload.materialFlags); // caustic photon maps
         }
         if (bounce == 0u) {
             r.emission = s.emission;
@@ -520,7 +520,7 @@ SampleResult tracePath() {
                 RectLight l = lights[payload.light];
                 float cosLight = abs(dot(direction, lightNormal(l)));
                 float lightPdf = 0.0;
-                if (l.kind == kLightTree) { // Task 12: the tree's density of this sphere, from prevP
+                if (l.kind == kLightTree) { // the light tree: the tree's density of this sphere, from prevP
                     lightPdf = treeHitPdf(payload.light, payload.primitive, prevP, prevN, prevTransmissive);
                 } else if (l.area > 0.0 && cosLight > 0.0) {
                     lightPdf = lightChoicePdf(payload.light, prevP, prevN, prevTransmissive) *
@@ -528,7 +528,7 @@ SampleResult tracePath() {
                 }
                 w = powerHeuristic(previousPdf, lightPdf);
             }
-            // Task 13: the photon map's share of the source light is excluded.
+            // caustic photon maps: the photon map's share of the source light is excluded.
             vec3 keep = causticEmissionKeep(caustic, payload.light, prevP, p);
             addContribution(r.lighting, throughput * s.emission * w * keep, rough);
         }
@@ -551,7 +551,7 @@ SampleResult tracePath() {
             bsdfHasNonDeltaLobe(s)) {
             addContribution(r.lighting,
                             throughput * sampleLight(s, p, n, ng, wo, bounce) *
-                                causticNeeKeep(caustic, s, p, n, wo, bounce), // Task 13
+                                causticNeeKeep(caustic, s, p, n, wo, bounce), // caustic photon maps
                             rough);
         }
 
@@ -572,7 +572,7 @@ SampleResult tracePath() {
         }
         bool passing = thinPane && dot(wi, wo) < 0.0; // straight through the pane
         if (!thinPane) {
-            causticPathScatter(caustic, s, n, wo, wi, delta); // Task 13
+            causticPathScatter(caustic, s, n, wo, wi, delta); // caustic photon maps
         }
         throughput *= weight;
         rough = rough || !delta;

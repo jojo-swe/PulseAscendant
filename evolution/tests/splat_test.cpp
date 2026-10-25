@@ -1,4 +1,4 @@
-// Emissive splats (Task 10 of step 5): points added into the emission guide in fixed point with integer
+// Emissive splats: points added into the emission guide in fixed point with integer
 // atomics, through a test splat shader (shaders/test/splat_grid.comp: a row of points, a hashed cloud, a
 // spiral galaxy), with the validation layer and its synchronization validation on; fails on any message.
 //   (a) energy: one point's summed energy (sum of radiance times pixel area, at the 1920x1080 reference) is

@@ -128,6 +128,8 @@ void testSources() {
             continue;
         }
         sources.insert(shot.source);
+        if (shot.source == Effect::Wormhole)
+            CHECK(shot.sourceSeconds == 494.15);
         const Range range = kShotRanges[row];
         for (const double t : {start, start + kFrame, (start + end) * .5, end - 1e-4}) {
             const std::optional<SceneCut> cut = show::sceneCut(finaleAt(t));

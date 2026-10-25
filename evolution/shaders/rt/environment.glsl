@@ -2,7 +2,7 @@
 #define EVO_RT_ENVIRONMENT_GLSL
 
 // The environment a ray sees when it leaves the scene, and its sampling for next-event estimation (step 5,
-// Task 2): the scene's EnvironmentUniforms `environment` (binding EVO_BINDING_ENVIRONMENT, packed from
+// scene environments): the scene's EnvironmentUniforms `environment` (binding EVO_BINDING_ENVIRONMENT, packed from
 // SceneFrame::environment, src/modern/environment.hpp) over the sky models of sky.glsl. Needs the
 // `environment` block declared before it (common.glsl declares it; the test probe its own).
 //

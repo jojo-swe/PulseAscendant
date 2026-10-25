@@ -1,11 +1,11 @@
-// Scene environments and sky sampling (step 5, Task 2) on lavapipe, with the validation layer and its
+// Scene environments and sky sampling (scene environments) on lavapipe, with the validation layer and its
 // synchronization validation on; fails on any message. A GPU probe (shaders/test/environment_probe.comp) runs
 // environment.glsl's functions directly; the path tracer runs at 64x64 unless noted.
 //
 // (0) the C++ side: EnvironmentDesc{} is the NightSky defaults (the moon's direction, no disc, not sampled),
 //     every kind's defaults pack to valid uniforms, the disc and dome shares, and the refusals (also through
 //     checkSceneFrame, which the path tracer and the scene sweep run); the Studio's frames keep their own
-//     NightSky (studioEnvironment, Task 14 of step 5), never sampled, and its moon emitter stands along that
+//     NightSky (studioEnvironment, the Studio light rig), never sampled, and its moon emitter stands along that
 //     sky's glow direction;
 // (a) disc and dome sampling: every sample's pdf equals environmentPdf (1e-4) and its radiance equals
 //     environmentLighting; the pdf integrates to 1 over the sphere (importance-sampled Monte Carlo, 1 %);
@@ -24,7 +24,7 @@
 //     stars from the hash (0.5 %);
 // (e) the Studio's mean display luminance at STUDIO NIGHT 40 % and REBOOT 60 % (160x90, spp 4, Export)
 //     stays within 5 % of its measured value (first the step 4 night sky's, measured before this task; since
-//     Task 14 of step 5 relit and reframed the Studio, that task's).
+//     the Studio light rig relit and reframed the Studio, that task's).
 // The layout of EnvironmentUniforms is material_test's probe. With --look <dir> [spp] it only renders stills
 // of the skies to look at.
 
@@ -856,10 +856,10 @@ double chapterTime(int chapter, double fraction) {
     return start + fraction * (show::chapterStart(chapter + 1) - start);
 }
 
-// The Studio under its sky, measured with this test's renderer: step 4's before Task 2 (c722ab1) was 0.10121
-// and 0.15723; Task 14 of step 5 relit the Studio (STUDIO NIGHT: the lamp off, the CRT the key light, a low
+// The Studio under its sky, measured with this test's renderer: step 4's before scene environments (c722ab1) was 0.10121
+// and 0.15723; the Studio light rig relit the Studio (STUDIO NIGHT: the lamp off, the CRT the key light, a low
 // wide dolly; REBOOT: a dark modern room, the CRT's light rig and exposure).
-// Re-measured on the merge of Task 14 with the NEE shadow-ray fix (d91fb09 and later), which lit REBOOT more.
+// Re-measured on the merge of the Studio light rig with the NEE shadow-ray fix (d91fb09 and later), which lit REBOOT more.
 // Re-measured again with the Studio's takes (STUDIO NIGHT's dolly back to the night wide, REBOOT's close-up)
 // and the per-act grade (Act II's lifted blacks): 0.07627 and 0.13525 before.
 constexpr double kStudioNightBaseline = 0.20728, kRebootBaseline = 0.23459;

@@ -1,4 +1,4 @@
-// Per-point light selection (Task 3 of step 5) on lavapipe, with the validation layer on; fails on any
+// Per-point light selection on lavapipe, with the validation layer on; fails on any
 // message.
 //
 // (a) the GPU (shaders/rt/lights.glsl through a compute probe) equals the CPU reference
@@ -171,7 +171,7 @@ public:
     }
 
 private:
-    // The tree's nodes (Task 12: lightImportance reads the root of a Tree light; these frames have none).
+    // The tree's nodes (the light tree: lightImportance reads the root of a Tree light; these frames have none).
     static constexpr std::array<gfx::Binding, 7> kBindings = {
         gfx::Binding{EVO_BINDING_FRAME, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
         gfx::Binding{EVO_BINDING_TREE_NODES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
@@ -197,7 +197,7 @@ private:
                                        kStorage, true, "probe lights"});
         if (!lights.empty())
             writeBuffer(lightBuffer, lights.data(), lights.size() * sizeof(rt::RectLight));
-        // The Studio's environment (the default NightSky, Task 2): a portal's power is its lighting radiance.
+        // The Studio's environment (the default NightSky, scene environments): a portal's power is its lighting radiance.
         const rt::EnvironmentUniforms sky = modern::packEnvironment(modern::EnvironmentDesc{});
         gfx::Buffer environment(ctx_, {sizeof sky, kStorage, true, "probe environment"});
         writeBuffer(environment, &sky, sizeof sky);
@@ -569,7 +569,7 @@ private:
 void testStudioScreen(gfx::Context& ctx, Probe& probe, gfx::Image& dos) {
     const auto start = std::chrono::steady_clock::now();
     const modern::Studio studio;
-    // RETURN: the DOS prompt with the lamp on (Task 14 of step 5 turns the lamp off in STUDIO NIGHT, where
+    // RETURN: the DOS prompt with the lamp on (the Studio light rig turns the lamp off in STUDIO NIGHT, where
     // the dark screen is then rightly the desk's main light).
     const std::vector<rt::RectLight> lights = studio.frame(chapterAt(kReturn, 0.2)).lights;
     gfx::Image white = makeRetro(ctx, [](std::uint32_t, std::uint32_t) { return Rgb8{255, 255, 255}; });
@@ -590,7 +590,7 @@ void testStudioScreen(gfx::Context& ctx, Probe& probe, gfx::Image& dos) {
             k, 100 * dark[k].pdf[screen], 100 * lit[k].pdf[screen], 100 * fixed[k].pdf[screen],
             100 * dark[k].pdf[modern::Studio::kLampLight], 100 * lit[k].pdf[modern::Studio::kLampLight],
             100 * dark[k].pdf[modern::Studio::kMoonLight], 100 * dark[k].pdf[modern::Studio::kWindowLight]);
-        // Under 8 %: Task 14 of step 5 raised RETURN's screen from 1.2 to 1.5 (5.6 % right of the keyboard).
+        // Under 8 %: the Studio light rig raised RETURN's screen from 1.2 to 1.5 (5.6 % right of the keyboard).
         CHECK(dark[k].pdf[screen] > 0.f && dark[k].pdf[screen] < 0.08f);
     }
     CHECK(lit[0].pdf[screen] > 0.2f);

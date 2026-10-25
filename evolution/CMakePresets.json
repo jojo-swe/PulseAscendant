@@ -17,8 +17,8 @@
         },
         {
             "name": "windows",
-            "displayName": "Windows (Visual Studio 2026, x64)",
-            "generator": "Visual Studio 18 2026",
+            "displayName": "Windows (Visual Studio 2022, x64)",
+            "generator": "Visual Studio 17 2022",
             "architecture": "x64",
             "binaryDir": "${sourceDir}/build/windows",
             "condition": {

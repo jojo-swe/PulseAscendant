@@ -10,8 +10,7 @@ rules and the RTX hardware checklist are in [`docs/ARCHITECTURE.md`](docs/ARCHIT
 > pipeline (below). The act II and act III planetary chapters are 2026 only (forced into 1993 they show a grey
 > test pattern; STUDIO NIGHT and RETURN show the DOS prompt the demo exited to). The 2026 side is a path
 > tracer with a denoiser and a PBR Neutral tonemap (below), and it renders the Studio in FINALE, PORTAL, STUDIO
-> NIGHT, RETURN and REBOOT; the other 2026 chapters show a placeholder gradient until step 5 brings the
-> modern scenes.
+> NIGHT, RETURN and REBOOT; the other 2026 chapters are the path-traced scenes.
 
 ## Requirements
 
@@ -19,6 +18,8 @@ rules and the RTX hardware checklist are in [`docs/ARCHITECTURE.md`](docs/ARCHIT
   `VK_KHR_ray_query` and `VK_KHR_deferred_host_operations`. Without them EVOLUTION names what is missing
   and exits with code 2; there is no fallback.
 - Windows 10/11 or Linux.
+- Python 3. The tests and `tools/` use it; `python_tools` and `storyboard` also need numpy. Linux
+  installs it as `python3`.
 
 Dependencies (SDL3, Vulkan-Headers, volk, VulkanMemoryAllocator) are fetched by CMake with git at
 configure time, each pinned to an exact commit, so the first configure needs network access and `git`.
@@ -109,16 +110,15 @@ commits new files (see the script's docstring).
 
 ## Build on Windows
 
-> The Windows preset has not been exercised yet. The steps below are what it is designed for.
-
 Requirements:
 
-- Visual Studio 2026 with the "Desktop development with C++" workload.
-- CMake 4.2 or newer: the preset uses the `Visual Studio 18 2026` generator, which first shipped in
-  CMake 4.2 (the project itself needs only 3.25).
+- Visual Studio 2022 with the "Desktop development with C++" workload. The `windows` preset uses the
+  `Visual Studio 17 2022` generator.
+- CMake 3.25 or newer, on PATH (the preset does not need a newer CMake than the project).
 - The [Vulkan SDK](https://vulkan.lunarg.com/), for `glslangValidator`; CMake looks for it in
   `%VULKAN_SDK%\Bin`. The Vulkan runtime itself comes with the GPU driver.
-- Git, and Python 3 (configure looks for it; the tests run it).
+- Git, and Python 3 (configure looks for it; the tests run it). numpy is needed for `python_tools`
+  and `storyboard`.
 
 ```bat
 cd evolution
@@ -130,6 +130,12 @@ ctest --preset windows
 The preset builds Release into `build\windows\`; the executable is `build\windows\bin\Evolution.exe`,
 with its shaders in `build\windows\bin\shaders\` (no per-configuration subdirectory, so a Debug build
 replaces the Release one).
+
+## Licence
+
+The code is MIT, copyright jojo-swe ([`LICENSE`](LICENSE)). The Future Crew glenz mesh is under the
+Unlicense ([`licenses/FUTURE-CREW-NOTICE.md`](licenses/FUTURE-CREW-NOTICE.md)). The music is joyolo's
+and is not covered by the MIT licence ([`licenses/MUSIC-NOTICE.md`](licenses/MUSIC-NOTICE.md)).
 
 ## Music
 
@@ -465,7 +471,7 @@ dark before, 5 % now).
   about 2.4 comes out pink, hue intact), so the Studio keeps its colourful chapters below that. Its moonlit
   wide shots are lit mostly by light bounced off the moonbeam, which keeps a fine grain at export spp; the
   lights are picked by fixed weights (no spatial importance); the glass sphere's caustic is subtle:
-  regularisation blurs it (sharp caustics await the photon maps of step 5's Task 13).
+ regularisation blurs it (sharp caustics await the photon maps).
 
 ## Storyboard
 

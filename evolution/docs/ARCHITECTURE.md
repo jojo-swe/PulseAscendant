@@ -49,12 +49,10 @@ cmake --preset linux && cmake --build --preset linux && ctest --preset linux --o
 
 `shaders/` mirrors this: `retro/` (compute, one invocation per pixel), `rt/` (ray generation, closest hit per
 material class, miss, intersection), `post/`, `modern/` (scene compute passes), `common/`, `test/` (fixtures
-compiled only for tests). Comments that mention "Task N" or "step N" name work items of the build-out: steps 0-4
+compiled only for tests). The comments name the feature they describe. Steps 0-4
 are the foundation (project skeleton, audio and timeline, retro pipeline, retro effects, ray tracing and the
-Studio); step 5a is the shared tracer, environments, light selection, trace scale, tonemap, integrator, denoiser,
-particles, splats and Studio polish (Tasks 1-15); step 5b is the scenes (Tasks 16-26). Tasks 6 (integrator
-regularisation and dispersion), 9 (object motion vectors and the export shutter), 11 (media), 12 (light tree),
-13 (caustic photon maps) and 25 (lensing) have their GPU interfaces in place and are still to be filled in.
+Studio). Step 5 is the shared tracer (environments, light selection, trace scale, the integrator, the denoiser,
+particles, splats and the Studio light rig) and the scenes.
 
 ## Render pipeline
 

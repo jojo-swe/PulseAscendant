@@ -1,7 +1,7 @@
 #ifndef EVO_MODERN_GALAXY_GLSL
 #define EVO_MODERN_GALAXY_GLSL
 
-// The galaxy of the Cosmos and Singularity scenes (step 5, Tasks 24 and 25): its stars, a pure function of
+// The galaxy of the Cosmos and Singularity scenes (step 5, the Cosmos scene and gravitational lensing): its stars, a pure function of
 // (id, count), and its dust, a pure function of the position. src/modern/scenes/cosmos.cpp mirrors the dust
 // (galaxyDust) and the colours (blackbodyColour) on the CPU and documents the model.
 //

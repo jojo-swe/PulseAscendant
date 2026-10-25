@@ -6,6 +6,7 @@
 #   powershell -ExecutionPolicy Bypass -File tools\render_4k.ps1
 #   tools\render_4k.ps1 -Codec hevc_nvenc        (NVENC instead of x264)
 #   tools\render_4k.ps1 -Bench                   (time a frame per chapter and estimate the render first)
+#   tools\render_4k.ps1 -Coda                    (after the show, black, then the secret part)
 param(
     [ValidateSet("x264", "hevc_nvenc", "ffv1")] [string] $Codec = "x264",
     [switch] $Coda,

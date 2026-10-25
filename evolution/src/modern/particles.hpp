@@ -1,6 +1,6 @@
 #pragma once
 
-// A frame's particle field: stateless traced spheres from a scene's particle shader (step 5, Task 8; the GPU
+// A frame's particle field: stateless traced spheres from a scene's particle shader (analytic spheres; the GPU
 // side is rt::ParticleField, which ModernStage keeps once for every scene).
 
 #include <array>

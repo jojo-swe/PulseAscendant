@@ -1,7 +1,7 @@
 #ifndef EVO_MODERN_PARTICLES_COMMON_GLSL
 #define EVO_MODERN_PARTICLES_COMMON_GLSL
 
-// The particle field's compute pass (step 5, Task 8; rt::ParticleField records it). A scene's
+// The particle field's compute pass (analytic spheres; rt::ParticleField records it). A scene's
 // shaders/modern/particles_<scene>.comp defines the pure function
 //
 //     SphereRecord particle(uint id, float seconds, vec4 params[4]);

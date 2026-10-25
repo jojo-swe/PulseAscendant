@@ -3,7 +3,7 @@
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_GOOGLE_include_directive : require
 
-// Caustic photons (step 5, Task 13; modern::CausticMaps records it after the frame's TLAS build). One
+// Caustic photons (caustic photon maps; modern::CausticMaps records it after the frame's TLAS build). One
 // invocation per photon, photon = gl_GlobalInvocationID.y * 65536 + x (CausticMaps::kPhotonsPerRow), a pure
 // function of (photon, seed): every random number is randomFloat(seed, (photon, kPhotonStream), 0, dim).
 //

@@ -1,12 +1,12 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The caustic maps' resolve (step 5, Task 13; modern::CausticMaps records it after photons.comp): one
+// The caustic maps' resolve (caustic photon maps; modern::CausticMaps records it after photons.comp): one
 // invocation per texel of one layer (push constants). A receiver's texel within its resolution gets the
 // irradiance its fixed-point flux sums stand for, filtered by a 3x3 tent (1 2 1 / 4 per axis, which keeps
 // the energy), clamped to RGBA16F's largest value; every other texel, and a layer without a receiver, 0.
 //
-// The chroma filter (a receiver's chromaRadius r > 0; Task 20 of step 5). Each photon of dispersive glass
+// The chroma filter (a receiver's chromaRadius r > 0; glass). Each photon of dispersive glass
 // carries one wavelength, so a texel's colour converges far slower than its brightness: at a few hundred
 // photons per tent the rainbow is speckled with every hue. The filter keeps the tent's luminance and takes
 // the colour from a wider window, 5 x 5 tent sums r / 2 texels apart (about (2r + 1)^2 texels):

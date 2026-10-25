@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// The Nebula scene's stars (step 5, Task 18): the frame's light tree, as an emissive sphere field. They are
+// The Nebula scene's stars (the Nebula): the frame's light tree, as an emissive sphere field. They are
 // fixed in the cloud; only their size and brightness follow the music. Two modes (params[0].x):
 //
 // 0, NEBULA: particles 0, 1, 2 are the hero stars A, B and C (modern::kNebulaStarCentres and Radii); A's

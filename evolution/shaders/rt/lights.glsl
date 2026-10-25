@@ -14,7 +14,7 @@
 // no weight at a point is simply never sampled there: BSDF rays that find it keep MIS weight 1.
 
 #include "environment.glsl"
-#include "light_tree.glsl" // Task 12
+#include "light_tree.glsl" // the light tree
 #include "screen.glsl"
 
 vec3 lightNormal(RectLight l) {
@@ -62,7 +62,7 @@ float lightPower(RectLight l) {
 }
 
 // The unnormalised weight with which light i is chosen at the shading point: selectWeight * front * power *
-// cosBound / d^2 (Task 3 of step 5), where
+// cosBound / d^2 (per-point light selection), where
 // - front: p is on the light's emitting side;
 // - cosBound: 1 on a transmissive surface, else the largest cosine between n and the directions to the
 //   light's corners and centre (0: the whole light is below the surface, as cos is linear over the quad);
@@ -70,7 +70,7 @@ float lightPower(RectLight l) {
 // - a gated light (gate != kNoLight: a moon outside a window) only where the segment from p to its centre
 //   crosses that portal.
 // The flag kTraceFlagFixedLightSelection returns step 4's fixed max(selectWeight, 0) instead (comparisons).
-// A Tree light (Task 12) stands for the whole light tree: selectWeight times the root's importance.
+// A Tree light (the light tree) stands for the whole light tree: selectWeight times the root's importance.
 float lightImportance(uint i, vec3 p, vec3 n, bool transmissive) {
     RectLight l = lights[i];
     float weight = max(l.selectWeight, 0.0);
@@ -161,7 +161,7 @@ float lightChoicePdf(uint index, vec3 p, vec3 n, bool transmissive) {
     return (1.0 - frame.environmentSelect) * lightSelectPdf(index, p, n, transmissive);
 }
 
-// --- The light tree (Task 12) ------------------------------------------------------------------------------
+// --- The light tree ------------------------------------------------------------------------------
 // The tree's lights are emissive spheres: the hit sphere's index in its buffer (HitPayload.primitive) names
 // its tree light, k = sphere - treeLights[0].sphere (light k is sphere firstSphere + k).
 

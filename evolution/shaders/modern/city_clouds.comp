@@ -1,7 +1,7 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
 
-// ASCENT's cloud deck (step 5, Task 23; src/modern/scenes/city.hpp): a grid medium over the box the scene
+// ASCENT's cloud deck (the City; src/modern/scenes/city.hpp): a grid medium over the box the scene
 // gives it, baked every frame as a pure function of (uvw, seconds, params). Cumulus-like: a fractal value
 // noise of four octaves, drifting with the wind, cut by a coverage threshold and shaped by a height profile
 // (flat bases, billowing tops), so there are gaps through which the moon's light falls and the city shows. A

@@ -59,7 +59,7 @@ struct SweepStats {
 // clampIndirect positive and finite; shots run 0, 1, 2, ... in order (the next frame's shot is the same or
 // one more); everything stays within |coordinate| < 10^4; every instance's transform is finite and neither
 // mirrors nor collapses (determinant > 0); and the frame passes modern::checkSceneFrame (capacities, indices,
-// lights against their instances). Tasks 8 and 10 add the particle and splat counts against the capacity
+// lights against their instances). analytic spheres and emissive splats add the particle and splat counts against the capacity
 // here.
 SweepStats checkSceneSweep(modern::SceneId scene, const SweepLimits& limits = {});
 

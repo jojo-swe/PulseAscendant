@@ -1,4 +1,4 @@
-// Participating media (step 5, Task 11) on lavapipe, with the validation layer and its synchronization
+// Participating media on lavapipe, with the validation layer and its synchronization
 // validation on; fails on any message. The path tracer runs at 64x64 with grids of 32^3 or less, through a
 // MediumVolume baked by a test-only shader (shaders/test/medium_constant.comp).
 //

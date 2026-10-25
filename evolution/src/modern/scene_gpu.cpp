@@ -192,7 +192,7 @@ void checkStaticSphereClasses(const SceneStatic& scene, const SceneFrame& frame,
         }
     }
 }
-// The light tree (Task 12): at most one RectLight of kind Tree, and then tree lights (none without one), at
+// The light tree: at most one RectLight of kind Tree, and then tree lights (none without one), at
 // most capacity.treeLights; exactly one instance, a sphere instance, is that light, and tree light k is its
 // sphere firstSphere + k, within its spheres (the particle field's count when dynamic); the instance scales
 // uniformly; every light has a finite centre, a radius > 0, an emission and a scale >= 0, and for static
@@ -339,7 +339,7 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
     packEnvironment(frame.environment); // throws for an invalid environment
     checkSplats(frame.splats, capacity.splats, scene.splatShader);
     if (frame.medium) {
-        // Task 11: valid media; a grid needs the scene's bake shader and fits its capacity.
+        // participating media: valid media; a grid needs the scene's bake shader and fits its capacity.
         packMedium(*frame.medium); // throws for invalid media
         if (frame.medium->grid) {
             if (scene.mediumShader.empty())
@@ -356,7 +356,7 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
         }
     }
     if (frame.lensing) {
-        // Task 25: a valid lens; its disc is the frame's grid medium.
+        // gravitational lensing: a valid lens; its disc is the frame's grid medium.
         packLensing(*frame.lensing); // throws for an invalid lens
         if (frame.lensing->disc && !(frame.medium && frame.medium->grid))
             throw std::invalid_argument("the lens has a disc, but the frame no grid medium");

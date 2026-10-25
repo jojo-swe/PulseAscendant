@@ -1,4 +1,4 @@
-// The Cosmos scene (step 5, Task 24): GALAXY and ASCENDANT on lavapipe, with the validation layer on; fails on
+// The Cosmos scene: GALAXY and ASCENDANT on lavapipe, with the validation layer on; fails on
 // any message.
 //
 // (k) the cards: GALAXY's names 16,777,216 stars and 256x64x256 dust, ASCENDANT's 2,097,152 particles and
@@ -151,13 +151,16 @@ void testFlight() {
 
     const std::uint32_t count = modern::kAscendantParticles;
     const modern::ParticleFrame p = modern::ascendantParticleFrame(at(chapter, t.accent), count);
+    const auto formation = static_cast<std::uint32_t>(p.params[6]);
+    CHECK(formation == 1u);
     const float cell = modern::kLogoCell;
     const Vec3 core = modern::kAscendantGalaxyCentre;
-    double worstLanding = 0, worstWaypoint = 0, farthestCore = 0;
+    double worstLanding = 0, worstWaypoint = 0, farthestCore = 0, widestY = 0;
     std::uint32_t scattered = 0;
     for (std::uint32_t id = 0; id < count; ++id) {
         const Vec3 target = modern::ascendantTarget(id, cell);
-        const Vec3 way = modern::ascendantWaypoint(0, id, cell);
+        const Vec3 way = modern::ascendantWaypoint(formation, id, cell);
+        widestY = std::max(widestY, static_cast<double>(std::abs(way.y)));
         const double landing = distance(v3(modern::ascendantParticle(id, t.accent, p.params).center), target);
         worstLanding = std::max(worstLanding, landing);
         for (const float w : {t.waypoint, t.waypoint + 0.5f * t.hold, t.waypoint + 0.999f * t.hold})
@@ -179,6 +182,7 @@ void testFlight() {
                 count, worstLanding, worstWaypoint, farthestCore, scattered, (count + 60) / 61);
     CHECK(worstLanding == 0.0);
     CHECK(worstWaypoint == 0.0);
+    CHECK(widestY <= 4.01 * cell); // the greeting, not the vortex
     CHECK(farthestCore < 40.0);
     CHECK(scattered > (count / 61) * 9 / 10);
     // Every logo target lies inside its font pixel (the shared table, logo_targets.hpp).

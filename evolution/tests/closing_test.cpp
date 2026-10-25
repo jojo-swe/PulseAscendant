@@ -340,7 +340,7 @@ void testTheEndImages(RetroStageFixture& fixture) {
 void testPortalRegistry() {
     const EffectInfo& info = evo::retro::effectFor(Effect::Portal);
     CHECK(info.grid == &evo::retro::portalGrid && !info.phosphor && info.retroRate == kRate);
-    CHECK(info.palette == &evo::retro::finalePalette && info.text == &evo::retro::portalText);
+    CHECK(info.palette == &evo::retro::portalPalette && info.text == &evo::retro::portalText);
     CHECK(info.scene == &evo::retro::portalScene);
 }
 
@@ -427,6 +427,46 @@ void testPortalImages(RetroStageFixture& fixture) {
     CHECK(lit == 0);
 }
 
+bool sameText(const std::vector<evo::text::Item>& a, const std::vector<evo::text::Item>& b) {
+    if (a.size() != b.size())
+        return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (a[i].x != b[i].x || a[i].y != b[i].y || a[i].scale != b[i].scale || a[i].rgba != b[i].rgba ||
+            a[i].text != b[i].text)
+            return false;
+    return true;
+}
+
+// After the card and the way out of the glass, PORTAL is the DOS listing. Its last retro frame is STUDIO
+// NIGHT's first, cursor on, so the act join does not cut from THE SCREEN_ to the listing.
+void testPortalJoinsDos(RetroStageFixture& fixture) {
+    const TimelineFrame any = portal(1);
+    const std::uint32_t listing = evo::retro::portalListingFrame(any);
+    const std::uint32_t last = evo::retro::portalLastRetroFrame(any);
+    CHECK(listing > 0 && listing <= last);
+    CHECK(listing >= evo::retro::cardSpan(any, kRate).out);
+    CHECK(evo::retro::portalPrompt(any, listing - 1) == "THE SCREEN");
+    const std::vector<evo::text::Item> before = evo::retro::portalText(any, listing - 1);
+    CHECK(std::any_of(before.begin(), before.end(),
+                      [](const evo::text::Item& item) { return item.text.find("THE SCREEN") != std::string::npos; }));
+    const std::vector<evo::text::Item> atJoin = evo::retro::portalText(any, last);
+    const TimelineFrame night = at(11, Effect::StudioNight, 0.5 / kRate);
+    CHECK(sameText(atJoin, evo::retro::dosIdleText(night, 0)));
+    Palette listed{}, dos{}, prompt{}, finale{};
+    evo::retro::portalPalette(listed, any, last);
+    evo::retro::bootPalette(dos, any, 0);
+    evo::retro::portalPalette(prompt, any, listing - 1);
+    evo::retro::finalePalette(finale, any, listing - 1);
+    CHECK(listed == dos && prompt == finale);
+    const double local = (static_cast<double>(last) + 0.5) / kRate;
+    CHECK(local < any.chapterDuration);
+    const RetroPicture portalPicture = fixture.renderPicture(portal(local));
+    const RetroPicture nightPicture = fixture.renderPicture(night);
+    CHECK(portalPicture.indices == nightPicture.indices);
+    CHECK(portalPicture.rgb == nightPicture.rgb);
+    std::printf("portal: DOS listing from retro frame %u, last frame %u matches STUDIO NIGHT\n", listing, last);
+}
+
 } // namespace
 
 int main() {
@@ -450,6 +490,7 @@ int main() {
             testRebootImages(fixture);
             testTheEndImages(fixture);
             testPortalImages(fixture);
+            testPortalJoinsDos(fixture);
             CHECK(ctx.validationMessageCount() == 0);
         }
         CHECK(evo::gfx::validationMessagesReported() == 0);

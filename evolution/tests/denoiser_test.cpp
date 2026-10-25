@@ -960,7 +960,7 @@ void testDeterministic(gfx::Context& ctx) {
     }
 }
 
-// --- Task 7 of step 5: clean first frames, the export firefly filter, the volume layer
+// --- clean first frames, the export firefly filter, the volume layer
 // ---------------------------------------------------------------------------------------------------------
 
 // FNV-1a over the output and history bits of every frame.

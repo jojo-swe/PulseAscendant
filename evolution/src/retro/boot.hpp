@@ -116,6 +116,11 @@ std::vector<text::Item> promptItems(const std::vector<std::string>& rows, bool c
 inline constexpr std::uint32_t kCardRate = 30;
 inline constexpr int kCardX = kBootMargin;
 inline constexpr int kCardY = 200 - kBootMargin - 8;
+// The card's first retro frame, and the first retro frame on which it is gone.
+struct CardSpan {
+    std::uint32_t in, out;
+};
+CardSpan cardSpan(const show::TimelineFrame& frame, std::uint32_t rate);
 int cardShown(const show::TimelineFrame& frame, std::uint32_t retroFrame, std::uint32_t rate);
 // The card's text item (none while hidden or before its first character).
 std::vector<text::Item> cardText(const show::TimelineFrame& frame, std::uint32_t retroFrame,

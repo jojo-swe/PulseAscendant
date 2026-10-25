@@ -598,7 +598,7 @@ void testTwoFramesInFlight(evo::gfx::Context& ctx) {
 }
 
 // An ASCENT frame: a 2026-only chapter that shows the placeholder (STUDIO NIGHT, the first 2026-only
-// chapter, path traces the Studio around the CRT since Task 10, so it runs the retro stage too), so the
+// chapter, path traces the Studio around the CRT since the Studio, so it runs the retro stage too), so the
 // colourful placeholder fills the whole output.
 TimelineFrame ascent(double localSeconds) {
     const int chapter = 12;
@@ -983,6 +983,32 @@ void testRejectsEmptySize(evo::gfx::Context& ctx) {
     CHECK(threw);
 }
 
+// FINALE's card: three output frames, two centred lines, gone outside the window and at a 160-wide frame
+// still drawn at scale 1.
+void testPauseCard() {
+    using evo::render::pauseCardItems;
+    const auto blank = [](double t) { return pauseCardItems(evo::show::sampleTimeline(t), 1920, 1080); };
+    CHECK(blank(173.66 - 1.0 / 60.0).empty());
+    CHECK(blank(173.71).empty());
+    int shown = 0;
+    for (int n = 10418; n <= 10424; ++n)
+        shown += pauseCardItems(evo::show::sampleTimeline(n / 60.0), 1920, 1080).empty() ? 0 : 1;
+    CHECK(shown == 3);
+    const auto items = pauseCardItems(evo::show::sampleTimeline(10421 / 60.0), 1920, 1080);
+    CHECK(items.size() == 4);
+    CHECK(items[2].text == "YOU PAUSED. GOOD EYE." && items[3].text == "WE ONLY HAD ONE FRAME TO SAY THANK YOU.");
+    CHECK(items[2].rgba == 0xFFFFFFFFu && items[0].rgba == 0xFF000000u && items[0].text == items[2].text);
+    CHECK(items[2].scale == 6.f && items[3].scale == 6.f);
+    const float thanks = 39.f * 8.f * 6.f;
+    const float eye = 21.f * 8.f * 6.f;
+    CHECK(items[3].x == (1920.f - thanks) * 0.5f && items[1].x == items[3].x + 6.f);
+    CHECK(items[2].x == (1920.f - eye) * 0.5f && items[0].x == items[2].x + 6.f);
+    CHECK(items[3].y == items[2].y + 48.f && items[0].y == items[2].y + 6.f);
+    const auto clipped = pauseCardItems(evo::show::sampleTimeline(10421 / 60.0), 160, 90);
+    CHECK(clipped.size() == 4 && clipped[2].scale == 1.f);
+    CHECK(pauseCardItems(evo::show::sampleTimeline(10421 / 60.0), 0, 90).empty());
+}
+
 } // namespace
 
 int main() {
@@ -991,6 +1017,7 @@ int main() {
         testEffectRegistry();
         testHudUnit();
         testHudItems();
+        testPauseCard();
         {
             auto ctx = evo::gfx::Context::create({.validation = true});
             if (!ctx.validationEnabled())

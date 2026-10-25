@@ -43,6 +43,33 @@ int hudUnit(std::uint32_t height) {
     return std::max(1, static_cast<int>(std::lround(static_cast<double>(height) / 360.0)));
 }
 
+std::vector<text::Item> pauseCardItems(const show::TimelineFrame& frame, std::uint32_t width,
+                                       std::uint32_t height) {
+    constexpr double kStart = 173.66, kEnd = 173.71;
+    constexpr const char* kEye = "YOU PAUSED. GOOD EYE.";
+    constexpr const char* kThanks = "WE ONLY HAD ONE FRAME TO SAY THANK YOU.";
+    if (!(frame.showSeconds >= kStart && frame.showSeconds < kEnd) || width == 0 || height == 0)
+        return {};
+    const int columns = static_cast<int>(std::max(std::char_traits<char>::length(kEye),
+                                                   std::char_traits<char>::length(kThanks)));
+    int scale = 1;
+    while (static_cast<std::uint32_t>((scale + 1) * 8 * columns) <= width &&
+           static_cast<std::uint32_t>((scale + 1) * 8 * 2) <= height)
+        ++scale;
+    const auto line = [width, height, scale](const char* text, int row, std::uint32_t rgba, float ox,
+                                              float oy) {
+        const auto cols = static_cast<int>(std::char_traits<char>::length(text));
+        const float w = 8.f * static_cast<float>(cols * scale);
+        const float block = 16.f * static_cast<float>(scale);
+        const float x = (static_cast<float>(width) - w) * 0.5f + ox;
+        const float y = (static_cast<float>(height) - block) * 0.5f + 8.f * static_cast<float>(row * scale) + oy;
+        return text::Item{x, y, static_cast<float>(scale), rgba, text};
+    };
+    const auto shadow = static_cast<float>(scale);
+    return {line(kEye, 0, kShadowColor, shadow, shadow), line(kThanks, 1, kShadowColor, shadow, shadow),
+            line(kEye, 0, kTitleColor, 0.f, 0.f), line(kThanks, 1, kTitleColor, 0.f, 0.f)};
+}
+
 std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t width, std::uint32_t height,
                                  bool title) {
     static_cast<void>(width);
@@ -161,10 +188,13 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
 
     const std::uint32_t visible =
         (plan.retroVisible ? kRetroVisible : 0u) | (plan.modernVisible ? kModernVisible : 0u);
-    const std::vector<text::Item> hud =
-        hud_ ? hudItems(frame, size.width, size.height, hudTitle_) : std::vector<text::Item>{};
+    std::vector<text::Item> overlay = pauseCardItems(frame, size.width, size.height);
+    if (hud_) {
+        const std::vector<text::Item> hud = hudItems(frame, size.width, size.height, hudTitle_);
+        overlay.insert(overlay.end(), hud.begin(), hud.end());
+    }
     timers_.begin(cmd, "compositor");
-    compositor_.render(cmd, retro_.image(), modern_.image(), frame, crt_, visible, hud);
+    compositor_.render(cmd, retro_.image(), modern_.image(), frame, crt_, visible, overlay);
     if (hud_)
         cards_.record(cmd, compositor_.output(), frame, crt_);
     timers_.end(cmd);

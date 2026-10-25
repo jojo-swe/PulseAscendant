@@ -1,4 +1,4 @@
-// The Glass scene (GLENZ, GLASS CATHEDRAL and CRYSTAL CITY; step 5 Task 20), with synchronization validation:
+// The Glass scene (GLENZ, GLASS CATHEDRAL and CRYSTAL CITY; glass), with synchronization validation:
 //   - the cards' numbers against the full-detail configuration (photons, crystal towers, panes);
 //   - the glenz: the 2026 star's vertices are the 1993 star's (retro::glenzWorldVertices) scaled into metres,
 //     at every retro frame of the chapter, and its core is the same star scaled 0.82;

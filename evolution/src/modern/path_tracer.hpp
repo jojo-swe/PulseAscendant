@@ -39,7 +39,7 @@ struct TraceSettings {
     std::uint32_t frameSeed = 0;
     bool nee = true;
     bool russianRoulette = true; // from bounce 3
-    // Task 6 of step 5: the luminance limit of a contribution after a rough (non-delta) vertex: the primary
+    // the integrator: the luminance limit of a contribution after a rough (non-delta) vertex: the primary
     // hit's NEE and camera -> delta chain -> light paths are never clamped.
     float clampIndirect = 16.f;
     // Path regularisation: after the first rough vertex every lobe (and the coat) has at least this
@@ -48,16 +48,16 @@ struct TraceSettings {
     // Choose lights by their fixed selectWeight alone, as step 4 did, instead of by their importance at each
     // shading point (power, distance, orientation, gate); only for comparisons.
     bool fixedLightSelection = false;
-    // The subpixel window (Task 4 of step 5, post::subpixelWindow): every sample of the frame is box-filtered
+    // The subpixel window (trace resolution and the temporal upscaler, post::subpixelWindow): every sample of the frame is box-filtered
     // over a window pixelFootprint wide (pixels, per axis, in (0, 1]) centred at the pixel centre plus
     // pixelJitter; it must lie inside the pixel. The default is the whole pixel, step 4's box filter, byte
     // for byte. The guides (depth, normal, motion) stay at the pixel centre.
     std::array<float, 2> pixelJitter{0.f, 0.f};
     std::array<float, 2> pixelFootprint{1.f, 1.f};
     // The frame's chapter-local show time (show::TimelineFrame::localSeconds), FrameUniforms::seconds: what
-    // hit-shader patterns animate with (Tasks 18 and 23) and the export shutter offsets from (Task 9).
+    // hit-shader patterns animate with (the Nebula and the City) and the export shutter offsets from (the export shutter).
     float seconds = 0.f;
-    // The export shutter (Task 9): the offset in seconds of slice k from `seconds`
+    // The export shutter: the offset in seconds of slice k from `seconds`
     // (FrameUniforms::shutterOffset), for the slices of a trace() (the slice frames themselves are the
     // caller's). Shaders that animate with the time use seconds + shutterOffset. Unused slices stay 0.
     std::array<float, kMaxShutterSlices> sliceOffsets{};
@@ -82,7 +82,7 @@ std::uint32_t frameSeedFor(double showSeconds, std::uint32_t framesSinceReset);
 // - motion, RGBA16F: xy = previous pixel centre - current pixel centre from the previous camera; z = 1 if
 //   valid;
 // - volume, RGBA16F: rgb the radiance in-scattered on the primary segment, a its transmittance (the mean over
-//   the frame's samples; Task 11, modern/medium.hpp); (0, 0, 0, 1) without a medium.
+//   the frame's samples; participating media, modern/medium.hpp); (0, 0, 0, 1) without a medium.
 // Every image is left in GENERAL after the trace's last write (Image tracks it).
 struct GBuffer {
     gfx::Image lighting, emission, albedo, normal, depth, motion, volume;
@@ -92,7 +92,7 @@ struct GBuffer {
 // any frame it traces. The largest over the scenes prepared (ModernStage).
 struct TracerCapacity {
     std::uint32_t instances = 0, lights = 0, materials = 0;
-    std::uint32_t treeLights = 0; // the light tree's lights (Task 12; its nodes: 2 treeLights - 1)
+    std::uint32_t treeLights = 0; // the light tree's lights (the light tree; its nodes: 2 treeLights - 1)
 };
 // The capacity a scene needs.
 TracerCapacity tracerCapacity(const SceneCapacity& scene);
@@ -105,27 +105,27 @@ TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b);
 // completes; a buffer written per frame is one of the feature's per-slot buffers. Null binds a one-element
 // dummy of the tracer's own. An image is sampled in GENERAL; trace() records its barrier.
 //
-// Who owns each binding (Task 1b's rule, so that the feature tasks route their data one way):
+// Who owns each binding (the shared bindings' rule, so that the feature tasks route their data one way):
 // - Small per-frame data derived from the SceneFrame alone is packed by trace() into the tracer's own
 //   per-slot buffers (the TraceExtras pointer then stays null, or replaces the packed data in a test; the
 //   environment does so today: trace() packs SceneFrame::environment, a non-null `environment` replaces it):
-//   15 environment (Task 2), 16/17 the light tree (Task 12), 18 MediumUniforms (Task 11), 21 the previous
-//   transforms (Task 9) and 25 lensing (Task 25).
+//   15 environment (scene environments), 16/17 the light tree, 18 MediumUniforms (participating media), 21 the previous
+//   transforms (the export shutter) and 25 lensing (gravitational lensing).
 // - Resources another object builds and owns come through TraceExtras: 19/20 the density and majorant grids
-//   (Task 11's medium volume, baked once in ModernStage), 23 the particle field with its BLAS (ModernStage's
-//   rt::ParticleField, Task 8: `particleSpheres` and `particleBlas` of the slot it recorded this frame), 24
-//   the caustic maps and 27 the receiver table (Task 13's caustic maps object, whose photon pass reads the
+//   (participating media's medium volume, baked once in ModernStage), 23 the particle field with its BLAS (ModernStage's
+//   rt::ParticleField, analytic spheres: `particleSpheres` and `particleBlas` of the slot it recorded this frame), 24
+//   the caustic maps and 27 the receiver table (the caustic maps' object, whose photon pass reads the
 //   same table). 22, the static spheres, are the SceneGpu's own, which trace() binds (a non-null
 //   `staticSpheres` replaces them, a hook).
 // Per-frame feature resources (particle fields, medium volumes, splat accumulators, caustic maps) live once
 // in ModernStage, sized to the largest prepared scene, not per scene.
 struct TraceExtras {
     const gfx::Buffer* environment = nullptr; // 15: replaces the frame's packed environment (a hook)
-    const gfx::Buffer* treeNodes = nullptr;   // 16: LightTreeNode[] (Task 12)
-    const gfx::Buffer* treeLights = nullptr;  // 17: TreeLight[] (Task 12)
+    const gfx::Buffer* treeNodes = nullptr;   // 16: LightTreeNode[] (the light tree)
+    const gfx::Buffer* treeLights = nullptr;  // 17: TreeLight[] (the light tree)
     const gfx::Buffer* medium = nullptr;      // 18: replaces the frame's packed MediumUniforms (a hook)
-    gfx::Image* density = nullptr;            // 19: 3D RGBA16F density + emission (Task 11)
-    gfx::Image* majorant = nullptr;           // 20: 3D R16F majorant per cell (Task 11)
+    gfx::Image* density = nullptr;            // 19: 3D RGBA16F density + emission (participating media)
+    gfx::Image* majorant = nullptr;           // 20: 3D R16F majorant per cell (participating media)
     const gfx::Buffer* previousTransforms = nullptr; // 21: replaces the packed Mat34[] (a hook)
     // The previous frame's instances, while the history continues (empty: none): what trace() packs into
     // binding 21. Instance i of the frame moved from previousInstances[i].transform when both frames have the
@@ -134,18 +134,18 @@ struct TraceExtras {
     // only the camera moves the surface in the motion guide.
     std::span<const SceneInstance> previousInstances;
     const gfx::Buffer* staticSpheres = nullptr;    // 22: replaces the scene's SphereRecord[] (a hook)
-    const gfx::Buffer* particleSpheres = nullptr;  // 23: SphereRecord[], the particle field (Task 8)
-    VkDeviceAddress particleBlas = 0;              // the particle field's BLAS (Task 8; no binding)
-    gfx::Image* causticMaps = nullptr;             // 24: 2D array RGBA16F irradiance (Task 13)
-    const gfx::Buffer* lensing = nullptr;          // 25: LensingUniforms (Task 25)
-    const gfx::Buffer* causticReceivers = nullptr; // 27: CausticReceiver[] (Task 13)
-    // Task 13: recorded after the TLAS build and before the trace dispatches, with the frame's TLAS and the
+    const gfx::Buffer* particleSpheres = nullptr;  // 23: SphereRecord[], the particle field (analytic spheres)
+    VkDeviceAddress particleBlas = 0;              // the particle field's BLAS (analytic spheres; no binding)
+    gfx::Image* causticMaps = nullptr;             // 24: 2D array RGBA16F irradiance (caustic photon maps)
+    const gfx::Buffer* lensing = nullptr;          // 25: LensingUniforms (gravitational lensing)
+    const gfx::Buffer* causticReceivers = nullptr; // 27: CausticReceiver[] (caustic photon maps)
+    // caustic photon maps: recorded after the TLAS build and before the trace dispatches, with the frame's TLAS and the
     // buffers the trace binds (modern::CausticMaps::record shoots the photons there). Required, with
     // causticMaps and causticReceivers, by a frame with caustics.
     std::function<void(VkCommandBuffer, const PhotonScene&)> photons;
 };
 
-// The path tracer every 2026 scene shares (step 5, Task 1): the ray tracing pipeline and its SBT (8 hit
+// The path tracer every 2026 scene shares (the shared path tracer): the ray tracing pipeline and its SBT (8 hit
 // groups: hitGroupFor(MaterialClass, GeometryKind), triangles then analytic spheres; misses: sky, shadow),
 // the TLAS and its scratch, the per-slot uniform, instance, light and material buffers, the dummies of the
 // feature bindings and the G-buffer. A scene's own GPU side is a SceneGpu, which trace() binds. One trace per
@@ -240,11 +240,11 @@ private:
     void createImages();
     // The per-slot instance, light, material and previous transform buffers of a capacity: kMaxShutterSlices
     // regions each, one per time slice (region k at k * the region stride, 256-byte aligned), and the light
-    // tree's nodes and lights (Task 12; the same regions).
+    // tree's nodes and lights (the light tree; the same regions).
     struct FrameBuffers {
         SlotBuffers instanceRecords, lights, materials, previousTransforms, treeNodes, treeLights;
     };
-    // The frame's light tree (Task 12): built from the frame's tree lights when their centres, radii,
+    // The frame's light tree (the light tree): built from the frame's tree lights when their centres, radii,
     // emissions or spheres change (treeKey_ holds the last ones), else refit for their scales alone. The
     // tree is a pure function of the frame either way (the build is deterministic), so a seek never sees
     // another frame's tree.
@@ -268,15 +268,15 @@ private:
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> uniforms_, instanceRecords_, lights_, materials_,
         previousTransforms_;
     // The light tree's nodes and lights (bindings EVO_BINDING_TREE_NODES and EVO_BINDING_TREE_LIGHTS), per
-    // slot, and the tree they were last packed from (Task 12).
+    // slot, and the tree they were last packed from (the light tree).
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> treeNodes_, treeLights_;
     std::vector<rt::TreeLight> treeKey_;
     rt::LightTree tree_;
     // The frame's environment (SceneFrame::environment packed, binding EVO_BINDING_ENVIRONMENT), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> environments_;
-    // The frame's media (SceneFrame::medium packed, binding EVO_BINDING_MEDIUM; Task 11), per slot.
+    // The frame's media (SceneFrame::medium packed, binding EVO_BINDING_MEDIUM; participating media), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> media_;
-    // The frame's lens (SceneFrame::lensing packed, binding EVO_BINDING_LENSING; Task 25), per slot.
+    // The frame's lens (SceneFrame::lensing packed, binding EVO_BINDING_LENSING; gravitational lensing), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> lenses_;
     GBuffer gbuffer_;
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.

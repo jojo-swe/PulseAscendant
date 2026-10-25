@@ -28,7 +28,7 @@ float valueNoise3(vec3 p, uint seed) {
                mix(mix(n001, n101, s.x), mix(n011, n111, s.x), s.y), s.z);
 }
 
-// Polished concrete in world space (Task 14 of step 5): cloudy tones between baseColor and baseColor2 at
+// Polished concrete in world space (the Studio light rig): cloudy tones between baseColor and baseColor2 at
 // three scales, a fine aggregate, roughness varying with the polish and, when patternScale > 0, saw-cut
 // joints every patternScale in the surface's plane (the plane across ng's largest axis).
 vec3 concrete(Material m, vec3 p, vec3 ng, inout float roughness) {
@@ -51,7 +51,7 @@ vec3 concrete(Material m, vec3 p, vec3 ng, inout float roughness) {
     return color;
 }
 
-// --- The Ship's patterns (step 5, Task 16) -----------------------------------------------------------------
+// --- The Ship's patterns (the Ship) -----------------------------------------------------------------
 
 // The width a ray's footprint covers on the surface here (metres): procedural lines thinner than that are
 // spread over it with their energy kept (filtered), so they neither alias nor sparkle. After a rough vertex
@@ -299,7 +299,7 @@ void main() {
     } else if (m.pattern == kPatternConcrete) {
         baseColor = concrete(m, h.position, h.geometricNormal, roughness);
     } else if (m.pattern >= kPatternCityPunched && m.pattern <= kPatternCityRound) {
-        cityFacade(h, m.pattern, baseColor, roughness, emission); // Task 23
+        cityFacade(h, m.pattern, baseColor, roughness, emission); // the City
     } else if (m.pattern == kPatternCityStreet) {
         cityStreet(h, baseColor, roughness);
     } else if (m.pattern == kPatternHull) {

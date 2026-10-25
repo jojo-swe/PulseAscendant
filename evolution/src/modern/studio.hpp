@@ -85,7 +85,7 @@ std::vector<double> studioGlassTimes();
 // room reads as a dark room lit by the CRT (and the lamp, where the rig has it on) and the screen's brightest
 // colours stay saturated under PBR Neutral where they matter: the screen's display gain (its emissionScale
 // times the beam profile's mean 0.875 times 2^EV) stays at about 2.4 in the colourful chapters (FINALE,
-// PORTAL; the decision on Task 5: a pastel CRT is fixed by the screen's level and the exposure,
+// PORTAL; the decision on the Studio exposure: a pastel CRT is fixed by the screen's level and the exposure,
 // not by the tonemap), while the grey DOS text of the others may glow brighter.
 float studioExposureEV(show::Effect effect);
 
@@ -94,7 +94,7 @@ float studioExposureEV(show::Effect effect);
 // room a dim cool fill through the window. Never sampled by NEE (select 0): the window's portal samples it.
 EnvironmentDesc studioEnvironment();
 
-// A chapter's light rig (Task 14 of step 5): the lamp's level (0 off, 1 full) and the screen's
+// A chapter's light rig (the Studio light rig): the lamp's level (0 off, 1 full) and the screen's
 // emissionScale. The frame's material table carries them (SceneFrame::materials), and the lights' emissions
 // follow from it.
 //   FLYBY           the lamp off, the screen 2.4: the room is revealed lit by phosphor and moon
@@ -145,7 +145,7 @@ public:
     static constexpr float kScreenWeight = 1.f, kLampWeight = 1.f, kWindowWeight = 1.f, kMoonWeight = 1.f;
     // Towards the moon (unit length): high (44 degrees) behind the window and a little to its left, so that
     // the moonbeam falls past the desk's left end onto the floor in front of it, where the wide shots see the
-    // window's cross in it (Task 14). The Studio's sky (studioEnvironment) centres its glow on it, and the
+    // window's cross in it (the Studio light rig). The Studio's sky (studioEnvironment) centres its glow on it, and the
     // moon's emitter stands 4 m out from the window along it.
     static constexpr Vec3 kMoonDirection{-0.2104f, 0.6913f, -0.6913f};
     // The lamp's emitter: a warm 8 cm square diffuser recessed 3.5 cm into the shade, colour times intensity

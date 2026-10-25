@@ -13,6 +13,7 @@
 
 #include "particles_common.glsl"
 #include "logo_targets.glsl"
+#include "greeting_targets.glsl"
 
 const float kPi = 3.14159265;
 const float kTau = 6.28318531;
@@ -45,6 +46,8 @@ vec3 targetAndRow(uint id, float cell, out uint row) {
 // vortex: a tilted whirl behind the logo, which in motion reads as part of the swirl. Another formation is
 // another table of targets (the same voxel scheme as the logo's), selected here by its number.
 vec3 waypoint(uint formation, uint id, float cell) {
+    if (formation == 1u)
+        return greetingTarget(id, cell);
     float width = 71.0 * cell;
     float a = kTau * golden(id) + 2.5 * hashUnit(id ^ 0x77AAu);
     float r = width * (0.12 + 0.42 * sqrt(hashUnit(id ^ 0x1F3Du)));

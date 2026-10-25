@@ -1,7 +1,7 @@
 #ifndef EVO_RT_MEDIUM_PATH_GLSL
 #define EVO_RT_MEDIUM_PATH_GLSL
 
-// The participating-media integrator (step 5, Task 11), built on medium.glsl. pathtrace.rgen includes it after
+// The participating-media integrator (participating media), built on medium.glsl. pathtrace.rgen includes it after
 // its own helpers (traceScene, shadowTransmittance, sampleLight, addContribution, bounceRand, ...) and calls it from
 // its hooks marked "[medium]", all behind mediumActive():
 // - mediumStep() after every trace of a path: at bounce 0 mediumPrimary(), the primary segment's
@@ -110,7 +110,7 @@ vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWor
         }
         RectLight l = lights[index];
         if (l.kind == kLightTree) {
-            // The light tree (Task 12), as sampleTreeLight: one sphere light by the walk (treeWord), one
+            // The light tree, as sampleTreeLight: one sphere light by the walk (treeWord), one
             // direction in its cone, the shadow ray to its near surface lifted off it.
             uint k;
             float treePdf;

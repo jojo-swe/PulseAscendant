@@ -1,6 +1,6 @@
 #pragma once
 
-// The particle field (step 5, Task 8): up to millions of analytic spheres made every frame by a stateless
+// The particle field (analytic spheres): up to millions of analytic spheres made every frame by a stateless
 // compute shader and traced through a per-frame AABB BLAS. A particle is a pure function of (id, seconds,
 // params): the scene's shaders/modern/particles_<scene>.comp defines
 //     SphereRecord particle(uint id, float seconds, vec4 params[4]);
@@ -59,7 +59,7 @@ public:
     // is `material`), a barrier (compute writes -> the AS build's input reads, the ray tracing and compute
     // shaders' storage reads), the BLAS build (PREFER_FAST_BUILD, a full rebuild: no state from another
     // frame), and a barrier (build writes -> TLAS builds and traces). It may run more than once in a frame
-    // (shutter slices, Task 9): each later run waits for the reads of the one before. Throws, before
+    // (shutter slices, the export shutter): each later run waits for the reads of the one before. Throws, before
     // recording anything, std::length_error for count > capacity and std::logic_error outside
     // ring.begin()/submit().
     void record(VkCommandBuffer cmd, std::uint32_t count, double seconds, double previousSeconds,

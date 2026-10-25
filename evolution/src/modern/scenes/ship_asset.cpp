@@ -346,7 +346,7 @@ rt::Material metal(Vec3 color, float roughness) {
     return m;
 }
 
-// Seen, never sampled as a light (Task 6's camera-only emission).
+// Seen, never sampled as a light (the integrator's camera-only emission).
 rt::Material emitter(Vec3 color, float scale) {
     rt::Material m = plastic({0.02f, 0.02f, 0.02f}, 0.4f);
     m.emission[0] = color.x, m.emission[1] = color.y, m.emission[2] = color.z;

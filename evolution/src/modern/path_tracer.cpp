@@ -85,7 +85,7 @@ gfx::RtShaders shaders() {
     s.closestHits = {dir / "rt_pbr.rchit.spv", dir / "rt_glass.rchit.spv", dir / "rt_emissive.rchit.spv",
                      dir / "rt_checker.rchit.spv"}; // in MaterialClass order
     // Hit groups kHitGroupsPerKind.. (hitGroupFor(class, Spheres)): the same closest-hits built for analytic
-    // spheres (-DGEOMETRY_SPHERES), behind the sphere intersection shader (Task 8).
+    // spheres (-DGEOMETRY_SPHERES), behind the sphere intersection shader (analytic spheres).
     const std::filesystem::path intersection = dir / "rt_sphere.rint.spv";
     s.proceduralHits = {{dir / "rt_pbr_sphere.rchit.spv", intersection},
                         {dir / "rt_glass_sphere.rchit.spv", intersection},
@@ -411,7 +411,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             throw std::invalid_argument(
                 "PathTracer::trace(): the frame places its particle field, but no particle "
                 "spheres and BLAS come with it (TraceExtras)");
-        // Task 13: caustics need the maps' image, receiver table and photon pass (the maps check the frame in
+        // caustic photon maps: caustics need the maps' image, receiver table and photon pass (the maps check the frame in
         // detail; the receivers' materials are checked here too, since the closest-hits read their table).
         if (frame.caustics &&
             (extras.causticMaps == nullptr || extras.causticReceivers == nullptr || !extras.photons))
@@ -419,7 +419,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                 "PathTracer::trace(): the frame has caustics, but no caustic maps, receiver "
                 "table and photon pass come with it (TraceExtras)");
         checkCausticFrame(scene.source(), frame, ~0u);
-        // Task 11: a grid medium samples the medium volume's images, which must hold it.
+        // participating media: a grid medium samples the medium volume's images, which must hold it.
         if (frame.medium && frame.medium->grid) {
             if (extras.density == nullptr || extras.majorant == nullptr)
                 throw std::invalid_argument(
@@ -530,11 +530,11 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         for (const rt::RectLight& light : frame.lights)
             u.lightWeightSum += std::max(light.selectWeight, 0.f);
         // Step 5's fields, each set by the task that reads it: no tree lights, medium or lensing; the caustic
-        // receivers (Task 13).
+        // receivers (caustic photon maps).
         u.environmentSelect = frame.environment.select;
-        u.treeLightCount = static_cast<std::uint32_t>(frame.treeLights.size()); // Task 12
-        u.mediumFlags = frame.medium ? mediumFlags(*frame.medium) : 0u;         // Task 11
-        // Task 25: the lens bends main rays; when its disc is the frame's grid medium, the lens marches that
+        u.treeLightCount = static_cast<std::uint32_t>(frame.treeLights.size()); // the light tree
+        u.mediumFlags = frame.medium ? mediumFlags(*frame.medium) : 0u;         // participating media
+        // gravitational lensing: the lens bends main rays; when its disc is the frame's grid medium, the lens marches that
         // grid along the bent segments itself and the medium integrator leaves it alone.
         u.lensing = frame.lensing ? 1u : 0u;
         if (frame.lensing && frame.lensing->disc)
@@ -558,7 +558,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         if (!frame.materials.empty())
             writeRegion(materials_[slot], materialStride, k, frame.materials.data(),
                         frame.materials.size() * sizeof(rt::Material));
-        // The light tree (Task 12; checkSceneFrame checked its lights, so neither the build nor the refit
+        // The light tree (the light tree; checkSceneFrame checked its lights, so neither the build nor the refit
         // throws): this slice's, since a light's scale may change within the shutter.
         if (!frame.treeLights.empty()) {
             const rt::LightTree& tree = lightTreeFor(frame);
@@ -695,7 +695,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             if (singleSlice && timers_)
                 timers_->begin(cmd, "tlas");
             tlas_->build(cmd, scene.blases(), sliceInstances[k]);
-            // Task 13: the photon pass, once, against the first slice's TLAS and tables (region 0 of this
+            // caustic photon maps: the photon pass, once, against the first slice's TLAS and tables (region 0 of this
             // slot's per-slice buffers), before any trace dispatch: the maps are a function of the frame's
             // time, shared by every slice.
             if (d == 0 && slices[0].caustics) {
@@ -721,7 +721,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             pipeline_.bind(cmd, ring_, writesFor(k));
             boundSlice = k;
         }
-        // The volume layer keeps a running mean too while the frame has a medium (Task 11).
+        // The volume layer keeps a running mean too while the frame has a medium (participating media).
         for (gfx::Image* image : {&gbuffer_.lighting, &gbuffer_.emission, &gbuffer_.albedo, &gbuffer_.volume})
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               kReadWrite);

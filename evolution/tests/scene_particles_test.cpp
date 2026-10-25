@@ -1,4 +1,4 @@
-// The Particles scene (step 5, Task 17): DOTS and PARTICLE OCEAN on lavapipe, with the validation layer on;
+// The Particles scene: DOTS and PARTICLE OCEAN on lavapipe, with the validation layer on;
 // fails on any message.
 //
 // (k) the cards: both chapters' 2026 card names 2,097,152, which is the full-detail particle count (the

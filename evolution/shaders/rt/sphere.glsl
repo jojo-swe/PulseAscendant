@@ -1,7 +1,7 @@
 #ifndef EVO_RT_SPHERE_GLSL
 #define EVO_RT_SPHERE_GLSL
 
-// The analytic sphere's math (step 5, Task 8): the intersection shader (sphere.rint) and the sphere variants
+// The analytic sphere's math (analytic spheres): the intersection shader (sphere.rint) and the sphere variants
 // of the closest-hits (hit.glsl under GEOMETRY_SPHERES) share it, and spheres_test runs it in a compute probe
 // against the CPU reference (rt::intersectSphere, rt::sphereUv in src/rt/spheres.hpp). Plain GLSL: no ray
 // tracing built-ins.

@@ -450,7 +450,7 @@ int runRenderStream(const Options& options) {
     render::RenderSettings settings{width, height, options.crt, options.hud};
     settings.mode = render::RenderMode::Export;
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
-    settings.shutterSeconds = 0.5 / options.fps; // a 180 degree shutter (Task 9); the window has none
+    settings.shutterSeconds = 0.5 / options.fps; // a 180 degree shutter (the export shutter); the window has none
     settings.detail = modern::SceneDetail{options.detail};
     render::Renderer renderer(ctx, ring, settings);
     // The GPU side of every path-traced scene the range shows (BLASes, and on the first the pipeline and the

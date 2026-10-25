@@ -1,6 +1,6 @@
 #version 460
 
-// The grid medium's majorant (step 5, Task 11; modern::MediumVolume records it after the bake): for every
+// The grid medium's majorant (participating media; modern::MediumVolume records it after the bake): for every
 // kMajorantCell^3 cell of the baked voxels, the largest density over the cell and a one-voxel apron (the
 // voxels a trilinear lookup inside the cell can reach), rounded up to half precision, so that it bounds every
 // density the tracer samples in the cell. Two cells per invocation, packed as halves into one word of the

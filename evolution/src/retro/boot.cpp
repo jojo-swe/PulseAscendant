@@ -100,10 +100,8 @@ std::string_view thenCard(const show::TimelineFrame& frame) {
     return show::cues[static_cast<std::size_t>(frame.chapter)].thenCard;
 }
 
-// The card's first frame and its first frame gone.
-struct CardSpan {
-    std::uint32_t in, out;
-};
+} // namespace
+
 CardSpan cardSpan(const show::TimelineFrame& frame, std::uint32_t rate) {
     const show::TransitionMarks marks = show::transitionMarks(frame);
     const double accent = marks.accent - marks.start;
@@ -113,8 +111,6 @@ CardSpan cardSpan(const show::TimelineFrame& frame, std::uint32_t rate) {
     };
     return {at(marks.bar), at(out)};
 }
-
-} // namespace
 
 double chapterBeat(const show::TimelineFrame& frame, int beat) {
     const ChapterGrid g = chapterGrid(frame);

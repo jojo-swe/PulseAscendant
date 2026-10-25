@@ -20,7 +20,7 @@ const uint kPatternTesserae = 4u;       // Checker class: the 1993 rotozoom text
 const uint kPatternTesseraeSphere = 5u; // the same over a sphere about its instance's origin
 const uint kPatternHull = 6u;           // Pbr class: the ship's panelled skin
 const uint kPatternPlanet = 7u;         // Pbr class: an ocean planet under clouds
-const uint kPatternCityPunched = 16u; // the City's patterns (city_patterns.glsl, Task 23)
+const uint kPatternCityPunched = 16u; // the City's patterns (city_patterns.glsl, the City)
 const uint kPatternCityCurtain = 17u;
 const uint kPatternCityBands = 18u;
 const uint kPatternCityRound = 19u;
@@ -222,7 +222,7 @@ struct LightTreeNode { // 32 bytes
     uint child;
 };
 
-struct LensingUniforms { // 32 bytes (Task 25; rt::LensingUniforms documents the fields)
+struct LensingUniforms { // 32 bytes (gravitational lensing; rt::LensingUniforms documents the fields)
     vec3 center;
     float massRadius;
     float influenceRadius;

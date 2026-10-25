@@ -1,6 +1,6 @@
 #pragma once
 
-// The Cosmos scene (step 5, Task 24): GALAXY and ASCENDANT, Act III's sky.
+// The Cosmos scene: GALAXY and ASCENDANT, Act III's sky.
 //
 // GALAXY: a spiral galaxy of kGalaxyStars splat stars (shaders/modern/cosmos_splats.comp; the model is
 // shaders/modern/galaxy.glsl: a bulge of old stars with red giants among them, an exponential disc, and two

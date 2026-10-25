@@ -1,6 +1,6 @@
 #version 460
 
-// Emissive splats, the resolve (step 5, Task 10): adds each pixel's fixed-point sums into the emission guide,
+// Emissive splats, the resolve (emissive splats): adds each pixel's fixed-point sums into the emission guide,
 // sum / fixedPointScale * (W * H) / (1920 * 1080) per channel (the sums are in reference units: radiance at
 // 1920x1080), at most 65504 (the half-float maximum); a channel whose overflow bit is set (its exact sum
 // reached 2^32) resolves to 65504. The emission bypasses the denoiser's history and filter.

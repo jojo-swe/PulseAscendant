@@ -5,7 +5,7 @@
 // glass only bends the coat's shading normal, emissive.rchit): the retro image (linear light through its sRGB
 // view) bulged by 2 % like crt.comp's barrel, but not renormalised, so the picture's corners pull in and the
 // screen is black outside the warped picture; a 10 % vignette towards the corners. Up close it shows how a
-// CRT draws (Task 14 of step 5):
+// CRT draws (the Studio light rig):
 // - the beam profile: each of the 200 source lines is one pass of the beam, brightest along its centre with
 //   a dark gap to the next, in its own row's colour. The profile is the same for every colour (so the screen
 //   scales every picture alike), its mean over a line is step 4's 87.5 % (its alternate rows 25 % darker),

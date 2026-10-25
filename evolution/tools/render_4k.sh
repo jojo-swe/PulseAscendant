@@ -7,6 +7,7 @@
 #   tools/render_4k.sh
 #   tools/render_4k.sh --codec hevc_nvenc      (any render_video.py option)
 #   tools/render_4k.sh --bench                 (time a frame per chapter and estimate the render first)
+#   tools/render_4k.sh --coda                  (after the show, black, then the secret part)
 set -eu
 cd "$(dirname "$0")/.."
 

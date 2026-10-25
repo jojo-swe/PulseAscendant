@@ -1,6 +1,6 @@
 #pragma once
 
-// The GPU side of one prepared scene (step 5, Task 1): what the shared path tracer binds when it traces that
+// The GPU side of one prepared scene (the shared path tracer): what the shared path tracer binds when it traces that
 // scene. Small (geometry, BLASes, materials), so the window prepares every scene up front and a chapter
 // start never hitches; the render targets, the pipeline and the TLAS are the one PathTracer's.
 
@@ -29,14 +29,14 @@ namespace evo::modern {
 // capacity.particles (std::length_error), without a particle shader or with a material that does not exist
 // (std::out_of_range), a light of no LightKind, whose area is not |edgeU x edgeV| or whose gate is no Portal
 // light, a light that disagrees with the instance that is its surface (see SceneInstance), and a light tree
-// (Task 12) whose tree lights are not its instance's spheres (see TreeLightFrame; more than
-// capacity.treeLights: std::length_error), and an invalid lens or a lens disc without a grid medium (Task
-// 25: std::invalid_argument). CPU only: PathTracer::trace() runs it before recording anything,
+// (the light tree) whose tree lights are not its instance's spheres (see TreeLightFrame; more than
+// capacity.treeLights: std::length_error), and an invalid lens or a lens disc without a grid medium
+// (gravitational lensing: std::invalid_argument). CPU only: PathTracer::trace() runs it before recording anything,
 // and every scene task's sweep (checkSceneSweep) runs it over every frame of its chapters.
 void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame);
 
 // One scene's geometry store (every mesh in one vertex and one index buffer), its compacted BLASes, its
-// static spheres (their buffer and one AABB BLAS per sphere range, Task 8) and its static material table,
+// static spheres (their buffer and one AABB BLAS per sphere range, analytic spheres) and its static material table,
 // built at setup (immediate submits that wait).
 //
 // Lifetime: `scene` (the ModernScene's static side) must outlive this object, and this object must outlive

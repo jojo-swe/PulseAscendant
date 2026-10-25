@@ -1,7 +1,7 @@
 #pragma once
 
-// Spheres (step 5, Task 22): the 2026 side of RAYTRACE, SPHERE STORM and RAYTRACE INFINITY, all analytic
-// spheres (Task 8), one scene object for the three chapters.
+// Spheres (the Spheres scene): the 2026 side of RAYTRACE, SPHERE STORM and RAYTRACE INFINITY, all analytic
+// spheres (analytic spheres), one scene object for the three chapters.
 //
 // - RAYTRACE: the 1993 "precalculated" raytrace (retro/raytrace.*) path traced: its six spheres at the same
 //   places at the same time (retro::raytraceSpheres), the central chrome one, four chrome ones and the
@@ -14,7 +14,7 @@
 //   the light tree's lights.
 // - RAYTRACE INFINITY: a lattice of chrome spheres without end, gold ones and glowing lanterns among them:
 //   the kInfinitySpheres lattice points round the falling camera, recycled as it falls (the same particle
-//   shader, mode 1). Until Task 11's fog lands, the spheres shrink away into the sky with distance instead.
+//   shader, mode 1). Until participating media's fog lands, the spheres shrink away into the sky with distance instead.
 //
 // World units are 1993's (the board's squares are 1 unit), +y up.
 

@@ -1,6 +1,7 @@
 #include "modern/scenes/cosmos.hpp"
 
 #include "modern/mesh_builder.hpp"
+#include "modern/scenes/greeting_targets.hpp"
 #include "modern/scenes/logo_targets.hpp"
 #include "modern/scenes/shots.hpp"
 
@@ -298,7 +299,7 @@ ParticleFrame ascendantParticleFrame(const show::TimelineFrame& frame, std::uint
                 t.liftSpread,
                 t.waypoint,
                 t.hold,
-                0.f, // the waypoint formation: the vortex
+                1.f, // the waypoint formation: "HI. YES, YOU."
                 t.release,
                 t.firstRow,
                 t.bar,
@@ -316,7 +317,9 @@ Vec3 ascendantTarget(std::uint32_t id, float cell) {
     return logoTarget(id, cell);
 }
 
-Vec3 ascendantWaypoint(std::uint32_t /*formation*/, std::uint32_t id, float cell) {
+Vec3 ascendantWaypoint(std::uint32_t formation, std::uint32_t id, float cell) {
+    if (formation == 1u)
+        return greetingTarget(id, cell);
     const float width = 71.f * cell;
     const float a = kTau * golden(id) + 2.5f * hashUnit(id ^ 0x77AAu);
     const float r = width * (0.12f + 0.42f * std::sqrt(hashUnit(id ^ 0x1F3Du)));

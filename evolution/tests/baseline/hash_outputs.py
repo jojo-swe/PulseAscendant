@@ -8,24 +8,24 @@ luminance of each Studio capture (Rec. 709 weights on the 8-bit sRGB bytes / 255
 tests/scene_fixture.cpp's checkChapterPictures).
 
 The committed SUMS and LUMINANCE files next to this script were made on lavapipe (Mesa llvmpipe). History:
-first at 4f300f6 (main after Tasks 1, 5 and 7), which Task 1b's own commits kept byte for byte; then
-regenerated after merging main d91fb09 (Tasks 2, 3 and 4), whose environments and light selection changed
+first at 4f300f6 (main after the early baseline), which the shared-bindings commits kept byte for byte; then
+regenerated after merging main d91fb09 (scene environments, light selection and the temporal upscaler), whose environments and light selection changed
 seven outputs (the lit Studio captures and streams; the merged build equals d91fb09's bytes exactly); then
 regenerated after the NEE shadow-ray fix (150714d), which changed seven outputs again: studio_night_40,
 finale_50, studio_night_acc, return_30 and the streams stream_studio_cut, stream_finale, stream_studio_ascent.
-Then regenerated after merging step 5 Task 14 (Studio polish, a422931): the Studio's light rig, cameras and
+Then regenerated after merging the Studio light rig (Studio polish, a422931): the Studio's light rig, cameras and
 concrete changed seven outputs again (studio_night_40, finale_50, studio_night_acc, return_30 and the streams
 stream_studio_cut, stream_finale, stream_studio_ascent); reboot_60, portal_50, reboot_10 and every non-Studio
 output stayed byte for byte.
-Then, merging step 5 Task 9, its export shutter changed one more: studio_night_acc (spp 5 is two dispatches, so two time slices of the
+Then, merging the export shutter changed one more: studio_night_acc (spp 5 is two dispatches, so two time slices of the
 180 degree shutter at the default 60 fps; mean luminance +0.13 %). Every capture at spp 4 or fewer and every
 stream (spp 1-2) has a single slice and stayed byte for byte the same.
-Then regenerated after merging step 5 Task 6 (the integrator v2: path regularisation, the clamp after a rough
+Then regenerated after merging the integrator (path regularisation, the clamp after a rough
 vertex, the Studio's camera-only LEDs), which changed the same seven Studio outputs (mean luminance within
-+-0.1 %); the caustic photon maps (Task 13) and the light tree (Task 12) changed nothing, and no non-Studio
++-0.1 %); the caustic photon maps and the light tree changed nothing, and no non-Studio
 output moved.
 Then regenerated after merging the Particles and Spheres scenes: only stream_dots and raytrace_2026 changed.
-Then regenerated for the City scene (step 5 Task 23): ASCENT now renders the city, so stream_studio_ascent
+Then regenerated for the City scene: ASCENT now renders the city, so stream_studio_ascent
 changed; every other output, the Studio's included, stayed byte for byte.
 Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
 Then galaxy_20 changed when GALAXY moved from the placeholder to the Cosmos scene; nothing else moved.
@@ -37,6 +37,7 @@ prompt) boot_50, finale_50, portal_50, the REBOOT and RETURN captures and two st
 stream_finale; the Studio's new cameras every Studio capture and stream, and flyby_2026, now the Studio. The
 Studio's mean display luminance rose by up to 714 % (reboot_60, now REBOOT's close-up on the screen) and fell by
 up to 81 % (portal_50, the CRT nearly dark once the grid has switched off).
+Then regenerated after the city chapter polish and the lit wormhole tunnel: stream_studio_ascent renders the city, and studio_night_40 moved with the shallower brushed-metal grooves (mean luminance +0.01 %).
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How later tasks use it (run from evolution/ after building the linux preset):
@@ -44,11 +45,11 @@ How later tasks use it (run from evolution/ after building the linux preset):
     python3 tests/baseline/hash_outputs.py build/linux/bin/Evolution build/linux/build-out/baseline \\
         --check tests/baseline/SUMS --luminance tests/baseline/LUMINANCE
 
-- A task whose output must stay byte-exact (Task 11 (j) "a scene without a medium", Task 13 (e) "a scene
-  without receivers", and every pure ABI/refactor change) passes --check: every sum must match.
-- A task that changes the picture on purpose (Task 2's environments, Task 6's integrator, Task 14's Studio
-  polish, ...) checks the luminance instead: --luminance prints each Studio capture's change against the
-  committed value (Task 2 (e): within 5 %), and the task commits a new SUMS/LUMINANCE in the same commit,
+- A task whose output must stay byte-exact (a scene without a medium, a scene
+  without receivers, and every pure ABI/refactor change) passes --check: every sum must match.
+- A task that changes the picture on purpose (scene environments, the integrator, the Studio
+  light rig, ...) checks the luminance instead: --luminance prints each Studio capture's change against the
+  committed value (within 5 %), and the task commits a new SUMS/LUMINANCE in the same commit,
   saying so in its commit message, so the next change compares against the new reference.
 
 Usage: hash_outputs.py <Evolution> <outdir> [--check SUMS] [--luminance LUMINANCE] [--write]
@@ -66,8 +67,8 @@ import zlib
 
 # name, show seconds, spp, width, height, EVO_FORCE_ERA (None: as the show has it), Studio?
 CAPTURES = [
-    ("studio_night_40", 202.68, 2, 160, 90, None, True),  # Task 1 Step 0
-    ("reboot_60", 424.14576, 2, 160, 90, None, True),  # Task 1 Step 0
+    ("studio_night_40", 202.68, 2, 160, 90, None, True),  # the baseline captures
+    ("reboot_60", 424.14576, 2, 160, 90, None, True),  # the baseline captures
     ("finale_50", 176.4, 2, 160, 90, None, True),
     ("portal_50", 188.26, 2, 160, 90, None, True),
     ("studio_night_acc", 212.0, 5, 160, 90, None, True),  # after the accent cut, two dispatches

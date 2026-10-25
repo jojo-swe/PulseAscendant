@@ -1,6 +1,6 @@
 #pragma once
 
-// The City (step 5, Task 23): VECTOR CITY, ASCENT, CITY NIGHT and METROPOLIS. One night city on the 1993
+// The City: VECTOR CITY, ASCENT, CITY NIGHT and METROPOLIS. One night city on the 1993
 // city's grid (retro/city_plan.hpp: streets kCityStreet wide every kCityCell, the lots and buildings of
 // cityLot), so a wipe between the eras shows the same streets, grown into a city of about 2 by 3 km with a
 // downtown of towers up to 330 m:
@@ -12,7 +12,7 @@
 // - Every street is wet asphalt: a water film over a darker base, with puddles and ruts filling first, lane
 //   markings, zebra crossings and manholes. The streets reflect the lights the way wet streets do.
 // - Every lot has eight street lamps on its kerbs (and the elevated avenue its own), and every tower over
-//   kBeaconHeight a red aviation beacon on its roof: tens of thousands of emissive spheres, all of them lights of the light tree (Task 12). Their
+//   kBeaconHeight a red aviation beacon on its roof: tens of thousands of emissive spheres, all of them lights of the light tree. Their
 //   positions never change, so a frame only refits the tree for their scales (lamps switching on, beacons
 //   blinking): the picture has every one of them as a light, path traced, nothing baked.
 // - Signs are rect lights (lightboxes and blades, lettered for the camera) along the two streets the cameras

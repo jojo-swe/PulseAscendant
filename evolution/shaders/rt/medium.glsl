@@ -1,7 +1,7 @@
 #ifndef EVO_RT_MEDIUM_GLSL
 #define EVO_RT_MEDIUM_GLSL
 
-// Participating media between surface hits (step 5, Task 11): height fog and a baked density grid, as
+// Participating media between surface hits (participating media): height fog and a baked density grid, as
 // src/modern/medium.hpp describes. This file holds what the integrator is built from: the frame's media
 // (MediumUniforms `mediumData`, binding EVO_BINDING_MEDIUM; FrameUniforms.mediumFlags), their own random
 // numbers, the fog's closed forms, the grid's DDA over its majorant cells (EVO_BINDING_MAJORANT) and its density

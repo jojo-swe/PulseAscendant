@@ -1,4 +1,4 @@
-// The trace resolution (Task 4 of step 5): the 2026 side traces at max(16, round(output * traceScale)) per
+// The trace resolution (trace resolution and the temporal upscaler): the 2026 side traces at max(16, round(output * traceScale)) per
 // axis and the temporal upscaler brings it to the output size. Pinned here, at 160x90 with the validation
 // layer on (fails on any message):
 //   - the trace size;

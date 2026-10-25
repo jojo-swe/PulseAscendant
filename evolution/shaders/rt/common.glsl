@@ -53,7 +53,7 @@ layout(set = 0, binding = EVO_BINDING_TREE_LIGHTS, scalar) readonly buffer TreeL
 };
 layout(set = 0, binding = EVO_BINDING_MEDIUM, scalar) readonly buffer MediumBlock { MediumUniforms mediumData; };
 layout(set = 0, binding = EVO_BINDING_DENSITY) uniform sampler3D mediumDensity;
-// The majorant is a per-cell maximum: Task 11 reads it with texelFetch (the bound trilinear sampler is then
+// The majorant is a per-cell maximum: participating media reads it with texelFetch (the bound trilinear sampler is then
 // ignored), since interpolating maxima underestimates them and biases delta tracking.
 layout(set = 0, binding = EVO_BINDING_MAJORANT) uniform sampler3D mediumMajorant;
 layout(set = 0, binding = EVO_BINDING_PREVIOUS_TRANSFORMS, scalar) readonly buffer PreviousTransformBlock {
@@ -73,7 +73,7 @@ layout(set = 0, binding = EVO_BINDING_LENSING, scalar) readonly buffer LensingBl
 // ((0, 0, 0, 1) without a medium).
 layout(set = 0, binding = EVO_BINDING_VOLUME, rgba16f) uniform image2D volumeImage;
 layout(set = 0, binding = EVO_BINDING_CAUSTIC_RECEIVERS, scalar) readonly buffer CausticReceiverBlock {
-    CausticReceiver receiverTable[]; // Material.receiver indexes it (Task 13)
+    CausticReceiver receiverTable[]; // Material.receiver indexes it (caustic photon maps)
 };
 
 const uint kMissIndexSky = 0u;
@@ -83,16 +83,16 @@ const uint kMissIndexShadow = 1u;
 // scattered off a rough surface and textures use kDiffuseTextureLod, as NEE does). Out, on a hit: the
 // surface the closest-hit evaluated, at the hit point; on a miss: t = -1 and emission = the sky's radiance.
 // Every closest-hit fills every field through writeSurface() (hit.glsl). The fields from materialFlags on are
-// step 5's (Task 1b froze them; a task never adds its own): written by every closest-hit now, read by the
+// step 5's (the shared bindings froze them; a task never adds its own): written by every closest-hit now, read by the
 // task that owns each meaning:
-//   materialFlags  Material.flags: camera-only emission (Task 6), caustic receiver (Task 13), thin-walled
-//   abbe           Material.abbe: dispersion (Task 6)
-//   medium         Material.medium: the medium inside the surface, kNoMedium for none (Task 11)
+//   materialFlags  Material.flags: camera-only emission (the integrator), caustic receiver (caustic photon maps), thin-walled
+//   abbe           Material.abbe: dispersion (the integrator)
+//   medium         Material.medium: the medium inside the surface, kNoMedium for none (participating media)
 //   primitive      the triangle (gl_PrimitiveID), or for a sphere instance the sphere's index in its buffer
-//                  (static spheres or particle field): its first sphere + gl_PrimitiveID (Task 8; Task 12's
+//                  (static spheres or particle field): its first sphere + gl_PrimitiveID (analytic spheres; the light tree's
 //                  tree light index is primitive - firstSphere)
-//   prevPosition   the hit point under the instance's previous transform (Task 9; = position until then; a
-//                  sphere's: the same point of it around its prevCenter, Task 8)
+//   prevPosition   the hit point under the instance's previous transform (the export shutter; = position until then; a
+//                  sphere's: the same point of it around its prevCenter, analytic spheres)
 //   absorption     a dielectric's absorption coefficient per unit length (Material.baseColor2 on a glass
 //                  that is not thin-walled, times a sphere's colour; 0 for every other surface): the raygen
 //                  attenuates a segment that ends on the inside of a glass by exp(-absorption * t)

@@ -1,4 +1,4 @@
-// The temporal upscaler (Task 4 of step 5) on synthetic inputs uploaded from the CPU, 64x36 -> 128x72:
+// The temporal upscaler (trace resolution and the temporal upscaler) on synthetic inputs uploaded from the CPU, 64x36 -> 128x72:
 //   (a) at equal sizes the output equals the input byte for byte (still holds at scale 1);
 //   (b) after a reset the output equals the pure spatial upsample (temporal off) byte for byte, whatever came
 //       before, and that is the clamped Catmull-Rom upsample a CPU reference computes;

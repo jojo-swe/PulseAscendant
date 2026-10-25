@@ -1,4 +1,4 @@
-// One path tracer and one denoiser shared by every scene (Task 1 of step 5), with the validation layer and
+// One path tracer and one denoiser shared by every scene (the shared path tracer), with the validation layer and
 // its synchronization validation on; fails on any message it reports. A test factory makes SceneId::Ship a
 // Cornell box (rt_test_scenes.hpp) and the scene map sends FLYBY to it:
 //   (a) STUDIO NIGHT, then a FLYBY frame (the Cornell box, forced to 2026), then STUDIO NIGHT again: the last

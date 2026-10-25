@@ -1,6 +1,6 @@
 #pragma once
 
-// The Lens scene (step 5, Task 21): LENS and LENS OF GOD, real glass bending light over the 1993 rotozoom's
+// The Lens scene: LENS and LENS OF GOD, real glass bending light over the 1993 rotozoom's
 // picture turned to stone. Everything the glass does on screen is traced: the mosaic seen through it is
 // refracted and magnified, its rim splits white light into fringes by wavelength (the integrator's hero
 // wavelength through dispersive glass), and the sunlight it gathers lands as a caustic photon map on the

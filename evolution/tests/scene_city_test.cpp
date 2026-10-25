@@ -1,4 +1,4 @@
-// The City scene (VECTOR CITY, ASCENT, CITY NIGHT and METROPOLIS: step 5 Task 23), with synchronization
+// The City scene (VECTOR CITY, ASCENT, CITY NIGHT and METROPOLIS: the City), with synchronization
 // validation:
 //   - the card's numbers at full detail: the light tree's lights (every lamp and beacon), the windows, and
 //   the

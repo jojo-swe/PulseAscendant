@@ -2,7 +2,7 @@
 #define EVO_RT_HIT_GLSL
 
 // Closest-hit helpers: the hit triangle's interpolated attributes in world space (or, compiled with
-// GEOMETRY_SPHERES, the hit analytic sphere's: the rt_<class>_sphere.rchit.spv variants, step 5's Task 8),
+// GEOMETRY_SPHERES, the hit analytic sphere's: the rt_<class>_sphere.rchit.spv variants, analytic spheres),
 // the procedural patterns and writing the evaluated surface into the payload. Closest-hit shaders never
 // trace (recursion depth 1).
 
@@ -58,7 +58,7 @@ struct HitPoint {
 // for a kInstanceDynamicSpheres instance. Its material is its own SphereRecord.material (every sphere of an
 // instance has the instance's class: the hit group), baseColor (and the pattern's baseColor2) multiplied by
 // its colour, plus colour * emission emitted. The normal is radial, the uv spherical (sphereUv), and the
-// previous position the same point of the sphere around prevCenter (the instance's transform is Task 9's).
+// previous position the same point of the sphere around prevCenter (the instance's transform is the export shutter').
 HitPoint hitPoint() {
     HitPoint h;
     h.record = instanceRecords[gl_InstanceCustomIndexEXT];
@@ -209,7 +209,7 @@ vec3 checkerColor(Material m, vec3 p, vec3 ng) {
     return odd ? m.baseColor2 : m.baseColor;
 }
 
-#include "caustics.glsl" // causticRadiance(HitPoint), Task 13's hook
+#include "caustics.glsl" // causticRadiance(HitPoint), caustic photon maps's hook
 
 // --- The payload -------------------------------------------------------------------------------------------
 
@@ -235,7 +235,7 @@ void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmissio
     payload.coatRoughness = h.material.coatRoughness;
     payload.materialClass = h.material.materialClass;
     payload.emission = (h.record.light == kNoLight || h.front) ? emission : vec3(0.0);
-    // Task 13: a caustic receiver reflects its photon map (0 without caustics in the frame).
+    // caustic photon maps: a caustic receiver reflects its photon map (0 without caustics in the frame).
     if ((h.material.flags & kMaterialCausticReceiver) != 0u) {
         h.material.baseColor = baseColor; // after the pattern
         payload.emission += causticRadiance(h);

@@ -1,7 +1,10 @@
 #include "retro/portal.hpp"
 
 #include "retro/boot.hpp"
+#include "retro/dos_idle.hpp"
 #include "retro/finale.hpp"
+#include "show/era.hpp"
+#include "show/music_curves.hpp"
 
 #include <algorithm>
 #include <array>
@@ -67,6 +70,42 @@ Collapse portalCollapse(const PixelRect& cell, std::uint32_t n) {
     return {rect, static_cast<float>(std::min(gain, 64.0))};
 }
 
+std::uint32_t portalListingFrame(const show::TimelineFrame& frame) {
+    const std::uint32_t cardGone = cardSpan(frame, kPortalRetroRate).out;
+    const show::TransitionMarks marks = show::transitionMarks(frame);
+    const show::BeatGridView grid = show::beatGrid(frame.track);
+    const double offset = show::trackStart(frame.track);
+    const double wayOut = grid.beatTime(grid.beatAt(marks.downbeat - offset + 1e-9) + 8) + offset;
+    const auto left = static_cast<std::uint32_t>(
+        std::floor(std::max(wayOut - marks.start, 0.0) * kPortalRetroRate + 1e-9));
+    return std::max(cardGone, left);
+}
+
+std::uint32_t portalLastRetroFrame(const show::TimelineFrame& frame) {
+    return static_cast<std::uint32_t>(std::floor((frame.chapterDuration - 1e-12) * kPortalRetroRate));
+}
+
+namespace {
+
+// The DOS cursor blinks on its own clock. Shift it so this chapter's last retro frame is an "on" frame, the
+// same picture STUDIO NIGHT's retro frame 0 draws.
+std::uint32_t listingCursorFrame(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    std::uint32_t shift = 0;
+    const std::uint32_t last = portalLastRetroFrame(frame);
+    while (!promptCursorOn(last + shift))
+        ++shift;
+    return retroFrame + shift;
+}
+
+} // namespace
+
+void portalPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    if (retroFrame >= portalListingFrame(frame))
+        bootPalette(palette, frame, retroFrame);
+    else
+        finalePalette(palette, frame, retroFrame);
+}
+
 std::string portalPrompt(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
     const std::uint32_t start = portalPromptFrame(frame);
     if (retroFrame < start)
@@ -111,6 +150,8 @@ void portalScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint3
 }
 
 std::vector<text::Item> portalText(const show::TimelineFrame& frame, std::uint32_t retroFrame) {
+    if (retroFrame >= portalListingFrame(frame))
+        return dosIdleText(frame, listingCursorFrame(frame, retroFrame));
     std::vector<text::Item> items;
     const std::uint32_t centreGone = portalOffFrame(frame, kFinaleCentre) + kPortalCollapseFrames;
     if (retroFrame < centreGone)

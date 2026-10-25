@@ -1,4 +1,4 @@
-// The Spheres scene (step 5, Task 22): RAYTRACE, SPHERE STORM and RAYTRACE INFINITY. With the validation
+// The Spheres scene: RAYTRACE, SPHERE STORM and RAYTRACE INFINITY. With the validation
 // layer and its synchronization validation on; fails on any message it reports.
 //   (a) the map: exactly the three chapters show Spheres;
 //   (b) the cards: every count the three 2026 cards state is the configuration's (RAYTRACE's

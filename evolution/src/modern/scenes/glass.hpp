@@ -1,6 +1,6 @@
 #pragma once
 
-// The Glass scene (step 5, Task 20): the 2026 side of GLENZ (chapter 5), GLASS CATHEDRAL (15) and CRYSTAL
+// The Glass scene (glass): the 2026 side of GLENZ (chapter 5), GLASS CATHEDRAL (15) and CRYSTAL
 // CITY (24). Refraction with total internal reflection, spectral dispersion (shaders/rt/spectral.glsl),
 // Beer-Lambert absorption inside thick glass, thin-walled stained glass, and caustics from photon maps
 // (modern/caustics.hpp) that land sharp, in colour, on the floors.

@@ -388,7 +388,7 @@ inline TestScene lookScene() {
     return s;
 }
 
-// --- Task 6 of step 5 (integrator_test): regularisation, the clamp, camera-only emitters, dispersion
+// --- the integrator (integrator_test): regularisation, the clamp, camera-only emitters, dispersion
 // ---------
 
 // A quad(1, 1) placed at `centre`, facing `normal` (its +z), `width` along normal x up's direction and

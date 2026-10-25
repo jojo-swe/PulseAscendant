@@ -1,6 +1,6 @@
 #pragma once
 
-// A frame's gravitational lens around a black hole (step 5, Task 25): SceneFrame::lensing, packed into
+// A frame's gravitational lens around a black hole (gravitational lensing): SceneFrame::lensing, packed into
 // rt::LensingUniforms (binding EVO_BINDING_LENSING) and read by shaders/rt/lensing.glsl.
 //
 // Main rays (the camera's, and every bounce's) follow the Schwarzschild null geodesic about `center` while

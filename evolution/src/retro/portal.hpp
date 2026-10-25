@@ -17,7 +17,10 @@ namespace evo::retro {
 // collapsing like a tube switched off, to a bright line and a dot (portalCollapse); the centre goes last.
 // Then, on the next bar line, the screen is black but for the prompt `THE SCREEN` typed at 30 characters a
 // second in the middle, with the underscore cursor blinking on the beat: the single prompt the camera crosses
-// into. The 1993 card is typed bottom-left as in FINALE. A grid effect at 35 retro frames a second.
+// into. The 1993 card is typed bottom-left as in FINALE. Once the card has left and the camera is on its way
+// back out of the glass (two bars after D), the screen is the DOS listing STUDIO NIGHT opens on, cursor
+// included, so the act join does not cut from the prompt to that listing. A grid effect at 35 retro frames
+// a second.
 //
 // Times are the chapter's tracked beats (chapterBeat): the cells go in kPortalOrder on beats kPortalFirstOff
 // to kPortalFirstOff + 8 (183.36 s to 186.73 s), the prompt starts typing on beat kPortalPromptBeat
@@ -49,8 +52,16 @@ Collapse portalCollapse(const PixelRect& cell, std::uint32_t n);
 // The prompt typed so far (the empty string before it starts).
 std::string portalPrompt(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 
-// The EffectInfo parts of PORTAL: FINALE's palette, PORTAL's own grid, scene (the card's cursor) and text
-// (the centre's scroller while the centre is on, the prompt and its cursor, the card).
+// The first retro frame of the DOS listing: the later of the 1993 card leaving and the way out of the glass.
+// The last retro frame the chapter can show (the one STUDIO NIGHT's first frame continues).
+std::uint32_t portalListingFrame(const show::TimelineFrame& frame);
+std::uint32_t portalLastRetroFrame(const show::TimelineFrame& frame);
+
+// FINALE's palette until the listing, then BOOT's DOS colours (STUDIO NIGHT's).
+void portalPalette(Palette& palette, const show::TimelineFrame& frame, std::uint32_t retroFrame);
+
+// The EffectInfo parts of PORTAL: the palette above, PORTAL's own grid, scene (the card's cursor) and text
+// (the centre's scroller while the centre is on, the prompt and its cursor, the card, then the DOS listing).
 std::vector<GridLayer> portalGrid(const show::TimelineFrame& frame, std::uint32_t retroFrame);
 void portalScene(RetroScene& scene, const show::TimelineFrame& frame, std::uint32_t retroFrame);
 std::vector<text::Item> portalText(const show::TimelineFrame& frame, std::uint32_t retroFrame);

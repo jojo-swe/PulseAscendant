@@ -55,7 +55,7 @@ constexpr Vec3 kLampElbow{-0.68f, kDeskTop + 0.4f, -0.56f};
 constexpr Vec3 kLampHead{-0.44f, kDeskTop + 0.43f, -0.12f};
 constexpr Vec3 kLampAim{-0.12f, kDeskTop, -0.16f}; // where the shade points
 // The diffuser: an 8 cm square recessed 3.5 cm into the shade (from its rim), so that it is hidden from
-// every camera and the shade's painted inside spreads its light (Task 14: no flat white plate).
+// every camera and the shade's painted inside spreads its light (the Studio light rig: no flat white plate).
 constexpr float kLampEmitterSize = 0.08f, kLampRecess = 0.035f;
 
 // The moon (see Studio::kMoonDirection): an 18 cm square 4 m out, about 2.6 degrees across.

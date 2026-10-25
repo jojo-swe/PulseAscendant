@@ -1,4 +1,4 @@
-// The Ship scene (step 5, Task 16: the starship's crossing in WORMHOLE), with synchronization validation:
+// The Ship scene (the Ship: the starship's crossing in WORMHOLE), with synchronization validation:
 //   (m) the map: WORMHOLE shows the Ship, FLYBY does not (its 2026 side is the Studio's pull-out);
 //   (k) the card: "1 KM RINGS" is the rings' spacing, "VOLUMETRIC" the plumes' grid (2 x 96^3 voxels at full
 //       detail), "MOTION BLUR" the crossing below; 262,144 stars at full detail, scaled by the detail;

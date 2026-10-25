@@ -86,7 +86,7 @@ const EffectInfo& effectFor(show::Effect effect) {
                                          .phosphorSeconds = kPhosphorFastSeconds};
     static constexpr EffectInfo kPortal{.shader = nullptr,
                                         .retroRate = kPortalRetroRate,
-                                        .palette = finalePalette,
+                                        .palette = portalPalette,
                                         .text = portalText,
                                         .scene = portalScene,
                                         .grid = portalGrid};

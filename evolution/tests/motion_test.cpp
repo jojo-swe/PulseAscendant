@@ -1,4 +1,4 @@
-// Per-object motion vectors and the export shutter (step 5, Task 9) on lavapipe, with the validation layer
+// Per-object motion vectors and the export shutter on lavapipe, with the validation layer
 // and its synchronization validation on; fails on any message.
 //
 // (a) a quad moving 2 px per frame under a static camera: the motion guide is (-2, 0) on it and (0, 0) on the
