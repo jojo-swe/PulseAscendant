@@ -215,9 +215,8 @@ std::vector<PromptWrite> bootScript(const show::TimelineFrame& frame) {
     script.push_back({on(beat(8)), "\n", 0});
     addDetection(script, kBootRayTracing, beat(9), beat(11));
     script.push_back({on(beat(11)), "\n", 0});
-    // The reserved slot: the rows of one more detection line (label and leader on one row, the result on
-    // the next), written from b12 to b14.
-    script.push_back({on(beat(12)), "\n\n", 0});
+    addDetection(script, kBootApplause, beat(12), beat(14));
+    script.push_back({on(beat(14)), "\n", 0});
     script.push_back({on(beat(15)), "LOADING", 0});
     script.push_back({on(beat(15)), "...", kBootDetectRate});
     return script;
