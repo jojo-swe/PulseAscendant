@@ -45,8 +45,13 @@ struct SceneCut {
     bool frozen;
 };
 
+// Where a megamix row's scene time comes from: its sourceSeconds as written (Acts I and II, whose times are
+// fixed), or sourceSeconds after WORMHOLE's ship pass (negative: before it; Act III follows the form of its
+// track, so the pass moves with the track: wormholePass).
+enum class MegamixFrom { Seconds, ShipPass };
+
 // One row of the FINALE megamix. From `quarter` quarter beats after the chapter's first tracked beat and for
-// `quarters` quarter beats, the frame shows `source`'s scene from `sourceSeconds` on (held there when
+// `quarters` quarter beats, the frame shows `source`'s scene from megamixSource(row) on (held there when
 // `frozen`). A row whose source is FINALE itself is the room: the chapter's own Studio, no cut. The rows
 // follow each other without a gap and the last one ends on D, where the room takes over for good.
 struct MegamixShot {
@@ -54,6 +59,7 @@ struct MegamixShot {
     Effect source;
     double sourceSeconds;
     bool frozen;
+    MegamixFrom from = MegamixFrom::Seconds;
 };
 
 // clang-format off
@@ -67,7 +73,7 @@ inline constexpr std::array<MegamixShot, 11> kMegamixShots = {{
     {32, 4, Effect::Finale,     0.0,  false}, // the room, a card on its first frames
     {36, 2, Effect::Tunnel,    78.0,  false}, // the points as lights
     {38, 1, Effect::Nebula,   280.2,  false}, // the star round the pillar
-    {39, 1, Effect::Wormhole, 494.15, false}, // the ship crossing
+    {39, 1, Effect::Wormhole,  -0.066, false, MegamixFrom::ShipPass}, // the ship crossing, through its pass
     {40, 4, Effect::Raytrace, 128.10, true},  // the drop, held
 }};
 // clang-format on
@@ -90,9 +96,18 @@ static_assert(megamixRowsChain(), "the megamix rows must follow each other and e
 // A quarter beat is a quarter of the tracked beat it falls in, so every boundary lies on the beat grid.
 double megamixStart(int row);
 
+// The show time row `row`'s scene starts at: its sourceSeconds, or for MegamixFrom::ShipPass that long after
+// wormholePass().
+double megamixSource(int row);
+
+// WORMHOLE's ship pass in show seconds (the ship at the crossing camera's centre), as modern::shipTimes
+// places it from the chapter's beat grid: the first downbeat from 21 % of the chapter on, but at least 2 s
+// before D (the last downbeat at or before the accent).
+double wormholePass();
+
 // The scene cut of a frame, if any:
-//   FINALE  each megamix row that is not the room cuts to its source's scene at sourceSeconds plus the time
-//           since the row started (or at sourceSeconds alone, frozen);
+//   FINALE  each megamix row that is not the room cuts to its source's scene at megamixSource(row) plus the
+//           time since the row started (or at megamixSource(row) alone, frozen);
 //   REBOOT  from D on, GALAXY's scene at the frame's own time (its local time negative until GALAXY starts).
 // Every other frame shows its own chapter's scene. A pure function of the frame's effect and time.
 std::optional<SceneCut> sceneCut(const TimelineFrame& frame);

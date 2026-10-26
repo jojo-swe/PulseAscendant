@@ -63,4 +63,8 @@ struct SweepStats {
 // here.
 SweepStats checkSceneSweep(modern::SceneId scene, const SweepLimits& limits = {});
 
+// The frames checkSceneSweep visits for `scene`: every 1/60 s of each of its chapters (Act III's chapters
+// follow the form of its track, so their lengths come from the show, not from the tests).
+std::uint32_t sweepFrames(modern::SceneId scene);
+
 } // namespace evo::test

@@ -77,9 +77,13 @@ double beatsBetween(const Grid& g, double from, double t) {
 // --- The world
 // ------------------------------------------------------------------------------------------------
 
-// The planet below the crossing: an ocean world, the ship 380 m over it as it passes, its centre ahead.
-constexpr double kPlanetAltitude = 380.0;
-const DVec3 kPlanetCentre{0.0, -double(kShipPlanetRadius) - kPlanetAltitude, 900.0};
+// The planet below the crossing: an ocean world, its top kPlanetAltitude under the flight and
+// kPlanetBehindPass behind the pass, so the crossing camera frames it the same wherever the music puts it.
+constexpr double kPlanetAltitude = 380.0, kPlanetBehindPass = 928.0;
+DVec3 planetCentre(const ShipTimes& t) {
+    const double top = double(kShipCruise) * t.pass - kPlanetBehindPass;
+    return {0.0, -double(kShipPlanetRadius) - kPlanetAltitude, top};
+}
 // The planet's own frame turned so its pole lies far off the flight (no pole under the camera).
 constexpr double kPlanetVisible = 9500.0; // drawn while its centre is nearer than this
 
@@ -354,6 +358,11 @@ ShipTimes shipTimes(const show::TimelineFrame& f) {
         if (b < t.pass - 1.2)
             t.crossing = b;
     t.tunnel = std::clamp(firstAfter(0.3 * t.duration, 0.32 * t.duration), t.pass + 1.0, t.drop - 1.0);
+    const int dropBeat = g.view.beatAt(g.start + t.drop + 1e-6);
+    if (dropBeat >= 0 && dropBeat + 1 < g.view.count())
+        t.beat = std::clamp(g.view.beatTime(dropBeat + 1) - g.view.beatTime(dropBeat), 0.2, 1.0);
+    // The break: the fourth downbeat after D, or the downbeat two bars before the end when that comes sooner
+    // (the last two bars are the white-out's, as the post grade has them).
     t.release = t.drop + 0.25 * (t.duration - t.drop);
     int after = 0;
     for (const double b : bars)
@@ -361,12 +370,15 @@ ShipTimes shipTimes(const show::TimelineFrame& f) {
             t.release = b;
             break;
         }
+    double latest = -1.0; // the last downbeat after D at least two bars before the end
+    for (const double b : bars)
+        if (b > t.drop + 1e-6 && b <= t.duration - 7.75 * t.beat)
+            latest = b;
+    if (latest > 0.0)
+        t.release = std::min(t.release, latest);
     t.release = std::min(t.release, t.duration - 1.0);
     t.whiteout =
         std::min(firstAfter(t.release + 1e-6, t.release + 0.4 * (t.duration - t.release)), t.duration - 0.5);
-    const int dropBeat = g.view.beatAt(g.start + t.drop + 1e-6);
-    if (dropBeat >= 0 && dropBeat + 1 < g.view.count())
-        t.beat = std::clamp(g.view.beatTime(dropBeat + 1) - g.view.beatTime(dropBeat), 0.2, 1.0);
     return t;
 }
 
@@ -407,7 +419,9 @@ double shipRingZ(const show::TimelineFrame& f, int k) {
 }
 
 ShipPose shipPose(const show::TimelineFrame& f) {
-    return {shipDistance(f), attitudeRows(std::clamp(f.localSeconds, 0.0, f.chapterDuration))};
+    // FLYBY's 1993 attitude, in the phase that shows its attitude at kShipAttitudeAtPass on the pass.
+    const double local = std::clamp(f.localSeconds, 0.0, f.chapterDuration);
+    return {shipDistance(f), attitudeRows(local - shipTimes(f).pass + kShipAttitudeAtPass)};
 }
 
 Camera shipCamera(const show::TimelineFrame& f) {
@@ -653,14 +667,15 @@ SceneFrame Ship::frame(const show::TimelineFrame& f) const {
 
     // The planet while it is near: its own frame turned (local y to world x) so no pole lies under the
     // flight.
-    const DVec3 toPlanet = kPlanetCentre - DVec3{0, 0, pose.z};
+    const DVec3 planetAt = planetCentre(t);
+    const DVec3 toPlanet = planetAt - DVec3{0, 0, pose.z};
     const double planetDistance =
         std::sqrt(toPlanet.x * toPlanet.x + toPlanet.y * toPlanet.y + toPlanet.z * toPlanet.z);
     const bool planet = planetDistance < kPlanetVisible;
     if (planet) {
         SceneInstance in{
             0, kPlanet,
-            inRender(pose.rows, pose.z, kPlanetCentre, {Vec3{0, 1, 0}, Vec3{-1, 0, 0}, Vec3{0, 0, 1}})};
+            inRender(pose.rows, pose.z, planetAt, {Vec3{0, 1, 0}, Vec3{-1, 0, 0}, Vec3{0, 0, 1}})};
         in.kind = rt::GeometryKind::Spheres;
         in.firstSphere = 0;
         in.sphereCount = 1;
