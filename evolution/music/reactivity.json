@@ -21,7 +21,7 @@
     0,
     19400,
     41240,
-    68196
+    73762
   ],
   "tracks": [
     {
@@ -65,23 +65,23 @@
       ]
     },
     {
-      "source": "Cyberpunk Assembly.wav",
-      "sha256": "1851969465f03f4093f5ef9350b767b8a753810092dbe00c811b9ab6300065ac",
-      "samples": 26956,
+      "source": "Cyberpunk Assembly Extended.wav",
+      "sha256": "ac84f8b68f55d1896362c1f0c7ca8a41bc7490263cdd6b97880e62287a123f5a",
+      "samples": 32522,
       "peaks": [
-        877,
-        1074,
-        1767
+        1040,
+        1300,
+        2225
       ],
       "active_fraction": [
-        0.58755,
-        0.45541,
-        0.43549
+        0.5841,
+        0.45735,
+        0.45434
       ],
       "saturated_fraction": [
-        0.01187,
-        0.01451,
-        0.01847
+        0.0123,
+        0.01442,
+        0.01866
       ]
     }
   ]

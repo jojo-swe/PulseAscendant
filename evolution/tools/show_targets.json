@@ -1,6 +1,6 @@
 {
-  "max_chapter_seconds": 40,
-  "tracks": ["Amiga Trance Demo", "Guitar Trance", "Cyberpunk Assembly"],
+  "max_chapter_seconds": 42,
+  "tracks": ["Amiga Trance Demo", "Guitar Trance", "Cyberpunk Assembly Extended"],
   "act_iii": "Act III (the chapters with a \"form\") follows the form of its track, found by tools/song_form.py and recorded in music/form.json, so a new Act III track needs no edit here. If a track's form calls for it, these are the values to adjust: the events and bar offsets of GALAXY, ASCENDANT and THE END; the fractions of PLASMA PLANET to METROPOLIS (their place between GALAXY and ASCENDANT) and of CREDITS (between ASCENDANT and THE END); the accents; and max_chapter_seconds. tools/direct_music.py explains the expressions, music/README.md the swap.",
   "chapters": [
     {"title": "BOOT", "target": 0, "track": 0},
@@ -25,12 +25,12 @@
     {"title": "RETURN", "target": 390.0, "track": 1},
     {"title": "REBOOT", "track": 2, "form": {"start": "track start", "accent": "middle +1 beat"}},
     {"title": "GALAXY", "track": 2, "form": {"start": "first drop"}},
-    {"title": "PLASMA PLANET", "track": 2, "form": {"start": 0.1539}},
-    {"title": "WORMHOLE", "track": 2, "form": {"start": 0.3077}},
-    {"title": "CRYSTAL CITY", "track": 2, "form": {"start": 0.4231}},
-    {"title": "LENS OF GOD", "track": 2, "form": {"start": 0.5385}},
-    {"title": "RAYTRACE INFINITY", "track": 2, "form": {"start": 0.6923}},
-    {"title": "METROPOLIS", "track": 2, "form": {"start": 0.8462}},
+    {"title": "PLASMA PLANET", "track": 2, "form": {"start": 0.1176}},
+    {"title": "WORMHOLE", "track": 2, "form": {"start": 0.2941}},
+    {"title": "CRYSTAL CITY", "track": 2, "form": {"start": 0.4118}},
+    {"title": "LENS OF GOD", "track": 2, "form": {"start": 0.5882}},
+    {"title": "RAYTRACE INFINITY", "track": 2, "form": {"start": 0.7059}},
+    {"title": "METROPOLIS", "track": 2, "form": {"start": 0.8235}},
     {"title": "ASCENDANT", "track": 2, "form": {"start": "biggest drop -8 bars", "accent": "biggest drop"}},
     {"title": "CREDITS", "track": 2, "form": {"start": 0.5162, "accent": "start +11 bars +3 beats", "min_bars": 13}},
     {"title": "THE END", "track": 2, "form": {"start": "tail", "accent": "track end -2 bars -1 s"}}

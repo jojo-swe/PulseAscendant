@@ -1,6 +1,6 @@
 {
-  "frames": 32734080,
-  "duration": 681.96,
+  "frames": 35405760,
+  "duration": 737.62,
   "sample_rate": 48000,
   "channels": 2,
   "encoding": "PCM signed 16 bit",
@@ -23,12 +23,12 @@
       "sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d"
     },
     {
-      "source": "Cyberpunk Assembly.mp3",
-      "runtime_file": "assets/music/Cyberpunk Assembly.wav",
-      "frames": 12938880,
-      "sha256": "1851969465f03f4093f5ef9350b767b8a753810092dbe00c811b9ab6300065ac"
+      "source": "Cyberpunk Assembly Extended.mp3",
+      "runtime_file": "assets/music/Cyberpunk Assembly Extended.wav",
+      "frames": 15610560,
+      "sha256": "ac84f8b68f55d1896362c1f0c7ca8a41bc7490263cdd6b97880e62287a123f5a"
     }
   ],
-  "sha256": "baa46dab11d71c103864ce9bceac7d92df6097d571ad715a37482928329b74a3",
+  "sha256": "1d8d38e7d39ca31bbe507639748a6f402dfa87aaf753639c198564d44e2defea",
   "runtime_file": "assets/music/show.wav"
 }

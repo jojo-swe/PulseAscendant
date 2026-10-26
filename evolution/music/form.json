@@ -311,9 +311,9 @@
     },
     {
       "directs": true,
-      "source": "Cyberpunk Assembly.wav",
-      "beats": 620,
-      "duration": 269.56,
+      "source": "Cyberpunk Assembly Extended.wav",
+      "beats": 748,
+      "duration": 325.22,
       "bar_phase": 0,
       "phrase_phase": 0,
       "phrase_bars": 8,
@@ -335,230 +335,282 @@
         195.2246,
         209.1354,
         223.0508,
-        236.9623,
-        250.8769,
-        264.7838
+        236.9677,
+        250.8808,
+        264.7931,
+        278.7108,
+        292.6223,
+        306.5377,
+        320.4438
       ],
       "boundaries": [
         {
           "beat": 32,
           "time": 14.3485,
           "kind": "rise",
-          "contrast": 0.149
+          "contrast": 0.152
         },
         {
           "beat": 64,
           "time": 28.26,
           "kind": "rise",
-          "contrast": 0.544
+          "contrast": 0.552
         },
         {
           "beat": 68,
           "time": 29.9969,
           "kind": "fall",
-          "contrast": -0.178
+          "contrast": -0.18
         },
         {
           "beat": 120,
           "time": 52.6092,
           "kind": "fall",
-          "contrast": -0.13
+          "contrast": -0.133
         },
         {
           "beat": 128,
           "time": 56.0877,
           "kind": "rise",
-          "contrast": 0.4
+          "contrast": 0.406
         },
         {
           "beat": 156,
           "time": 68.2638,
           "kind": "fall",
-          "contrast": -0.309
+          "contrast": -0.314
         },
         {
           "beat": 160,
           "time": 70.0015,
           "kind": "rise",
-          "contrast": 0.318
+          "contrast": 0.323
         },
         {
           "beat": 188,
           "time": 82.1777,
           "kind": "fall",
-          "contrast": -0.275
+          "contrast": -0.28
         },
         {
           "beat": 192,
           "time": 83.9177,
           "kind": "rise",
-          "contrast": 0.336
+          "contrast": 0.341
         },
         {
           "beat": 240,
           "time": 104.7823,
           "kind": "fall",
-          "contrast": -0.135
+          "contrast": -0.137
         },
         {
           "beat": 256,
           "time": 111.7438,
           "kind": "rise",
-          "contrast": 0.267
+          "contrast": 0.272
         },
         {
           "beat": 260,
           "time": 113.4815,
           "kind": "fall",
-          "contrast": -0.149
+          "contrast": -0.152
         },
         {
           "beat": 288,
           "time": 125.6562,
           "kind": "rise",
-          "contrast": 0.416
+          "contrast": 0.421
         },
         {
           "beat": 316,
           "time": 137.8292,
           "kind": "fall",
-          "contrast": -0.349
+          "contrast": -0.353
         },
         {
           "beat": 320,
           "time": 139.5692,
           "kind": "rise",
-          "contrast": 0.332
+          "contrast": 0.337
         },
         {
           "beat": 348,
           "time": 151.7454,
           "kind": "fall",
-          "contrast": -0.291
+          "contrast": -0.296
         },
         {
           "beat": 384,
           "time": 167.3969,
           "kind": "rise",
-          "contrast": 0.525
+          "contrast": 0.532
         },
         {
           "beat": 412,
           "time": 179.57,
           "kind": "fall",
-          "contrast": -0.43
+          "contrast": -0.434
         },
         {
           "beat": 416,
           "time": 181.3115,
           "kind": "rise",
-          "contrast": 0.419
+          "contrast": 0.422
         },
         {
           "beat": 444,
           "time": 193.4846,
           "kind": "fall",
-          "contrast": -0.365
+          "contrast": -0.369
         },
         {
           "beat": 448,
           "time": 195.2246,
           "kind": "rise",
-          "contrast": 0.445
+          "contrast": 0.448
         },
         {
           "beat": 476,
           "time": 207.3962,
           "kind": "fall",
-          "contrast": -0.412
+          "contrast": -0.413
+        },
+        {
+          "beat": 504,
+          "time": 219.5723,
+          "kind": "fall",
+          "contrast": -0.131
         },
         {
           "beat": 512,
           "time": 223.0508,
           "kind": "rise",
-          "contrast": 0.508
+          "contrast": 0.417
         },
         {
           "beat": 540,
-          "time": 235.2238,
+          "time": 235.2269,
           "kind": "fall",
-          "contrast": -0.405
+          "contrast": -0.314
         },
         {
           "beat": 544,
-          "time": 236.9623,
+          "time": 236.9677,
+          "kind": "rise",
+          "contrast": 0.318
+        },
+        {
+          "beat": 572,
+          "time": 249.1392,
+          "kind": "fall",
+          "contrast": -0.28
+        },
+        {
+          "beat": 576,
+          "time": 250.8808,
+          "kind": "rise",
+          "contrast": 0.339
+        },
+        {
+          "beat": 608,
+          "time": 264.7931,
+          "kind": "fall",
+          "contrast": -0.291
+        },
+        {
+          "beat": 640,
+          "time": 278.7108,
+          "kind": "rise",
+          "contrast": 0.506
+        },
+        {
+          "beat": 668,
+          "time": 290.8838,
+          "kind": "fall",
+          "contrast": -0.404
+        },
+        {
+          "beat": 672,
+          "time": 292.6223,
           "kind": "rise",
           "contrast": 0.373
         },
         {
-          "beat": 568,
-          "time": 247.3992,
+          "beat": 696,
+          "time": 303.06,
           "kind": "fall",
-          "contrast": -0.332
+          "contrast": -0.344
         },
         {
-          "beat": 576,
-          "time": 250.8769,
+          "beat": 704,
+          "time": 306.5377,
           "kind": "rise",
-          "contrast": 0.338
+          "contrast": 0.337
         },
         {
-          "beat": 604,
-          "time": 263.0469,
+          "beat": 732,
+          "time": 318.7069,
           "kind": "fall",
-          "contrast": -0.266
+          "contrast": -0.276
         },
         {
-          "beat": 612,
-          "time": 266.5146,
+          "beat": 740,
+          "time": 322.1746,
           "kind": "fall",
-          "contrast": -0.399
+          "contrast": -0.409
         }
       ],
       "drops": [
         {
           "beat": 64,
           "time": 28.26,
-          "lift": 0.325,
-          "strength": 0.603
+          "lift": 0.33,
+          "strength": 0.612
         },
         {
           "beat": 128,
           "time": 56.0877,
-          "lift": 0.18,
-          "strength": 0.489
+          "lift": 0.183,
+          "strength": 0.495
         },
         {
           "beat": 288,
           "time": 125.6562,
-          "lift": 0.319,
-          "strength": 0.682
+          "lift": 0.323,
+          "strength": 0.69
         },
         {
           "beat": 384,
           "time": 167.3969,
-          "lift": 0.423,
-          "strength": 0.807
+          "lift": 0.427,
+          "strength": 0.816
         },
         {
           "beat": 448,
           "time": 195.2246,
           "lift": 0.115,
-          "strength": 0.551
+          "strength": 0.555
         },
         {
           "beat": 512,
           "time": 223.0508,
-          "lift": 0.459,
-          "strength": 0.886
+          "lift": 0.184,
+          "strength": 0.498
+        },
+        {
+          "beat": 640,
+          "time": 278.7108,
+          "lift": 0.462,
+          "strength": 0.893
         }
       ],
       "events": {
         "track start": 0.0,
-        "track end": 269.56,
+        "track end": 325.22,
         "first drop": 28.26,
-        "biggest drop": 223.0508,
-        "tail": 263.0469
+        "biggest drop": 278.7108,
+        "tail": 318.7069
       }
     }
   ]

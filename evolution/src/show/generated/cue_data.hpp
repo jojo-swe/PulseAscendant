@@ -4,13 +4,13 @@
 namespace evo::show::generated {
 inline constexpr int chapterCount = 31;
 // Directed chapter starts in show seconds, each on a tracked beat; the first is 0.
-inline constexpr double chapterStarts[chapterCount] = {0.0000,7.1731,27.1138,44.1346,60.7038,80.6485,98.8677,115.3762,149.1862,170.2923,182.5208,194.0000,215.7000,238.6900,264.4454,289.7015,321.7492,346.4715,366.4431,390.6408,412.4000,440.6600,468.4877,496.3177,517.1823,538.0562,565.8838,593.7115,621.5354,649.3623,675.4469};
+inline constexpr double chapterStarts[chapterCount] = {0.0000,7.1731,27.1138,44.1346,60.7038,80.6485,98.8677,115.3762,149.1862,170.2923,182.5208,194.0000,215.7000,238.6900,264.4454,289.7015,321.7492,346.4715,366.4431,390.6408,412.4000,440.6600,468.4877,510.2315,538.0562,579.7969,607.6246,635.4508,677.1931,705.0223,731.1069};
 // The targets from tools/show_targets.json in show seconds: as written, or found in the form of a
 // form-directed track (tools/song_form.py).
-inline constexpr double chapterTargets[chapterCount] = {0.0000,8.0000,26.0000,44.0000,62.0000,80.0000,98.0000,116.0000,150.0000,168.0000,182.0000,194.0000,214.0000,238.0000,264.0000,292.0000,322.0000,344.0000,368.0000,390.0000,412.4000,440.6600,468.4967,496.3154,517.1884,538.0614,565.8800,593.7168,621.5354,649.3645,675.4469};
+inline constexpr double chapterTargets[chapterCount] = {0.0000,8.0000,26.0000,44.0000,62.0000,80.0000,98.0000,116.0000,150.0000,168.0000,182.0000,194.0000,214.0000,238.0000,264.0000,292.0000,322.0000,344.0000,368.0000,390.0000,412.4000,440.6600,468.4763,510.2244,538.0643,579.7888,607.6287,635.4450,677.1931,705.0234,731.1069};
 // The tracked beat each chapter's accent lands on, in show seconds, from the form of a form-directed
 // track; -1 where the show finds the accent itself (the strongest hit in the middle of the chapter).
-inline constexpr double chapterAccents[chapterCount] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,427.1831,454.5715,482.4015,510.2315,524.1438,551.9692,579.7969,607.6246,635.4508,669.7931,677.1838};
+inline constexpr double chapterAccents[chapterCount] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,427.1831,454.5715,496.3177,524.1438,551.9692,593.7115,621.5354,663.2808,691.1108,725.4531,732.8438};
 // SHA-256 of assets/music/show.wav, the audio this data was measured from.
-inline constexpr const char* sourceSha256 = "baa46dab11d71c103864ce9bceac7d92df6097d571ad715a37482928329b74a3";
+inline constexpr const char* sourceSha256 = "1d8d38e7d39ca31bbe507639748a6f402dfa87aaf753639c198564d44e2defea";
 }
