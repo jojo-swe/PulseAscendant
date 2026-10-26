@@ -56,6 +56,7 @@ add_compile_definitions(VK_NO_PROTOTYPES)
 # --- Project targets --------------------------------------------------------------------------------------
 
 add_library(evo_core STATIC
+    src/app/auto_scale.cpp
     src/app/options.cpp
     src/image/png.cpp)
 target_include_directories(evo_core PUBLIC src)
@@ -203,11 +204,18 @@ evo_add_shaders(evo_modern
     shaders/rt/pathtrace.rgen
     shaders/rt/sky.rmiss
     shaders/rt/shadow.rmiss
+    shaders/rt/pane.rmiss
     shaders/rt/pbr.rchit
     shaders/rt/glass.rchit
     shaders/rt/emissive.rchit
     shaders/rt/checker.rchit
     ${EVO_MODERN_SCENE_SHADERS})
+# The counting raygen (--bench-counters: shaders/rt/counters.glsl), rt_pathtrace_counters.rgen.spv.
+evo_add_shader_variants(evo_modern SUFFIX counters DEFINES EVO_COUNTERS SHADERS shaders/rt/pathtrace.rgen)
+# The window's fast raygen (modern::TracerOptions::fast: shaders/rt/pathtrace.rgen's EVO_FAST), and counting.
+evo_add_shader_variants(evo_modern SUFFIX fast DEFINES EVO_FAST SHADERS shaders/rt/pathtrace.rgen)
+evo_add_shader_variants(evo_modern SUFFIX fast_counters DEFINES EVO_FAST EVO_COUNTERS SHADERS
+    shaders/rt/pathtrace.rgen)
 
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.
@@ -267,6 +275,11 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_executable(options_test tests/options_test.cpp)
 target_link_libraries(options_test PRIVATE evo_core)
 add_test(NAME options COMMAND options_test)
+
+# The window's adaptive trace scale: the table and the controller (CPU only).
+add_executable(auto_scale_test tests/auto_scale_test.cpp)
+target_link_libraries(auto_scale_test PRIVATE evo_core)
+add_test(NAME auto_scale COMMAND auto_scale_test)
 
 add_executable(png_test tests/png_test.cpp)
 target_link_libraries(png_test PRIVATE evo_core)

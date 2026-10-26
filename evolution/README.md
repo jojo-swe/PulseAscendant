@@ -379,7 +379,10 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   stops at transmittance and depth steps so silhouettes in fog stay sharp, and is composed as
   `transmittance × surface + volume`; a scene without a medium skips it.
 - **Trace resolution and the temporal upscaler** (`src/post/upscale.*`, `shaders/post/upscale.comp`). The
-  window path traces at `--trace-scale` × its size (0.67 by default, at least 16 pixels per axis) and the
+  window path traces at `--trace-scale` × its size (at least 16 pixels per axis; by default `auto`: each
+  chapter starts at its scale from a table for 1280x720, scaled with the output's size and kept within
+  0.3..0.67, and the window lowers it while the GPU misses 30 fps and raises it again when there is room for
+  60, src/app/auto_scale.hpp) and the
   denoised picture is upscaled to the window size in time: from its second frame after a reset the window
   traces each pixel's samples in a window one output pixel wide, moved over the trace pixel by a 16-frame
   Halton (2, 3) sequence, and the upscaler accumulates them where they fell (each output pixel weights the
@@ -586,9 +589,15 @@ Options:
                        --capture-dir and --render-stream, where every frame stands alone)
   --detail F           Detail of the 2026 scenes, 0 < F <= 1 (default 1): particle,
                        splat, voxel and photon counts scale with it (for quick tests)
-  --trace-scale F      Path trace at F x the window size, 0.25..1 (default 0.67), and
-                       upscale in time; the window and --bench only (the exports always
-                       trace at the output size)
+  --trace-scale F      Path trace at F x the window size, 0.25..1, and upscale in time;
+                       the window and --bench only (the exports always trace at the
+                       output size). 'auto' (the default) traces each chapter at its
+                       scale from a table, 0.3..0.67, to hold 30 fps; the window also
+                       adapts it to the GPU's frame time (docs/PERFORMANCE.md)
+  --no-fast-mode       Trace the window and --bench as the exports do: four in-scatter
+                       points in media, photons seeded per frame, the generic pipeline,
+                       full BLAS builds (by default the window traces in fast mode;
+                       docs/PERFORMANCE.md)
   --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
                        needs a duration greater than 0
   --headless           Render without opening a window
@@ -598,6 +607,11 @@ Options:
                        --bench-frames frames from 20 % into it (after 2 warm-up frames)
                        and print one JSON line with the GPU time of every pass
   --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)
+  --bench-capture DIR  With --bench: also write each chapter's last timed frame to
+                       DIR/bench_<chapter>.png (to compare the look of two runs)
+  --bench-counters     With --bench: trace with the counting path tracer and add its work
+                       per pixel per frame (rays by kind, NEE, medium steps) and the
+                       frame's scene statistics to each line (slower; the same picture)
   --chapters LIST      Chapters for --bench, comma-separated indices as --show-info
                        numbers them, e.g. 11,14 (default: all)
   --music PATH         Music WAV to play (default: assets/music/show.wav beside the
@@ -664,10 +678,13 @@ the window adds `0x9E3779B9` per frame since its last reset, so its first frame 
 seed and, at equal bounces, equals the export frame at spp max(`--spp`, 4) byte for byte while that is below
 16 (where both filter the same way). The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
 equals a real export frame; only the tests, which set both, see the equality. The window traces below its
-size (`--trace-scale`, 0.67 by default) and the exports at the output size, so the equality holds at
+size (`--trace-scale`, by default `auto`: 0.3 to 0.67) and the exports at the output size, so the equality holds at
 `--trace-scale 1`; at a lower scale the window's first frame after a reset equals a frame rendered in Export
 mode at the same scale (the tests pin both), and seeking stays deterministic: the jitter and the upscaler's
-history follow only the frames since the last reset.
+history follow only the frames since the last reset. The window's fast mode (on unless `--no-fast-mode`,
+docs/PERFORMANCE.md) traces fewer in-scatter points and keeps its photon maps from a per-chapter seed, so
+the equality needs `--no-fast-mode`; a fast window frame is still a pure function of the time and the frames
+since the last reset.
 
 In the window the time comes from the music: the clock is the position the listener hears (what SDL still
 has queued and the device's buffer are subtracted), and the show loops at its end. `--audio-offset` shifts
@@ -693,23 +710,39 @@ them, two frames in flight. Each chapter prints one JSON line on stdout (progres
 ```json
 {"chapter":11,"title":"STUDIO NIGHT","scene":"Studio","frames":120,"spp":1,"traceScale":0.6700,
  "width":2560,"height":1440,"traceWidth":1715,"traceHeight":965,"device":"NVIDIA GeForce RTX 4090",
- "timestamps":true,"gpuMs":{"total":…,"retro":…,"fill":…,"tlas":…,"trace":…,"denoise":…,"upscale":…,
- "tonemap":…,"compositor":…},"fps":…}
+ "timestamps":true,"gpuMs":{"total":…,"retro":…,"fill":…,"particles":…,"medium":…,"tlas":…,"photons":…,
+ "trace":…,"splats":…,"denoise":…,"upscale":…,"bloom":…,"tonemap":…,"compositor":…},"cpuMs":…,"waitMs":…,
+ "fast":true,"fps":…}
 ```
 
 `gpuMs` are GPU timestamp times per pass, averaged over the timed frames (a pass a frame did not run counts
-0): `tlas` the top-level acceleration structure build, `trace` the path tracing dispatches, `denoise`,
-`upscale` (0 at scale 1), `tonemap`, `compositor` (CRT, era blend and HUD), `retro` the 1993 stage, `fill`
-the placeholder and `total` the whole frame. `fps` counts the timed frames over their wall-clock time. A GPU
-whose queue has no timestamps reports `"timestamps":false` and zero times. The per-scene budget (see ARCHITECTURE.md) is measured this way:
+0): `particles` the particle field and its BLAS, `medium` the grid medium's bake, `tlas` the top-level
+acceleration structure build, `photons` the caustic photon maps, `trace` the path tracing dispatches,
+`splats`, `denoise`, `upscale` (0 at scale 1), `bloom`, `tonemap`, `compositor` (CRT, era blend and HUD),
+`retro` the 1993 stage, `fill` the placeholder and `total` the whole frame. `cpuMs` is the CPU time of
+recording a frame (the scene's frame, uploads, commands) and `waitMs` the time spent waiting for the GPU to
+free a frame slot. `fps` counts the timed frames over their wall-clock time. A GPU whose queue has no
+timestamps reports `"timestamps":false` and zero times. `--bench-counters` adds `counters` (the path
+tracer's work per trace pixel per frame: rays by kind, next-event estimates, medium steps, light-selection
+evaluations) and `stats` (the scene's instances, lights, media, photons and particles, and the ray tracing
+pipeline's stack sizes as the driver reports them); docs/PERFORMANCE.md explains them. The per-scene budget (see ARCHITECTURE.md) is measured this way:
 
 ```sh
-# Every chapter at 1440p as the window renders it (trace scale 0.67), then at scale 1
+# Every chapter at 720p and 1440p as the window starts it (each chapter at its table scale)
+Evolution --bench --width 1280 --height 720 > bench-720p.jsonl
 Evolution --bench --width 2560 --height 1440 > bench-1440p.jsonl
+# The former fixed scale, and native
+Evolution --bench --width 2560 --height 1440 --trace-scale 0.67 > bench-1440p-0.67.jsonl
 Evolution --bench --width 2560 --height 1440 --trace-scale 1 > bench-1440p-native.jsonl
 # Two chapters, fewer frames
 Evolution --bench --chapters 11,19 --bench-frames 60
 ```
+
+**Pipeline cache.** Every run (window, `--bench`, `--capture-dir`, `--render-stream`) creates its pipelines
+through a Vulkan pipeline cache kept in `pipeline_cache.bin` beside the executable's `shaders` directory, so a
+second run, and every chunk of a `tools/render_video.py` render after the first, compiles nothing it compiled
+before. A file of another GPU or driver is ignored and replaced. `EVO_PIPELINE_CACHE=<path>` keeps it elsewhere,
+`EVO_PIPELINE_CACHE=0` turns it off.
 
 Exit codes: 0 on success, 1 for bad usage or a runtime error, 2 when the machine cannot run EVOLUTION
 (no Vulkan loader, no Vulkan 1.3 driver, no GPU, or a missing extension or feature; stderr names what is

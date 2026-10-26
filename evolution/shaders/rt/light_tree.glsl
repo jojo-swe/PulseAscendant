@@ -14,6 +14,10 @@
 #include "../common/finite.glsl"
 #include "random.glsl" // pcgHash
 
+#ifndef EVO_COUNT
+#define EVO_COUNT(k, n) // counters.glsl's, without common.glsl (the light tree's test probe)
+#endif
+
 const uint kTreeLeaf = 0x80000000u;
 const uint kMaxTreeDepth = 32u;
 
@@ -21,6 +25,7 @@ const uint kMaxTreeDepth = 32u;
 // cosBound the largest max(dot(n, normalize(corner - p)), 0) over the 8 corners (1 on a transmissive surface
 // or inside the box; 0 when the whole box is below the surface: cos is linear over it). 0 when not finite.
 float treeNodeImportance(LightTreeNode node, vec3 p, vec3 n, bool transmissive) {
+    EVO_COUNT(kCountTreeNodes, 1);
     float cosBound = 1.0;
     bool inside = all(greaterThanEqual(p, node.boundsMin)) && all(lessThanEqual(p, node.boundsMax));
     if (!transmissive && !inside) {
@@ -66,6 +71,7 @@ bool pickTreeLight(uint random, uint count, vec3 p, vec3 n, bool transmissive, b
         pdf = 1.0 / float(count);
         return true;
     }
+    EVO_COUNT(kCountTreeWalks, 1);
     // The node's child word is read once per level, at the end (lavapipe, Mesa 25.2, crashed: a null read in the
     // JIT code of the ray tracing pipeline, on the form that read it in the loop's condition).
     uint nodeChild = treeNodes[0].child;
@@ -100,6 +106,7 @@ float treeLightPdf(uint light, uint count, vec3 p, vec3 n, bool transmissive, bo
     if (uniformSelection) {
         return 1.0 / float(count);
     }
+    EVO_COUNT(kCountTreeWalks, 1);
     uint trail = treeLights[light].trail;
     uint depth = min(treeLights[light].depth, kMaxTreeDepth);
     uint nodeChild = treeNodes[0].child;

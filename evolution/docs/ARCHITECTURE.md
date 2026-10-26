@@ -86,7 +86,8 @@ emissive texture, so the 1993 picture lights the 2026 room.
 - The renderer derives a `HistoryState` {reset, framesSinceReset, mode, spp, maxBounces, frameSeed} and the modern
   stage never recomputes the seed. Export uses `frameSeedFor(t, 0)`; the window uses
   `frameSeedFor(t, framesSinceReset)`, so the first window frame after a reset equals an export frame at equal spp
-  and bounces. Every random number is an integer hash of (frame seed, pixel, sample, dimension).
+  and bounces (with `--no-fast-mode`: the window's fast mode, docs/PERFORMANCE.md, traces fewer in-scatter
+  points and keeps its photon maps, and is still a pure function of the time and the frames since a reset). Every random number is an integer hash of (frame seed, pixel, sample, dimension).
 - History resets on seeks, chapter changes and cuts. The reset is guarded twice (the denoiser's `resetHistory()` and
   withholding the previous camera); the seek tests fail only when both are removed.
 - Export (`--capture-dir`, `--render-stream`) has no temporal history: it traces `--spp` samples per frame (64 by
@@ -107,6 +108,9 @@ emissive texture, so the 1993 picture lights the 2026 room.
   in C++ and read back on the GPU by `material_test`. Later features fill reserved fields without moving any.
 
 ## Performance targets
+
+docs/PERFORMANCE.md has the RTX 4080 measurements, where the window's time goes, the window's fast mode and
+adaptive trace scale, and how to measure on the RTX (`--bench-counters`, Nsight Graphics).
 
 Estimates for an RTX 4090, to be confirmed with `--bench`: a 2560x1440 window frame traced at scale 1 with 1 spp
 and 4 bounces should take at most 14 ms on the GPU (trace at most 9 ms; denoise, upscale and tonemap at most

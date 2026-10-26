@@ -294,33 +294,37 @@ void main() {
     vec3 baseColor = m.baseColor;
     float roughness = m.roughness;
     vec3 emission = materialEmission(m);
-    if (m.pattern == kPatternWoodPlanks) {
+    // Each pattern behind its scene's feature (common.glsl's kFeatures): a scene's own pipeline keeps only
+    // its own.
+    bool studio = featureOn(kFeatureStudioPatterns), city = featureOn(kFeatureCityPatterns);
+    bool ship = featureOn(kFeatureShipPatterns), sea = featureOn(kFeatureSeaPatterns);
+    if (studio && m.pattern == kPatternWoodPlanks) {
         baseColor = woodPlanks(m, h.position);
-    } else if (m.pattern == kPatternBrushedMetal) {
+    } else if (studio && m.pattern == kPatternBrushedMetal) {
         baseColor = brushedMetal(m, h.position, roughness);
-    } else if (m.pattern == kPatternConcrete) {
+    } else if (studio && m.pattern == kPatternConcrete) {
         baseColor = concrete(m, h.position, h.geometricNormal, roughness);
-    } else if (m.pattern >= kPatternCityPunched && m.pattern <= kPatternCityRound) {
+    } else if (city && m.pattern >= kPatternCityPunched && m.pattern <= kPatternCityRound) {
         cityFacade(h, m.pattern, baseColor, roughness, emission);
-    } else if (m.pattern == kPatternCityStreet) {
+    } else if (city && m.pattern == kPatternCityStreet) {
         cityStreet(h, baseColor, roughness);
-    } else if (m.pattern == kPatternHull) {
+    } else if (ship && m.pattern == kPatternHull) {
         baseColor = hullPattern(m, h, roughness, emission);
-    } else if (m.pattern == kPatternPlanet) {
+    } else if (ship && m.pattern == kPatternPlanet) {
         baseColor = planetPattern(m, h, roughness, emission);
-    } else if (m.pattern == kPatternWormholeWall) {
+    } else if (ship && m.pattern == kPatternWormholeWall) {
         baseColor = wormholeWall(m, h, roughness, emission);
-    } else if (m.pattern == kPatternWormholeRing) {
+    } else if (ship && m.pattern == kPatternWormholeRing) {
         baseColor = wormholeRing(m, h, roughness, emission);
-    } else if (m.pattern == kPatternSeaBead) {
+    } else if (sea && m.pattern == kPatternSeaBead) {
 #ifdef GEOMETRY_SPHERES
         seaBead(h, m, roughness);
 #endif
-    } else if (m.pattern == kPatternLightRing) {
+    } else if (sea && m.pattern == kPatternLightRing) {
         emission += lightRing(h, m);
-    } else if (m.pattern == kPatternKeyCap) {
+    } else if (studio && m.pattern == kPatternKeyCap) {
         baseColor = keyCap(h, baseColor);
-    } else if (m.pattern == kPatternPlasmaSea) {
+    } else if (featureOn(kFeaturePlasmaSea) && m.pattern == kPatternPlasmaSea) {
         baseColor = plasmaSeaPattern(m, h, roughness, emission);
     }
     writeSurface(h, baseColor, roughness, m.transmission, emission);

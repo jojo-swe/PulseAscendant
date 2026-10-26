@@ -40,8 +40,16 @@ public:
     // Builds the shader's pipeline (setShader) and the slots' buffers and BLASes (setup). Throws
     // std::invalid_argument for
     // capacity 0, std::runtime_error for a shader that cannot load.
+    //
+    // `refit` (the window's fast mode): each slot's BLAS is built to allow updates, and a record() whose
+    // count equals the slot's last build and whose time is less than kRefitSeconds past the slot's last
+    // record() updates it in place instead of rebuilding it, at most kRefitFrames times in a row (a refit
+    // keeps the tree's topology, so its quality drifts as the particles move). The traced hits are the same
+    // either way.
     ParticleField(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t capacity,
-                  const std::filesystem::path& shader);
+                  const std::filesystem::path& shader, bool refit = false);
+    static constexpr std::uint32_t kRefitFrames = 8;
+    static constexpr double kRefitSeconds = 0.25;
     ~ParticleField();
     ParticleField(const ParticleField&) = delete;
     ParticleField& operator=(const ParticleField&) = delete;
@@ -70,6 +78,8 @@ public:
     const gfx::Buffer& records() const;
     // The particles this slot's last record() made.
     std::uint32_t count() const;
+    // How many record() calls updated a BLAS instead of building it (refit), in all.
+    std::uint32_t refits() const { return refitsRecorded_; }
     std::uint32_t capacity() const { return capacity_; }
     // The device memory held, as allocated (VMA): every slot's buffers, BLAS storage and scratch.
     VkDeviceSize bytes() const;
@@ -80,6 +90,11 @@ private:
         VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
         VkDeviceAddress address = 0;
         std::uint32_t count = 0;
+        // refit: whether the BLAS holds a build of `count` particles that may be updated, the updates since
+        // that build, and the time of the last record().
+        bool updatable = false;
+        std::uint32_t refits = 0;
+        double seconds = 0.0;
     };
     using Slots = std::array<Slot, gfx::FrameRing::kFramesInFlight>;
     Slots createSlots(std::uint32_t capacity) const;
@@ -88,6 +103,8 @@ private:
     gfx::Context& ctx_;
     gfx::FrameRing& ring_;
     std::uint32_t capacity_ = 0;
+    bool refit_ = false;
+    std::uint32_t refitsRecorded_ = 0; // a test hook's count (refits())
     std::map<std::filesystem::path, std::unique_ptr<gfx::ComputePipeline>> pipelines_;
     gfx::ComputePipeline* current_ = nullptr;
     Slots slots_;

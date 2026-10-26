@@ -14,6 +14,7 @@
 #include "modern/scene.hpp"
 #include "modern/scene_gpu.hpp"
 #include "modern/shutter.hpp"
+#include "modern/tracer_options.hpp"
 #include "rt/accel.hpp"
 #include "rt/geometry.hpp"
 #include "rt/light_tree.hpp"
@@ -23,6 +24,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -145,8 +147,13 @@ struct TraceExtras {
     std::function<void(VkCommandBuffer, const PhotonScene&)> photons;
 };
 
+// The features a frame's trace needs (rt::kFeature*: lensing, fog, a grid medium, caustics, thin panes, the
+// light tree, dispersion, the retro screen, and each scene's surface patterns, from the frame's or the
+// scene's material table), for the scene's own pipelines (PathTracer::preparePipeline).
+std::uint32_t traceFeatures(const SceneStatic& scene, const SceneFrame& frame);
+
 // The path tracer every 2026 scene shares: the ray tracing pipeline and its SBT (8 hit
-// groups: hitGroupFor(MaterialClass, GeometryKind), triangles then analytic spheres; misses: sky, shadow),
+// groups: hitGroupFor(MaterialClass, GeometryKind), triangles then analytic spheres; misses: sky, shadow, pane),
 // the TLAS and its scratch, the per-slot uniform, instance, light and material buffers, the dummies of the
 // feature bindings and the G-buffer. A scene's own GPU side is a SceneGpu, which trace() binds. One trace per
 // frame: a frame shows one scene.
@@ -155,7 +162,7 @@ public:
     // Builds the pipeline once (setup work) and sizes its buffers and TLAS for `capacity`. Throws
     // std::invalid_argument for an empty size.
     PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
-               const TracerCapacity& capacity);
+               const TracerCapacity& capacity, const TracerOptions& options = {});
     ~PathTracer();
     PathTracer(const PathTracer&) = delete;
     PathTracer& operator=(const PathTracer&) = delete;
@@ -209,6 +216,17 @@ public:
               extras);
     }
 
+    // Builds a pipeline specialized for `features` (rt::kFeature*; setup work), which trace() then uses for
+    // every frame whose traceFeatures() it covers: the generic pipeline's code with every feature outside
+    // `features` compiled out (fewer registers on GPUs whose ray tracing occupancy follows the pipeline's
+    // largest shader). Frames it does not cover keep the generic pipeline. A no-op for kFeatureAll or a set
+    // already built. The window's fast mode builds one per scene (render::ModernStage::prepare).
+    void preparePipeline(std::uint32_t features);
+    // The pipelines built so far: the generic one and the specialized ones.
+    std::uint32_t pipelineCount() const { return 1u + static_cast<std::uint32_t>(specialized_.size()); }
+    // The features of the pipeline the last trace() used (kFeatureAll: the generic one).
+    std::uint32_t lastPipelineFeatures() const { return lastFeatures_; }
+
     // GPU timer scopes for the TLAS build ("tlas") and the trace dispatches ("trace") of every later trace()
     // (null: none). The timers must outlive the tracer's use of them.
     void setTimers(gfx::GpuTimers* timers) { timers_ = timers; }
@@ -230,6 +248,14 @@ public:
         std::uint32_t traceDispatches = 0; // in the last trace()
     };
     Stats lastStats() const { return stats_; }
+
+    // The work counters since the last call, summed over the frames traced (zeros unless built with
+    // TracerOptions::counters). Only after the ring's frames completed (ring.waitAll()).
+    Counters takeCounters();
+    bool counting() const { return options_.counters; }
+    // The stack sizes of the pipeline the last trace() used, as the driver reports them
+    // (gfx::RayTracingPipeline::stackSizes).
+    gfx::RayTracingPipeline::StackSizes stackSizes() const;
 
     // How many ray tracing pipelines PathTracers have created in this process (a test hook: one per tracer,
     // whatever the number of scenes it traces).
@@ -253,6 +279,8 @@ private:
 
     gfx::Context& ctx_;
     gfx::FrameRing& ring_;
+    TracerOptions options_;
+    bool filteredGrid_ = false; // kTraceFlagFilteredGrid: every driver but lavapipe
     std::uint32_t width_ = 0, height_ = 0;
     TracerCapacity capacity_;
     Stats stats_{};
@@ -262,6 +290,10 @@ private:
 
     gfx::Image blackScreen_;
     gfx::RayTracingPipeline pipeline_;
+    // preparePipeline's pipelines by their features, and the features of the last one used.
+    std::map<std::uint32_t, std::unique_ptr<gfx::RayTracingPipeline>> specialized_;
+    std::uint32_t lastFeatures_ = rt::kFeatureAll;
+    gfx::RayTracingPipeline& pipelineFor(std::uint32_t features);
     // The feature bindings' stand-ins: a zeroed buffer, and one-texel images of the right types.
     gfx::Buffer dummyBuffer_;
     gfx::Image dummyDensity_, dummyMajorant_, dummyCaustics_;
@@ -279,6 +311,12 @@ private:
     // The frame's lens (SceneFrame::lensing packed, binding EVO_BINDING_LENSING), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> lenses_;
     GBuffer gbuffer_;
+    // The counting build's per-slot totals (lo, hi words per counter), whether a slot holds a frame not yet
+    // added to counterSums_, and the sums.
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> counters_;
+    std::array<bool, gfx::FrameRing::kFramesInFlight> countersPending_{};
+    Counters counterSums_{};
+    void gatherCounters(std::uint32_t slot);
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
     std::unique_ptr<rt::Tlas> tlas_;
 };

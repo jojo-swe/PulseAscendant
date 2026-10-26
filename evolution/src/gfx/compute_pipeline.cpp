@@ -52,7 +52,7 @@ ComputePipeline::ComputePipeline(Context& ctx, const std::filesystem::path& spv,
         pipelineInfo.stage.pName = "main";
         pipelineInfo.layout = layout_;
         const VkResult result =
-            vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
+            vkCreateComputePipelines(device, ctx.pipelineCache(), 1, &pipelineInfo, nullptr, &pipeline_);
         vkDestroyShaderModule(device, module, nullptr);
         vkCheck(result, ("vkCreateComputePipelines(" + name + ")").c_str());
     } catch (...) {

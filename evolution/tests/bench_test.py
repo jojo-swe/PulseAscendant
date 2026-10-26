@@ -3,17 +3,21 @@ hardware checkpoint reads, sane values, and the exit code 0. Arguments after the
 --validation) are passed to every run."""
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 
 KEYS = {"chapter", "title", "scene", "frames", "spp", "traceScale", "width", "height", "traceWidth",
         "traceHeight", "device", "timestamps", "gpuMs", "fps"}
-PASSES = {"total", "retro", "fill", "tlas", "trace", "denoise", "upscale", "tonemap", "compositor"}
+PASSES = {"total", "retro", "fill", "particles", "medium", "tlas", "photons", "trace", "splats", "denoise",
+          "upscale", "bloom", "tonemap", "compositor"}
 
 
-def bench(exe, extra, args):
+def bench(exe, extra, args, env=None):
     result = subprocess.run([exe, *extra, "--bench", "--width", "96", "--height", "54", *args],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300,
+                            env=dict(os.environ, **(env or {})))
     sys.stderr.write(result.stderr.decode(errors="replace"))
     if result.returncode != 0:
         sys.exit(f"--bench {' '.join(args)} exited with {result.returncode}")
@@ -57,6 +61,8 @@ def main(exe, extra):
     ms = studio["gpuMs"]
     if studio["timestamps"] and not (ms["trace"] > 0 and ms["upscale"] > 0 and ms["total"] > 0):
         sys.exit(f"STUDIO NIGHT at scale 0.67 must time the trace and the upscale: {ms}")
+    if studio.get("fast") is not True:
+        sys.exit(f"--bench renders in the window's fast mode by default: {studio}")
     print(f"bench: {json.dumps(studio)}")
 
     # Two chapters in the order given, at scale 1: no upscale pass; BOOT has no 2026 scene (the placeholder).
@@ -68,6 +74,42 @@ def main(exe, extra):
     if records[0]["gpuMs"]["upscale"] != 0 or records[1]["scene"] != "Placeholder":
         sys.exit(f"scale 1 must not upscale, BOOT must be the placeholder: {records}")
     print(f"bench: chapters 11 and 0 at scale 1: {[r['gpuMs']['total'] for r in records]} ms")
+
+    # --bench-counters: the counting tracer's work per trace pixel and the frame's statistics. STUDIO NIGHT's
+    # timed frames trace 1 spp: one path, one camera ray and one guide ray per pixel.
+    # --bench-capture writes the last timed frame as bench_<chapter>.png.
+    capture = tempfile.mkdtemp(prefix="evo_bench_")
+    records = bench(exe, extra, ["--chapters", "11", "--bench-frames", "2", "--bench-counters", "--bench-capture",
+                                 capture])
+    png = os.path.join(capture, "bench_11.png")
+    with open(png, "rb") as f:
+        head = f.read(24)
+    if head[:8] != b"\x89PNG\r\n\x1a\n" or head[16:24] != (96).to_bytes(4, "big") + (54).to_bytes(4, "big"):
+        sys.exit(f"--bench-capture: {png} is no 96x54 PNG")
+    counted = records[0]
+    check(counted, 11, 2, 0.67, (64, 36))
+    counters, stats = counted.get("counters", {}), counted.get("stats", {})
+    if not {"paths", "primaryRays", "bounceRays", "shadowRays", "guideRays", "treeNodes"} <= counters.keys():
+        sys.exit(f"--bench-counters: missing counters in {counted}")
+    if abs(counters["paths"] - 1) > 1e-6 or counters["primaryRays"] != counters["paths"] or \
+            abs(counters["guideRays"] - 1) > 1e-6 or not counters["shadowRays"] > 0:
+        sys.exit(f"--bench-counters: one path, camera ray and guide ray per pixel expected: {counters}")
+    if not stats.get("instances", 0) > 0 or stats.get("spp") != 1 or stats.get("maxBounces") != 4:
+        sys.exit(f"--bench-counters: implausible statistics {stats}")
+    print(f"bench: counters {counters}")
+
+    # Fast mode traces the Studio with its own pipeline (retro screen and Studio patterns, no lensing or grid),
+    # whose picture is the generic pipeline's (EVO_SCENE_PIPELINES=0) byte for byte.
+    features = int(stats.get("pipelineFeatures", -1))
+    if features == 0xFFFFFFFF or not features & 128 or features & (1 | 4):
+        sys.exit(f"STUDIO NIGHT should trace with its own pipeline: features {features:#x}")
+    generic = tempfile.mkdtemp(prefix="evo_bench_generic_")
+    bench(exe, extra, ["--chapters", "11", "--bench-frames", "2", "--bench-counters", "--bench-capture", generic],
+          {"EVO_SCENE_PIPELINES": "0"})
+    with open(png, "rb") as a, open(os.path.join(generic, "bench_11.png"), "rb") as b:
+        if a.read() != b.read():
+            sys.exit("the Studio's own pipeline and the generic one gave different pictures")
+    print(f"bench: the Studio's pipeline (features {features:#x}) equals the generic one")
 
     # A chapter the show does not have.
     result = subprocess.run([exe, "--bench", "--chapters", "99", "--width", "96", "--height", "54"],

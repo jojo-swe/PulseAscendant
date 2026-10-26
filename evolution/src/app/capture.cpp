@@ -44,6 +44,7 @@ bool applyForcedEra(show::TimelineFrame& frame) {
 int runCapture(const Options& options) {
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
+    contextOptions.pipelineCacheFile = gfx::pipelineCachePath(); // no recompiles on the next run
     gfx::Context ctx = gfx::Context::create(contextOptions);
 
     const auto width = static_cast<std::uint32_t>(options.width);

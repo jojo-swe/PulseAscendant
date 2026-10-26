@@ -3,6 +3,7 @@
 #include "gfx/descriptors.hpp"
 #include "gfx/paths.hpp"
 #include "gfx/sync.hpp"
+#include "modern/environment.hpp"
 #include "modern/scene.hpp"
 
 #include <algorithm>
@@ -256,6 +257,62 @@ CausticMaps::~CausticMaps() {
     ring_.waitAll(); // shutdown
 }
 
+namespace {
+
+// FNV-1a over the bytes of everything the photon pass reads from a frame (CausticMaps::prepare's reuse).
+class KeyHash {
+public:
+    void bytes(const void* data, std::size_t size) {
+        const auto* p = static_cast<const unsigned char*>(data);
+        for (std::size_t i = 0; i < size; ++i)
+            h_ = (h_ ^ p[i]) * 0x100000001B3ull;
+    }
+    template <typename T> void value(const T& v) { bytes(&v, sizeof v); }
+    std::uint64_t get() const { return h_; }
+
+private:
+    std::uint64_t h_ = 0xCBF29CE484222325ull;
+};
+
+std::uint64_t inputKey(const SceneStatic& scene, const SceneFrame& frame, std::uint32_t photons,
+                       std::uint32_t seed, std::uint32_t resolution) {
+    KeyHash h;
+    h.value(&scene);
+    h.value(photons);
+    h.value(seed);
+    h.value(resolution);
+    const CausticFrame& c = *frame.caustics;
+    for (const CausticReceiver& r : c.receivers) {
+        h.value(r.worldToUv);
+        h.value(r.resolution);
+        h.value(r.chromaRadius);
+    }
+    h.value(c.photons);
+    h.value(c.light);
+    h.value(c.casterInstanceFirst);
+    h.value(c.casterInstanceCount);
+    for (const SceneInstance& in : frame.instances) {
+        h.value(in.mesh);
+        h.value(in.material);
+        h.value(in.transform);
+        h.value(in.light);
+        h.value(in.kind);
+        h.value(in.firstSphere);
+        h.value(in.sphereCount);
+        h.value(in.dynamicSpheres);
+    }
+    h.value(frame.instances.size());
+    h.bytes(frame.lights.data(), frame.lights.size() * sizeof(rt::RectLight));
+    h.value(frame.lights.size());
+    const std::vector<rt::Material>& materials = frame.materials.empty() ? scene.materials : frame.materials;
+    h.bytes(materials.data(), materials.size() * sizeof(rt::Material));
+    h.value(materials.size());
+    h.value(packEnvironment(frame.environment));
+    return h.get();
+}
+
+} // namespace
+
 void CausticMaps::createMaps() {
     const VkDeviceSize texels = VkDeviceSize(resolution_) * resolution_;
     accumulator_ = gfx::Buffer(ctx_, {kMaxCausticReceivers * texels * 3 * sizeof(std::uint32_t),
@@ -281,6 +338,7 @@ void CausticMaps::reserve(std::uint32_t maxResolution) {
     vkQueueWaitIdle(ctx_.queue()); // setup
     resolution_ = maxResolution;
     createMaps();
+    mapsValid_ = false;
 }
 
 const gfx::Buffer& CausticMaps::receiverTable() const {
@@ -300,7 +358,7 @@ void CausticMaps::setPhotonOrder(std::uint32_t multiplier, std::uint32_t offset)
 }
 
 void CausticMaps::prepare(const SceneStatic& scene, const SceneFrame& frame, std::uint32_t photons,
-                          std::uint32_t seed) {
+                          std::uint32_t seed, bool reuse) {
     if (!ring_.recording())
         throw std::logic_error("CausticMaps::prepare() outside FrameRing::begin()/submit()");
     if (!frame.caustics)
@@ -358,12 +416,19 @@ void CausticMaps::prepare(const SceneStatic& scene, const SceneFrame& frame, std
                                     : 0.f;
         irradianceScale_[i] = texelArea > 0 ? fluxUnit / texelArea : 0.f;
     }
+    // The maps of the same inputs come out the same: keep them (the window's fast mode).
+    key_ = reuse && !frame.particles ? inputKey(scene, frame, photons, seed, resolution_) : 0;
+    skip_ = key_ != 0 && mapsValid_ && key_ == mapsKey_;
     prepared_ = true;
 }
 
 void CausticMaps::record(VkCommandBuffer cmd, const PhotonScene& scene) {
     if (!prepared_)
         throw std::logic_error("CausticMaps::record() without prepare() in this frame");
+    if (skip_)
+        return; // the maps already hold this frame's photons
+    mapsKey_ = key_;
+    mapsValid_ = key_ != 0;
     constexpr VkAccessFlags2 kReadWrite =
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     // Clear the sums (after the last frame's photons and resolve), then gather this frame's.

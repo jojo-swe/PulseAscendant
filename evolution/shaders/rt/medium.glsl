@@ -22,13 +22,14 @@ const float kMediumPi = 3.14159265358979;
 
 // Whether this frame has any medium, fog or a grid.
 bool mediumActive() {
-    return frame.mediumFlags != 0u;
+    return (frame.mediumFlags & ((featureOn(kFeatureFog) ? kMediumFog : 0u) |
+                                 (featureOn(kFeatureGrid) ? kMediumGrid : 0u))) != 0u;
 }
 bool fogActive() {
-    return (frame.mediumFlags & kMediumFog) != 0u;
+    return featureOn(kFeatureFog) && (frame.mediumFlags & kMediumFog) != 0u;
 }
 bool gridActive() {
-    return (frame.mediumFlags & kMediumGrid) != 0u;
+    return featureOn(kFeatureGrid) && (frame.mediumFlags & kMediumGrid) != 0u;
 }
 
 // --- Random numbers ----------------------------------------------------------------------------------------
@@ -153,13 +154,19 @@ GridRay gridRay(vec3 o, vec3 d) {
 }
 
 // The baked voxel (density, emission rgb) at cell-space point c: trilinear between the baked voxels' centres
-// (clamped to them: the image may be larger than this frame's grid). By hand from eight texelFetches rather
-// than the sampler's filtering: exact on every driver and in full precision (hardware filtering weights
-// may have 8 bits), so the majorant, taken from the same texels, bounds it exactly (lavapipe's filtered
-// fetch from a 32^3 image was measured off, its texelFetch exact).
+// (clamped to them: the image may be larger than this frame's grid). With kTraceFlagFilteredGrid (every
+// driver but lavapipe) one fetch through the bound trilinear sampler at the same point: the texture unit
+// interpolates the same eight texels, with weights of 8 bits on most GPUs, so the result still lies between
+// them and the cell's majorant still bounds it (the trackers clamp it there anyway). Otherwise by hand from
+// eight texelFetches: lavapipe's filtered fetch from a 32^3 image was measured off, its texelFetch exact, and
+// its pictures are the byte-exact reference.
 vec4 gridVoxel(vec3 c) {
+    EVO_COUNT(kCountGridLookups, 1);
     ivec3 last = ivec3(mediumData.gridSize) - 1;
     vec3 u = clamp(c * kMajorantCell - 0.5, vec3(0.0), vec3(last));
+    if ((frame.flags & kTraceFlagFilteredGrid) != 0u) {
+        return textureLod(mediumDensity, (u + 0.5) / vec3(textureSize(mediumDensity, 0)), 0.0);
+    }
     ivec3 i0 = min(ivec3(u), last);
     ivec3 i1 = min(i0 + 1, last);
     vec3 f = u - vec3(i0);
@@ -247,6 +254,7 @@ bool gridWalkNext(inout GridWalk w, out float s0, out float s1, out float majora
         return false;
     }
     w.left -= 1u;
+    EVO_COUNT(kCountGridCells, 1);
     float exitT = min(min(w.tNext.x, w.tNext.y), w.tNext.z);
     s1 = min(max(exitT, w.t), w.tEnd);
     majorant = mediumData.densityScale * texelFetch(mediumMajorant, w.cell, 0).r;
@@ -282,6 +290,7 @@ float gridTransmittance(vec3 o, vec3 d, float t0, float t1) {
     if (!gridWalkBegin(r, t0, t1, w)) {
         return 1.0;
     }
+    EVO_COUNT(kCountGridWalks, 1);
     float transmittance = 1.0;
     uint steps = 0u;
     float s0;
@@ -307,6 +316,7 @@ float gridTransmittance(vec3 o, vec3 d, float t0, float t1) {
                     break;
                 }
                 steps += 1u;
+                EVO_COUNT(kCountTrackingSteps, 1);
                 float control = sigmaA + slope * (t - a);
                 transmittance *= clamp(1.0 - (gridSigma(r.origin + r.direction * t) - control) / majorant, 0.0, 2.0);
             }
@@ -345,6 +355,7 @@ bool gridCollision(vec3 o, vec3 d, float t0, float t1, out float tHit, inout vec
             if (!(t < s1)) {
                 break;
             }
+            EVO_COUNT(kCountTrackingSteps, 1);
             vec4 voxel = gridVoxel(r.origin + r.direction * t);
             float sigma = mediumData.densityScale * max(voxel.r, 0.0);
             if (emits) {

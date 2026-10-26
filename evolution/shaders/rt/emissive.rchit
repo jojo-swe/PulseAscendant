@@ -96,22 +96,23 @@ void main() {
     HitPoint h = hitPoint();
     Material m = h.material;
     vec3 emission = materialEmission(m);
-    if (m.texture == kRetroScreenTexture && (m.flags & kMaterialThinWalled) != 0u) {
+    bool retro = featureOn(kFeatureRetro) && m.texture == kRetroScreenTexture;
+    if (retro && (m.flags & kMaterialThinWalled) != 0u) {
         // The screen seen from behind (a camera inside the picture, Studio's PORTAL and REBOOT): thin glass
         // whose picture glows only towards its back, mirrored as a picture seen through its glass is; where
         // it is black the glass is clear and the room shows through (the raygen passes the thin pane).
         emission = h.front ? vec3(0.0) : retroScreenPicture(h.uv, screenTextureLod(h)) * m.emissionScale;
-    } else if (m.texture == kRetroScreenTexture) {
+    } else if (retro) {
         float lod = screenTextureLod(h);
         bool primary = payload.coneSpread >= 0.0 && payload.coneWidth == 0.0;
         emission = (primary ? primaryScreenPicture(h, lod) : retroScreenPicture(h.uv, lod)) * m.emissionScale;
         h.normal = crtGlassNormal(h);
-        if (m.pattern == kPatternCrtGlass) {
+        if (featureOn(kFeatureStudioPatterns) && m.pattern == kPatternCrtGlass) {
             crtGlass(h, h.material, m.baseColor, emission);
         }
-    } else if (m.pattern == kPatternCityTrail) {
+    } else if (featureOn(kFeatureCityPatterns) && m.pattern == kPatternCityTrail) {
         emission *= cityTrail(h.uv); // City: a car's light trail
-    } else if (m.pattern == kPatternCitySign && payload.coneSpread >= 0.0) {
+    } else if (featureOn(kFeatureCityPatterns) && m.pattern == kPatternCitySign && payload.coneSpread >= 0.0) {
         // City: a sign's lettering, to the camera and along delta chains; its mean is the light's emission.
         emission *= citySign(h.uv, vec2(length(h.dPdu), length(h.dPdv)), cityBuildingSeed());
     }

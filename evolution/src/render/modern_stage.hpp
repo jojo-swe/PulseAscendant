@@ -6,6 +6,7 @@
 #include "gfx/image.hpp"
 #include "modern/modern_scene.hpp"
 #include "modern/scene.hpp"
+#include "modern/tracer_options.hpp"
 #include "post/tonemap.hpp"
 #include "render/stage_plan.hpp"
 #include "show/timeline.hpp"
@@ -130,7 +131,7 @@ public:
     // Throws std::invalid_argument for a trace scale validTraceScale refuses.
     ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
                 modern::SceneDetail detail = {}, modern::SceneFactory factory = {}, modern::SceneMap map = {},
-                float traceScale = 1.f);
+                float traceScale = 1.f, const modern::TracerOptions& tracerOptions = {});
     ~ModernStage();
     ModernStage(const ModernStage&) = delete;
     ModernStage& operator=(const ModernStage&) = delete;
@@ -189,6 +190,28 @@ public:
     modern::PathTracer* tracer();
     // A prepared scene's GPU side; null for one not prepared (and the placeholder).
     const modern::SceneGpu* sceneGpu(modern::SceneId id) const;
+    // What the last traced frame held and asked for (zeros after a placeholder frame): its scene's size,
+    // lights, media and per-frame GPU work, for --bench-counters.
+    struct FrameStats {
+        std::uint32_t instances = 0, rectLights = 0, portals = 0, treeLights = 0;
+        bool thinPanes = false, fog = false, lensing = false;
+        std::uint32_t gridVoxels = 0;     // the grid medium's voxels, baked this frame (0: none)
+        std::uint32_t photons = 0;        // caustic photons shot this frame
+        std::uint32_t causticTexels = 0;  // caustic map texels resolved this frame
+        std::uint32_t particles = 0;      // particles made this frame (their BLAS is rebuilt)
+        std::uint32_t splats = 0;
+        std::uint32_t slices = 0, spp = 0, maxBounces = 0;
+        std::uint32_t traceWidth = 0, traceHeight = 0;
+        // The tracer pipeline's stack sizes in bytes (the driver's; gfx::RayTracingPipeline::stackSizes).
+        std::uint64_t raygenStack = 0, hitStack = 0;
+        // The features of the pipeline that traced it (rt::kFeature*; all bits: the generic pipeline).
+        std::uint32_t pipelineFeatures = 0;
+    };
+    const FrameStats& lastFrameStats() const { return frameStats_; }
+    // The path tracer's work counters since the last call (modern::PathTracer::takeCounters; zeros without
+    // TracerOptions::counters or a tracer). Only after the ring's frames completed.
+    modern::Counters takeCounters();
+
     // The particle field every scene with particles shares; null until one is prepared.
     const rt::ParticleField* particles() const { return particles_.get(); }
     // The caustic maps every scene with caustics shares; null until one is prepared.
@@ -199,6 +222,9 @@ public:
 private:
     // The scene object of an id, built on first use (CPU only).
     const modern::ModernScene& scene(modern::SceneId id) const;
+    // What the scene's frames need of the path tracer's pipeline (modern::traceFeatures over its chapters,
+    // sampled): its own pipeline in the window's fast mode.
+    std::uint32_t sceneFeatures(modern::SceneId id) const;
     void renderTraced(VkCommandBuffer cmd, modern::SceneId id, const show::TimelineFrame& frame,
                       const HistoryState& state, gfx::Image* retroImage);
     bool upscales() const { return traceWidth_ != width_ || traceHeight_ != height_; }
@@ -213,6 +239,8 @@ private:
     float traceScale_;
     std::uint32_t traceWidth_, traceHeight_;
     modern::SceneDetail detail_;
+    modern::TracerOptions tracerOptions_;
+    FrameStats frameStats_;
     modern::SceneFactory factory_;
     modern::SceneMap map_;
     gfx::FillPass fill_; // the placeholder, as HDR light

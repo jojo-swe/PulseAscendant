@@ -114,7 +114,10 @@ private:
 //: max(spp, kResetSpp[framesSinceReset]) while framesSinceReset < 2, then spp. Exports
 // always trace spp. The HistoryKey keeps the configured spp, so the extra samples never reset anything.
 inline constexpr std::array<std::uint32_t, 2> kResetSpp{4, 2};
-std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset);
+// The window's fast mode (modern::TracerOptions::fast) starts a history at half of that, kFastResetSpp: a cut
+// then costs the frame after it two frames' work instead of four, not a stutter at 60 fps.
+inline constexpr std::array<std::uint32_t, 2> kFastResetSpp{2, 1};
+std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset, bool fast = false);
 
 // From this many samples per pixel exports clamp fireflies and filter the surface lighting lightly: only
 // kExportFineAtrousIterations a-trous iterations (steps 1 and 2), which still remove the speckle of many

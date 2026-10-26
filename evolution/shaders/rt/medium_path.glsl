@@ -38,7 +38,11 @@ const uint kMediumSegmentEnd = 2u;       // the path ends in the medium
 // The continuation's bounces draw the per-bounce random dimensions of bounce + this (the surface path's own
 // stay below it).
 const uint kMediumBounceOffset = 64u;
+#ifdef EVO_FAST
+const uint kPrimaryScatterSamples = 2u; // the window's fast build (pathtrace.rgen); one was visibly darker
+#else
 const uint kPrimaryScatterSamples = 4u; // modern::kPrimaryScatterSamples
+#endif
 // Equiangular sampling of the primary segment's points serves frames with 1 to this many tree lights (stars
 // in a nebula); a city's thousands of lamps leave it to the majorant. The share of the points it draws:
 const uint kEquiangularMaxLights = 64u;   // modern::kEquiangularMaxLights
@@ -87,6 +91,7 @@ vec3 sampleMediumPhase(MediumPhase ph, vec3 travel, vec3 u) {
 // from. u: the light choice and the point on it. Returns value(phase) * Le * T * w_MIS / pdf_NEE. Both kinds
 // of light end in the one shadow ray (a single ray tracing site).
 vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWord) {
+    EVO_COUNT(kCountMediumNee, 1);
     const vec3 facing = vec3(0.0, 1.0, 0.0); // light selection ignores it at a transmissive point
     float environmentSelect = frame.environmentSelect;
     vec3 wi;
@@ -110,6 +115,9 @@ vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWor
         }
         RectLight l = lights[index];
         if (l.kind == kLightTree) {
+            if (!featureOn(kFeatureTree)) {
+                return vec3(0.0);
+            }
             // The light tree, as sampleTreeLight: one sphere light by the walk (treeWord), one
             // direction in its cone, the shadow ray to its near surface lifted off it.
             uint k;
@@ -222,6 +230,7 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout bool rough, inout
     if (bounce >= frame.maxBounces) {
         return kMediumSegmentEnd;
     }
+    EVO_COUNT(kCountMediumScatter, 1);
     vec3 x = origin + tHit * direction;
     float g = which == 0u ? mediumData.fogPhaseG : mediumData.gridPhaseG;
     throughput *= which == 0u ? mediumData.fogAlbedo : mediumData.gridAlbedo;
@@ -232,7 +241,7 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout bool rough, inout
         mediumRequestLight(x, direction, ph, throughput, u, treeWord);
     }
     vec3 wi = hgSample(g, direction, vec2(bounceRand(bounce, 0u), bounceRand(bounce, 1u)));
-    if (roulette && bounce >= 3u) {
+    if (roulette && bounce >= kRouletteBounce) {
         float survive = clamp(maxComponent(throughput), 0.05, 0.95);
         if (bounceRand(bounce, 6u) >= survive) {
             return kMediumSegmentEnd;
@@ -381,6 +390,7 @@ float gridTransmittanceAt(GridRay r, GridWalk w, vec3 o, vec3 d, float ts[kPrima
                     break;
                 }
                 steps += 1u;
+                EVO_COUNT(kCountTrackingSteps, 1);
                 transmittance *=
                     clamp(1.0 - (gridSigma(r.origin + r.direction * t) - controlReach) / majorant, 0.0, 2.0);
                 if (transmittance < kMediumTransmittanceCutoff) {
@@ -471,7 +481,7 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
 
     // Equiangular sampling towards the frame's few tree lights, over the grid's part of the segment: one
     // light per point, chosen by equiangularWeight.
-    uint equiangularLights = gridMass > 0.0 && frame.treeLightCount <= kEquiangularMaxLights
+    uint equiangularLights = featureOn(kFeatureTree) && gridMass > 0.0 && frame.treeLightCount <= kEquiangularMaxLights
                                  ? frame.treeLightCount : 0u;
     float weightSum = 0.0;
     for (uint k = 0u; k < equiangularLights; ++k) {
@@ -483,6 +493,7 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
     // equiangular densities.
     float ts[kPrimaryScatterSamples];
     float pdfs[kPrimaryScatterSamples];
+    EVO_COUNT(kCountInScatterPoints, kPrimaryScatterSamples);
     for (uint k = 0u; k < kPrimaryScatterSamples; ++k) {
         float strategy = mediumRand();
         float u = (float(k) + mediumRand()) / float(kPrimaryScatterSamples);
