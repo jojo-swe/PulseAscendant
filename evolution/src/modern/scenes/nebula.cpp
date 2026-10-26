@@ -584,7 +584,7 @@ float nebulaExposureEV(const show::TimelineFrame& frame) {
     const PlasmaPlanetTimes times = plasmaPlanetTimes(frame);
     const float day = smooth01(static_cast<float>((frame.localSeconds - times.sunrise) / times.barSeconds));
     if (frame.localSeconds >= times.lowPass)
-        return -2.3f;
+        return -3.f; // the cloud tops in the low sun keep their shading, short of clipping to white
     return 0.4f - 2.6f * day;
 }
 

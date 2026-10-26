@@ -506,11 +506,16 @@ float planetClouds(vec3 p, float altitude, float t) {
     // Billows: 3-D detail that grows towards the top, so the towers come out cauliflowered, not as slabs.
     float h = (altitude - kCloudBase) / (kCloudTop - kCloudBase);
     float billows = fbm(q * 0.9 + vec3(0.0, -0.2 * t, 0.0), 3);
-    float cover = cells + 0.5 * heap + (0.12 + 0.25 * h) * billows; // about zero-mean (fbm is)
+    // The systems only set where the cumulus gathers; the heaps and billows shape each cloud, so its top is
+    // a dome of towers, not the flat lid of a smooth field's contour.
+    float cover = 0.65 * cells + 0.75 * heap + (0.15 + 0.35 * h) * billows; // about zero-mean (fbm is)
     // Heaped: the higher, the more cover a column needs to reach it (flat bases, rounded tops).
-    float shape = smoothstep(0.0, 0.08, cover - 0.1 - 0.32 * h);
-    float erosion = 0.3 * gradientNoise(q * 2.3);
-    return 6.0 * band * clamp(shape * (1.0 + erosion), 0.0, 1.0);
+    // Each cloud has its own height: most stay low and flat-topped, some tower to the layer's top, so the
+    // deck is a field of heaps of different heights catching the low sun, not one level of floes.
+    float towers = clamp(0.25 + 1.3 * (fbm(q * 0.11 + vec3(5.3, 0.0, 2.1), 2) + 0.15), 0.22, 1.0);
+    float shape = smoothstep(0.0, 0.14, cover - 0.06 - 0.5 * h / towers);
+    float erosion = 0.35 * gradientNoise(q * 2.3);
+    return 4.5 * band * clamp(shape * (1.0 + erosion), 0.0, 1.0);
 }
 
 vec4 planetVoxel(vec3 p, float t, float sunIrradiance, float radius, vec3 eye, bool withClouds) {
