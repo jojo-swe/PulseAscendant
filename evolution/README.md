@@ -596,8 +596,9 @@ Options:
                        adapts it to the GPU's frame time (docs/PERFORMANCE.md)
   --no-fast-mode       Trace the window and --bench as the exports do: four in-scatter
                        points in media, photons seeded per frame, the generic pipeline,
-                       full BLAS builds (by default the window traces in fast mode;
-                       docs/PERFORMANCE.md)
+                       full BLAS builds, every shadow ray traced and walked through
+                       panes, roulette from bounce 3 only (by default the window
+                       traces in fast mode; docs/PERFORMANCE.md)
   --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
                        needs a duration greater than 0
   --headless           Render without opening a window

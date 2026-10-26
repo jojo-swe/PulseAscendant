@@ -61,13 +61,15 @@ const std::array<gfx::Binding, EVO_BINDING_COUNT> kBindings = {
 
 // pathtrace.rgen's push constants: which of the frame's samples this dispatch traces, and the subpixel
 // window they are box-filtered over (its corner relative to the pixel's, and its size; (0, 0) and (1, 1) for
-// the whole pixel), and whether it writes the guides (one dispatch of the frame does).
+// the whole pixel), whether it writes the guides (one dispatch of the frame does), and the fast raygen's
+// shadow-ray roulette level (TraceSettings::neeRoulette; the other builds do not declare it).
 struct TracePush {
     std::uint32_t sampleBase, sampleCount;
     float windowOrigin[2], windowSize[2];
     std::uint32_t guides; // non-zero: this dispatch also writes the guides (depth, normal, motion, volume)
+    float neeRoulette;
 };
-static_assert(sizeof(TracePush) == 28);
+static_assert(sizeof(TracePush) == 32);
 
 // The largest struct a feature binding may declare (MediumUniforms): the dummy buffer covers any of them.
 constexpr VkDeviceSize kDummyBufferBytes = 256;
@@ -875,7 +877,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                              {0.5f + settings.pixelJitter[0] - 0.5f * settings.pixelFootprint[0],
                               0.5f + settings.pixelJitter[1] - 0.5f * settings.pixelFootprint[1]},
                              {settings.pixelFootprint[0], settings.pixelFootprint[1]},
-                             k == guideSlice && firstOfSlice ? 1u : 0u};
+                             k == guideSlice && firstOfSlice ? 1u : 0u,
+                             options_.fast ? settings.neeRoulette : 0.f};
         pipeline.push(cmd, &push, sizeof push);
         pipeline.traceRays(cmd, width_, height_);
     }
