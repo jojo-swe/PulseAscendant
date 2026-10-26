@@ -213,7 +213,11 @@ Camera plasmaCamera(const show::TimelineFrame& f) {
                         {end, {1.6f, 0.8f, 1.f}}};
     const double t = std::clamp(f.localSeconds, 0.0, end);
     const Vec3 eye = throughKeys(eyes, t, {1});
-    const Vec3 look = normalize(Vec3{-0.02f * smooth01(static_cast<float>((t - downbeat) / (end - downbeat))), 0.f, -1.f});
+    // Inside, the camera turns slowly to look along the slab instead of through it, so the strands recede
+    // in layers to the end of the shot.
+    const float turn = smooth01(static_cast<float>((t - accent) / std::max(end - accent, 1e-3)));
+    const Vec3 look = normalize(Vec3{-0.02f * smooth01(static_cast<float>((t - downbeat) / (end - downbeat))) + 0.7f * turn,
+                                     0.06f * turn, -1.f});
     return lookAt(eye, eye + 10.f * look, kFov24, 0);
 }
 
