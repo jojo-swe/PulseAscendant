@@ -14,6 +14,7 @@
 #include "modern/scene.hpp"
 #include "modern/scene_gpu.hpp"
 #include "modern/shutter.hpp"
+#include "modern/tracer_options.hpp"
 #include "rt/accel.hpp"
 #include "rt/geometry.hpp"
 #include "rt/light_tree.hpp"
@@ -155,7 +156,7 @@ public:
     // Builds the pipeline once (setup work) and sizes its buffers and TLAS for `capacity`. Throws
     // std::invalid_argument for an empty size.
     PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
-               const TracerCapacity& capacity);
+               const TracerCapacity& capacity, const TracerOptions& options = {});
     ~PathTracer();
     PathTracer(const PathTracer&) = delete;
     PathTracer& operator=(const PathTracer&) = delete;
@@ -231,6 +232,13 @@ public:
     };
     Stats lastStats() const { return stats_; }
 
+    // The work counters since the last call, summed over the frames traced (zeros unless built with
+    // TracerOptions::counters). Only after the ring's frames completed (ring.waitAll()).
+    Counters takeCounters();
+    bool counting() const { return options_.counters; }
+    // The pipeline's stack sizes as the driver reports them (gfx::RayTracingPipeline::stackSizes).
+    gfx::RayTracingPipeline::StackSizes stackSizes() const { return pipeline_.stackSizes(); }
+
     // How many ray tracing pipelines PathTracers have created in this process (a test hook: one per tracer,
     // whatever the number of scenes it traces).
     static std::uint32_t pipelinesCreated();
@@ -253,6 +261,7 @@ private:
 
     gfx::Context& ctx_;
     gfx::FrameRing& ring_;
+    TracerOptions options_;
     std::uint32_t width_ = 0, height_ = 0;
     TracerCapacity capacity_;
     Stats stats_{};
@@ -279,6 +288,12 @@ private:
     // The frame's lens (SceneFrame::lensing packed, binding EVO_BINDING_LENSING), per slot.
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> lenses_;
     GBuffer gbuffer_;
+    // The counting build's per-slot totals (lo, hi words per counter), whether a slot holds a frame not yet
+    // added to counterSums_, and the sums.
+    std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> counters_;
+    std::array<bool, gfx::FrameRing::kFramesInFlight> countersPending_{};
+    Counters counterSums_{};
+    void gatherCounters(std::uint32_t slot);
     // Last: destroyed first, its destructor waits for the ring's frames in flight before anything above goes.
     std::unique_ptr<rt::Tlas> tlas_;
 };

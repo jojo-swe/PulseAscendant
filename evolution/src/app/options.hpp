@@ -42,6 +42,7 @@ struct Options {
     // one JSON line each on stdout (app/bench.hpp).
     bool bench = false;
     int benchFrames = 120;
+    bool benchCounters = false; // --bench-counters: the work counters and scene statistics per chapter
     std::vector<int> chapters; // --chapters LIST: chapter indices, as --show-info numbers them
     // --secret-part[=WORD]: the window and --render-stream run the part of retro/secret_part.hpp instead of
     // the show (--time and --duration then count its seconds); WORD is checked as the patient's answer.

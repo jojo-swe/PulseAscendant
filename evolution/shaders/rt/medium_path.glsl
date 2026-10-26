@@ -87,6 +87,7 @@ vec3 sampleMediumPhase(MediumPhase ph, vec3 travel, vec3 u) {
 // from. u: the light choice and the point on it. Returns value(phase) * Le * T * w_MIS / pdf_NEE. Both kinds
 // of light end in the one shadow ray (a single ray tracing site).
 vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWord) {
+    EVO_COUNT(kCountMediumNee, 1);
     const vec3 facing = vec3(0.0, 1.0, 0.0); // light selection ignores it at a transmissive point
     float environmentSelect = frame.environmentSelect;
     vec3 wi;
@@ -222,6 +223,7 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout bool rough, inout
     if (bounce >= frame.maxBounces) {
         return kMediumSegmentEnd;
     }
+    EVO_COUNT(kCountMediumScatter, 1);
     vec3 x = origin + tHit * direction;
     float g = which == 0u ? mediumData.fogPhaseG : mediumData.gridPhaseG;
     throughput *= which == 0u ? mediumData.fogAlbedo : mediumData.gridAlbedo;
@@ -381,6 +383,7 @@ float gridTransmittanceAt(GridRay r, GridWalk w, vec3 o, vec3 d, float ts[kPrima
                     break;
                 }
                 steps += 1u;
+                EVO_COUNT(kCountTrackingSteps, 1);
                 transmittance *=
                     clamp(1.0 - (gridSigma(r.origin + r.direction * t) - controlReach) / majorant, 0.0, 2.0);
                 if (transmittance < kMediumTransmittanceCutoff) {
@@ -483,6 +486,7 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
     // equiangular densities.
     float ts[kPrimaryScatterSamples];
     float pdfs[kPrimaryScatterSamples];
+    EVO_COUNT(kCountInScatterPoints, kPrimaryScatterSamples);
     for (uint k = 0u; k < kPrimaryScatterSamples; ++k) {
         float strategy = mediumRand();
         float u = (float(k) + mediumRand()) / float(kPrimaryScatterSamples);

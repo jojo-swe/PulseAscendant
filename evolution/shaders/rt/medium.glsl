@@ -158,6 +158,7 @@ GridRay gridRay(vec3 o, vec3 d) {
 // may have 8 bits), so the majorant, taken from the same texels, bounds it exactly (lavapipe's filtered
 // fetch from a 32^3 image was measured off, its texelFetch exact).
 vec4 gridVoxel(vec3 c) {
+    EVO_COUNT(kCountGridLookups, 1);
     ivec3 last = ivec3(mediumData.gridSize) - 1;
     vec3 u = clamp(c * kMajorantCell - 0.5, vec3(0.0), vec3(last));
     ivec3 i0 = min(ivec3(u), last);
@@ -247,6 +248,7 @@ bool gridWalkNext(inout GridWalk w, out float s0, out float s1, out float majora
         return false;
     }
     w.left -= 1u;
+    EVO_COUNT(kCountGridCells, 1);
     float exitT = min(min(w.tNext.x, w.tNext.y), w.tNext.z);
     s1 = min(max(exitT, w.t), w.tEnd);
     majorant = mediumData.densityScale * texelFetch(mediumMajorant, w.cell, 0).r;
@@ -282,6 +284,7 @@ float gridTransmittance(vec3 o, vec3 d, float t0, float t1) {
     if (!gridWalkBegin(r, t0, t1, w)) {
         return 1.0;
     }
+    EVO_COUNT(kCountGridWalks, 1);
     float transmittance = 1.0;
     uint steps = 0u;
     float s0;
@@ -307,6 +310,7 @@ float gridTransmittance(vec3 o, vec3 d, float t0, float t1) {
                     break;
                 }
                 steps += 1u;
+                EVO_COUNT(kCountTrackingSteps, 1);
                 float control = sigmaA + slope * (t - a);
                 transmittance *= clamp(1.0 - (gridSigma(r.origin + r.direction * t) - control) / majorant, 0.0, 2.0);
             }
@@ -345,6 +349,7 @@ bool gridCollision(vec3 o, vec3 d, float t0, float t1, out float tHit, inout vec
             if (!(t < s1)) {
                 break;
             }
+            EVO_COUNT(kCountTrackingSteps, 1);
             vec4 voxel = gridVoxel(r.origin + r.direction * t);
             float sigma = mediumData.densityScale * max(voxel.r, 0.0);
             if (emits) {

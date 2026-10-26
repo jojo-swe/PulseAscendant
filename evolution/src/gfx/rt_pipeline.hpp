@@ -72,6 +72,13 @@ public:
     // The device memory of the shader binding table, as allocated.
     VkDeviceSize sbtBytes() const { return sbt_.bytes(); }
     VkPipeline handle() const { return pipeline_; }
+    // What the driver reports a thread's ray tracing stack needs, in bytes
+    // (vkGetRayTracingShaderGroupStackSizeKHR): the raygen's, and the largest closest-hit, intersection and miss
+    // shader's. A large raygen stack is live state spilled around every trace (a diagnostic for --bench).
+    struct StackSizes {
+        VkDeviceSize raygen = 0, closestHit = 0, intersection = 0, miss = 0;
+    };
+    StackSizes stackSizes() const;
     VkPipelineLayout layout() const { return layout_; }
     const DescriptorLayout& descriptorLayout() const { return setLayout_; }
 
@@ -84,6 +91,7 @@ private:
     VkPipelineLayout layout_ = VK_NULL_HANDLE;
     VkPipeline pipeline_ = VK_NULL_HANDLE;
     SbtLayout sbtLayout_{};
+    std::uint32_t missGroups_ = 0, triangleGroups_ = 0, proceduralGroups_ = 0;
     Buffer sbt_;
     VkDeviceAddress sbtAddress_ = 0;
     VkStridedDeviceAddressRegionKHR raygenRegion_{}, missRegion_{}, hitRegion_{}, callableRegion_{};

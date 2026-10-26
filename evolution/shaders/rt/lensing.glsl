@@ -187,6 +187,7 @@ void traceLensed(vec3 origin, vec3 direction, float coneWidth, float coneSpread)
         }
         payload.coneWidth = coneWidth;
         payload.coneSpread = coneSpread;
+        EVO_COUNT(kCountLensSegments, i > 0u ? 1u : 0u);
         traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, kMissIndexSky, p, 0.0, d, len, 0);
         if (phase == 2u) {
             if (rs > 0.0) {

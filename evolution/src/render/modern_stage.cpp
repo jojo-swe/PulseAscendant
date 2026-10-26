@@ -82,10 +82,11 @@ VkExtent2D traceSize(std::uint32_t width, std::uint32_t height, float scale) {
 
 ModernStage::ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
                          modern::SceneDetail detail, modern::SceneFactory factory, modern::SceneMap map,
-                         float traceScale)
+                         float traceScale, const modern::TracerOptions& tracerOptions)
     : ctx_(ctx), ring_(ring), width_(width), height_(height), traceScale_(checkedScale(traceScale)),
       traceWidth_(traceSize(width, height, traceScale).width),
       traceHeight_(traceSize(width, height, traceScale).height), detail_(detail),
+      tracerOptions_(tracerOptions),
       factory_(factory ? std::move(factory) : modern::SceneFactory(&modern::makeScene)),
       map_(map ? std::move(map) : modern::SceneMap(&modern::sceneFor)), fill_(ctx, gfx::FillTarget::Hdr),
       tonemap_(ctx, ring), hdr_(ctx, hdrDesc(width, height)), image_(ctx, imageDesc(width, height)) {}
@@ -144,7 +145,8 @@ void ModernStage::prepare(modern::SceneId id) {
     if (hasMedium && !medium_)
         medium = std::make_unique<modern::MediumVolume>(ctx_, ring_, mediumCapacity, statics.mediumShader);
     if (!tracer_) {
-        auto tracer = std::make_unique<modern::PathTracer>(ctx_, ring_, traceWidth_, traceHeight_, capacity);
+        auto tracer = std::make_unique<modern::PathTracer>(ctx_, ring_, traceWidth_, traceHeight_, capacity,
+                                                           tracerOptions_);
         tracer->setTimers(timers_);
         auto denoiser = std::make_unique<post::Denoiser>(ctx_, ring_, traceWidth_, traceHeight_);
         auto upscaler =
@@ -269,6 +271,10 @@ std::string ModernStage::nowCard(show::Effect effect) const {
     return id == modern::SceneId::Placeholder ? std::string() : scene(id).nowCard(effect);
 }
 
+modern::Counters ModernStage::takeCounters() {
+    return tracer_ ? tracer_->takeCounters() : modern::Counters{};
+}
+
 modern::PathTracer* ModernStage::tracer() {
     return tracer_.get();
 }
@@ -281,6 +287,7 @@ void ModernStage::render(VkCommandBuffer cmd, const show::TimelineFrame& frame, 
                          gfx::Image* retroImage) {
     const modern::SceneId id = sceneOf(frame.effect);
     lastJitter_ = {0.f, 0.f};
+    frameStats_ = {};
     if (id != modern::SceneId::Placeholder) {
         renderTraced(cmd, id, frame, state, retroImage);
         return;
@@ -389,6 +396,9 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
             fineFrame.caustics = modern::exportCaustics(*slices[0].caustics, caustics_->maxResolution());
             causticFrame = &fineFrame;
         }
+        frameStats_.photons = photons;
+        for (const modern::CausticReceiver& r : causticFrame->caustics->receivers)
+            frameStats_.causticTexels += r.resolution * r.resolution;
         caustics_->prepare(object.staticScene(), *causticFrame, photons,
                            rt::pcgHash(modern::frameSeedFor(frame.showSeconds, 0) ^ 0x43415553u));
         extras.causticMaps = &caustics_->maps();
@@ -405,6 +415,8 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         medium_->setShader(statics.mediumShader);
         beginScope(cmd, "medium");
         medium_->record(cmd, *middle.medium->grid, sliceLocal[sliceCount / 2]);
+        frameStats_.gridVoxels = middle.medium->grid->size[0] * middle.medium->grid->size[1] *
+                                 middle.medium->grid->size[2];
         endScope(cmd);
         extras.density = &medium_->density();
         extras.majorant = &medium_->majorant();
@@ -469,6 +481,34 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     beginScope(cmd, "tonemap");
     tonemap_.record(cmd, hdr_, image_, tone);
     endScope(cmd);
+    frameStats_.instances = static_cast<std::uint32_t>(scene.instances.size());
+    frameStats_.rectLights = static_cast<std::uint32_t>(scene.lights.size());
+    frameStats_.portals = static_cast<std::uint32_t>(
+        std::count_if(scene.lights.begin(), scene.lights.end(),
+                      [](const rt::RectLight& l) { return l.kind == static_cast<std::uint32_t>(rt::LightKind::Portal); }));
+    frameStats_.treeLights = static_cast<std::uint32_t>(scene.treeLights.size());
+    for (const modern::SceneInstance& in : scene.instances) {
+        const std::vector<rt::Material>& materials =
+            scene.materials.empty() ? object.staticScene().materials : scene.materials;
+        const rt::Material& m = materials[in.material];
+        frameStats_.thinPanes = frameStats_.thinPanes ||
+                                ((m.flags & rt::kMaterialThinWalled) != 0 && m.transmission > 0.5f);
+    }
+    frameStats_.fog = scene.medium && scene.medium->fog.has_value();
+    frameStats_.lensing = scene.lensing.has_value();
+    for (const modern::SceneFrame& s : slices)
+        frameStats_.particles += s.particles ? s.particles->count : 0u;
+    frameStats_.splats = scene.splats ? scene.splats->count : 0u;
+    frameStats_.slices = sliceCount;
+    frameStats_.spp = state.spp;
+    frameStats_.maxBounces = state.maxBounces;
+    frameStats_.traceWidth = traceWidth_;
+    if (tracerOptions_.counters) {
+        const gfx::RayTracingPipeline::StackSizes stack = tracer_->stackSizes();
+        frameStats_.raygenStack = stack.raygen;
+        frameStats_.hitStack = std::max({stack.closestHit, stack.intersection, stack.miss});
+    }
+    frameStats_.traceHeight = traceHeight_;
     previousCamera_ = scene.camera;
     previousInstances_ = scene.instances;
     previousSeconds_ = sliceLocal[guideSlice];

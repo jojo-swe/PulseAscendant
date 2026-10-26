@@ -3,6 +3,7 @@
 #include "gfx/shader.hpp"
 #include "gfx/vk_check.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
@@ -143,6 +144,9 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
                 closestHit, addStage(hit.intersection, VK_SHADER_STAGE_INTERSECTION_BIT_KHR)));
         }
 
+        missGroups_ = static_cast<std::uint32_t>(shaders.misses.size());
+        triangleGroups_ = static_cast<std::uint32_t>(shaders.closestHits.size());
+        proceduralGroups_ = static_cast<std::uint32_t>(shaders.proceduralHits.size());
         VkRayTracingPipelineCreateInfoKHR pipelineInfo{
             VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
         pipelineInfo.stageCount = static_cast<std::uint32_t>(stages.size());
@@ -239,6 +243,25 @@ void RayTracingPipeline::push(VkCommandBuffer cmd, const void* data, std::uint32
 
 void RayTracingPipeline::traceRays(VkCommandBuffer cmd, std::uint32_t width, std::uint32_t height) {
     vkCmdTraceRaysKHR(cmd, &raygenRegion_, &missRegion_, &hitRegion_, &callableRegion_, width, height, 1);
+}
+
+RayTracingPipeline::StackSizes RayTracingPipeline::stackSizes() const {
+    StackSizes sizes;
+    const VkDevice device = ctx_.device();
+    const auto size = [&](std::uint32_t group, VkShaderGroupShaderKHR shader) {
+        return vkGetRayTracingShaderGroupStackSizeKHR(device, pipeline_, group, shader);
+    };
+    sizes.raygen = size(0, VK_SHADER_GROUP_SHADER_GENERAL_KHR);
+    for (std::uint32_t i = 0; i < missGroups_; ++i)
+        sizes.miss = std::max(sizes.miss, size(1 + i, VK_SHADER_GROUP_SHADER_GENERAL_KHR));
+    for (std::uint32_t k = 0; k < triangleGroups_ + proceduralGroups_; ++k) {
+        const std::uint32_t group = 1 + missGroups_ + k;
+        sizes.closestHit = std::max(sizes.closestHit, size(group, VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR));
+        if (k >= triangleGroups_)
+            sizes.intersection =
+                std::max(sizes.intersection, size(group, VK_SHADER_GROUP_SHADER_INTERSECTION_KHR));
+    }
+    return sizes;
 }
 
 } // namespace evo::gfx

@@ -56,23 +56,32 @@ double chapterEnd(int chapter) {
 } // namespace
 
 const std::vector<std::string>& benchPasses() {
-    static const std::vector<std::string> passes = {"total",   "retro",   "fill",    "tlas",      "trace",
-                                                    "denoise", "upscale", "tonemap", "compositor"};
+    static const std::vector<std::string> passes = {
+        "total",  "retro",   "fill",    "particles", "medium", "tlas",    "photons",
+        "trace",  "splats",  "denoise", "upscale",   "bloom",  "tonemap", "compositor"};
     return passes;
 }
 
 std::string benchJson(const BenchRecord& r) {
-    std::string ms;
-    for (const auto& [name, value] : r.gpuMs)
-        ms += (ms.empty() ? "" : ",") + jsonString(name) + ":" + number(value, 4);
+    const auto object = [](const std::vector<std::pair<std::string, double>>& values) {
+        std::string out;
+        for (const auto& [name, value] : values)
+            out += (out.empty() ? "" : ",") + jsonString(name) + ":" + number(value, 4);
+        return "{" + out + "}";
+    };
+    std::string extra = ",\"cpuMs\":" + number(r.cpuMs, 4) + ",\"waitMs\":" + number(r.waitMs, 4);
+    if (!r.counters.empty())
+        extra += ",\"counters\":" + object(r.counters);
+    if (!r.stats.empty())
+        extra += ",\"stats\":" + object(r.stats);
     return "{\"chapter\":" + std::to_string(r.chapter) + ",\"title\":" + jsonString(r.title) +
            ",\"scene\":" + jsonString(r.scene) + ",\"frames\":" + std::to_string(r.frames) +
            ",\"spp\":" + std::to_string(r.spp) + ",\"traceScale\":" + number(r.traceScale, 4) +
            ",\"width\":" + std::to_string(r.width) + ",\"height\":" + std::to_string(r.height) +
            ",\"traceWidth\":" + std::to_string(r.traceWidth) +
            ",\"traceHeight\":" + std::to_string(r.traceHeight) + ",\"device\":" + jsonString(r.device) +
-           ",\"timestamps\":" + (r.timestamps ? "true" : "false") + ",\"gpuMs\":{" + ms +
-           "},\"fps\":" + number(r.fps, 3) + "}";
+           ",\"timestamps\":" + (r.timestamps ? "true" : "false") + ",\"gpuMs\":" + object(r.gpuMs) + extra +
+           ",\"fps\":" + number(r.fps, 3) + "}";
 }
 
 int runBench(const Options& options) {
@@ -100,6 +109,7 @@ int runBench(const Options& options) {
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     settings.detail = modern::SceneDetail{options.detail};
     settings.traceScale = traceScaleFor(options);
+    settings.counters = options.benchCounters;
     render::Renderer renderer(ctx, ring, settings);
 
     const double step = 1.0 / options.fps;
@@ -126,12 +136,19 @@ int runBench(const Options& options) {
         }
         ring.waitAll();
         timers.collect();
-        timers.takeCompleted(); // the warm-up frames' times
+        timers.takeCompleted();               // the warm-up frames' times
+        renderer.modern().takeCounters(); // and their work
 
-        const auto start = std::chrono::steady_clock::now();
+        using Clock = std::chrono::steady_clock;
+        const auto start = Clock::now();
+        double cpuSeconds = 0.0, waitSeconds = 0.0;
         for (int i = 0; i < options.benchFrames; ++i) {
+            const auto before = Clock::now();
             VkCommandBuffer cmd = ring.begin();
+            const auto begun = Clock::now();
             renderer.render(cmd, show::sampleTimeline(t0 + i * step));
+            cpuSeconds += std::chrono::duration<double>(Clock::now() - begun).count();
+            waitSeconds += std::chrono::duration<double>(begun - before).count();
             ring.submit();
         }
         ring.waitAll();
@@ -162,6 +179,24 @@ int runBench(const Options& options) {
             record.gpuMs.emplace_back(pass,
                                       frames.empty() ? 0.0 : sums[pass] / static_cast<double>(frames.size()));
         record.fps = seconds > 0.0 ? options.benchFrames / seconds : 0.0;
+        record.cpuMs = 1000.0 * cpuSeconds / options.benchFrames;
+        record.waitMs = 1000.0 * waitSeconds / options.benchFrames;
+        if (options.benchCounters) {
+            const modern::Counters counters = renderer.modern().takeCounters();
+            const render::ModernStage::FrameStats& s = renderer.modern().lastFrameStats();
+            const double pixels = double(options.benchFrames) * double(trace.width) * double(trace.height);
+            for (std::size_t k = 0; k < counters.size(); ++k)
+                record.counters.emplace_back(modern::kCounterNames[k], double(counters[k]) / pixels);
+            record.stats = {{"instances", s.instances},     {"rectLights", s.rectLights},
+                            {"portals", s.portals},         {"treeLights", s.treeLights},
+                            {"thinPanes", s.thinPanes},     {"fog", s.fog},
+                            {"lensing", s.lensing},         {"gridVoxels", s.gridVoxels},
+                            {"photons", s.photons},         {"causticTexels", s.causticTexels},
+                            {"particles", s.particles},     {"splats", s.splats},
+                            {"spp", s.spp},                 {"maxBounces", s.maxBounces},
+                            {"raygenStackBytes", double(s.raygenStack)},
+                            {"hitStackBytes", double(s.hitStack)}};
+        }
         std::printf("%s\n", benchJson(record).c_str());
         std::fflush(stdout);
     }

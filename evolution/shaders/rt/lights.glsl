@@ -72,6 +72,7 @@ float lightPower(RectLight l) {
 // The flag kTraceFlagFixedLightSelection returns the original fixed max(selectWeight, 0) instead (comparisons).
 // A Tree light stands for the whole light tree: selectWeight times the root's importance.
 float lightImportance(uint i, vec3 p, vec3 n, bool transmissive) {
+    EVO_COUNT(kCountRectImportance, 1);
     RectLight l = lights[i];
     float weight = max(l.selectWeight, 0.0);
     if ((frame.flags & kTraceFlagFixedLightSelection) != 0u) {

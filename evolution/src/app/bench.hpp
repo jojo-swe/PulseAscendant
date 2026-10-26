@@ -15,11 +15,16 @@ namespace evo {
 // (the history reset's 4 and 2 spp), then --bench-frames frames 1/--fps apart from 20 % into the chapter, two
 // in flight as in the window. Then one JSON line on stdout:
 //   {"chapter", "title", "scene", "frames", "spp", "traceScale", "width", "height", "traceWidth",
-//    "traceHeight", "device", "timestamps", "gpuMs": {"total", "retro", "fill", "tlas", "trace", "denoise",
-//    "upscale", "tonemap", "compositor"}, "fps"}
+//    "traceHeight", "device", "timestamps", "gpuMs": {"total", "retro", "fill", "particles", "medium", "tlas",
+//    "photons", "trace", "splats", "denoise", "upscale", "bloom", "tonemap", "compositor"}, "cpuMs",
+//    "waitMs", "fps"}
 // gpuMs are means over the timed frames (a pass a frame did not run counts 0); timestamps is false (and every
-// time 0) on a queue without timestamps; fps counts the timed frames over their wall-clock time, waits for
-// the GPU included. Progress goes to stderr. Throws std::runtime_error for a chapter the show does not have.
+// time 0) on a queue without timestamps; cpuMs is the mean wall-clock time of recording a frame
+// (Renderer::render: the scene's frame, uploads, command recording) and waitMs the mean time ring.begin()
+// waited for the GPU; fps counts the timed frames over their wall-clock time, waits for the GPU included.
+// With --bench-counters the tracer is the counting build and each line also has "counters" (the path
+// tracer's work per trace pixel per frame, modern::kCounterNames) and "stats" (the last timed frame's
+// render::ModernStage::FrameStats). Progress goes to stderr. Throws std::runtime_error for a chapter the show does not have.
 int runBench(const Options& options);
 
 // One bench result as its JSON line (without the newline).
@@ -32,7 +37,9 @@ struct BenchRecord {
     unsigned width = 0, height = 0, traceWidth = 0, traceHeight = 0;
     bool timestamps = false;
     std::vector<std::pair<std::string, double>> gpuMs; // in the order of benchPasses()
+    double cpuMs = 0.0, waitMs = 0.0;
     double fps = 0.0;
+    std::vector<std::pair<std::string, double>> counters, stats; // --bench-counters only (else empty)
 };
 std::string benchJson(const BenchRecord& record);
 // The passes every line reports, in order.

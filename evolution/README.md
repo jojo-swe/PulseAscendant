@@ -591,6 +591,9 @@ Options:
                        --bench-frames frames from 20 % into it (after 2 warm-up frames)
                        and print one JSON line with the GPU time of every pass
   --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)
+  --bench-counters     With --bench: trace with the counting path tracer and add its work
+                       per pixel per frame (rays by kind, NEE, medium steps) and the
+                       frame's scene statistics to each line (slower; the same picture)
   --chapters LIST      Chapters for --bench, comma-separated indices as --show-info
                        numbers them, e.g. 11,14 (default: all)
   --music PATH         Music WAV to play (default: assets/music/show.wav beside the
@@ -686,15 +689,22 @@ them, two frames in flight. Each chapter prints one JSON line on stdout (progres
 ```json
 {"chapter":11,"title":"STUDIO NIGHT","scene":"Studio","frames":120,"spp":1,"traceScale":0.6700,
  "width":2560,"height":1440,"traceWidth":1715,"traceHeight":965,"device":"NVIDIA GeForce RTX 4090",
- "timestamps":true,"gpuMs":{"total":…,"retro":…,"fill":…,"tlas":…,"trace":…,"denoise":…,"upscale":…,
- "tonemap":…,"compositor":…},"fps":…}
+ "timestamps":true,"gpuMs":{"total":…,"retro":…,"fill":…,"particles":…,"medium":…,"tlas":…,"photons":…,
+ "trace":…,"splats":…,"denoise":…,"upscale":…,"bloom":…,"tonemap":…,"compositor":…},"cpuMs":…,"waitMs":…,
+ "fps":…}
 ```
 
 `gpuMs` are GPU timestamp times per pass, averaged over the timed frames (a pass a frame did not run counts
-0): `tlas` the top-level acceleration structure build, `trace` the path tracing dispatches, `denoise`,
-`upscale` (0 at scale 1), `tonemap`, `compositor` (CRT, era blend and HUD), `retro` the 1993 stage, `fill`
-the placeholder and `total` the whole frame. `fps` counts the timed frames over their wall-clock time. A GPU
-whose queue has no timestamps reports `"timestamps":false` and zero times. The per-scene budget (see ARCHITECTURE.md) is measured this way:
+0): `particles` the particle field and its BLAS, `medium` the grid medium's bake, `tlas` the top-level
+acceleration structure build, `photons` the caustic photon maps, `trace` the path tracing dispatches,
+`splats`, `denoise`, `upscale` (0 at scale 1), `bloom`, `tonemap`, `compositor` (CRT, era blend and HUD),
+`retro` the 1993 stage, `fill` the placeholder and `total` the whole frame. `cpuMs` is the CPU time of
+recording a frame (the scene's frame, uploads, commands) and `waitMs` the time spent waiting for the GPU to
+free a frame slot. `fps` counts the timed frames over their wall-clock time. A GPU whose queue has no
+timestamps reports `"timestamps":false` and zero times. `--bench-counters` adds `counters` (the path
+tracer's work per trace pixel per frame: rays by kind, next-event estimates, medium steps, light-selection
+evaluations) and `stats` (the scene's instances, lights, media, photons and particles, and the ray tracing
+pipeline's stack sizes as the driver reports them); docs/PERFORMANCE.md explains them. The per-scene budget (see ARCHITECTURE.md) is measured this way:
 
 ```sh
 # Every chapter at 1440p as the window renders it (trace scale 0.67), then at scale 1

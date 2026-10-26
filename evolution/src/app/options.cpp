@@ -139,6 +139,9 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.traceScale = parseTraceScale(flag, nextValue());
         } else if (flag == "--bench") {
             options.bench = true;
+        } else if (flag == "--bench-counters") {
+            options.benchCounters = true;
+            benchOnly = true;
         } else if (flag == "--bench-frames") {
             options.benchFrames = parseInt(flag, nextValue(), 1, kMaxBenchFrames);
             benchOnly = true;
@@ -272,6 +275,9 @@ std::string helpText() {
            "                       --bench-frames frames from 20 % into it (after 2 warm-up frames)\n"
            "                       and print one JSON line with the GPU time of every pass\n"
            "  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)\n"
+           "  --bench-counters     With --bench: trace with the counting path tracer and add its work\n"
+           "                       per pixel per frame (rays by kind, NEE, medium steps) and the\n"
+           "                       frame's scene statistics to each line (slower; the same picture)\n"
            "  --chapters LIST      Chapters for --bench, comma-separated indices as --show-info\n"
            "                       numbers them, e.g. 11,14 (default: all)\n"
            "  --music PATH         Music WAV to play (default: assets/music/show.wav beside the\n"

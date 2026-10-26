@@ -8,7 +8,8 @@ import sys
 
 KEYS = {"chapter", "title", "scene", "frames", "spp", "traceScale", "width", "height", "traceWidth",
         "traceHeight", "device", "timestamps", "gpuMs", "fps"}
-PASSES = {"total", "retro", "fill", "tlas", "trace", "denoise", "upscale", "tonemap", "compositor"}
+PASSES = {"total", "retro", "fill", "particles", "medium", "tlas", "photons", "trace", "splats", "denoise",
+          "upscale", "bloom", "tonemap", "compositor"}
 
 
 def bench(exe, extra, args):
@@ -68,6 +69,21 @@ def main(exe, extra):
     if records[0]["gpuMs"]["upscale"] != 0 or records[1]["scene"] != "Placeholder":
         sys.exit(f"scale 1 must not upscale, BOOT must be the placeholder: {records}")
     print(f"bench: chapters 11 and 0 at scale 1: {[r['gpuMs']['total'] for r in records]} ms")
+
+    # --bench-counters: the counting tracer's work per trace pixel and the frame's statistics. STUDIO NIGHT's
+    # timed frames trace 1 spp: one path, one camera ray and one guide ray per pixel.
+    records = bench(exe, extra, ["--chapters", "11", "--bench-frames", "2", "--bench-counters"])
+    counted = records[0]
+    check(counted, 11, 2, 0.67, (64, 36))
+    counters, stats = counted.get("counters", {}), counted.get("stats", {})
+    if not {"paths", "primaryRays", "bounceRays", "shadowRays", "guideRays", "treeNodes"} <= counters.keys():
+        sys.exit(f"--bench-counters: missing counters in {counted}")
+    if abs(counters["paths"] - 1) > 1e-6 or counters["primaryRays"] != counters["paths"] or \
+            abs(counters["guideRays"] - 1) > 1e-6 or not counters["shadowRays"] > 0:
+        sys.exit(f"--bench-counters: one path, camera ray and guide ray per pixel expected: {counters}")
+    if not stats.get("instances", 0) > 0 or stats.get("spp") != 1 or stats.get("maxBounces") != 4:
+        sys.exit(f"--bench-counters: implausible statistics {stats}")
+    print(f"bench: counters {counters}")
 
     # A chapter the show does not have.
     result = subprocess.run([exe, "--bench", "--chapters", "99", "--width", "96", "--height", "54"],

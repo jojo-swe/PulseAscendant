@@ -177,13 +177,16 @@ int main() {
         CHECK(!parseError({"--bench", "--chapters", ""}).empty());
         CHECK(parseError({"--chapters", "1"}) == "--chapters and --bench-frames need --bench");
         CHECK(parseError({"--bench-frames", "5"}) == "--chapters and --bench-frames need --bench");
+        CHECK(!defaults.benchCounters && !bench.benchCounters);
+        CHECK(evo::parseOptions({"--bench", "--bench-counters"}).benchCounters);
+        CHECK(!parseError({"--bench-counters"}).empty());
         CHECK(parseError({"--bench", "--capture-dir", "out"}) == "--bench cannot be combined with an export");
         CHECK(!parseError({"--bench", "--render-stream", "--duration", "1"}).empty());
 
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
         for (const char* flag :
              {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt", "--no-hud",
-              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--chapters"})
+              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--bench-counters", "--chapters"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);

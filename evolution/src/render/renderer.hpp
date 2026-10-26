@@ -43,6 +43,9 @@ struct RenderSettings {
     // one per frame, so a long 4K frame never sits in one submit (Windows' 2 s TDR). Same bytes either way;
     // the CLI's exports set it, the window ignores it.
     bool submitPerSlice = false;
+    // --bench-counters: the path tracer's counting build (modern::TracerOptions::counters), whose work
+    // counters ModernStage::takeCounters() reads. Slower; the same picture.
+    bool counters = false;
     // Test hooks: the modern stage's scene factory and effect -> scene map (empty: the show's).
     modern::SceneFactory sceneFactory;
     modern::SceneMap sceneMap;

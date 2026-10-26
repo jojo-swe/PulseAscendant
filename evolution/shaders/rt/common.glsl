@@ -14,6 +14,7 @@
 #include "../common/finite.glsl" // isFinite, isInfinite, allFinite (from the bits: robust under fast-math)
 #include "../../src/rt/bindings.hpp"
 #include "types.glsl"
+#include "counters.glsl" // EVO_COUNT: nothing outside the counting build
 
 layout(set = 0, binding = EVO_BINDING_TLAS) uniform accelerationStructureEXT tlas;
 layout(set = 0, binding = EVO_BINDING_LIGHTING, rgba32f) uniform image2D lightingImage;
