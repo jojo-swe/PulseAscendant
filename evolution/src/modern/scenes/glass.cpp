@@ -1136,11 +1136,11 @@ Camera glenzCamera(const show::TimelineFrame& f) {
         return makeCamera(k, float(retro::glenzCamera().fovYDegrees), 0.f, 0.f, st.shot);
     }
     // Free of the 1993 camera: 85 mm, low beyond the end of the caustic's fan on the left, looking back along
-    // it to the star: the spectra in the bottom two thirds of the frame, the glass (its lower half) in the top third;
-    // a slow push in, focused on the middle of the fan.
+    // it to the star: the spectra in the bottom of the frame, the glass (its lower half, however high the bounce
+    // carries it) in the top third; a slow push in, focused on the middle of the fan.
     const std::array<Key, 2> keys = {{
-        {{-6.4f, 1.2f, 2.4f}, {-1.5f, 0.3f, 0.75f}},
-        {{-5.9f, 1.12f, 2.25f}, {-1.4f, 0.3f, 0.72f}},
+        {{-6.4f, 1.08f, 2.4f}, {-1.5f, 0.38f, 0.75f}},
+        {{-5.9f, 1.02f, 2.25f}, {-1.4f, 0.38f, 0.72f}},
     }};
     const Key k = alongKeys(keys, st.s);
     return makeCamera(k, kLens85, 0.012f, length(kCausticAt - k.eye), st.shot);

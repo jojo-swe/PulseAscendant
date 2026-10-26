@@ -273,11 +273,13 @@ MediumFrame raytraceMedium(const show::TimelineFrame& frame) {
     grid.size = kCirrusGrid;
     grid.worldToMedium = mediumBox({-kCirrusHalf, kCirrusBase, -kCirrusHalf}, {kCirrusHalf, kCirrusTop, kCirrusHalf});
     grid.densityScale = 1.f;
-    grid.albedo = {0.97f, 0.97f, 0.98f};
+    // Ice that scatters a touch less red than green and blue: the warm sun plus the blue dome would
+    // otherwise mix to lavender on a white deck.
+    grid.albedo = {0.86f, 0.95f, 0.97f};
     grid.phaseG = 0.7f;
     grid.emissionScale = 0.f;
     grid.params[0] = 0.07f;                                      // density at full cover (per unit)
-    grid.params[1] = 0.52f;                                      // coverage
+    grid.params[1] = 0.44f;                                      // coverage: the blue shows between
     grid.params[2] = 0.0012f * float(frame.localSeconds);        // drift
     m.grid = grid;
     return m;
@@ -1036,7 +1038,8 @@ SceneFrame Spheres::infinityFrame(const show::TimelineFrame& frame) const {
     fog.density = kInfinityFog;
     fog.baseHeight = f.camera.eye.y;
     fog.falloff = kInfinityFogFalloff;
-    fog.albedo = {0.55f, 0.58f, 0.66f}; // a cool, dim haze: the dark channels between the spheres stay dark
+    fog.albedo = {0.56f, 0.58f, 0.6f}; // a slate, dim haze: the dark channels stay dark and the dusk sun's
+                                       // light in it reads amber-grey, never mauve
     fog.phaseG = 0.4f;
     medium.fog = fog;
     f.medium = medium;
