@@ -544,7 +544,8 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     }
     frameStats_.traceHeight = traceHeight_;
     previousCamera_ = scene.camera;
-    previousInstances_ = scene.instances;
+    // The guide slice is not read again: its instances move (a city's are 59,000, 4.7 MB a frame).
+    previousInstances_ = std::move(slices[guideSlice].instances);
     previousSeconds_ = sliceLocal[guideSlice];
 }
 
