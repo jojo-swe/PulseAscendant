@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstddef>
 #include <string>
 #include <span>
 
@@ -411,13 +412,21 @@ AscendantTimes ascendantTimes(const show::TimelineFrame& frame) {
     t.accent = static_cast<float>(frame.accentSeconds);
     t.waypoint = b.at(-1);
     t.hold = kWaypointHold;
-    t.firstRow = b.at(4);
     t.bar = b.bar;
     float last = b.d;
-    for (const float d : b.downbeats)
-        if (d <= static_cast<float>(frame.chapterDuration) - 0.25f)
-            last = d;
+    std::size_t lastIndex = 0;
+    for (std::size_t i = 0; i < b.downbeats.size(); ++i)
+        if (b.downbeats[i] <= static_cast<float>(frame.chapterDuration) - 0.25f) {
+            last = b.downbeats[i];
+            lastIndex = i;
+        }
     t.release = last;
+    // The rows light from the fourth bar after D, or, when the release comes sooner, from the downbeat seven
+    // bars before it, so the top row is lit a bar before the release; never before D.
+    t.firstRow = b.at(4);
+    if (lastIndex >= 7)
+        t.firstRow = std::min(t.firstRow, b.downbeats[lastIndex - 7]);
+    t.firstRow = std::max(t.firstRow, b.d);
     t.liftStart = b.at(-4);
     t.liftSpread = std::max(t.waypoint - 1.2f - t.liftStart, 0.5f);
     return t;
