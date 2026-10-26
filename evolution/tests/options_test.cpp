@@ -161,6 +161,9 @@ int main() {
         CHECK(parseError({"--trace-scale", "0.5", "--capture-dir", "out"}) ==
               "--trace-scale is for the window and --bench: the exports trace at the output size");
         CHECK(!parseError({"--trace-scale", "0.5", "--render-stream", "--duration", "1"}).empty());
+        CHECK(evo::parseOptions({"--trace-scale", "auto"}).autoTraceScale);
+        CHECK(!evo::parseOptions({"--trace-scale", "auto"}).traceScale);
+        CHECK(!parseError({"--trace-scale", "auto", "--capture-dir", "out"}).empty());
 
         // --bench: Interactive and headless, per chapter; --bench-frames N (default 120); --chapters LIST.
         CHECK(!defaults.bench && defaults.benchFrames == 120 && defaults.chapters.empty());

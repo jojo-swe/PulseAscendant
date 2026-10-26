@@ -372,7 +372,9 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   stops at transmittance and depth steps so silhouettes in fog stay sharp, and is composed as
   `transmittance × surface + volume`; a scene without a medium skips it.
 - **Trace resolution and the temporal upscaler** (`src/post/upscale.*`, `shaders/post/upscale.comp`). The
-  window path traces at `--trace-scale` × its size (0.67 by default, at least 16 pixels per axis) and the
+  window path traces at `--trace-scale` × its size (at least 16 pixels per axis; by default `auto`: each
+  chapter starts at its scale from a table, at most 0.67, and the window lowers it, to 0.4 at the least, while
+  the GPU misses 60 fps and raises it again when there is room, src/app/auto_scale.hpp) and the
   denoised picture is upscaled to the window size in time: from its second frame after a reset the window
   traces each pixel's samples in a window one output pixel wide, moved over the trace pixel by a 16-frame
   Halton (2, 3) sequence, and the upscaler accumulates them where they fell (each output pixel weights the
@@ -579,9 +581,11 @@ Options:
                        --capture-dir and --render-stream, where every frame stands alone)
   --detail F           Detail of the 2026 scenes, 0 < F <= 1 (default 1): particle,
                        splat, voxel and photon counts scale with it (for quick tests)
-  --trace-scale F      Path trace at F x the window size, 0.25..1 (default 0.67), and
-                       upscale in time; the window and --bench only (the exports always
-                       trace at the output size)
+  --trace-scale F      Path trace at F x the window size, 0.25..1, and upscale in time;
+                       the window and --bench only (the exports always trace at the
+                       output size). 'auto' (the window's default) adapts it per chapter
+                       to hold 60 fps, 0.4..0.67; --bench uses 0.67 unless given 'auto'
+                       (then each chapter's scale from the table, docs/PERFORMANCE.md)
   --no-fast-mode       Trace the window and --bench as the exports do: Russian roulette
                        from bounce 3, four in-scatter points in media, every photon (by
                        default the window traces in fast mode; docs/PERFORMANCE.md)

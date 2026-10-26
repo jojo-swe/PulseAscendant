@@ -1,5 +1,7 @@
 #include "app/bench.hpp"
 
+#include "app/auto_scale.hpp"
+
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/gpu_timers.hpp"
@@ -134,9 +136,13 @@ int runBench(const Options& options) {
     std::optional<gfx::Readback> readback;
     if (!options.benchCapture.empty())
         readback.emplace(ctx, settings.width, settings.height);
-    const VkExtent2D trace = renderer.modern().traceExtent();
+    const bool adaptive = adaptiveTraceScale(options);
     for (const int chapter : chapters) {
         const double t0 = firstTimed(chapter);
+        // --trace-scale auto: the chapter's scale from the table (no controller: reproducible numbers).
+        if (adaptive)
+            renderer.setTraceScale(autoTraceScale(chapter, settings.width, settings.height));
+        const VkExtent2D trace = renderer.modern().traceExtent();
         std::fprintf(stderr, "bench: chapter %d (%s), %d frames\n", chapter, show::sampleTimeline(t0).title,
                      options.benchFrames);
         for (int i = -kWarmUpFrames; i < 0; ++i) {
@@ -181,7 +187,7 @@ int runBench(const Options& options) {
         record.device = ctx.deviceName();
         record.frames = options.benchFrames;
         record.spp = settings.spp;
-        record.traceScale = settings.traceScale;
+        record.traceScale = renderer.traceScale();
         record.width = settings.width;
         record.height = settings.height;
         record.traceWidth = trace.width;

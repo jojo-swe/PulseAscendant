@@ -56,6 +56,7 @@ add_compile_definitions(VK_NO_PROTOTYPES)
 # --- Project targets --------------------------------------------------------------------------------------
 
 add_library(evo_core STATIC
+    src/app/auto_scale.cpp
     src/app/options.cpp
     src/image/png.cpp)
 target_include_directories(evo_core PUBLIC src)
@@ -274,6 +275,11 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_executable(options_test tests/options_test.cpp)
 target_link_libraries(options_test PRIVATE evo_core)
 add_test(NAME options COMMAND options_test)
+
+# The window's adaptive trace scale: the table and the controller (CPU only).
+add_executable(auto_scale_test tests/auto_scale_test.cpp)
+target_link_libraries(auto_scale_test PRIVATE evo_core)
+add_test(NAME auto_scale COMMAND auto_scale_test)
 
 add_executable(png_test tests/png_test.cpp)
 target_link_libraries(png_test PRIVATE evo_core)

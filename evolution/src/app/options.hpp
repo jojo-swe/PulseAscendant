@@ -38,6 +38,8 @@ struct Options {
     // The trace resolution as a fraction of the output (--trace-scale, kMinTraceScale..1); unset = the
     // mode's (traceScaleFor). The exports refuse it: they always trace at the output size.
     std::optional<float> traceScale;
+    // --trace-scale auto: the adaptive scale (app/auto_scale.hpp); the window's default (adaptiveTraceScale).
+    bool autoTraceScale = false;
     // The window's fast mode (render::RenderSettings::fast) for the window and --bench; --no-fast-mode turns
     // it off. The exports never use it.
     bool fastMode = true;
@@ -61,6 +63,9 @@ inline constexpr int kMaxBenchFrames = 100000;
 // The trace scale a run renders with: --trace-scale, or 1 for the exports (--capture-dir, --render-stream),
 // which trace at the output size, and kWindowTraceScale for the window and --bench.
 float traceScaleFor(const Options& options);
+// Whether the trace scale adapts per chapter (app/auto_scale.hpp): in the window unless --trace-scale F, in
+// --bench only with --trace-scale auto (the table's scale per chapter, no controller), never in an export.
+bool adaptiveTraceScale(const Options& options);
 
 inline constexpr int kMinSpp = 1;
 inline constexpr int kMaxSpp = 4096;
