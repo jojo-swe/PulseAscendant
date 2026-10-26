@@ -52,6 +52,15 @@ bool usesRetroScreen(const std::vector<rt::Material>& materials) {
                        [](const rt::Material& m) { return m.texture == rt::kRetroScreenTexture; });
 }
 
+// Whether a static material is a thin glass pane of the Glass class (the window's shadow rays then pass such
+// panes in one trace, through the Glass hit group's any-hit: SceneGpu::paneAnyHit).
+bool hasGlassPanes(const std::vector<rt::Material>& materials) {
+    return std::any_of(materials.begin(), materials.end(), [](const rt::Material& m) {
+        return (m.flags & rt::kMaterialThinWalled) != 0 && m.transmission > 0.5f &&
+               m.materialClass == static_cast<std::uint32_t>(rt::MaterialClass::Glass);
+    });
+}
+
 // Equal within a relative 1e-5 (rounding between two ways of computing one value).
 bool nearlyEqual(float a, float b) {
     return std::abs(double(a) - double(b)) <= 1e-5 * std::max(std::abs(double(a)), std::abs(double(b)));
@@ -364,8 +373,9 @@ void checkSceneFrame(const SceneStatic& scene, const SceneFrame& frame) {
 }
 
 SceneGpu::SceneGpu(gfx::Context& ctx, const SceneStatic& scene)
-    : source_(&checked(scene)), samplesRetro_(usesRetroScreen(scene.materials)), store_(ctx, scene.meshes),
-      blases_(ctx, store_), spheres_(sphereBlas(ctx, scene)),
+    : source_(&checked(scene)), samplesRetro_(usesRetroScreen(scene.materials)),
+      paneAnyHit_(hasGlassPanes(scene.materials)), store_(ctx, scene.meshes),
+      blases_(ctx, store_, true, paneAnyHit_), spheres_(sphereBlas(ctx, scene)),
       materials_(materialBuffer(ctx, scene.materials)) {}
 
 VkDeviceSize SceneGpu::bytes() const {

@@ -17,6 +17,7 @@ namespace {
 
 constexpr VkShaderStageFlags kRtStages = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR |
                                          VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                                         VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
                                          VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
 
 // Checked before anything is created.
@@ -25,6 +26,10 @@ std::uint32_t checkedPushConstantBytes(const RtShaders& shaders, std::uint32_t b
         throw std::invalid_argument("RayTracingPipeline: no miss shader");
     if (shaders.closestHits.empty())
         throw std::invalid_argument("RayTracingPipeline: no closest-hit shader");
+    if (!shaders.anyHits.empty() && shaders.anyHits.size() != shaders.closestHits.size())
+        throw std::invalid_argument("RayTracingPipeline: " + std::to_string(shaders.anyHits.size()) +
+                                    " any-hit entries for " + std::to_string(shaders.closestHits.size()) +
+                                    " triangle hit groups");
     if (bytes % 4 != 0)
         throw std::invalid_argument("RayTracingPipeline: push constant size " + std::to_string(bytes) +
                                     " is not a multiple of 4");
@@ -55,12 +60,14 @@ VkRayTracingShaderGroupCreateInfoKHR generalGroup(std::uint32_t stage) {
     return group;
 }
 
-VkRayTracingShaderGroupCreateInfoKHR triangleHitGroup(std::uint32_t closestHitStage) {
+// A triangle hit group: its closest-hit, and an any-hit (VK_SHADER_UNUSED_KHR for none: opaque geometry).
+VkRayTracingShaderGroupCreateInfoKHR triangleHitGroup(std::uint32_t closestHitStage,
+                                                      std::uint32_t anyHitStage) {
     VkRayTracingShaderGroupCreateInfoKHR group{VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR};
     group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
     group.generalShader = VK_SHADER_UNUSED_KHR;
     group.closestHitShader = closestHitStage;
-    group.anyHitShader = VK_SHADER_UNUSED_KHR; // opaque geometry: no any-hit
+    group.anyHitShader = anyHitStage;
     group.intersectionShader = VK_SHADER_UNUSED_KHR;
     return group;
 }
@@ -107,8 +114,8 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         layoutInfo.pPushConstantRanges = pushConstantBytes > 0 ? &pushRange : nullptr;
         vkCheck(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &layout_), "vkCreatePipelineLayout");
 
-        // Stages and groups: raygen, the misses, one triangle hit group per closest-hit, the procedural hit
-        // groups.
+        // Stages and groups: raygen, the misses, one triangle hit group per closest-hit (with its any-hit, if
+        // any), the procedural hit groups.
         Modules modules(device);
         std::vector<VkPipelineShaderStageCreateInfo> stages;
         // Every stage gets the same constants (a shader ignores the ids it does not declare).
@@ -144,8 +151,14 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         groups.push_back(generalGroup(addStage(shaders.raygen, VK_SHADER_STAGE_RAYGEN_BIT_KHR)));
         for (const auto& miss : shaders.misses)
             groups.push_back(generalGroup(addStage(miss, VK_SHADER_STAGE_MISS_BIT_KHR)));
-        for (const auto& closestHit : shaders.closestHits)
-            groups.push_back(triangleHitGroup(addStage(closestHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)));
+        for (std::size_t k = 0; k < shaders.closestHits.size(); ++k) {
+            const std::uint32_t closestHit =
+                addStage(shaders.closestHits[k], VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+            const bool anyHit = !shaders.anyHits.empty() && !shaders.anyHits[k].empty();
+            groups.push_back(triangleHitGroup(
+                closestHit, anyHit ? addStage(shaders.anyHits[k], VK_SHADER_STAGE_ANY_HIT_BIT_KHR)
+                                   : VK_SHADER_UNUSED_KHR));
+        }
         for (const ProceduralHitGroup& hit : shaders.proceduralHits) {
             const std::uint32_t closestHit = addStage(hit.closestHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
             groups.push_back(proceduralHitGroup(

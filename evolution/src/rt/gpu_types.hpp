@@ -151,10 +151,12 @@ constexpr std::uint32_t hitGroupFor(MaterialClass c, GeometryKind k) {
 // FrameUniforms::flags. FixedLightSelection: choose lights by their fixed selectWeight alone, not by
 // their importance at the shading point; for comparisons and tests. FilteredGrid: read the grid medium's
 // density through the sampler's trilinear filter (one fetch) instead of eight texelFetches (every driver but
-// lavapipe, whose filtered fetch from a 3D image was measured off).
+// lavapipe, whose filtered fetch from a 3D image was measured off). PaneAnyHit (the window's fast mode): a
+// shadow ray passes the thin panes in one trace, through the Glass hit group's any-hit
+// (shaders/rt/pane.rahit).
 inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u,
                                kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u,
-                               kTraceFlagFilteredGrid = 16u;
+                               kTraceFlagFilteredGrid = 16u, kTraceFlagPaneAnyHit = 32u;
 // The features a path tracer pipeline is built for (shaders/rt/types.glsl's kFeature*, specialization
 // constant 0 of every path tracer shader): kFeatureAll in the generic pipeline; a scene's own pipeline (the
 // window's fast mode) only those its frames use, so the driver's compiler drops the rest of the code and its

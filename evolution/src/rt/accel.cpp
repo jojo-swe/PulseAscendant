@@ -114,8 +114,8 @@ private:
 
 namespace {
 
-// A store's meshes as BLAS inputs: one opaque triangle geometry each.
-std::vector<BlasInput> meshInputs(const GeometryStore& store) {
+// A store's meshes as BLAS inputs: one opaque triangle geometry each (and NO_DUPLICATE_ANY_HIT_INVOCATION).
+std::vector<BlasInput> meshInputs(const GeometryStore& store, bool noDuplicateAnyHit) {
     const auto records = store.records();
     const VkDeviceAddress vertexBase = store.vertices().address();
     const VkDeviceAddress indexBase = store.indices().address();
@@ -125,7 +125,8 @@ std::vector<BlasInput> meshInputs(const GeometryStore& store) {
         VkAccelerationStructureGeometryKHR& geometry = inputs[i].geometry;
         geometry = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
         geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-        geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+        geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR |
+                         (noDuplicateAnyHit ? VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR : 0u);
         VkAccelerationStructureGeometryTrianglesDataKHR& triangles = geometry.geometry.triangles;
         triangles = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR};
         triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT; // Vertex::position
@@ -142,8 +143,9 @@ std::vector<BlasInput> meshInputs(const GeometryStore& store) {
 
 } // namespace
 
-BlasSet::BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact) : ctx_(ctx) {
-    build(meshInputs(store), compact);
+BlasSet::BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact, bool noDuplicateAnyHit)
+    : ctx_(ctx) {
+    build(meshInputs(store, noDuplicateAnyHit), compact);
 }
 
 BlasSet::BlasSet(gfx::Context& ctx, std::span<const BlasInput> inputs, bool compact) : ctx_(ctx) {
@@ -424,7 +426,8 @@ void Tlas::build(VkCommandBuffer cmd, const BlasSet& blases, std::span<const Ins
         record.instanceCustomIndex = instance.customIndex;
         record.mask = instance.mask;
         record.instanceShaderBindingTableRecordOffset = instance.hitGroup;
-        record.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+        record.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
+                       (instance.notOpaque ? VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR : 0u);
         record.accelerationStructureReference =
             instance.blas != 0 ? instance.blas : blases.address(instance.mesh);
     }

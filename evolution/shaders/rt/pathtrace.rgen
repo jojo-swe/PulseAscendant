@@ -74,7 +74,10 @@
 // compiler then drops). Both estimates stay unbiased, and less state is live across each trace. The volume
 // layer's extra noise costs a little light where the denoiser's history clamp cuts it (ASCENT's clouds 1.5 %,
 // one point 2.5 %). Russian roulette stays at bounce 3: from bounce 2 it amplified the survivors of dark
-// bounces past the scenes' low indirect clamps, which then cut them (2-3 % of the light).
+// bounces past the scenes' low indirect clamps, which then cut them (2-3 % of the light). When every thin pane
+// of the frame is a Glass mesh (kTraceFlagPaneAnyHit), a shadow ray passes the panes in one trace through the
+// Glass group's any-hit (pane.rahit, the same transmission) instead of one occlusion ray plus a closest-hit
+// trace per pane and one more that misses.
 
 #include "common.glsl"
 #include "random.glsl"
@@ -94,6 +97,10 @@ layout(push_constant) uniform Push {
 
 layout(location = 0) rayPayloadEXT HitPayload payload;
 layout(location = 1) rayPayloadEXT uint shadowVisible;
+#ifdef EVO_FAST
+// A shadow ray through thin panes' any-hit (shadowTransmittance): rgb what they let through, a its miss.
+layout(location = 2) rayPayloadEXT vec4 shadowThrough;
+#endif
 
 const float kRayMax = 1e30;
 // Random dimensions: 0-1 pixel jitter, 2-3 lens, then kDimsPerBounce per bounce (0-2 BSDF sample, 3 the light
@@ -154,6 +161,20 @@ bool unoccluded(vec3 origin, vec3 direction, float tMax) {
 // the panes with the main payload, which it restores.
 const uint kMaxShadowPanes = 8u;
 vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
+#ifdef EVO_FAST
+    // The window's fast mode, when every pane is a Glass mesh (kTraceFlagPaneAnyHit): one trace, solid
+    // geometry opaque, the panes not, their any-hit (pane.rahit) multiplying the same transmission into the
+    // small payload and passing on; the miss marks it unoccluded. The walk below takes a trace per pane plus
+    // one, each with the main payload saved and restored.
+    if (featureOn(kFeaturePanes) && (frame.flags & kTraceFlagPaneAnyHit) != 0u) {
+        EVO_COUNT(kCountShadowRays, 1);
+        shadowThrough = vec4(1.0, 1.0, 1.0, 0.0);
+        traceRayEXT(tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
+                    kInstanceMaskSolid | kInstanceMaskPane, 0, 0, kMissIndexShadowThrough, origin, 0.0,
+                    direction, tMax, 2);
+        return shadowThrough.a != 0.0 ? shadowThrough.rgb : vec3(0.0);
+    }
+#endif
     if (!unoccluded(origin, direction, tMax)) {
         return vec3(0.0);
     }
