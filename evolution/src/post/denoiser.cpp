@@ -37,9 +37,10 @@ static_assert(sizeof(AccumulatePush) == 44);
 struct AtrousPush {
     std::uint32_t width, height, step;
     float sigmaDepth, sigmaNormal, sigmaLuminance;
-    std::uint32_t copyAbove, volume;
+    std::uint32_t copyAbove, mode;
+    float sigmaChroma;
 };
-static_assert(sizeof(AtrousPush) == 32);
+static_assert(sizeof(AtrousPush) == 36);
 
 struct CombinePush {
     std::uint32_t width, height, hasMedium;
@@ -48,6 +49,8 @@ static_assert(sizeof(CombinePush) == 12);
 
 // AtrousPush::copyAbove: filter every pixel.
 constexpr std::uint32_t kFilterAll = 0xFFFFFFFFu;
+// AtrousPush::mode: what an iteration filters.
+enum class AtrousMode : std::uint32_t { Surface = 0, Volume = 1, Chroma = 2 };
 // The history length up to which a pixel gets resetAtrousIterations: the window's first three frames after a
 // reset (at 3 iterations frame 3 kept low-frequency blotches in the Studio).
 constexpr std::uint32_t kResetLength = 3;
@@ -99,7 +102,8 @@ void checkSettings(const DenoiseSettings& settings) {
     for (const auto& [name, iterations] :
          {std::pair{"atrousIterations", settings.atrousIterations},
           std::pair{"resetAtrousIterations", settings.resetAtrousIterations},
-          std::pair{"volumeAtrousIterations", settings.volumeAtrousIterations}})
+          std::pair{"volumeAtrousIterations", settings.volumeAtrousIterations},
+          std::pair{"chromaAtrousIterations", settings.chromaAtrousIterations}})
         if (iterations > kMaxAtrousIterations)
             throw std::invalid_argument(std::string("Denoiser: at most ") +
                                         std::to_string(kMaxAtrousIterations) + " a-trous iterations, got " +
@@ -110,7 +114,7 @@ void checkSettings(const DenoiseSettings& settings) {
     // Written as positive tests so a NaN fails them.
     for (const auto& [name, sigma] :
          {std::pair{"sigmaDepth", settings.sigmaDepth}, std::pair{"sigmaNormal", settings.sigmaNormal},
-          std::pair{"sigmaLuminance", settings.sigmaLuminance}})
+          std::pair{"sigmaLuminance", settings.sigmaLuminance}, std::pair{"sigmaChroma", settings.sigmaChroma}})
         if (!(std::isfinite(sigma) && sigma > 0.0f))
             throw std::invalid_argument(std::string("Denoiser: ") + name +
                                         " must be positive and finite, got " + std::to_string(sigma));
@@ -253,15 +257,17 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
     const std::uint32_t allIterations =
         iterations == 0 ? 0u : std::max(iterations, settings.resetAtrousIterations);
 
-    // One a-trous iteration from source into target.
+    // One a-trous iteration from source into target. Its fifth image is the moments (history length), or in
+    // the chroma mode the unfiltered illumination, whose local chroma deviation scales the chroma stop.
     const auto atrous = [&](gfx::Image& source, gfx::Image& target, std::uint32_t step,
-                            std::uint32_t copyAbove, bool volume) {
+                            std::uint32_t copyAbove, AtrousMode mode) {
+        gfx::Image& guide = mode == AtrousMode::Chroma ? color_[current_] : moments_[current_];
         prepareRead(cmd, source);
-        prepareRead(cmd, moments_[current_]);
+        prepareRead(cmd, guide);
         prepareWrite(cmd, target);
         const std::array<VkDescriptorImageInfo, 5> atrousImages = {storage(source), storage(gbuffer.depth),
                                                                    storage(gbuffer.normal), storage(target),
-                                                                   storage(moments_[current_])};
+                                                                   storage(guide)};
         atrous_.bind(cmd, ring_, atrousImages, {});
         const AtrousPush atrousPush{width_,
                                     height_,
@@ -270,7 +276,8 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
                                     settings.sigmaNormal,
                                     settings.sigmaLuminance,
                                     copyAbove,
-                                    volume ? 1u : 0u};
+                                    static_cast<std::uint32_t>(mode),
+                                    settings.sigmaChroma};
         atrous_.push(cmd, &atrousPush, sizeof(atrousPush));
         atrous_.dispatch(cmd, width_, height_);
     };
@@ -281,19 +288,27 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
     gfx::Image* source = &color_[current_];
     for (std::uint32_t i = 0; i < allIterations; ++i) {
         gfx::Image& target = filtered_[i % 2];
-        atrous(*source, target, 1u << i, i < iterations ? kFilterAll : kResetLength, false);
+        atrous(*source, target, 1u << i, i < iterations ? kFilterAll : kResetLength, AtrousMode::Surface);
         source = &target;
     }
+    // Then the chroma passes (exports), from step 1 again, continuing the ping-pong.
+    const std::uint32_t chromaIterations = iterations == 0 ? 0u : settings.chromaAtrousIterations;
+    for (std::uint32_t i = 0; i < chromaIterations; ++i) {
+        gfx::Image& target = filtered_[(allIterations + i) % 2];
+        atrous(*source, target, 1u << i, kFilterAll, AtrousMode::Chroma);
+        source = &target;
+    }
+    const std::uint32_t surfacePasses = allIterations + chromaIterations;
 
     // The volume layer's own à-trous, ping-ponging between the a-trous image the surface left free and the
     // previous frame's volume history, which nothing reads any more this frame.
     gfx::Image* volume = &volume_[current_];
-    const std::array<gfx::Image*, 2> volumeTargets = {&filtered_[allIterations % 2], &volume_[previous]};
+    const std::array<gfx::Image*, 2> volumeTargets = {&filtered_[surfacePasses % 2], &volume_[previous]};
     // Without a medium the layer is not filtered (nor read by the combine).
     const std::uint32_t volumeIterations = settings.hasMedium ? settings.volumeAtrousIterations : 0u;
     for (std::uint32_t i = 0; i < volumeIterations; ++i) {
         gfx::Image& target = *volumeTargets[i % 2];
-        atrous(*volume, target, 1u << i, kFilterAll, true);
+        atrous(*volume, target, 1u << i, kFilterAll, AtrousMode::Volume);
         volume = &target;
     }
 

@@ -8,11 +8,20 @@
 // and never taken as a tap (as is a non-finite depth). A pixel whose history is longer than copyAbove frames
 // is copied as well: the extra iterations a short history gets (resetAtrousIterations) leave the others.
 //
-// With `volume` set it filters the volume layer instead (RGB in-scattered radiance, A transmittance): every
+// In mode 1 (volume) it filters the volume layer instead (RGB in-scattered radiance, A transmittance): every
 // pixel, every tap inside the image, weighted by luminance (the stop scales with the standard deviation of
 // the 3x3 neighbourhood at each pass), by transmittance and by depth (a silhouette seen through the medium
 // ends a segment of another length: see volumeGeometryWeight); no normal stop (a medium has none). The
 // transmittance is copied, never blurred, since it carries the silhouettes of the surfaces it multiplies.
+//
+// In mode 2 (chroma) it smooths the colour of the illumination and leaves its luminance alone (the export
+// passes after the surface ones, see DenoiseSettings::chromaAtrousIterations): each pixel keeps its own
+// luminance and takes the luminance-weighted chromaticity sum(w rgb) / sum(w Y) of its taps. A tap counts by
+// the depth, normal and luminance stops of the surface passes, and by its chromaticity (rgb / Y) difference
+// to the centre's against the chroma noise: the chromaticity deviation of the unfiltered illumination around
+// the pixel times sigmaChroma. So per-sample chroma noise (wavelengths dispersed through glass) averages out
+// over a wide footprint, while a colour edge that stands out of that noise, and every luminance edge the
+// surface passes kept, stays. The variance is copied.
 
 #extension GL_GOOGLE_include_directive : require
 
@@ -24,9 +33,10 @@ layout(set = 0, binding = 0, rgba16f) uniform readonly image2D source; // RGB il
 layout(set = 0, binding = 1, r32f) uniform readonly image2D depthImage;
 layout(set = 0, binding = 2, rgba16f) uniform readonly image2D normalImage;
 layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D target;
-layout(set = 0, binding = 4, rgba16f) uniform readonly image2D momentsImage; // R history length
+// R history length; in the chroma mode the unfiltered illumination instead.
+layout(set = 0, binding = 4, rgba16f) uniform readonly image2D momentsImage;
 
-// Must match AtrousPush in src/post/denoiser.cpp (32 bytes).
+// Must match AtrousPush in src/post/denoiser.cpp (36 bytes).
 layout(push_constant) uniform PushConstants {
     uint width;
     uint height;
@@ -35,8 +45,12 @@ layout(push_constant) uniform PushConstants {
     float sigmaNormal;
     float sigmaLuminance;
     uint copyAbove; // pixels with a longer history are copied (0xFFFFFFFF: none)
-    uint volume;    // 1: the volume layer
+    uint mode;      // 0: the surface illumination; 1: the volume layer; 2: its chroma (see above)
+    float sigmaChroma;
 } pc;
+
+const uint kModeVolume = 1u;
+const uint kModeChroma = 2u;
 
 const float kKernel[3] = float[3](3.0 / 8.0, 1.0 / 4.0, 1.0 / 16.0);
 const float kGauss[2] = float[2](1.0 / 2.0, 1.0 / 4.0);
@@ -104,13 +118,103 @@ void filterVolume(ivec2 p) {
     imageStore(target, p, vec4(max(centre.rgb + sum / sumWeight, vec3(0.0)), centre.a));
 }
 
+// The chroma passes' luminance floor (illumination units): below it a pixel's chromaticity means nothing.
+const float kChromaLuminanceFloor = 1e-4;
+
+vec3 chromaticity(vec3 rgb, float y) {
+    return rgb / max(y, kChromaLuminanceFloor);
+}
+
+void filterChroma(ivec2 p) {
+    vec4 centre = imageLoad(source, p);
+    float depth = imageLoad(depthImage, p).r;
+    float lum = luminance(centre.rgb);
+    if (!isHit(depth) || !(lum > kChromaLuminanceFloor)) {
+        imageStore(target, p, centre);
+        return;
+    }
+    vec3 normal = imageLoad(normalImage, p).xyz;
+    vec3 chroma = chromaticity(centre.rgb, lum);
+
+    // The pixel's chroma noise: the chromaticity deviation of the unfiltered illumination (momentsImage in
+    // this mode), luminance-weighted over a 3x3 Gaussian about its weighted mean. Measured before any
+    // filtering, so blotches the surface passes left still count as noise, while a clean colour edge
+    // stands out of a small deviation.
+    vec3 sumRgb = vec3(0.0);
+    float sumY = 0.0, sumYChromaSquare = 0.0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            vec3 rgb = imageLoad(momentsImage, clampToImage(p + ivec2(dx, dy))).rgb;
+            float y = luminance(rgb);
+            if (!(y > kChromaLuminanceFloor)) {
+                continue;
+            }
+            float g = kGauss[abs(dx)] * kGauss[abs(dy)];
+            vec3 c = chromaticity(rgb, y);
+            sumRgb += g * rgb;
+            sumY += g * y;
+            sumYChromaSquare += g * y * dot(c, c);
+        }
+    }
+    vec3 meanChroma = sumRgb / max(sumY, kChromaLuminanceFloor);
+    float deviation = sumY > 0.0 ? sqrt(max(sumYChromaSquare / sumY - dot(meanChroma, meanChroma), 0.0)) : 0.0;
+    float phiChroma = pc.sigmaChroma * deviation + 1e-3;
+    float phiDepth = pc.sigmaDepth * float(pc.step) * 0.01 * max(depth, 1e-3);
+    // The surface passes' luminance stop, against the variance they carried.
+    float variance = 0.0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            variance +=
+                kGauss[abs(dx)] * kGauss[abs(dy)] * abs(imageLoad(source, clampToImage(p + ivec2(dx, dy))).a);
+        }
+    }
+    float phiLuminance = pc.sigmaLuminance * sqrt(max(variance, 0.0)) + 1e-4;
+
+    vec3 sum = vec3(0.0);
+    float sumWeightY = 0.0;
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            ivec2 q = p + ivec2(dx, dy) * int(pc.step);
+            if (!inside(q)) {
+                continue;
+            }
+            vec3 rgb = centre.rgb;
+            float w = 1.0; // the centre tap
+            if (dx != 0 || dy != 0) {
+                float qDepth = imageLoad(depthImage, q).r;
+                if (!isHit(qDepth)) {
+                    continue;
+                }
+                rgb = imageLoad(source, q).rgb;
+                float y = luminance(rgb);
+                if (!(y > kChromaLuminanceFloor)) {
+                    continue;
+                }
+                vec3 qNormal = imageLoad(normalImage, q).xyz;
+                w = exp(-abs(depth - qDepth) / phiDepth) * normalWeight(normal, qNormal, pc.sigmaNormal) *
+                    exp(-abs(lum - y) / phiLuminance) *
+                    exp(-length(chromaticity(rgb, y) - chroma) / phiChroma);
+            }
+            float kw = kKernel[abs(dx)] * kKernel[abs(dy)] * w;
+            sum += kw * rgb;
+            sumWeightY += kw * luminance(rgb);
+        }
+    }
+    // sumWeightY >= the centre's 9/64 lum: the pixel keeps its luminance, with its taps' mean chromaticity.
+    imageStore(target, p, vec4(min(lum * sum / sumWeightY, vec3(kHalfMax)), centre.a));
+}
+
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
         return;
     }
-    if (pc.volume != 0u) {
+    if (pc.mode == kModeVolume) {
         filterVolume(p);
+        return;
+    }
+    if (pc.mode == kModeChroma) {
+        filterChroma(p);
         return;
     }
 

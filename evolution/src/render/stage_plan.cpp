@@ -84,6 +84,7 @@ post::DenoiseSettings denoiseSettingsFor(const HistoryState& state) {
         // them: both are set to the light pass, steps 1 and 2.
         settings.atrousIterations = kExportFineAtrousIterations;
         settings.resetAtrousIterations = kExportFineAtrousIterations;
+        settings.chromaAtrousIterations = kExportChromaAtrousIterations;
     } else {
         settings.atrousIterations = kAtrousIterations;
     }

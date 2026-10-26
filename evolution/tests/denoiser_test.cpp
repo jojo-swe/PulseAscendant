@@ -9,6 +9,7 @@
 // bytes; heavy-tailed first frames keep their brightness, and so do the Studio's dark walls on STUDIO NIGHT's
 // first frame against 256 spp (`denoiser_test --studio [spp] [size factor]` runs that alone). Frames run with
 // two in flight, with the validation layer and its synchronization validation on; fails on any message.
+// The export chroma passes smooth chroma noise and keep luminance and clean colour edges.
 
 #include "gfx/buffer.hpp"
 #include "gfx/context.hpp"
@@ -1456,6 +1457,98 @@ void testFireflyFilter(gfx::Context& ctx) {
     CHECK(std::fabs(off.runOne(frame, defaults).history(10, 10, 0) - 500.0f) <= 0.5f);
 }
 
+// The export chroma passes: on lighting whose luminance and chroma are both noisy, they cut the chroma noise
+// the light surface passes leave by at least 2x and keep every pixel's luminance; on a clean surface (two
+// colours meeting at a luminance step) they change next to nothing. The export settings choose them from
+// kExportFilterSpp only.
+void testChromaPasses(gfx::Context& ctx) {
+    std::printf("the export chroma passes smooth chroma noise and keep luminance and clean colour edges\n");
+    Frame frame = flatFrame();
+    constexpr std::uint32_t kNoisyRows = 32, kCleanFrom = 40, kEdgeX = 40;
+    for (std::uint32_t y = 0; y < kSize; ++y)
+        for (std::uint32_t x = 0; x < kSize; ++x) {
+            float* l = frame.at(frame.lighting, x, y);
+            if (y < kNoisyRows) {
+                // Luminance 0.5 +- 50 %, chromaticity (1, 1, 1) plus a vector of zero luminance.
+                const float lum = 0.5f * (1.0f + noise(1, x, y, 0));
+                const float a = 1.2f * noise(1, x, y, 1), c = 1.2f * noise(1, x, y, 2);
+                const float b = -(0.2126f * a + 0.0722f * c) / 0.7152f;
+                l[0] = lum * (1.0f + a);
+                l[1] = lum * (1.0f + b);
+                l[2] = lum * (1.0f + c);
+            } else {
+                frame.depth[std::size_t{y} * kSize + x] = 2.0f; // another surface
+                const bool left = x < kEdgeX;
+                l[0] = left ? 0.9f : 0.3f;
+                l[1] = left ? 0.4f : 0.6f;
+                l[2] = left ? 0.2f : 1.4f;
+            }
+        }
+    post::DenoiseSettings settings;
+    settings.temporal = false;
+    settings.fireflyFilter = true;
+    settings.atrousIterations = settings.resetAtrousIterations = render::kExportFineAtrousIterations;
+    settings.hasMedium = false;
+    Harness without(ctx);
+    const Output plain = without.runOne(frame, settings);
+    settings.chromaAtrousIterations = render::kExportChromaAtrousIterations;
+    Harness with(ctx);
+    const Output chroma = with.runOne(frame, settings);
+
+    const auto lum = [](const Output& o, std::uint32_t x, std::uint32_t y) {
+        return 0.2126f * o.hdr(x, y, 0) + 0.7152f * o.hdr(x, y, 1) + 0.0722f * o.hdr(x, y, 2);
+    };
+    // The chroma error: the distance of the chromaticity from grey, over the noisy rows' interior.
+    const auto chromaError = [&](const Output& o) {
+        double sum = 0.0;
+        int count = 0;
+        for (std::uint32_t y = 4; y < kNoisyRows - 4; ++y)
+            for (std::uint32_t x = 4; x < kSize - 4; ++x) {
+                const float y0 = lum(o, x, y);
+                double d = 0.0;
+                for (std::uint32_t c = 0; c < 3; ++c)
+                    d += std::pow(o.hdr(x, y, c) / y0 - 1.0f, 2.0f);
+                sum += std::sqrt(d);
+                ++count;
+            }
+        return sum / count;
+    };
+    const double before = chromaError(plain), after = chromaError(chroma);
+    std::printf("  chroma error %.4f -> %.4f\n", before, after);
+    CHECK(after * 2.0 <= before);
+    float worstLum = 0.0f, worstClean = 0.0f;
+    for (std::uint32_t y = 0; y < kSize; ++y)
+        for (std::uint32_t x = 0; x < kSize; ++x) {
+            const float a = lum(plain, x, y), b = lum(chroma, x, y);
+            worstLum = std::max(worstLum, std::fabs(a - b) / a);
+            if (y >= kCleanFrom + 4)
+                for (std::uint32_t c = 0; c < 3; ++c)
+                    worstClean = std::max(worstClean, std::fabs(plain.hdr(x, y, c) - chroma.hdr(x, y, c)) /
+                                                          plain.hdr(x, y, c));
+        }
+    std::printf("  luminance kept within %.5f, clean rows within %.5f\n", worstLum, worstClean);
+    CHECK(worstLum <= 4.0f / 1024.0f);
+    // Not quite 0: at step 8 the depth stop lets the noisy surface, a depth of 1 away, in at a weight of
+    // about exp(-6), and the clean surface passes that on.
+    CHECK(worstClean <= 1.0f / 200.0f);
+    // Two pixels either side of the colour edge keep their colours.
+    std::printf("  beside the edge: blue %.4f | %.4f\n", chroma.hdr(kEdgeX - 2, kSize - 8, 2),
+                chroma.hdr(kEdgeX + 1, kSize - 8, 2));
+    CHECK(std::fabs(chroma.hdr(kEdgeX - 2, kSize - 8, 2) - 0.2f) <= 0.2f / 100.0f);
+    CHECK(std::fabs(chroma.hdr(kEdgeX + 1, kSize - 8, 2) - 1.4f) <= 1.4f / 100.0f);
+
+    // Only exports from kExportFilterSpp get them.
+    render::HistoryState state;
+    state.mode = render::RenderMode::Export;
+    state.spp = render::kExportFilterSpp;
+    CHECK(render::denoiseSettingsFor(state).chromaAtrousIterations == render::kExportChromaAtrousIterations);
+    state.spp = render::kExportFilterSpp - 1;
+    CHECK(render::denoiseSettingsFor(state).chromaAtrousIterations == 0);
+    state.mode = render::RenderMode::Interactive;
+    state.spp = 64;
+    CHECK(render::denoiseSettingsFor(state).chromaAtrousIterations == 0);
+}
+
 // (d) The volume layer: hdr = T * surface + volume. A constant volume (0.2, 0.1, 0.05, T 0.5) over a surface
 // of 1 gives exactly 0.5 + volume (converted to fp16), on every frame of a history; a noisy volume loses at
 // least 3x of its standard deviation; the history follows the surface motion without depth or normal tests
@@ -1657,7 +1750,7 @@ void testRefusalsAndResize(gfx::Context& ctx) {
                            harness.depth_,    harness.motion_,   harness.volume_};
     for (float post::DenoiseSettings::*field :
          {&post::DenoiseSettings::sigmaDepth, &post::DenoiseSettings::sigmaNormal,
-          &post::DenoiseSettings::sigmaLuminance})
+          &post::DenoiseSettings::sigmaLuminance, &post::DenoiseSettings::sigmaChroma})
         for (const float bad : {0.0f, -1.0f, nan, inf}) {
             post::DenoiseSettings settings;
             settings.*field = bad;
@@ -1673,7 +1766,7 @@ void testRefusalsAndResize(gfx::Context& ctx) {
     // At most 9 iterations of each kind; fireflyK finite and at least 1.
     for (std::uint32_t post::DenoiseSettings::*field :
          {&post::DenoiseSettings::atrousIterations, &post::DenoiseSettings::resetAtrousIterations,
-          &post::DenoiseSettings::volumeAtrousIterations}) {
+          &post::DenoiseSettings::volumeAtrousIterations, &post::DenoiseSettings::chromaAtrousIterations}) {
         post::DenoiseSettings settings;
         settings.*field = 10;
         CHECK(throws<std::invalid_argument>([&] { harness.denoiseWith(good, harness.hdr_, settings); }));
@@ -1760,6 +1853,8 @@ int main(int argc, char** argv) {
             testNoMediumKeepsStep4Output(ctx);
             settle();
             testFireflyFilter(ctx);
+            settle();
+            testChromaPasses(ctx);
             settle();
             testVolumeLayer(ctx);
             settle();

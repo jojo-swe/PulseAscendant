@@ -122,6 +122,10 @@ std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesS
 // luminance stop scaled by the local deviation, smaller at more samples) keep edges and detail.
 inline constexpr std::uint32_t kExportFilterSpp = 16;
 inline constexpr std::uint32_t kExportFineAtrousIterations = 2;
+// Then kExportChromaAtrousIterations chroma passes (steps 1, 2, 4, 8) smooth the colour of the lighting but
+// not its luminance. Light dispersed through glass has a wavelength per sample: its chroma noise is far
+// larger than its luminance noise, and the light luminance-stopped passes would leave it as coloured blotches.
+inline constexpr std::uint32_t kExportChromaAtrousIterations = 4;
 
 // The denoiser settings of a frame: the window keeps history and always runs 3 a-trous iterations (5 at
 // history length <= 3); exports keep none and run 3 (5, every pixel's history being one frame) below

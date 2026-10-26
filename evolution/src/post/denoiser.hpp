@@ -75,8 +75,12 @@ struct GBufferView {
 //   atrous      atrousIterations 5x5 B3 passes, step 1, 2, 4, ..., weighted by depth, normal and luminance
 //               (against the 3x3 Gaussian of the variance), the variance carried with squared weights; pixels
 //               with len <= 3 get max(atrousIterations, resetAtrousIterations) (the others are copied
-//               through the extra passes). Then volumeAtrousIterations passes over the volume layer's
-//               radiance, weighted by luminance (against the 3x3 standard deviation at each pass), by
+//               through the extra passes). Then chromaAtrousIterations passes (steps 1, 2, ...; exports
+//               only) that keep each pixel's luminance and give it the luminance-weighted chromaticity of
+//               its taps, weighted by depth, normal, log-luminance ratio and chromaticity (against the 3x3
+//               chromaticity deviation times sigmaChroma). Then volumeAtrousIterations passes over the
+//               volume layer's radiance, weighted by luminance (against the 3x3 standard deviation at each
+//               pass), by
 //               transmittance (|T_p - T_q| / 0.05) and by depth as the surface passes (a hit and a miss never
 //               mix): a silhouette seen through a medium ends a segment of another length, so it is an edge
 //               of the layer too. Its transmittance is not blurred, since it carries the silhouettes of the

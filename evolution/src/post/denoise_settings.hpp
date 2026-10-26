@@ -17,6 +17,11 @@ struct DenoiseSettings {
     bool fireflyFilter = false;              // exports at spp >= 16
     float fireflyK = 4.f;
     std::uint32_t volumeAtrousIterations = 4;
+    // After the surface passes: this many à-trous iterations (steps 1, 2, 4, ...) that smooth only the
+    // chroma of the illumination, each pixel keeping its luminance (atrous.comp's chroma mode), with the
+    // chromaticity stop scaled by sigmaChroma. 0 (the window): none.
+    std::uint32_t chromaAtrousIterations = 0;
+    float sigmaChroma = 4.f;
     // false: the frame has no participating medium, so the G-buffer's volume layer is (0, 0, 0, 1) and the
     // denoiser neither reads nor filters it (the same output bytes, without the volume passes and loads).
     bool hasMedium = true;

@@ -36,7 +36,8 @@
 //   leaves glass as it was.
 // - Hero wavelengths (exports: frame.spp >= kHeroSpp): at that first dispersive dielectric the path splits
 //   into kHeroWavelengths copies at wavelengths a kHeroWavelengths-th of the range apart (the hero's uniform
-//   plus k / kHeroWavelengths, wrapped), each with spectralRgb(lambda_k) and a share 1 / kHeroWavelengths of
+//   plus k / kHeroWavelengths, wrapped; the heroes of a pixel's samples stratify the first kHeroWavelengths-th:
+//   heroSetWavelength), each with spectralRgb(lambda_k) and a share 1 / kHeroWavelengths of
 //   everything it adds from there (gHeroWeight, after the clamp). The copies replay the hit that split them
 //   (the same ray, traced again, without its medium segment, which the first copy already took) and then
 //   draw the same random numbers, so where the glass disperses little they take nearly the same path and
@@ -265,6 +266,18 @@ void addContribution(inout vec3 radiance, vec3 c, bool rough) {
 float heroWavelength(uint bounce) {
     float start = randomFloat(frame.frameSeed, gPixel, 0u, 4u + bounce * kDimsPerBounce + 7u);
     return fract(start + float(gSample) * 0.6180339887);
+}
+
+// The hero's uniform when the path splits into `heroes` wavelengths (exports): the pixel's spp samples
+// stratify the first 1 / heroes of the range from one random start per pixel and frame, whatever bounce
+// they split at, so with the copies' offsets k / heroes the pixel's wavelengths are spp * heroes evenly
+// spaced ones (64 at 16 spp, 6.25 nm apart, no two alike). Each sample's uniform is still uniform. The
+// golden-ratio walk does not suit this: its steps times heroes (2.47 for 4) leave half of each quarter
+// sparse, and a set of wavelengths a quarter of the range apart is far from grey (from orange to blue as
+// the start moves), so the pixels kept the colour of their sparse halves.
+float heroSetWavelength(uint heroes) {
+    float start = randomFloat(frame.frameSeed, gPixel, 0u, 4u + 7u);
+    return fract(start + float(gSample) / float(max(frame.spp, 1u) * heroes));
 }
 
 // Next-event estimation towards the environment: one direction from sampleEnvironment(), one shadow ray to
@@ -636,14 +649,16 @@ SampleResult tracePath() {
         }
         if (isDielectric(s) && payload.abbe > 0.0) {
             if (lambda < 0.0) {
-                float u = heroWavelength(bounce);
+                float u;
                 if (heroes > 1u) {
                     if (!heroSplit) {
                         heroSplit = true;
-                        heroU = u;
+                        heroU = heroSetWavelength(heroes);
                         gHeroWeight = 1.0 / float(heroes);
                     }
                     u = fract(heroU + float(hero) / float(heroes));
+                } else {
+                    u = heroWavelength(bounce);
                 }
                 lambda = kSpectralMinNm + kSpectralRangeNm * u;
                 throughput *= spectralRgb(lambda);

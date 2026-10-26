@@ -363,7 +363,11 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
   3×3 neighbourhood, which keeps anything two pixels wide (CRT text, highlights) and pixels on a geometry
   edge (a highlight along an edge, such as the window sill's, is one pixel wide) but removes lone fireflies,
   then a light à-trous of 2 iterations (steps 1 and 2) smooths the speckle that many small lights and caustics
-  leave at 16–64 spp; its luminance stop follows the local noise, so at more samples it keeps more detail. A separate volume layer
+  leave at 16–64 spp; its luminance stop follows the local noise, so at more samples it keeps more detail.
+  Four chroma passes (steps 1 to 8) follow: each pixel keeps its luminance and takes its neighbours' mean
+  colour, stopped at depth, normal and luminance edges and at colour edges that stand out of the pixel's own
+  chroma noise. Light dispersed through glass is far noisier in colour than in brightness, and without them
+  the light pass leaves that noise as coloured blotches (GLASS CATHEDRAL's piers). A separate volume layer
   (in-scattered light and transmittance, from the participating media) has its own history and filter, which
   stops at transmittance and depth steps so silhouettes in fog stay sharp, and is composed as
   `transmittance × surface + volume`; a scene without a medium skips it.
@@ -441,8 +445,9 @@ streak. `scene_ship_test --look <dir> [spp] [width height]` renders a still of e
   its first dispersive glass into four copies a quarter of the spectrum apart, which then draw the same
   random numbers: where the glass bends the wavelengths little they take nearly the same path, and their
   colours average to the spectrum's rather than one wavelength's. Through a dispersive cube the chroma noise
-  drops by 87 % against one wavelength at the same sample count (`scene_glass_test heroes`). The window keeps
-  one wavelength and leaves the colour to the temporal history.
+  drops by 87 % against one wavelength at the same sample count (`scene_glass_test heroes`). A pixel's samples
+  stratify where their four wavelengths start, so its 16 samples trace 64 evenly spaced wavelengths. The
+  window keeps one wavelength and leaves the colour to the temporal history.
 - **A bladed iris.** From the 50 mm lens up, the thin lens's aperture is a hexagon of the disc's area, so the
   portraits' out-of-focus highlights take the iris's shape; the 24 and 35 mm lenses keep a round aperture.
 - **The glass chapters** (GLENZ, GLASS CATHEDRAL, CRYSTAL CITY, LENS, LENS OF GOD) shoot their caustics, not
