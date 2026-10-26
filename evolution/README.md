@@ -162,19 +162,26 @@ gaps (credits and provenance in [`licenses/MUSIC-NOTICE.md`](licenses/MUSIC-NOTI
 |---|---|---|---|---|
 | I | Amiga Trance Demo | 141.6 BPM | 0 s | 194.00 s |
 | II | Guitar Trance | 140.5 BPM | 194.0 s | 218.40 s |
-| III | Rigid Arpeggios | 138.3 BPM | 412.4 s | 298.76 s |
+| III | Cyberpunk Assembly | 138.1 BPM | 412.4 s | 269.56 s |
 
-The show is 711.16 s long. The MP3s in `music/source/` and the WAVs in `assets/music/` are git-ignored.
+The show is 681.96 s long. Act III's track stands in until the final one; replacing it is one command (see
+[Replacing a track](music/README.md#replacing-a-track)). The MP3s in `music/source/` and the WAVs in
+`assets/music/` are git-ignored.
 With the MP3s in place, this regenerates `assets/music/show.wav`, the generated headers in
 `src/show/generated/` and the receipts in [`music/`](music/README.md) (needs numpy and ffmpeg):
 
 ```sh
 cd evolution
-python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Rigid Arpeggios.mp3"
+python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Cyberpunk Assembly.mp3"
 ```
 
 The headers and receipts are committed, so the build has the whole show without the audio; chapter
-targets come from `tools/show_targets.json`. Trance delays at 3/16 put strong onsets 1.5 beats apart, so
+targets come from `tools/show_targets.json`. Acts I and II give theirs in seconds; Act III's are places in the
+form of its track (`tools/song_form.py`: its bar and phrase lines, breakdowns and drops, recorded in
+`music/form.json`), such as "first drop", "biggest drop -8 bars" or a fraction of the way between two of
+them, so its chapters and accents follow whatever track is put there: REBOOT runs over the intro, GALAXY
+starts on the first drop, ASCENDANT's logo lands on the biggest drop, and CREDITS and THE END take the outro.
+Trance delays at 3/16 put strong onsets 1.5 beats apart, so
 `beat_grid.disambiguate_period()` rescores the candidate tempos by the bass onsets on each one's grid
 rather than trusting the autocorrelation, which reads them at 2/3 of their tempo. The `python_tools` test
 runs the pipeline into a temporary directory on a 270 s, 134 BPM placeholder song synthesised by
@@ -733,7 +740,7 @@ tools/render_4k.sh --spp 64              # maximum quality
 `-Spp 16` / `--spp 16` (default, about 0.25 of the 64-spp time); `-Spp 64` / `--spp 64` for maximum quality.
 Exports from 16 spp run the à-trous filter; `--bench` times frames at the same sample count.
 
-At the export budget (2.5 s a frame at 4K and 64 spp on an RTX 4090) the 42,670 frames take about 30 hours. A
+At the export budget (2.5 s a frame at 4K and 64 spp on an RTX 4090) the 40,918 frames take about 28 hours. A
 software Vulkan driver (lavapipe) is far too slow for the full video; use it for short ranges and checks.
 
 The parts directory records the render's settings and the build (the executable's size, time and hash, and its

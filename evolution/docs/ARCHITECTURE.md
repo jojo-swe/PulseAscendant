@@ -1,6 +1,6 @@
 # EVOLUTION architecture
 
-EVOLUTION is a standalone Vulkan 1.3 demo under `evolution/`: every chapter of a 711 s, three-act show first
+EVOLUTION is a standalone Vulkan 1.3 demo under `evolution/`: every chapter of a 682 s, three-act show first
 appears as a 1993 effect (320x200, palette-indexed, rasterised on the GPU) and then as a 2026 path-traced scene.
 This document covers the build, the module layout, the render pipeline, the determinism rules and the checks
 that need RT hardware. The README has the user-facing description, flags and keys.
@@ -24,7 +24,9 @@ cmake --preset linux && cmake --build --preset linux && ctest --preset linux --o
   waits on the timeline semaphore, so tests keep buffers alive or idle the queue between subtests.
 - Music files are not committed. `python3 tools/prepare_show.py <track>.mp3 ...` writes `assets/music/show.wav`,
   the generated headers in `src/show/generated/` and the receipts in `music/`. Without `show.wav` the demo runs
-  in SILENT MODE.
+  in SILENT MODE. Act III's chapters are placed on the form of its track (`tools/song_form.py`), and the code
+  and tests take Act III's times from the generated data, so swapping its track is that one command and a test
+  run (`music/README.md`, "Replacing a track") plus a baseline regeneration.
 - `tests/baseline/hash_outputs.py` renders a fixed set of captures and streams and compares SHA-256 sums
   (`SUMS`) and Studio luminance (`LUMINANCE`) on lavapipe; use `--check tests/baseline/SUMS` for changes that must
   not move a pixel.
@@ -168,7 +170,7 @@ None of this can be checked on lavapipe.
 - THE END: the epoch card stays white while the text fades.
 - Exports use `ring.wait(ring.submit())` per frame, which caps 1993 and placeholder chapters at 20-30 fps at 4K;
   per-slot readback and GPU RGB packing are planned.
-- The export frame grid: 711.16 s is not a whole number of 60 fps frames, so the audio must be padded to the grid.
+- The export frame grid: 681.96 s is not a whole number of 60 fps frames, so the audio must be padded to the grid.
 - `tools/render_video.py` does not exist yet; a final render is `--render-stream` piped to ffmpeg.
 - Small items: `Image` does not expose its usage; `lathe` throws on repeated profile points; a firefly can spread
   through the a-trous filter before remodulation (finite and clamped); `writeGuides` traces one extra unjittered
