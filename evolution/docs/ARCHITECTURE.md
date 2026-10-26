@@ -86,8 +86,8 @@ emissive texture, so the 1993 picture lights the 2026 room.
 - The renderer derives a `HistoryState` {reset, framesSinceReset, mode, spp, maxBounces, frameSeed} and the modern
   stage never recomputes the seed. Export uses `frameSeedFor(t, 0)`; the window uses
   `frameSeedFor(t, framesSinceReset)`, so the first window frame after a reset equals an export frame at equal spp
-  and bounces (with `--no-fast-mode`: the window's fast mode, docs/PERFORMANCE.md, traces fewer in-scatter
-  points and keeps its photon maps, and is still a pure function of the time and the frames since a reset). Every random number is an integer hash of (frame seed, pixel, sample, dimension).
+  and bounces (with `--no-fast-mode`: the window's fast mode, docs/PERFORMANCE.md, roulettes faint shadow
+  rays and paths and keeps its photon maps, and is still a pure function of the time and the frames since a reset). Every random number is an integer hash of (frame seed, pixel, sample, dimension).
 - History resets on seeks, chapter changes and cuts. The reset is guarded twice (the denoiser's `resetHistory()` and
   withholding the previous camera); the seek tests fail only when both are removed.
 - Export (`--capture-dir`, `--render-stream`) has no temporal history: it traces `--spp` samples per frame (64 by

@@ -69,12 +69,12 @@
 // shader traces rays (recursion depth 1).
 //
 // The window's fast build (rt_pathtrace_fast.rgen.spv, -DEVO_FAST; modern::TracerOptions::fast, never an
-// export; docs/PERFORMANCE.md): two in-scatter points on the primary segment instead of four
-// (medium_path.glsl), and one wavelength per path whatever the spp (no hero split, whose saved state the
-// compiler then drops). Both estimates stay unbiased, and less state is live across each trace. The volume
-// layer's extra noise costs a little light where the denoiser's history clamp cuts it (ASCENT's clouds 1.5 %,
-// one point 2.5 %). Roulette that divides the throughput stays at bounce 3: from bounce 2 it amplified the
-// survivors of dark bounces past the scenes' low indirect clamps, which then cut them (2-3 % of the light).
+// export; docs/PERFORMANCE.md): one wavelength per path whatever the spp (no hero split, whose saved state
+// the compiler then drops), which stays unbiased with less state live across each trace. It keeps the four
+// in-scatter points on the primary segment (medium_path.glsl): two made the volume layer noisy enough for the
+// denoiser's history clamp to cut its light (METROPOLIS's haze 7 %, ASCENT's clouds 1.6 %). Roulette that
+// divides the throughput stays at bounce 3: from bounce 2 it amplified the survivors of dark bounces past the
+// scenes' low indirect clamps, which then cut them (2-3 % of the light).
 // When every thin pane of the frame is a Glass mesh (kTraceFlagPaneAnyHit), a shadow ray passes the panes in
 // one trace through the Glass group's any-hit (pane.rahit, the same transmission) instead of one occlusion
 // ray plus a closest-hit trace per pane and one more that misses. The surface path (not the continuation,

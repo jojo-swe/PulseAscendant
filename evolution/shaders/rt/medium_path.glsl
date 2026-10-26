@@ -38,11 +38,10 @@ const uint kMediumSegmentEnd = 2u;       // the path ends in the medium
 // The continuation's bounces draw the per-bounce random dimensions of bounce + this (the surface path's own
 // stay below it).
 const uint kMediumBounceOffset = 64u;
-#ifdef EVO_FAST
-const uint kPrimaryScatterSamples = 2u; // the window's fast build (pathtrace.rgen); one was visibly darker
-#else
-const uint kPrimaryScatterSamples = 4u; // modern::kPrimaryScatterSamples
-#endif
+// modern::kPrimaryScatterSamples, in the window's fast build too: with two its noisier volume layer lost
+// light to the denoiser's history clamp (METROPOLIS's lit haze 7 % darker, ASCENT's clouds 1.6 %; three
+// points 3.3 and 0.9 %).
+const uint kPrimaryScatterSamples = 4u;
 // Equiangular sampling of the primary segment's points serves frames with 1 to this many tree lights (stars
 // in a nebula); a city's thousands of lamps leave it to the majorant. The share of the points it draws:
 const uint kEquiangularMaxLights = 64u;   // modern::kEquiangularMaxLights
