@@ -53,6 +53,7 @@ Then regenerated for the City's distant facades (lit window blocks and wall tone
 stream_studio_ascent changed.
 Then regenerated for RAYTRACE's cirrus (no lavender), INFINITY's slate haze and GLENZ's floor shot: only
 raytrace_2026 changed.
+Then regenerated for PLASMA's layered strands inside the slab: only plasma_wipe changed.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How a change uses it (run from evolution/ after building the linux preset):
