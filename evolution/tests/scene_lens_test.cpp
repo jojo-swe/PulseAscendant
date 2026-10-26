@@ -363,7 +363,7 @@ void testOptics() {
                 double(modern::kGodLensFocalLength));
     CHECK(std::abs(focus - modern::kGodLensFocalLength) < 0.1 * modern::kGodLensFocalLength);
     const show::TimelineFrame god = at(show::Effect::LensOfGod, 0.0);
-    const double accent = god.accentSeconds, settle = modern::lensDownbeatBefore(god, accent);
+    const double accent = god.accentSeconds, settle = modern::godSettle(god);
     std::printf("    lens of god: D %.3f s, accent %.3f s into the chapter\n", settle, accent);
     CHECK(settle > 0 && settle <= accent && accent - settle < 1.8);
     double previous = 1e30;
@@ -796,7 +796,7 @@ int main(int argc, char** argv) {
             test::SweepLimits limits;
             limits.maxCameraStep = 12.f; // LENS OF GOD's orbit, descent and pull-back cover kilometres
             const test::SweepStats stats = test::checkSceneSweep(SceneId::Lens, limits);
-            CHECK(stats.frames > 2500 && stats.shots == 6);
+            CHECK(stats.frames == test::sweepFrames(SceneId::Lens) && stats.shots == 6);
         });
         std::optional<Shots> shots;
         timed("f", [&] { testFocusSpot(shots ? *shots : shots.emplace(ctx)); });
