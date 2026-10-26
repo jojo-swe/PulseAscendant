@@ -3,6 +3,7 @@
 #include "retro/effects.hpp"
 #include "show/director.hpp"
 #include "show/era.hpp"
+#include "show/music_curves.hpp"
 
 #include <algorithm>
 #include <array>
@@ -46,11 +47,39 @@ show::TransitionMarks marksOf(int chapter) {
         show::sampleTimeline(0.5 * (show::chapterStart(chapter) + show::chapterStart(chapter + 1))));
 }
 
+// The downbeats of a chapter in show seconds, from its track's beat grid.
+std::vector<double> downbeatsOf(int chapter) {
+    const double start = show::chapterStart(chapter), end = show::chapterStart(chapter + 1);
+    const int track = show::trackAt(start);
+    const double offset = show::trackStart(track);
+    const show::BeatGridView grid = show::beatGrid(track);
+    std::vector<double> out;
+    for (int beat = 0; beat < grid.count(); ++beat) {
+        const double t = grid.beatTime(beat) + offset;
+        if (grid.bar(beat) == 0 && t >= start - 1e-6 && t <= end + 1e-6)
+            out.push_back(t);
+    }
+    return out;
+}
+
+// The downbeat one bar before ASCENDANT's release, which modern::ascendantTimes puts on the chapter's last
+// downbeat at least a quarter second before its end.
+double beforeRelease(int chapter) {
+    const std::vector<double> bars = downbeatsOf(chapter);
+    const double end = show::chapterStart(chapter + 1);
+    std::size_t release = 0;
+    for (std::size_t i = 0; i < bars.size(); ++i)
+        if (bars[i] <= end - 0.25)
+            release = i;
+    return release > 0 ? bars[release - 1] : end - 2 * marksOf(chapter).bar;
+}
+
 // The keys, from the show's own chapter starts, accents, downbeats and bars wherever the direction ties an
-// event to them; the few shot times the direction names in seconds are written as such.
+// event to them; the few Act II shot times the direction names in seconds are written as such (Act III's
+// follow the form of its track, so none of them is).
 std::vector<ExposureKey> buildKeys() {
     constexpr int kRaytrace = 7, kStudioNight = 11, kSingularity = 18, kReturn = 19, kWormhole = 23,
-                  kMetropolis = 27, kAscendant = 28;
+                  kCrystalCity = 24, kMetropolis = 27, kAscendant = 28;
     const double raytraceEnd = show::chapterStart(kRaytrace + 1);
     const show::TransitionMarks night = marksOf(kStudioNight);
     const double singularityEnd = show::chapterStart(kSingularity + 1);
@@ -58,6 +87,8 @@ std::vector<ExposureKey> buildKeys() {
     const double rebalance = marksOf(kReturn).accent; // the CRT comes on
     const double rebalanceBeat = show::sampleTimeline(rebalance).beatSeconds;
     const double wormholeEnd = show::chapterStart(kWormhole + 1);
+    // CRYSTAL CITY's first shot, the sunrise, runs two bars (modern::glassShotStarts).
+    const double sunrise = show::chapterStart(kCrystalCity) + 2 * marksOf(kCrystalCity).bar;
     const double blink = marksOf(kMetropolis).accent; // every window of the city blinks on
     const double blinkBeat = show::sampleTimeline(blink).beatSeconds;
     const double ascendantEnd = show::chapterStart(kAscendant + 1);
@@ -86,17 +117,17 @@ std::vector<ExposureKey> buildKeys() {
         {returnEnd, -0.2f},
         {returnEnd, 0.f},
         // WORMHOLE: the white-out over its last two bars, held into CRYSTAL CITY, whose sunrise resolves it by
-        // 520 s.
+        // the end of its first shot.
         {wormholeEnd - 2 * marksOf(kWormhole).bar, 0.f},
         {wormholeEnd, 6.f},
-        {520.0, 0.f},
+        {sunrise, 0.f},
         // METROPOLIS: the city-wide blink is the brightest beat of the chapter.
         {blink, 0.f},
         {blink + 0.5 * blinkBeat, 0.3f},
         {blink + blinkBeat, 0.f},
-        // ASCENDANT: from the downbeat a bar before the release (666.71) the frame goes to white; CREDITS is
-        // 1993 only.
-        {664.97, 0.f},
+        // ASCENDANT: from the downbeat a bar before the release the frame goes to white; CREDITS is 1993
+        // only.
+        {beforeRelease(kAscendant), 0.f},
         {ascendantEnd, 6.f},
         {ascendantEnd, 0.f},
     };
