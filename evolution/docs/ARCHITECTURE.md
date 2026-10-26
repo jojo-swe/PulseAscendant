@@ -170,7 +170,7 @@ None of this can be checked on lavapipe.
 - THE END: the epoch card stays white while the text fades.
 - Exports use `ring.wait(ring.submit())` per frame, which caps 1993 and placeholder chapters at 20-30 fps at 4K;
   per-slot readback and GPU RGB packing are planned.
-- The export frame grid: 681.96 s is not a whole number of 60 fps frames, so the audio must be padded to the grid.
+- The export frame grid: 737.62 s is not a whole number of 60 fps frames, so the audio must be padded to the grid.
 - `tools/render_video.py` does not exist yet; a final render is `--render-stream` piped to ffmpeg.
 - Small items: `Image` does not expose its usage; `lathe` throws on repeated profile points; a firefly can spread
   through the a-trous filter before remodulation (finite and clamped); `writeGuides` traces one extra unjittered

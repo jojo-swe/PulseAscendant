@@ -37,7 +37,7 @@ generated data.
 
 ## Replacing a track
 
-Act III's track (Cyberpunk Assembly) stands in until the final one. To replace it, from `evolution/`:
+Act III's track (Cyberpunk Assembly, extended) stands in until the final one. To replace it, from `evolution/`:
 
 1. Put the new file in `music/source/`, for example `music/source/Final Track.mp3`.
 2. Update the list: the third name in `"tracks"` in `tools/show_targets.json`, and the track in the command

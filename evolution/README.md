@@ -162,9 +162,9 @@ gaps (credits and provenance in [`licenses/MUSIC-NOTICE.md`](licenses/MUSIC-NOTI
 |---|---|---|---|---|
 | I | Amiga Trance Demo | 141.6 BPM | 0 s | 194.00 s |
 | II | Guitar Trance | 140.5 BPM | 194.0 s | 218.40 s |
-| III | Cyberpunk Assembly | 138.1 BPM | 412.4 s | 269.56 s |
+| III | Cyberpunk Assembly (extended) | 138.1 BPM | 412.4 s | 325.22 s |
 
-The show is 681.96 s long. Act III's track stands in until the final one; replacing it is one command (see
+The show is 737.62 s long. Act III's track stands in until the final one; replacing it is one command (see
 [Replacing a track](music/README.md#replacing-a-track)). The MP3s in `music/source/` and the WAVs in
 `assets/music/` are git-ignored.
 With the MP3s in place, this regenerates `assets/music/show.wav`, the generated headers in
@@ -172,7 +172,7 @@ With the MP3s in place, this regenerates `assets/music/show.wav`, the generated 
 
 ```sh
 cd evolution
-python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Cyberpunk Assembly.mp3"
+python3 tools/prepare_show.py "music/source/Amiga Trance Demo.mp3" "music/source/Guitar Trance.mp3" "music/source/Cyberpunk Assembly Extended.mp3"
 ```
 
 The headers and receipts are committed, so the build has the whole show without the audio; chapter
