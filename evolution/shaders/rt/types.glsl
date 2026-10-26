@@ -64,6 +64,7 @@ const uint kTraceFlagNee = 1u; // FrameUniforms.flags
 const uint kTraceFlagRussianRoulette = 2u;
 const uint kTraceFlagFixedLightSelection = 4u; // the original fixed selectWeights (comparisons)
 const uint kTraceFlagThinPanes = 8u; // the frame has thin-walled glass (shadow rays then pass through it)
+const uint kTraceFlagFilteredGrid = 16u; // the grid's density through the sampler's filter (not lavapipe)
 // TLAS instance masks: thin-walled glass panes, and everything else (shadow rays see only the latter).
 const uint kInstanceMaskSolid = 1u;
 const uint kInstanceMaskPane = 2u;

@@ -72,6 +72,8 @@ public:
     VkCommandPool commandPool() const { return commandPool_; }
 
     std::string deviceName() const;
+    // The driver (VkPhysicalDeviceDriverProperties::driverID): VK_DRIVER_ID_MESA_LLVMPIPE on lavapipe.
+    VkDriverId driverId() const;
     uint32_t apiVersion() const;
     // The device, driver, API version, validation state and the ray tracing properties as one JSON object.
     std::string deviceInfoJson() const;

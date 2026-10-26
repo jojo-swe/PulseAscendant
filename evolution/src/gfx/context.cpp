@@ -526,6 +526,14 @@ std::string Context::deviceName() const {
     return properties.deviceName;
 }
 
+VkDriverId Context::driverId() const {
+    VkPhysicalDeviceDriverProperties driver{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    properties.pNext = &driver;
+    vkGetPhysicalDeviceProperties2(physicalDevice_, &properties);
+    return driver.driverID;
+}
+
 uint32_t Context::apiVersion() const {
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(physicalDevice_, &properties);

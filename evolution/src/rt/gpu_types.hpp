@@ -149,9 +149,12 @@ constexpr std::uint32_t hitGroupFor(MaterialClass c, GeometryKind k) {
 // --- The path tracer's frame -------------------------------------------------------------------------------
 
 // FrameUniforms::flags. FixedLightSelection: choose lights by their fixed selectWeight alone, not by
-// their importance at the shading point; for comparisons and tests.
+// their importance at the shading point; for comparisons and tests. FilteredGrid: read the grid medium's
+// density through the sampler's trilinear filter (one fetch) instead of eight texelFetches (every driver but
+// lavapipe, whose filtered fetch from a 3D image was measured off).
 inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u,
-                               kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u;
+                               kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u,
+                               kTraceFlagFilteredGrid = 16u;
 // TLAS instance masks: a thin-walled glass pane is a filter, not an occluder; shadow rays trace the
 // solid instances, then the panes in their way for their tint.
 inline constexpr std::uint8_t kInstanceMaskSolid = 1u, kInstanceMaskPane = 2u;

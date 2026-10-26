@@ -262,6 +262,7 @@ private:
     gfx::Context& ctx_;
     gfx::FrameRing& ring_;
     TracerOptions options_;
+    bool filteredGrid_ = false; // kTraceFlagFilteredGrid: every driver but lavapipe
     std::uint32_t width_ = 0, height_ = 0;
     TracerCapacity capacity_;
     Stats stats_{};

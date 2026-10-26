@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <numbers>
@@ -94,6 +95,15 @@ gfx::RtShaders shaders(const TracerOptions& options) {
                         {dir / "rt_emissive_sphere.rchit.spv", intersection},
                         {dir / "rt_checker_sphere.rchit.spv", intersection}};
     return s;
+}
+
+// Whether the grid medium's density is read through the sampler's filter (kTraceFlagFilteredGrid): on every
+// driver but lavapipe, whose filtered 3D fetch is off and whose pictures are the byte-exact reference.
+// EVO_FILTERED_GRID=0 or 1 overrides the choice (a diagnostic).
+bool filteredGridFor(const gfx::Context& ctx) {
+    if (const char* forced = std::getenv("EVO_FILTERED_GRID"))
+        return std::string(forced) == "1";
+    return ctx.driverId() != VK_DRIVER_ID_MESA_LLVMPIPE;
 }
 
 std::uint32_t checkedSize(std::uint32_t width, std::uint32_t height) {
@@ -219,7 +229,8 @@ std::uint32_t PathTracer::pipelinesCreated() {
 
 PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
                        const TracerCapacity& capacity, const TracerOptions& options)
-    : ctx_(ctx), ring_(ring), options_(options), width_(checkedSize(width, height)), height_(height),
+    : ctx_(ctx), ring_(ring), options_(options), filteredGrid_(filteredGridFor(ctx)),
+      width_(checkedSize(width, height)), height_(height),
       capacity_(unite(capacity, {1, 1, 1})),
       blackScreen_(clearedTexture(ctx, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_VIEW_TYPE_2D, "black screen")),
       pipeline_(ctx, shaders(options), kBindings, sizeof(TracePush)), dummyBuffer_(zeroedBuffer(ctx)),
@@ -551,7 +562,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
                   (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
                   (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u) |
-                  (panes ? rt::kTraceFlagThinPanes : 0u);
+                  (panes ? rt::kTraceFlagThinPanes : 0u) | (filteredGrid_ ? rt::kTraceFlagFilteredGrid : 0u);
         u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
         u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
         u.clampIndirect = settings.clampIndirect;
