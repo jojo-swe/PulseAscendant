@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -79,7 +80,7 @@ static_assert(sizeof(rt::MediumUniforms) <= kDummyBufferBytes &&
 
 std::atomic<std::uint32_t> gPipelinesCreated{0};
 
-gfx::RtShaders shaders(const TracerOptions& options) {
+gfx::RtShaders shaders(const TracerOptions& options, std::uint32_t features = rt::kFeatureAll) {
     const std::filesystem::path dir = gfx::shaderDir();
     gfx::RtShaders s;
     s.raygen = dir / (std::string("rt_pathtrace") + (options.fast ? "_fast" : "") +
@@ -95,6 +96,8 @@ gfx::RtShaders shaders(const TracerOptions& options) {
                         {dir / "rt_glass_sphere.rchit.spv", intersection},
                         {dir / "rt_emissive_sphere.rchit.spv", intersection},
                         {dir / "rt_checker_sphere.rchit.spv", intersection}};
+    if (features != rt::kFeatureAll)
+        s.specialization = {features}; // constant_id 0: common.glsl's kFeatures
     return s;
 }
 
@@ -224,6 +227,45 @@ TracerCapacity unite(const TracerCapacity& a, const TracerCapacity& b) {
             std::max(a.materials, b.materials), std::max(a.treeLights, b.treeLights)};
 }
 
+namespace {
+
+// traceFeatures without the scan of the instances for panes (`panes`: whether there are any).
+std::uint32_t frameFeatures(const SceneStatic& scene, const SceneFrame& frame, bool panes) {
+    const std::vector<rt::Material>& materials = frame.materials.empty() ? scene.materials : frame.materials;
+    std::uint32_t features = panes ? rt::kFeaturePanes : 0u;
+    if (frame.lensing)
+        features |= rt::kFeatureLensing;
+    if (frame.medium && frame.medium->fog)
+        features |= rt::kFeatureFog;
+    if (frame.medium && frame.medium->grid)
+        features |= rt::kFeatureGrid;
+    if (frame.caustics)
+        features |= rt::kFeatureCaustics;
+    if (!frame.treeLights.empty())
+        features |= rt::kFeatureTree;
+    for (const std::vector<rt::Material>* table : {&materials, &scene.materials})
+        for (const rt::Material& m : *table) {
+            features |= rt::patternFeature(m.pattern);
+            if (m.abbe > 0.f)
+                features |= rt::kFeatureDispersion;
+            if (m.texture == rt::kRetroScreenTexture)
+                features |= rt::kFeatureRetro;
+        }
+    return features;
+}
+
+} // namespace
+
+std::uint32_t traceFeatures(const SceneStatic& scene, const SceneFrame& frame) {
+    const std::vector<rt::Material>& materials = frame.materials.empty() ? scene.materials : frame.materials;
+    bool panes = false;
+    for (const SceneInstance& in : frame.instances) {
+        const rt::Material& m = materials[in.material];
+        panes = panes || ((m.flags & rt::kMaterialThinWalled) != 0 && m.transmission > 0.5f);
+    }
+    return frameFeatures(scene, frame, panes);
+}
+
 std::uint32_t PathTracer::pipelinesCreated() {
     return gPipelinesCreated.load();
 }
@@ -264,6 +306,33 @@ PathTracer::PathTracer(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t wi
             buffer.flush();
         }
     createImages();
+}
+
+void PathTracer::preparePipeline(std::uint32_t features) {
+    if (features == rt::kFeatureAll || specialized_.contains(features))
+        return;
+    auto pipeline = std::make_unique<gfx::RayTracingPipeline>(ctx_, shaders(options_, features), kBindings,
+                                                              sizeof(TracePush));
+    ++gPipelinesCreated;
+    specialized_.emplace(features, std::move(pipeline));
+}
+
+gfx::RayTracingPipeline& PathTracer::pipelineFor(std::uint32_t features) {
+    // The specialized pipeline with the fewest features that covers the frame's, else the generic one.
+    gfx::RayTracingPipeline* best = &pipeline_;
+    std::uint32_t bestFeatures = rt::kFeatureAll;
+    for (const auto& [set, pipeline] : specialized_)
+        if ((features & ~set) == 0 && std::popcount(set) < std::popcount(bestFeatures)) {
+            best = pipeline.get();
+            bestFeatures = set;
+        }
+    lastFeatures_ = bestFeatures;
+    return *best;
+}
+
+gfx::RayTracingPipeline::StackSizes PathTracer::stackSizes() const {
+    const auto it = specialized_.find(lastFeatures_);
+    return it != specialized_.end() ? it->second->stackSizes() : pipeline_.stackSizes();
 }
 
 void PathTracer::gatherCounters(std::uint32_t slot) {
@@ -356,6 +425,8 @@ VkDeviceSize PathTracer::imageBytes() const {
 VkDeviceSize PathTracer::bufferBytes() const {
     VkDeviceSize bytes = tlas_->bytes() + pipeline_.sbtBytes() + dummyBuffer_.bytes() + blackScreen_.bytes() +
                          dummyDensity_.bytes() + dummyMajorant_.bytes() + dummyCaustics_.bytes();
+    for (const auto& [features, pipeline] : specialized_)
+        bytes += pipeline->sbtBytes();
     for (const SlotBuffers* buffers :
          {&uniforms_, &instanceRecords_, &lights_, &materials_, &previousTransforms_, &environments_,
           &treeNodes_, &treeLights_, &media_, &lenses_, &counters_})
@@ -492,6 +563,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         regionStride(sizeof(rt::LightTreeNode), treeNodeCount(capacity_.treeLights));
     const VkDeviceSize treeLightStride = regionStride(sizeof(rt::TreeLight), capacity_.treeLights);
     std::vector<std::vector<rt::Instance>> sliceInstances(sliceCount);
+    std::uint32_t features = 0; // what the slices need of the pipeline (traceFeatures)
     for (std::uint32_t k = 0; k < sliceCount; ++k) {
         const SceneFrame& frame = slices[k];
         const rt::EnvironmentUniforms environment = packEnvironment(frame.environment);
@@ -564,6 +636,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                   (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
                   (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u) |
                   (panes ? rt::kTraceFlagThinPanes : 0u) | (filteredGrid_ ? rt::kTraceFlagFilteredGrid : 0u);
+        features |= frameFeatures(scene.source(), frame, panes);
         u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
         u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
         u.clampIndirect = settings.clampIndirect;
@@ -616,6 +689,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
           &lenses_[slot]})
         buffer->flush();
     tracedThisFrame_ = true; // nothing is refused from here on
+    // The pipeline: a scene's own (preparePipeline) when it covers every slice's features, else the generic.
+    gfx::RayTracingPipeline& pipeline = pipelineFor(features);
     // The counting build: the slot's last frame has completed (the ring's begin() waited for it).
     gatherCounters(slot);
 
@@ -768,7 +843,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                 timers_->begin(cmd, "trace");
                 tracing = true;
             }
-            pipeline_.bind(cmd, ring_, writesFor(k));
+            pipeline.bind(cmd, ring_, writesFor(k));
             boundSlice = k;
         }
         // The volume layer keeps a running mean too while the frame has a medium.
@@ -785,8 +860,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                               0.5f + settings.pixelJitter[1] - 0.5f * settings.pixelFootprint[1]},
                              {settings.pixelFootprint[0], settings.pixelFootprint[1]},
                              k == guideSlice && firstOfSlice ? 1u : 0u};
-        pipeline_.push(cmd, &push, sizeof push);
-        pipeline_.traceRays(cmd, width_, height_);
+        pipeline.push(cmd, &push, sizeof push);
+        pipeline.traceRays(cmd, width_, height_);
     }
     if (timers_ && (tracing || !singleSlice))
         timers_->end(cmd);

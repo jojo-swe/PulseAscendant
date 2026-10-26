@@ -22,13 +22,14 @@ const float kMediumPi = 3.14159265358979;
 
 // Whether this frame has any medium, fog or a grid.
 bool mediumActive() {
-    return frame.mediumFlags != 0u;
+    return (frame.mediumFlags & ((featureOn(kFeatureFog) ? kMediumFog : 0u) |
+                                 (featureOn(kFeatureGrid) ? kMediumGrid : 0u))) != 0u;
 }
 bool fogActive() {
-    return (frame.mediumFlags & kMediumFog) != 0u;
+    return featureOn(kFeatureFog) && (frame.mediumFlags & kMediumFog) != 0u;
 }
 bool gridActive() {
-    return (frame.mediumFlags & kMediumGrid) != 0u;
+    return featureOn(kFeatureGrid) && (frame.mediumFlags & kMediumGrid) != 0u;
 }
 
 // --- Random numbers ----------------------------------------------------------------------------------------

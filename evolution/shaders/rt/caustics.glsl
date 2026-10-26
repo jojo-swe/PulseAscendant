@@ -15,7 +15,8 @@
 // a receiver of this frame's caustics (h.material.baseColor after the material's pattern); 0 elsewhere.
 vec3 causticRadiance(HitPoint h) {
     Material m = h.material;
-    if ((m.flags & kMaterialCausticReceiver) == 0u || m.receiver >= frame.causticReceivers) {
+    if (!featureOn(kFeatureCaustics) || (m.flags & kMaterialCausticReceiver) == 0u ||
+        m.receiver >= frame.causticReceivers) {
         return vec3(0.0);
     }
     CausticReceiver r = receiverTable[m.receiver];

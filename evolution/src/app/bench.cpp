@@ -206,15 +206,23 @@ int runBench(const Options& options) {
             const double pixels = double(options.benchFrames) * double(trace.width) * double(trace.height);
             for (std::size_t k = 0; k < counters.size(); ++k)
                 record.counters.emplace_back(modern::kCounterNames[k], double(counters[k]) / pixels);
-            record.stats = {{"instances", s.instances},     {"rectLights", s.rectLights},
-                            {"portals", s.portals},         {"treeLights", s.treeLights},
-                            {"thinPanes", s.thinPanes},     {"fog", s.fog},
-                            {"lensing", s.lensing},         {"gridVoxels", s.gridVoxels},
-                            {"photons", s.photons},         {"causticTexels", s.causticTexels},
-                            {"particles", s.particles},     {"splats", s.splats},
-                            {"spp", s.spp},                 {"maxBounces", s.maxBounces},
+            record.stats = {{"instances", s.instances},
+                            {"rectLights", s.rectLights},
+                            {"portals", s.portals},
+                            {"treeLights", s.treeLights},
+                            {"thinPanes", s.thinPanes},
+                            {"fog", s.fog},
+                            {"lensing", s.lensing},
+                            {"gridVoxels", s.gridVoxels},
+                            {"photons", s.photons},
+                            {"causticTexels", s.causticTexels},
+                            {"particles", s.particles},
+                            {"splats", s.splats},
+                            {"spp", s.spp},
+                            {"maxBounces", s.maxBounces},
                             {"raygenStackBytes", double(s.raygenStack)},
-                            {"hitStackBytes", double(s.hitStack)}};
+                            {"hitStackBytes", double(s.hitStack)},
+                            {"pipelineFeatures", double(s.pipelineFeatures)}};
         }
         if (readback) {
             const std::vector<std::uint8_t> rgb = readback->rgb(); // the ring is idle (waitAll above)

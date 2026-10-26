@@ -129,7 +129,7 @@ vec2 tesseraCoordinates(Material m, vec3 p) {
 void main() {
     HitPoint h = hitPoint();
     Material m = h.material;
-    if (m.pattern == kPatternTesserae || m.pattern == kPatternTesseraeSphere) {
+    if (featureOn(kFeatureTesserae) && (m.pattern == kPatternTesserae || m.pattern == kPatternTesseraeSphere)) {
         float roughness = m.roughness;
         vec3 color;
         float saturation = m.baseColor2.z > 0.0 ? m.baseColor2.z : 0.72;

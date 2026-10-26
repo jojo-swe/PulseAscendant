@@ -14,9 +14,10 @@ PASSES = {"total", "retro", "fill", "particles", "medium", "tlas", "photons", "t
           "upscale", "bloom", "tonemap", "compositor"}
 
 
-def bench(exe, extra, args):
+def bench(exe, extra, args, env=None):
     result = subprocess.run([exe, *extra, "--bench", "--width", "96", "--height", "54", *args],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300,
+                            env=dict(os.environ, **(env or {})))
     sys.stderr.write(result.stderr.decode(errors="replace"))
     if result.returncode != 0:
         sys.exit(f"--bench {' '.join(args)} exited with {result.returncode}")
@@ -96,6 +97,19 @@ def main(exe, extra):
     if not stats.get("instances", 0) > 0 or stats.get("spp") != 1 or stats.get("maxBounces") != 4:
         sys.exit(f"--bench-counters: implausible statistics {stats}")
     print(f"bench: counters {counters}")
+
+    # Fast mode traces the Studio with its own pipeline (retro screen and Studio patterns, no lensing or grid),
+    # whose picture is the generic pipeline's (EVO_SCENE_PIPELINES=0) byte for byte.
+    features = int(stats.get("pipelineFeatures", -1))
+    if features == 0xFFFFFFFF or not features & 128 or features & (1 | 4):
+        sys.exit(f"STUDIO NIGHT should trace with its own pipeline: features {features:#x}")
+    generic = tempfile.mkdtemp(prefix="evo_bench_generic_")
+    bench(exe, extra, ["--chapters", "11", "--bench-frames", "2", "--bench-counters", "--bench-capture", generic],
+          {"EVO_SCENE_PIPELINES": "0"})
+    with open(png, "rb") as a, open(os.path.join(generic, "bench_11.png"), "rb") as b:
+        if a.read() != b.read():
+            sys.exit("the Studio's own pipeline and the generic one gave different pictures")
+    print(f"bench: the Studio's pipeline (features {features:#x}) equals the generic one")
 
     # A chapter the show does not have.
     result = subprocess.run([exe, "--bench", "--chapters", "99", "--width", "96", "--height", "54"],

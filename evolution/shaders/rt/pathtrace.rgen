@@ -161,7 +161,7 @@ vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
         return vec3(0.0);
     }
     vec3 through = vec3(1.0);
-    if ((frame.flags & kTraceFlagThinPanes) == 0u) {
+    if (!featureOn(kFeaturePanes) || (frame.flags & kTraceFlagThinPanes) == 0u) {
         return through;
     }
     HitPayload hit = payload;
@@ -389,7 +389,8 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
     selectPdf *= 1.0 - environmentSelect;
     RectLight l = lights[index];
     if (l.kind == kLightTree) {
-        return sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf);
+        return featureOn(kFeatureTree) ? sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf)
+                                       : vec3(0.0);
     }
     if (!(l.area > 0.0)) {
         return vec3(0.0);
@@ -672,7 +673,7 @@ SampleResult tracePath() {
         if (rough) {
             s = regularizedSurface(s, frame.regularizeRoughness);
         }
-        if (isDielectric(s) && payload.abbe > 0.0) {
+        if (featureOn(kFeatureDispersion) && isDielectric(s) && payload.abbe > 0.0) {
             if (lambda < 0.0) {
                 float u;
                 if (heroes > 1u) {

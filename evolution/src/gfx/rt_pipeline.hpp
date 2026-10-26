@@ -27,6 +27,8 @@ struct RtShaders {
     std::filesystem::path raygen;
     std::vector<std::filesystem::path> misses, closestHits;
     std::vector<ProceduralHitGroup> proceduralHits;
+    // The values of specialization constants 0, 1, ... for every stage (empty: the shaders' defaults).
+    std::vector<std::uint32_t> specialization;
 };
 
 // A ray tracing pipeline with its descriptor set layout (set 0, the given bindings, visible to the raygen,

@@ -54,7 +54,7 @@ float lightPower(RectLight l) {
     float radiance = luminance(l.emission);
     if (l.kind == kLightPortal) {
         radiance = luminance(environmentLighting(-lightNormal(l)));
-    } else if (l.kind == kLightRetroScreen) {
+    } else if (featureOn(kFeatureRetro) && l.kind == kLightRetroScreen) {
         float top = float(textureQueryLevels(retroScreen) - 1);
         radiance *= luminance(textureLod(retroScreen, vec2(0.5), top).rgb);
     }
@@ -79,7 +79,9 @@ float lightImportance(uint i, vec3 p, vec3 n, bool transmissive) {
         return weight;
     }
     if (l.kind == kLightTree) {
-        float tw = frame.treeLightCount > 0u ? weight * treeNodeImportance(treeNodes[0], p, n, transmissive) : 0.0;
+        float tw = featureOn(kFeatureTree) && frame.treeLightCount > 0u
+                       ? weight * treeNodeImportance(treeNodes[0], p, n, transmissive)
+                       : 0.0;
         return tw > 0.0 && isFinite(tw) ? tw : 0.0;
     }
     if (!(weight > 0.0) || !(l.area > 0.0)) {
@@ -173,7 +175,7 @@ bool treeUniformSelection() {
 
 // The tree light that sphere is, or kNoLight (a sphere of the instance beyond the tree's lights).
 uint treeLightOfSphere(uint sphere) {
-    if (frame.treeLightCount == 0u) {
+    if (!featureOn(kFeatureTree) || frame.treeLightCount == 0u) {
         return kNoLight;
     }
     uint k = sphere - treeLights[0].sphere; // wraps to a large number below the first
@@ -210,7 +212,7 @@ vec3 lightRadiance(RectLight l, vec2 uv, vec3 wi) {
     if (l.kind == kLightPortal) {
         return environmentLighting(wi);
     }
-    if (l.kind == kLightRetroScreen) {
+    if (featureOn(kFeatureRetro) && l.kind == kLightRetroScreen) {
         // The quad's own uv: (u, 1 - v), the picture's top left at the light's corner + edgeV.
         return retroScreenPicture(vec2(uv.x, 1.0 - uv.y), kDiffuseTextureLod) * l.emission;
     }

@@ -111,6 +111,13 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         // groups.
         Modules modules(device);
         std::vector<VkPipelineShaderStageCreateInfo> stages;
+        // Every stage gets the same constants (a shader ignores the ids it does not declare).
+        std::vector<VkSpecializationMapEntry> entries;
+        for (std::uint32_t i = 0; i < shaders.specialization.size(); ++i)
+            entries.push_back({i, i * std::uint32_t(sizeof(std::uint32_t)), sizeof(std::uint32_t)});
+        const VkSpecializationInfo specialization{static_cast<std::uint32_t>(entries.size()), entries.data(),
+                                                  shaders.specialization.size() * sizeof(std::uint32_t),
+                                                  shaders.specialization.data()};
         std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups;
         const auto addStage = [&](const std::filesystem::path& spv, VkShaderStageFlagBits stage) {
             const std::vector<std::uint32_t> words = loadSpirv(spv);
@@ -130,6 +137,7 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
             info.stage = stage;
             info.module = modules.modules.back();
             info.pName = "main";
+            info.pSpecializationInfo = entries.empty() ? nullptr : &specialization;
             stages.push_back(info);
             return static_cast<std::uint32_t>(stages.size() - 1);
         };

@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -32,6 +33,9 @@ constexpr std::uint32_t kMinTraceSize = 16;
 // at least kFastMinPhotons.
 constexpr std::uint32_t kFastPhotonDivisor = 4;
 constexpr std::uint32_t kFastMinPhotons = 1024;
+// The fast mode's scene pipelines: the features of a scene's frames, sampled this many seconds apart over its
+// chapters.
+constexpr double kFeatureProbeSeconds = 1.0;
 // The upscaler's history: how much of it survives a frame (UpscaleSettings::feedback) and its clip box.
 constexpr float kUpscaleFeedback = 0.9f;
 constexpr float kUpscaleClipGamma = 1.f;
@@ -183,6 +187,27 @@ void ModernStage::prepare(modern::SceneId id) {
     if (medium)
         medium_ = std::move(medium);
     gpus_[index] = std::move(gpu);
+    // The window's fast mode: the scene's own pipeline, with only the features its frames use (a frame that
+    // needs more, which the probe missed, traces with the generic pipeline). EVO_SCENE_PIPELINES=0 keeps the
+    // generic one (a diagnostic, to compare the two).
+    const char* scenePipelines = std::getenv("EVO_SCENE_PIPELINES");
+    if (tracerOptions_.fast && !(scenePipelines && std::string(scenePipelines) == "0"))
+        tracer_->preparePipeline(sceneFeatures(id));
+}
+
+std::uint32_t ModernStage::sceneFeatures(modern::SceneId id) const {
+    const modern::ModernScene& object = scene(id);
+    std::uint32_t features = 0;
+    for (int chapter = 0; chapter < show::chapterCount(); ++chapter) {
+        const double start = show::chapterStart(chapter);
+        const double end =
+            chapter + 1 < show::chapterCount() ? show::chapterStart(chapter + 1) : show::showDuration();
+        if (sceneOf(show::sampleTimeline(start).effect) != id)
+            continue;
+        for (double t = start; t < end; t += kFeatureProbeSeconds)
+            features |= modern::traceFeatures(object.staticScene(), object.frame(show::sampleTimeline(t)));
+    }
+    return features;
 }
 
 void ModernStage::prepareAll() {
@@ -517,6 +542,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     frameStats_.spp = state.spp;
     frameStats_.maxBounces = state.maxBounces;
     frameStats_.traceWidth = traceWidth_;
+    frameStats_.pipelineFeatures = tracer_->lastPipelineFeatures();
     if (tracerOptions_.counters) {
         const gfx::RayTracingPipeline::StackSizes stack = tracer_->stackSizes();
         frameStats_.raygenStack = stack.raygen;

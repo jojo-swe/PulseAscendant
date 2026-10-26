@@ -24,8 +24,9 @@ using Counters = std::array<std::uint64_t, kCounterCount>;
 // is the window's fast mode (never an export's; docs/PERFORMANCE.md): the fast raygen
 // (rt_pathtrace_fast.rgen.spv: Russian roulette from bounce 2, one in-scatter point on the primary segment,
 // one wavelength per path), in render::ModernStage a quarter of the caustic photons from a seed fixed per
-// chapter, the photon maps reused while their inputs do not change, and in render::Renderer half the extra
-// samples of a history's first two frames (render::kFastResetSpp).
+// chapter, the photon maps reused while their inputs do not change, a pipeline of its own per scene
+// (PathTracer::preparePipeline: only the features the scene's frames use), and in render::Renderer half the
+// extra samples of a history's first two frames (render::kFastResetSpp).
 struct TracerOptions {
     bool counters = false;
     bool fast = false;

@@ -115,6 +115,9 @@ vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWor
         }
         RectLight l = lights[index];
         if (l.kind == kLightTree) {
+            if (!featureOn(kFeatureTree)) {
+                return vec3(0.0);
+            }
             // The light tree, as sampleTreeLight: one sphere light by the walk (treeWord), one
             // direction in its cone, the shadow ray to its near surface lifted off it.
             uint k;
@@ -478,7 +481,7 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
 
     // Equiangular sampling towards the frame's few tree lights, over the grid's part of the segment: one
     // light per point, chosen by equiangularWeight.
-    uint equiangularLights = gridMass > 0.0 && frame.treeLightCount <= kEquiangularMaxLights
+    uint equiangularLights = featureOn(kFeatureTree) && gridMass > 0.0 && frame.treeLightCount <= kEquiangularMaxLights
                                  ? frame.treeLightCount : 0u;
     float weightSum = 0.0;
     for (uint k = 0u; k < equiangularLights; ++k) {

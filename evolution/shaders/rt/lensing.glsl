@@ -16,7 +16,7 @@ const uint kLensDimension = 0x6C656E73u; // the disc march's jitter, far from th
 
 // Whether this frame bends rays.
 bool lensingActive() {
-    return frame.lensing != 0u;
+    return featureOn(kFeatureLensing) && frame.lensing != 0u;
 }
 
 // v turned by `angle` towards the unit vector n (perpendicular to v, towards the hole).

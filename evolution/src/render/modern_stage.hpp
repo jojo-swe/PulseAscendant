@@ -204,6 +204,8 @@ public:
         std::uint32_t traceWidth = 0, traceHeight = 0;
         // The tracer pipeline's stack sizes in bytes (the driver's; gfx::RayTracingPipeline::stackSizes).
         std::uint64_t raygenStack = 0, hitStack = 0;
+        // The features of the pipeline that traced it (rt::kFeature*; all bits: the generic pipeline).
+        std::uint32_t pipelineFeatures = 0;
     };
     const FrameStats& lastFrameStats() const { return frameStats_; }
     // The path tracer's work counters since the last call (modern::PathTracer::takeCounters; zeros without
@@ -220,6 +222,9 @@ public:
 private:
     // The scene object of an id, built on first use (CPU only).
     const modern::ModernScene& scene(modern::SceneId id) const;
+    // What the scene's frames need of the path tracer's pipeline (modern::traceFeatures over its chapters,
+    // sampled): its own pipeline in the window's fast mode.
+    std::uint32_t sceneFeatures(modern::SceneId id) const;
     void renderTraced(VkCommandBuffer cmd, modern::SceneId id, const show::TimelineFrame& frame,
                       const HistoryState& state, gfx::Image* retroImage);
     bool upscales() const { return traceWidth_ != width_ || traceHeight_ != height_; }

@@ -77,6 +77,14 @@ layout(set = 0, binding = EVO_BINDING_CAUSTIC_RECEIVERS, scalar) readonly buffer
     CausticReceiver receiverTable[]; // Material.receiver indexes it
 };
 
+// The features this pipeline is built for (types.glsl's kFeature*): all in the generic pipeline (the default);
+// a scene's own pipeline clears the others, and every hook below that tests one is then dead code.
+layout(constant_id = 0) const uint kFeatures = 0xFFFFFFFFu;
+
+bool featureOn(uint feature) {
+    return (kFeatures & feature) != 0u;
+}
+
 const uint kMissIndexSky = 0u;
 const uint kMissIndexShadow = 1u;
 const uint kMissIndexPane = 2u; // shadowTransmittance's walk through thin panes: t = -1 only
