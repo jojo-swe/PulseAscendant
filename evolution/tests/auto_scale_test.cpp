@@ -49,7 +49,8 @@ int main() {
         CHECK(near(evo::autoTraceScale(15, 2560, 1440), kAutoMinTraceScale)); // 0.15, clamped
         CHECK(near(evo::autoTraceScale(4, 1280, 720), 0.4f));                 // TUNNEL
         CHECK(near(evo::autoTraceScale(4, 640, 360), kAutoMaxTraceScale));    // 0.8, clamped
-        CHECK(near(evo::autoTraceScale(12, 1280, 720), 0.35f));               // ASCENT
+        CHECK(near(evo::autoTraceScale(12, 1280, 720), 0.3f));                // ASCENT
+        CHECK(near(evo::autoTraceScale(8, 1280, 720), 0.35f));                // VECTOR CITY
         CHECK(near(evo::autoTraceScale(11, 1280, 720), kAutoMaxTraceScale));
         CHECK(near(evo::autoTraceScale(99, 1280, 720), kAutoMaxTraceScale));
 
@@ -64,13 +65,13 @@ int main() {
         CHECK(near(down, kAutoMinTraceScale)); // 0.4 * sqrt(31 / 62) * 0.95 = 0.27, clamped to 0.3
         // A brief spike does not move it.
         evo::TraceScaleController d(1280, 720);
-        d.update(12, 0.0);
-        run(d, 12, 20.0, 20);
-        CHECK(near(run(d, 12, 80.0, 5), 0.35f) && near(run(d, 12, 20.0, 100), 0.35f));
+        d.update(8, 0.0);
+        run(d, 8, 20.0, 20);
+        CHECK(near(run(d, 8, 80.0, 5), 0.35f) && near(run(d, 8, 20.0, 100), 0.35f));
         // Long headroom (room for 60 fps): up one step at a time, never above the window's former scale.
-        const float up = run(d, 12, 10.0, evo::TraceScaleController::kSettleFrames + 200);
+        const float up = run(d, 8, 10.0, evo::TraceScaleController::kSettleFrames + 200);
         CHECK(near(up, 0.4f));
-        CHECK(near(run(d, 12, 10.0, 5000), kAutoMaxTraceScale));
+        CHECK(near(run(d, 8, 10.0, 5000), kAutoMaxTraceScale));
         // A chapter comes back at the scale it last settled at; another starts from its table entry.
         CHECK(near(c.update(13, 0.0), 0.3f));
         CHECK(near(c.update(4, 0.0), kAutoMinTraceScale));

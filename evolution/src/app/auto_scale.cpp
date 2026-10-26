@@ -31,12 +31,12 @@ const std::array<float, 31>& autoTraceScaleTable() {
         0.4f,  // 4 TUNNEL
         0.67f, // 5 GLENZ
         0.67f, // 6 LENS
-        0.45f, // 7 RAYTRACE
+        0.4f,  // 7 RAYTRACE
         0.35f, // 8 VECTOR CITY
         0.55f, // 9 FINALE
         0.67f, // 10 PORTAL
         0.67f, // 11 STUDIO NIGHT
-        0.35f, // 12 ASCENT
+        0.3f,  // 12 ASCENT
         0.3f,  // 13 CITY NIGHT
         0.67f, // 14 NEBULA
         0.3f,  // 15 GLASS CATHEDRAL
@@ -50,8 +50,8 @@ const std::array<float, 31>& autoTraceScaleTable() {
         0.67f, // 23 WORMHOLE
         0.67f, // 24 CRYSTAL CITY
         0.5f,  // 25 LENS OF GOD
-        0.5f,  // 26 RAYTRACE INFINITY
-        0.45f, // 27 METROPOLIS
+        0.45f, // 26 RAYTRACE INFINITY
+        0.4f,  // 27 METROPOLIS
         0.67f, // 28 ASCENDANT
         0.67f, // 29 CREDITS
         0.67f, // 30 THE END

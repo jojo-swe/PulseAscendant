@@ -493,6 +493,9 @@ What the round bought, per chapter (estimates):
   PARTICLE OCEAN 0.50 -> 0.45 (est. 36 fps) and LENS OF GOD 0.55 -> 0.50 (est. 35 fps). Every other entry
   stays (the lowest estimates are RAYTRACE at 30.1 and METROPOLIS at 30.6, both at 0.45). The window's
   controller still lowers any chapter that misses 31 ms.
+- **Margin for the four chapters nearest 30** (est., same model): RAYTRACE 0.45 -> 0.40 (about 37 fps),
+  METROPOLIS 0.45 -> 0.40 (about 39), RAYTRACE INFINITY 0.50 -> 0.45 (about 39) and ASCENT 0.35 -> 0.30
+  (about 41). Every chapter is then estimated at 34 fps or more at 720p.
 - **Scales for 40 fps** (est.): GLASS CATHEDRAL and CITY NIGHT 0.25, ASCENT and VECTOR CITY 0.30, TUNNEL,
   METROPOLIS and RAYTRACE 0.35, PARTICLE OCEAN and RAYTRACE INFINITY 0.40, LENS OF GOD 0.45, NEBULA 0.65,
   PLASMA 0.67.
