@@ -7,10 +7,12 @@ that are not already stereo 48 kHz PCM16 WAV (e.g. MP3).
 
 For each track (in show order): convert or copy to <root>/assets/music/<stem>.wav, then concatenate the
 tracks with no gap into <root>/assets/music/show.wav, with a 3 ms raised-cosine fade at each join. The
-analysis, reactivity, beat grid and direction run over the per-track WAVs and write
+analysis, reactivity, beat grid, form and direction run over the per-track WAVs and write
 <root>/src/show/generated/{music_data,reactivity_data,beat_data,cue_data}.hpp and
-<root>/music/{analysis,reactivity,beats,direction,show-audio}.json. <root> defaults to evolution/; the
-chapter targets always come from tools/show_targets.json beside this script.
+<root>/music/{analysis,reactivity,beats,form,direction,show-audio}.json. A track whose chapters carry a "form"
+(Act III) takes its bar lines from its form (tools/song_form.py) and its chapters and accents from the places
+the form names (tools/direct_music.py), so replacing it needs no other change. <root> defaults to evolution/;
+the chapter targets come from tools/show_targets.json beside this script unless --targets names another file.
 """
 import argparse
 import hashlib
@@ -26,6 +28,7 @@ import analyze_music
 import analyze_reactivity
 import beat_grid
 import direct_music
+import song_form
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = (48000, 2, 2)  # sample rate, channels, bytes per sample
@@ -104,10 +107,22 @@ def main():
     analyze_reactivity.write_outputs(*analyze_reactivity.analyze_tracks(tracks),
                                      generated / 'reactivity_data.hpp', receipts / 'reactivity.json')
     grids = [beat_grid.analyze(track) for track in tracks]
-    beat_grid.write_outputs(grids, generated / 'beat_data.hpp', receipts / 'beats.json')
     chapters, max_chapter = direct_music.load_targets(args.targets)
+    forms = [song_form.analyze(a, g) for a, g in zip(analyses, grids)]
+    by_form = direct_music.form_tracks(chapters)
+    for index in by_form:
+        # A form-directed track takes its bar lines from its form.
+        grids[index]['bar_position'] = forms[index]['bar_position']
+        grids[index]['downbeats'] = sum(1 for b in forms[index]['bar_position'] if b == 0)
+        grids[index]['bar_lines_from'] = 'form (tools/song_form.py)'
+    beat_grid.write_outputs(grids, generated / 'beat_data.hpp', receipts / 'beats.json')
+    receipts.mkdir(parents=True, exist_ok=True)
+    (receipts / 'form.json').write_text(json.dumps(dict(
+        method=song_form.METHOD, tracks=[song_form.receipt(form, index in by_form)
+                                         for index, form in enumerate(forms)]), indent=2) + '\n',
+        encoding='utf-8')
     starts, chapter_reports, track_reports = direct_music.direct_show(tracks, analyses, grids, chapters,
-                                                                      max_chapter)
+                                                                      max_chapter, forms)
     direct_music.write_outputs(chapters, starts, chapter_reports, track_reports, max_chapter, show_sha256,
                                generated / 'cue_data.hpp', receipts / 'direction.json')
 
@@ -125,11 +140,15 @@ def main():
     print(f'show.wav: {sum(frames)} frames, {sum(frames) / 48000:.3f} s, sha256 {show_sha256}')
     for grid in grids:
         print(f'{grid["source"]}: {grid["bpm_median"]} BPM, {grid["beats"]} beats, {grid["downbeats"]} downbeats')
+    for index in by_form:
+        events = ', '.join(f'{name} {time:.2f}' for name, time in forms[index]['events'].items())
+        print(f'{forms[index]["source"]}: directed by its form; {events} (track seconds)')
     print(f'Direction (max chapter {max_chapter:g} s):')
-    print(f'  {"chapter":10} {"target":>8} {"start":>10} {"shift":>8}  on_beat downbeat phrase attack')
+    print(f'  {"chapter":10} {"target":>8} {"start":>10} {"shift":>8}  on_beat downbeat phrase attack  accent')
     for c in chapter_reports:
+        accent = f'  {c["accent_beat"]:.4f}' if 'accent_beat' in c else ''
         print(f'  {c["title"]:10} {c["target"]:8.3f} {c["start"]:10.4f} {c["shift"]:+8.4f}  '
-              f'{c["on_beat"]!s:7} {c["on_downbeat"]!s:8} {c["phrase"]!s:6} {c["attack"]:.3f}')
+              f'{c["on_beat"]!s:7} {c["on_downbeat"]!s:8} {c["phrase"]!s:6} {c["attack"]:.3f}{accent}')
 
 
 if __name__ == '__main__':
