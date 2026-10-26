@@ -206,13 +206,14 @@ struct Frame {
 // the ring, then the field, which waits too, then the ring and the scene's GPU side).
 class Tracer {
 public:
-    Tracer(gfx::Context& ctx, const TestScene& scene, std::uint32_t width, std::uint32_t height)
+    Tracer(gfx::Context& ctx, const TestScene& scene, std::uint32_t width, std::uint32_t height,
+           bool refit = false)
         : ctx_(ctx), gpu_(ctx, scene.statics), ring_(ctx),
           particles_(scene.statics.particleShader.empty()
                          ? nullptr
                          : std::make_unique<rt::ParticleField>(ctx, ring_,
                                                                std::max(scene.statics.capacity.particles, 1u),
-                                                               scene.statics.particleShader)),
+                                                               scene.statics.particleShader, refit)),
           tracer_(ctx, ring_, width, height, modern::tracerCapacity(scene.statics.capacity)) {}
 
     // Records the frame's particle field (at `seconds`, prevCenter at `previous`) and the trace; `after`
@@ -703,7 +704,8 @@ TestScene particleScene(std::uint32_t count, std::uint32_t capacity) {
     return s;
 }
 
-void testParticleField(gfx::Context& ctx) {
+// With `refit` (the window's fast mode) the field updates its BLAS between rebuilds: the same hits.
+void testParticleField(gfx::Context& ctx, bool refit) {
     constexpr std::uint32_t kW = 64, kH = 64, kCount = 4096, kFrames = 32;
     const GridParams grid;
     TestScene s = particleScene(kCount, kCount);
@@ -736,7 +738,7 @@ void testParticleField(gfx::Context& ctx) {
     }
     CHECK(probes.size() == 5);
 
-    Tracer tracer(ctx, s, kW, kH);
+    Tracer tracer(ctx, s, kW, kH, refit);
     struct Pending {
         PendingRead depth;
         gfx::Buffer records;
@@ -805,10 +807,15 @@ void testParticleField(gfx::Context& ctx) {
         }
     }
     CHECK(probesHit >= 100); // the probes see particles in most frames
+    // Refit: each slot updates its BLAS kRefitFrames times between builds (16 frames per slot here).
+    CHECK(tracer.particles().refits() == (refit ? 2u * (16u - (16u + rt::ParticleField::kRefitFrames) /
+                                                                  (rt::ParticleField::kRefitFrames + 1))
+                                                : 0u));
     std::printf(
-        "(c) particle field: %u particles, %u frames two in flight in %.2f s; probes %d hit, %d missed "
+        "(c) particle field%s: %u particles, %u frames two in flight in %.2f s; probes %d hit, %d missed "
         "(%d on a silhouette skipped), worst depth %.2g; centres and prevCenters within %.2g\n",
-        kCount, kFrames, seconds, probesHit, probesMissed, skipped, worstDepth, worstCentre);
+        refit ? " (refit)" : "", kCount, kFrames, seconds, probesHit, probesMissed, skipped, worstDepth,
+        worstCentre);
 }
 
 // --- (d) ---------------------------------------------------------------------------------------------------
@@ -1332,7 +1339,8 @@ int main(int argc, char** argv) {
             timed("e", [&] { testClasses(ctx); });
             timed("f", [&] { testInsideGlass(ctx); });
             timed("d", [&] { testRefusals(ctx); });
-            timed("c", [&] { testParticleField(ctx); });
+            timed("c", [&] { testParticleField(ctx, false); });
+            timed("c", [&] { testParticleField(ctx, true); });
             timed("p", [&] { testPayload(ctx); });
             timed("b", [&] { testGlassMatchesMesh(ctx); });
             timed("s", [&] { testStage(ctx); });

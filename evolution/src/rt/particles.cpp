@@ -70,11 +70,13 @@ VkAccelerationStructureGeometryKHR aabbGeometry(VkDeviceAddress aabbs) {
     return geometry;
 }
 
-VkAccelerationStructureBuildGeometryInfoKHR buildInfo(const VkAccelerationStructureGeometryKHR& geometry) {
+VkAccelerationStructureBuildGeometryInfoKHR buildInfo(const VkAccelerationStructureGeometryKHR& geometry,
+                                                      bool refit) {
     VkAccelerationStructureBuildGeometryInfoKHR build{
         VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
     build.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-    build.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+    build.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR |
+                  (refit ? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR : 0u);
     build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
     build.geometryCount = 1;
     build.pGeometries = &geometry;
@@ -90,8 +92,8 @@ std::uint32_t checkedCapacity(std::uint32_t capacity) {
 } // namespace
 
 ParticleField::ParticleField(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t capacity,
-                             const std::filesystem::path& shader)
-    : ctx_(ctx), ring_(ring), capacity_(checkedCapacity(capacity)) {
+                             const std::filesystem::path& shader, bool refit)
+    : ctx_(ctx), ring_(ring), capacity_(checkedCapacity(capacity)), refit_(refit) {
     setShader(shader);
     slots_ = createSlots(capacity_);
     ringAlive_ = ring.onBegin([](std::uint32_t) {});
@@ -111,7 +113,7 @@ ParticleField::~ParticleField() {
 ParticleField::Slots ParticleField::createSlots(std::uint32_t capacity) const {
     // The build sizes for `capacity` AABBs; every build uses at most that many.
     const VkAccelerationStructureGeometryKHR geometry = aabbGeometry(0);
-    const VkAccelerationStructureBuildGeometryInfoKHR build = buildInfo(geometry);
+    const VkAccelerationStructureBuildGeometryInfoKHR build = buildInfo(geometry, refit_);
     VkAccelerationStructureBuildSizesInfoKHR sizes{
         VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
     vkGetAccelerationStructureBuildSizesKHR(ctx_.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
@@ -138,10 +140,10 @@ ParticleField::Slots ParticleField::createSlots(std::uint32_t capacity) const {
                                               VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
                                                   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                                               false, ("particle blas" + suffix).c_str()});
-            gfx::BufferDesc scratch{std::max<VkDeviceSize>(sizes.buildScratchSize, 1),
-                                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                    false, ("particle blas scratch" + suffix).c_str()};
+            gfx::BufferDesc scratch{
+                std::max<VkDeviceSize>({sizes.buildScratchSize, refit_ ? sizes.updateScratchSize : 0, 1}),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, false,
+                ("particle blas scratch" + suffix).c_str()};
             scratch.alignment = scratchAlignment;
             slot.scratch = gfx::Buffer(ctx_, scratch);
             if (slot.scratch.address() % scratchAlignment != 0)
@@ -242,13 +244,25 @@ void ParticleField::record(VkCommandBuffer cmd, std::uint32_t count, double seco
                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_TRANSFER_READ_BIT}});
 
     const VkAccelerationStructureGeometryKHR geometry = aabbGeometry(slot.aabbs.address());
-    VkAccelerationStructureBuildGeometryInfoKHR build = buildInfo(geometry);
+    VkAccelerationStructureBuildGeometryInfoKHR build = buildInfo(geometry, refit_);
+    // refit: update the slot's last build in place while it holds the same particles a moment earlier.
+    const double since = seconds - slot.seconds;
+    const bool update = refit_ && slot.updatable && count > 0 && count == slot.count &&
+                        slot.refits < kRefitFrames && since > 0.0 && since < kRefitSeconds;
+    if (update) {
+        build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
+        build.srcAccelerationStructure = slot.blas;
+    }
     build.dstAccelerationStructure = slot.blas;
     build.scratchData.deviceAddress = slot.scratch.address();
     const VkAccelerationStructureBuildRangeInfoKHR range{count, 0, 0, 0};
     const VkAccelerationStructureBuildRangeInfoKHR* rangePointer = &range;
     vkCmdBuildAccelerationStructuresKHR(cmd, 1, &build, &rangePointer);
     slot.count = count;
+    slot.updatable = refit_ && count > 0;
+    slot.refits = update ? slot.refits + 1 : 0;
+    slot.seconds = seconds;
+    refitsRecorded_ += update ? 1u : 0u;
 
     // The TLAS build references the BLAS, and the traces walk it.
     memoryBarriers(cmd, {{kBuild, kAsWrite, kBuild | kTracers, kAsRead}});

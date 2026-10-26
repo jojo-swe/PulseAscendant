@@ -130,8 +130,8 @@ void ModernStage::prepare(modern::SceneId id) {
     const std::uint32_t particleCapacity = std::max(statics.capacity.particles, 1u);
     std::unique_ptr<rt::ParticleField> particles;
     if (hasParticles && !particles_)
-        particles =
-            std::make_unique<rt::ParticleField>(ctx_, ring_, particleCapacity, statics.particleShader);
+        particles = std::make_unique<rt::ParticleField>(ctx_, ring_, particleCapacity, statics.particleShader,
+                                                        tracerOptions_.fast); // the window's fast mode refits
     // The splat pass with the first scene that has a splat shader, which it loads now.
     std::unique_ptr<modern::SplatPass> splats;
     if (!statics.splatShader.empty()) {
