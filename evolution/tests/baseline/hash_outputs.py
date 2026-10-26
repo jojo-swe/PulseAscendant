@@ -51,6 +51,8 @@ studio_night_40 changed; the Studio's luminance moved by 0.05 % or less.
 Then regenerated for NEBULA's darker pillar faces and star A's fronts: only nebula_40 changed.
 Then regenerated for the City's distant facades (lit window blocks and wall tones past the prefilter): only
 stream_studio_ascent changed.
+Then regenerated for RAYTRACE's cirrus (no lavender), INFINITY's slate haze and GLENZ's floor shot: only
+raytrace_2026 changed.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How a change uses it (run from evolution/ after building the linux preset):
