@@ -14,7 +14,10 @@
 #else
 hitAttributeEXT vec2 hitBarycentrics;
 #endif
+// EVO_HIT_POINT_ONLY (pane.rahit, whose ray carries another payload): hitPoint() and the patterns alone.
+#ifndef EVO_HIT_POINT_ONLY
 layout(location = 0) rayPayloadInEXT HitPayload payload;
+#endif
 
 // How far a hit point moved with its instance since the previous frame: the instance's previous transform
 // (binding 21, PathTracer: the current one when the frame has no matching previous instances) applied to the
@@ -143,6 +146,7 @@ HitPoint hitPoint() {
 
 #endif
 
+#ifndef EVO_HIT_POINT_ONLY
 // The mip level of a texture of texSize texels for this hit, from the ray cone (Akenine-Moller et al. 2019);
 // kDiffuseTextureLod once the path has scattered off a rough surface.
 float coneTextureLod(HitPoint h, vec2 texSize) {
@@ -157,6 +161,7 @@ float coneTextureLod(HitPoint h, vec2 texSize) {
     float cosine = max(abs(dot(gl_WorldRayDirectionEXT, h.geometricNormal)), 1e-3);
     return max(0.5 * log2(texelsPerArea) + log2(width / cosine), 0.0);
 }
+#endif
 
 // --- Procedural patterns (integer hashes only) -------------------------------------------------------------
 
@@ -209,6 +214,7 @@ vec3 checkerColor(Material m, vec3 p, vec3 ng) {
     return odd ? m.baseColor2 : m.baseColor;
 }
 
+#ifndef EVO_HIT_POINT_ONLY
 #include "caustics.glsl" // causticRadiance(HitPoint), the caustics' hook
 
 // --- The payload -------------------------------------------------------------------------------------------
@@ -249,6 +255,8 @@ void writeSurface(HitPoint h, vec3 baseColor, float roughness, float transmissio
     bool solidGlass = transmission > 0.5 && (h.material.flags & kMaterialThinWalled) == 0u;
     payload.absorption = solidGlass ? max(h.material.baseColor2, vec3(0.0)) : vec3(0.0);
 }
+
+#endif // EVO_HIT_POINT_ONLY
 
 vec3 materialEmission(Material m) {
     return m.emission * m.emissionScale;

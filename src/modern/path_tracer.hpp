@@ -63,6 +63,11 @@ struct TraceSettings {
     // (FrameUniforms::shutterOffset), for the slices of a trace() (the slice frames themselves are the
     // caller's). Shaders that animate with the time use seconds + shutterOffset. Unused slices stay 0.
     std::array<float, kMaxShutterSlices> sliceOffsets{};
+    // The window's fast mode only (TracerOptions::fast; ignored otherwise): the luminance below which the
+    // shadow ray of a next-event estimate made after a rough vertex is traced with probability luminance /
+    // neeRoulette and its estimate weighed by the inverse (shaders/rt/pathtrace.rgen's neeShadowTraced: the
+    // expectation stays the same); 0 traces every one.
+    float neeRoulette = 0.f;
 };
 
 // Samples per trace dispatch: an export at many spp is split so that no dispatch runs long enough to trip a

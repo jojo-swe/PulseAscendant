@@ -88,6 +88,7 @@ bool featureOn(uint feature) {
 const uint kMissIndexSky = 0u;
 const uint kMissIndexShadow = 1u;
 const uint kMissIndexPane = 2u; // shadowTransmittance's walk through thin panes: t = -1 only
+const uint kMissIndexShadowThrough = 3u; // a shadow ray through panes' any-hit (fast mode): unoccluded
 
 // The main ray's payload (location 0). In: the ray cone at the ray's origin (coneSpread < 0: the path has
 // scattered off a rough surface and textures use kDiffuseTextureLod, as NEE does). Out, on a hit: the

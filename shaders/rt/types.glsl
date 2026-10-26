@@ -65,6 +65,7 @@ const uint kTraceFlagRussianRoulette = 2u;
 const uint kTraceFlagFixedLightSelection = 4u; // the original fixed selectWeights (comparisons)
 const uint kTraceFlagThinPanes = 8u; // the frame has thin-walled glass (shadow rays then pass through it)
 const uint kTraceFlagFilteredGrid = 16u; // the grid's density through the sampler's filter (not lavapipe)
+const uint kTraceFlagPaneAnyHit = 32u;   // fast mode: shadow rays pass the panes through pane.rahit
 // The features a path tracer pipeline is built for (common.glsl's kFeatures, specialization constant 0;
 // rt::kFeature* in src/rt/gpu_types.hpp): every one in the generic pipeline; a scene's own pipeline (the
 // window's fast mode) only those its frames use, so the compiler drops the rest and their registers.

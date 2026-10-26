@@ -22,23 +22,25 @@ struct ProceduralHitGroup {
 
 // The SPIR-V of a ray tracing pipeline: one raygen, the miss shaders in miss-index order, one closest-hit per
 // triangle hit group, then the procedural hit groups (analytic spheres), in SBT order: hit
-// group k = an instance's hitGroup k, the triangle groups first. No any-hit shaders: all geometry is opaque.
+// group k = an instance's hitGroup k, the triangle groups first. anyHits, when not empty, has one entry per
+// triangle hit group: the any-hit of that group, or an empty path for none. All geometry is opaque, so an
+// any-hit only runs for a ray traced without the opaque flag that meets an instance made not opaque.
 struct RtShaders {
     std::filesystem::path raygen;
-    std::vector<std::filesystem::path> misses, closestHits;
+    std::vector<std::filesystem::path> misses, closestHits, anyHits;
     std::vector<ProceduralHitGroup> proceduralHits;
     // The values of specialization constants 0, 1, ... for every stage (empty: the shaders' defaults).
     std::vector<std::uint32_t> specialization;
 };
 
 // A ray tracing pipeline with its descriptor set layout (set 0, the given bindings, visible to the raygen,
-// miss, closest-hit and intersection stages), a push constant range for the same stages, and its shader
-// binding table: computeSbtLayout(ctx.rayTracingProperties(), misses, closestHits + proceduralHits) in a
-// device-local buffer whose start is aligned to shaderGroupBaseAlignment (usage SHADER_BINDING_TABLE |
+// miss, closest-hit, any-hit and intersection stages), a push constant range for the same stages, and its
+// shader binding table: computeSbtLayout(ctx.rayTracingProperties(), misses, closestHits + proceduralHits)
+// in a device-local buffer whose start is aligned to shaderGroupBaseAlignment (usage SHADER_BINDING_TABLE |
 // SHADER_DEVICE_ADDRESS), filled at construction through an immediate submit (setup work). Group order:
 // raygen, the misses, the triangle hit groups, the procedural hit groups.
-// maxPipelineRayRecursionDepth is 1: only the raygen traces; miss, closest-hit and intersection shaders must
-// not.
+// maxPipelineRayRecursionDepth is 1: only the raygen traces; miss, closest-hit, any-hit and intersection
+// shaders must not.
 //
 // Lifetime as for a ComputePipeline: the pipeline, its SBT and the sets a frame binds are used until that
 // frame's submit completes, so declare the FrameRing after its pipelines. The first bind() ties the
@@ -47,11 +49,11 @@ class RayTracingPipeline {
 public:
     static constexpr std::uint32_t kMaxRecursionDepth = 1;
 
-    // Entry points are "main". Throws std::invalid_argument for no miss or no closest-hit shader, a miss,
-    // closest-hit or intersection shader that traces a ray (OpTraceRayKHR) or any shader that executes a
-    // callable (OpExecuteCallableKHR), found by scanning the SPIR-V, or a pushConstantBytes that is not a
-    // multiple of 4; std::runtime_error naming a SPIR-V file that cannot load; and what computeSbtLayout
-    // throws.
+    // Entry points are "main". Throws std::invalid_argument for no miss or no closest-hit shader, anyHits
+    // neither empty nor one per closest-hit, a miss, closest-hit, any-hit or intersection shader that traces
+    // a ray (OpTraceRayKHR) or any shader that executes a callable (OpExecuteCallableKHR), found by scanning
+    // the SPIR-V, or a pushConstantBytes that is not a multiple of 4; std::runtime_error naming a SPIR-V file
+    // that cannot load; and what computeSbtLayout throws.
     RayTracingPipeline(Context& ctx, const RtShaders& shaders, std::span<const Binding> bindings,
                        std::uint32_t pushConstantBytes);
     ~RayTracingPipeline();

@@ -22,7 +22,8 @@ using Counters = std::array<std::uint64_t, kCounterCount>;
 // How a tracer is built: `counters` loads the counting raygen (rt_pathtrace_counters.rgen.spv), which tallies
 // its work into a per-slot buffer that takeCounters() reads (a diagnostic: slower, the same picture). `fast`
 // is the window's fast mode (never an export's; docs/PERFORMANCE.md): the fast raygen
-// (rt_pathtrace_fast.rgen.spv: two in-scatter points on the primary segment, one wavelength per path), in
+// (rt_pathtrace_fast.rgen.spv: one wavelength per path, thin panes passed by an any-hit, faint shadow rays
+// and paths from bounce 2 rouletted after the clamp), in
 // render::ModernStage the caustic photons from a seed fixed per chapter, the photon maps reused while their
 // inputs do not change, the particle field's BLAS refit between rebuilds, a pipeline of its own per scene
 // (PathTracer::preparePipeline: only the features the scene's frames use), and in render::Renderer half the

@@ -35,6 +35,19 @@ constexpr double kFeatureProbeSeconds = 1.0;
 // The upscaler's history: how much of it survives a frame (UpscaleSettings::feedback) and its clip box.
 constexpr float kUpscaleFeedback = 0.9f;
 constexpr float kUpscaleClipGamma = 1.f;
+// The fast mode's shadow-ray roulette (TraceSettings::neeRoulette): the display level, before the tone curve
+// (radiance times 2^exposure), below which a next-event estimate after a rough vertex is rouletted. 1/4096 is
+// under one 8-bit step even at black, where sRGB is steepest (12.92 / 4096 of full scale).
+constexpr float kNeeRouletteDisplay = 1.f / 4096.f;
+
+// kNeeRouletteDisplay, or EVO_NEE_ROULETTE (a display level; 0 turns the roulette off: an A/B diagnostic).
+float neeRouletteDisplay() {
+    static const float level = [] {
+        const char* forced = std::getenv("EVO_NEE_ROULETTE");
+        return forced ? std::max(0.f, std::strtof(forced, nullptr)) : kNeeRouletteDisplay;
+    }();
+    return level;
+}
 
 // Transfer source too: tests read the HDR picture back (splat_test).
 gfx::ImageDesc hdrDesc(std::uint32_t width, std::uint32_t height) {
@@ -372,6 +385,11 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     trace.frameSeed = state.frameSeed;
     trace.clampIndirect = scene.clampIndirect;
     trace.seconds = static_cast<float>(frame.localSeconds);
+    // The window's fast mode: next-event estimates after a rough vertex fainter than a fraction of one
+    // display level at this frame's exposure have their shadow rays rouletted (TraceSettings::neeRoulette).
+    if (tracerOptions_.fast && interactive)
+        trace.neeRoulette =
+            neeRouletteDisplay() * std::exp2(-(scene.exposureEV + post::lookFor(frame).exposureOffset));
     trace.pixelJitter = window.jitter;
     trace.pixelFootprint = window.footprint;
     lastJitter_ = window.jitter;

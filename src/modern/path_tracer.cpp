@@ -61,13 +61,15 @@ const std::array<gfx::Binding, EVO_BINDING_COUNT> kBindings = {
 
 // pathtrace.rgen's push constants: which of the frame's samples this dispatch traces, and the subpixel
 // window they are box-filtered over (its corner relative to the pixel's, and its size; (0, 0) and (1, 1) for
-// the whole pixel), and whether it writes the guides (one dispatch of the frame does).
+// the whole pixel), whether it writes the guides (one dispatch of the frame does), and the fast raygen's
+// shadow-ray roulette level (TraceSettings::neeRoulette; the other builds do not declare it).
 struct TracePush {
     std::uint32_t sampleBase, sampleCount;
     float windowOrigin[2], windowSize[2];
     std::uint32_t guides; // non-zero: this dispatch also writes the guides (depth, normal, motion, volume)
+    float neeRoulette;
 };
-static_assert(sizeof(TracePush) == 28);
+static_assert(sizeof(TracePush) == 32);
 
 // The largest struct a feature binding may declare (MediumUniforms): the dummy buffer covers any of them.
 constexpr VkDeviceSize kDummyBufferBytes = 256;
@@ -85,10 +87,15 @@ gfx::RtShaders shaders(const TracerOptions& options, std::uint32_t features = rt
     gfx::RtShaders s;
     s.raygen = dir / (std::string("rt_pathtrace") + (options.fast ? "_fast" : "") +
                       (options.counters ? "_counters" : "") + ".rgen.spv");
-    // miss 0: sky, 1: shadow, 2: the end of a shadow ray's walk through thin panes
-    s.misses = {dir / "rt_sky.rmiss.spv", dir / "rt_shadow.rmiss.spv", dir / "rt_pane.rmiss.spv"};
+    // miss 0: sky, 1: shadow, 2: the end of a shadow ray's walk through thin panes, 3: the end of a shadow
+    // ray that passes thin panes through their any-hit (fast mode)
+    s.misses = {dir / "rt_sky.rmiss.spv", dir / "rt_shadow.rmiss.spv", dir / "rt_pane.rmiss.spv",
+                dir / "rt_shadow_through.rmiss.spv"};
     s.closestHits = {dir / "rt_pbr.rchit.spv", dir / "rt_glass.rchit.spv", dir / "rt_emissive.rchit.spv",
                      dir / "rt_checker.rchit.spv"}; // in MaterialClass order
+    // Fast mode: the Glass group's any-hit passes a shadow ray through thin panes (kTraceFlagPaneAnyHit).
+    if (options.fast)
+        s.anyHits = {{}, dir / "rt_pane.rahit.spv", {}, {}};
     // Hit groups kHitGroupsPerKind.. (hitGroupFor(class, Spheres)): the same closest-hits built for analytic
     // spheres (-DGEOMETRY_SPHERES), behind the sphere intersection shader.
     const std::filesystem::path intersection = dir / "rt_sphere.rint.spv";
@@ -576,6 +583,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         instances.reserve(frame.instances.size());
         records.reserve(frame.instances.size());
         bool panes = false;
+        bool glassPanes = true; // every pane a Glass triangle mesh (pane.rahit's)
         for (std::size_t i = 0; i < frame.instances.size(); ++i) {
             const SceneInstance& in = frame.instances[i];
             const auto index = static_cast<std::uint32_t>(i);
@@ -584,6 +592,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                               materials[in.material].transmission > 0.5f;
             panes = panes || pane;
             const bool spheres = in.kind == rt::GeometryKind::Spheres;
+            if (pane && (spheres || materialClass != rt::MaterialClass::Glass))
+                glassPanes = false;
             // A sphere instance's BLAS: the particle field's this frame, or its range's of the static
             // spheres (checkSceneFrame found the range).
             VkDeviceAddress blas = 0;
@@ -598,6 +608,13 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                                         (spheres && in.dynamicSpheres ? rt::kInstanceDynamicSpheres : 0u);
             records.push_back({spheres ? in.firstSphere : in.mesh, in.material, in.light, flags});
         }
+        // Fast mode: shadow rays pass the panes in one trace, through the Glass group's any-hit, when every
+        // pane is a Glass mesh of a scene whose BLASes call an any-hit once per triangle; the panes are then
+        // not opaque to that ray alone (every other ray is traced opaque).
+        const bool paneAnyHit = options_.fast && panes && glassPanes && scene.paneAnyHit();
+        if (paneAnyHit)
+            for (rt::Instance& instance : instances)
+                instance.notOpaque = instance.mask == rt::kInstanceMaskPane;
         // The previous transforms (binding 21): instance i's transform in the previous frame, or its current
         // one (no motion of its own) where the previous frame's instances are not this slice's.
         const bool havePrevious = describesSameInstances(frame.instances, extras.previousInstances);
@@ -635,7 +652,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
                   (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
                   (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u) |
-                  (panes ? rt::kTraceFlagThinPanes : 0u) | (filteredGrid_ ? rt::kTraceFlagFilteredGrid : 0u);
+                  (panes ? rt::kTraceFlagThinPanes : 0u) | (filteredGrid_ ? rt::kTraceFlagFilteredGrid : 0u) |
+                  (paneAnyHit ? rt::kTraceFlagPaneAnyHit : 0u);
         features |= frameFeatures(scene.source(), frame, panes);
         u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
         u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
@@ -859,7 +877,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                              {0.5f + settings.pixelJitter[0] - 0.5f * settings.pixelFootprint[0],
                               0.5f + settings.pixelJitter[1] - 0.5f * settings.pixelFootprint[1]},
                              {settings.pixelFootprint[0], settings.pixelFootprint[1]},
-                             k == guideSlice && firstOfSlice ? 1u : 0u};
+                             k == guideSlice && firstOfSlice ? 1u : 0u,
+                             options_.fast ? settings.neeRoulette : 0.f};
         pipeline.push(cmd, &push, sizeof push);
         pipeline.traceRays(cmd, width_, height_);
     }

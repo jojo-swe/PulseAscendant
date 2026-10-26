@@ -594,10 +594,11 @@ Options:
                        output size). 'auto' (the default) traces each chapter at its
                        scale from a table, 0.3..0.67, to hold 30 fps; the window also
                        adapts it to the GPU's frame time (docs/PERFORMANCE.md)
-  --no-fast-mode       Trace the window and --bench as the exports do: four in-scatter
-                       points in media, photons seeded per frame, the generic pipeline,
-                       full BLAS builds (by default the window traces in fast mode;
-                       docs/PERFORMANCE.md)
+  --no-fast-mode       Trace the window and --bench as the exports do: photons seeded
+                       per frame, the generic pipeline,
+                       full BLAS builds, every shadow ray traced and walked through
+                       panes, roulette from bounce 3 only (by default the window
+                       traces in fast mode; docs/PERFORMANCE.md)
   --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
                        needs a duration greater than 0
   --headless           Render without opening a window
@@ -682,7 +683,7 @@ size (`--trace-scale`, by default `auto`: 0.3 to 0.67) and the exports at the ou
 `--trace-scale 1`; at a lower scale the window's first frame after a reset equals a frame rendered in Export
 mode at the same scale (the tests pin both), and seeking stays deterministic: the jitter and the upscaler's
 history follow only the frames since the last reset. The window's fast mode (on unless `--no-fast-mode`,
-docs/PERFORMANCE.md) traces fewer in-scatter points and keeps its photon maps from a per-chapter seed, so
+docs/PERFORMANCE.md) roulettes faint shadow rays and paths, keeps its photon maps from a per-chapter seed, so
 the equality needs `--no-fast-mode`; a fast window frame is still a pure function of the time and the frames
 since the last reset.
 
