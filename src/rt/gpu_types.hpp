@@ -149,9 +149,54 @@ constexpr std::uint32_t hitGroupFor(MaterialClass c, GeometryKind k) {
 // --- The path tracer's frame -------------------------------------------------------------------------------
 
 // FrameUniforms::flags. FixedLightSelection: choose lights by their fixed selectWeight alone, not by
-// their importance at the shading point; for comparisons and tests.
+// their importance at the shading point; for comparisons and tests. FilteredGrid: read the grid medium's
+// density through the sampler's trilinear filter (one fetch) instead of eight texelFetches (every driver but
+// lavapipe, whose filtered fetch from a 3D image was measured off).
 inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u,
-                               kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u;
+                               kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u,
+                               kTraceFlagFilteredGrid = 16u;
+// The features a path tracer pipeline is built for (shaders/rt/types.glsl's kFeature*, specialization
+// constant 0 of every path tracer shader): kFeatureAll in the generic pipeline; a scene's own pipeline (the
+// window's fast mode) only those its frames use, so the driver's compiler drops the rest of the code and its
+// registers.
+inline constexpr std::uint32_t kFeatureLensing = 1u, kFeatureFog = 2u, kFeatureGrid = 4u,
+                               kFeatureCaustics = 8u, kFeaturePanes = 16u, kFeatureTree = 32u,
+                               kFeatureDispersion = 64u, kFeatureRetro = 128u, kFeatureStudioPatterns = 256u,
+                               kFeatureCityPatterns = 512u, kFeatureShipPatterns = 1024u,
+                               kFeatureSeaPatterns = 2048u, kFeaturePlasmaSea = 4096u,
+                               kFeatureTesserae = 8192u, kFeatureAll = ~0u;
+// The feature a material's Pattern needs (0 for none; every pattern feature for a pattern the shaders do not
+// group).
+constexpr std::uint32_t patternFeature(std::uint32_t pattern) {
+    switch (pattern) {
+    case 0:
+        return 0u;
+    case 1:  // WoodPlanks
+    case 2:  // BrushedMetal
+    case 3:  // Concrete
+    case 34: // CrtGlass
+    case 35: // KeyCap
+        return kFeatureStudioPatterns;
+    case 4: // Tesserae
+    case 5: // TesseraeSphere
+        return kFeatureTesserae;
+    case 6:  // Hull
+    case 7:  // Planet
+    case 36: // WormholeWall
+    case 37: // WormholeRing
+        return kFeatureShipPatterns;
+    case 32: // SeaBead
+    case 33: // LightRing
+        return kFeatureSeaPatterns;
+    case 44: // PlasmaSea
+        return kFeaturePlasmaSea;
+    default:
+        return pattern >= 16 && pattern <= 22
+                   ? kFeatureCityPatterns
+                   : kFeatureStudioPatterns | kFeatureCityPatterns | kFeatureShipPatterns |
+                         kFeatureSeaPatterns | kFeaturePlasmaSea | kFeatureTesserae;
+    }
+}
 // TLAS instance masks: a thin-walled glass pane is a filter, not an occluder; shadow rays trace the
 // solid instances, then the panes in their way for their tint.
 inline constexpr std::uint8_t kInstanceMaskSolid = 1u, kInstanceMaskPane = 2u;

@@ -178,6 +178,126 @@ class MultiTrackTests(unittest.TestCase):
         self.assertEqual(show['frames'], 60 * RATE)
 
 
+def dance_track(sections, bpm=120, seed=0):
+    """A four-on-the-floor track from (bars, click, kick, bass) sections: a click on every beat (so the grid
+    never drops), a pitched-down kick and a 55 Hz bass note on every beat at the section's levels, a little
+    noise throughout, and 1 s of decay at the end."""
+    rng = np.random.default_rng(seed)
+    beat = 60 / bpm
+    beats = sum(bars for bars, *_ in sections) * 4
+    signal = rng.normal(0, .002, int((beats * beat + 1) * RATE))
+    t = np.arange(int(beat * RATE)) / RATE
+    click = np.where(t < .03, .5 * np.sin(2 * np.pi * 1800 * t) * np.exp(-t / .008), 0)
+    kick = np.sin(2 * np.pi * (50 * t + 4 * (1 - np.exp(-t * 30)))) * np.exp(-t * 9)
+    bass = np.sin(2 * np.pi * 55 * t) * np.minimum(1, t / .01) * np.exp(-t * 2)
+    k = 0
+    for bars, click_level, kick_level, bass_level in sections:
+        for _ in range(bars * 4):
+            start = int(k * beat * RATE)
+            signal[start:start + len(t)] += click_level * click + kick_level * kick + bass_level * bass
+            k += 1
+    return np.repeat(signal[:, None], 2, axis=1)
+
+
+class FormDirectionTests(unittest.TestCase):
+    """A track directed by its form: an 8-bar intro, a 20-bar drop, a 4-bar break, the 16-bar biggest drop
+    and a 6-bar outro at 120 BPM (2 s bars), with chapters on its first drop, biggest drop and tail."""
+
+    BAR = 2.
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temp.name)
+        track = cls.root / 'in/form.wav'
+        write_wav(track, dance_track([(8, .2, 0, 0), (20, .3, .45, .25), (4, .2, 0, 0), (16, .3, .7, .4),
+                                      (6, .1, 0, 0)]))
+        cls.chapters = [
+            dict(title='ONE', track=0, form={'start': 'track start', 'accent': 'middle +1 beat'}),
+            dict(title='TWO', track=0, form={'start': 'first drop'}),
+            dict(title='THREE', track=0, form={'start': .5}),
+            dict(title='FOUR', track=0, form={'start': 'biggest drop -4 bars', 'accent': 'biggest drop'}),
+            dict(title='FIVE', track=0, form={'start': 'tail', 'accent': 'track end -2 bars -1 s'})]
+        targets = cls.root / 'targets.json'
+        targets.write_text(json.dumps(dict(max_chapter_seconds=40, chapters=cls.chapters)))
+        subprocess.run([sys.executable, str(ROOT / 'tools/prepare_show.py'), '--root', str(cls.root),
+                        '--targets', str(targets), str(track)], check=True, capture_output=True, text=True)
+        generated = cls.root / 'src/show/generated'
+        cls.cue = (generated / 'cue_data.hpp').read_text()
+        cls.beats = array((generated / 'beat_data.hpp').read_text(), 'beatTimes')
+        cls.bars = array((generated / 'beat_data.hpp').read_text(), 'beatBar')
+        cls.form = json.loads((cls.root / 'music/form.json').read_text())['tracks'][0]
+        cls.direction = json.loads((cls.root / 'music/direction.json').read_text())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def beat_at(self, time):
+        index = min(range(len(self.beats)), key=lambda i: abs(self.beats[i] - time))
+        self.assertLessEqual(abs(self.beats[index] - time), 1e-3, time)
+        return index
+
+    def test_the_form_finds_the_drops_and_the_tail(self):
+        self.assertTrue(self.form['directs'])
+        events = self.form['events']
+        self.assertAlmostEqual(events['first drop'], 8 * self.BAR, delta=.1)
+        self.assertAlmostEqual(events['biggest drop'], 32 * self.BAR, delta=.1)
+        self.assertAlmostEqual(events['tail'], 48 * self.BAR, delta=.1)
+
+    def test_bar_lines_come_from_the_form(self):
+        for bar in (8, 28, 32, 48):
+            self.assertEqual(self.bars[self.beat_at(self.form['events']['first drop'] - 8 * self.BAR +
+                                                    bar * self.BAR)], 0, bar)
+        tracks = json.loads((self.root / 'music/beats.json').read_text())['tracks']
+        self.assertIn('form', tracks[0]['bar_lines_from'])
+
+    def test_chapters_start_on_the_named_events(self):
+        starts = array(self.cue, 'chapterStarts')
+        events = self.form['events']
+        self.assertEqual(starts[0], 0)
+        self.assertAlmostEqual(starts[1], events['first drop'], delta=1e-3)
+        self.assertAlmostEqual(starts[3], events['biggest drop'] - 4 * self.BAR, delta=.05)  # the break
+        self.assertAlmostEqual(starts[4], events['tail'], delta=1e-3)
+        # THREE: halfway from TWO's target to FOUR's (36 s), on the nearest cut point: the phrase at 32 s.
+        self.assertAlmostEqual(starts[2], 16 * self.BAR, delta=.05)
+        for start in starts[1:]:
+            self.beat_at(start)
+        self.assertEqual([c['title'] for c in self.direction['chapters']],
+                         ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'])
+        self.assertEqual(self.direction['tracks'][0]['directed_by'], 'form')
+
+    def test_accents_land_on_their_beats(self):
+        accents = array(self.cue, 'chapterAccents')
+        starts = array(self.cue, 'chapterStarts') + [self.form['events']['track end']]
+        events = self.form['events']
+        self.assertEqual(len(accents), 5)
+        self.assertAlmostEqual(accents[3], events['biggest drop'], delta=1e-3)
+        # The last bar line at least 2 bars and a second before the end (108 s and a second of decay).
+        self.assertLessEqual(accents[4], events['track end'] - 2 * self.BAR - 1)
+        self.assertEqual(self.bars[self.beat_at(accents[4])], 0)
+        for index, accent in enumerate(accents):
+            self.beat_at(accent)
+            self.assertTrue(starts[index] < accent < starts[index + 1], index)
+        # ONE's accent: a beat after a bar line in the middle half of the intro.
+        one = self.beat_at(accents[0])
+        self.assertEqual(self.bars[one - 1], 0)
+
+    def test_every_form_chapter_names_its_accent(self):
+        self.assertNotIn('-1', self.cue.split('chapterAccents')[1].split(';')[0])
+
+    def test_expressions(self):
+        sys.path.insert(0, str(ROOT / 'tools'))
+        import direct_music
+        self.assertEqual(direct_music.parse_expression('biggest drop -8 bars +1 beat'),
+                         ('biggest drop', dict(bars=-8., beats=1., seconds=0.)))
+        self.assertEqual(direct_music.parse_expression('track end -2 bars -1 s'),
+                         ('track end', dict(bars=-2., beats=0., seconds=-1.)))
+        for bad in ('+8 bars', 'tail +1', 'tail +1 furlong', 'tail +0.5 bars'):
+            with self.assertRaises(ValueError):
+                direct_music.parse_expression(bad)
+
+
 class JoinFadeTests(unittest.TestCase):
     """concatenate() fades each act join so show.wav does not click where one track meets the next."""
 

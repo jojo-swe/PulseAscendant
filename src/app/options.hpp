@@ -38,10 +38,17 @@ struct Options {
     // The trace resolution as a fraction of the output (--trace-scale, kMinTraceScale..1); unset = the
     // mode's (traceScaleFor). The exports refuse it: they always trace at the output size.
     std::optional<float> traceScale;
+    // --trace-scale auto: the adaptive scale (app/auto_scale.hpp); the window's default (adaptiveTraceScale).
+    bool autoTraceScale = false;
+    // The window's fast mode (render::RenderSettings::fast) for the window and --bench; --no-fast-mode turns
+    // it off. The exports never use it.
+    bool fastMode = true;
     // --bench: Interactive and headless, every chapter of `chapters` (empty: all) for benchFrames frames,
     // one JSON line each on stdout (app/bench.hpp).
     bool bench = false;
     int benchFrames = 120;
+    bool benchCounters = false; // --bench-counters: the work counters and scene statistics per chapter
+    std::filesystem::path benchCapture; // --bench-capture DIR: each chapter's last timed frame as a PNG
     std::vector<int> chapters; // --chapters LIST: chapter indices, as --show-info numbers them
     // --secret-part[=WORD]: the window and --render-stream run the part of retro/secret_part.hpp instead of
     // the show (--time and --duration then count its seconds); WORD is checked as the patient's answer.
@@ -56,6 +63,9 @@ inline constexpr int kMaxBenchFrames = 100000;
 // The trace scale a run renders with: --trace-scale, or 1 for the exports (--capture-dir, --render-stream),
 // which trace at the output size, and kWindowTraceScale for the window and --bench.
 float traceScaleFor(const Options& options);
+// Whether the trace scale adapts per chapter (app/auto_scale.hpp): in the window and --bench unless
+// --trace-scale F (--bench takes the table's scale per chapter, no controller), never in an export.
+bool adaptiveTraceScale(const Options& options);
 
 inline constexpr int kMinSpp = 1;
 inline constexpr int kMaxSpp = 4096;

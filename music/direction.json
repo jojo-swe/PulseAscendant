@@ -1,9 +1,10 @@
 {
-  "method": "Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes with bar-line and 4-bar phrase bonuses; +/-2.5 s; 5-40 s chapter bounds (max_chapter_seconds = 40 from tools/show_targets.json; the default is 18); each track's first chapter pinned to the track start; starts are exact tracked beat times",
+  "method": "Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes with bar-line and 4-bar phrase bonuses; +/-2.5 s; 5-42 s chapter bounds (max_chapter_seconds = 42 from tools/show_targets.json; the default is 18); each track's first chapter pinned to the track start; starts are exact tracked beat times",
+  "form_method": "A form-directed track: targets from the \"form\" expressions over tools/song_form.py events, starts chosen among its phrase starts and boundaries within 16 bars of them by dynamic programming (cost: distance in bars, -0.5 on a boundary, -0.25 on a phrase start) within the same bounds; accents on the beats their expressions name",
   "window_seconds": 2.5,
   "min_chapter_seconds": 5,
-  "max_chapter_seconds": 40.0,
-  "source_sha256": "39db88573e32440e6f0d57e1c646ab4d594833472af719acf61421924b9bc585",
+  "max_chapter_seconds": 42.0,
+  "source_sha256": "1d8d38e7d39ca31bbe507639748a6f402dfa87aaf753639c198564d44e2defea",
   "chapters": [
     {
       "title": "BOOT",
@@ -255,127 +256,187 @@
       "on_beat": false,
       "on_downbeat": false,
       "phrase": false,
-      "nominal_attack": 0.0
+      "nominal_attack": 0.0,
+      "form": {
+        "start": "track start",
+        "accent": "middle +1 beat"
+      },
+      "cut": "track start",
+      "accent_beat": 427.1831
     },
     {
       "title": "GALAXY",
       "track": 2,
-      "target": 430.4,
-      "start": 431.9762,
-      "shift": 1.5762,
-      "attack": 0.31,
+      "target": 440.66,
+      "start": 440.66,
+      "shift": 0.0,
+      "attack": 0.431,
       "on_beat": true,
       "on_downbeat": true,
-      "phrase": false,
-      "nominal_attack": 0.337
+      "phrase": true,
+      "nominal_attack": 0.431,
+      "form": {
+        "start": "first drop"
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 454.5715
     },
     {
       "title": "PLASMA PLANET",
       "track": 2,
-      "target": 458.4,
-      "start": 458.5331,
-      "shift": 0.1331,
-      "attack": 0.349,
+      "target": 468.4763,
+      "start": 468.4877,
+      "shift": 0.0114,
+      "attack": 0.769,
       "on_beat": true,
-      "on_downbeat": false,
-      "phrase": false,
-      "nominal_attack": 0.514
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.769,
+      "form": {
+        "start": 0.1176
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 496.3177
     },
     {
       "title": "WORMHOLE",
       "track": 2,
-      "target": 486.4,
-      "start": 488.1231,
-      "shift": 1.7231,
-      "attack": 0.839,
+      "target": 510.2244,
+      "start": 510.2315,
+      "shift": 0.0071,
+      "attack": 0.714,
       "on_beat": true,
-      "on_downbeat": false,
-      "phrase": false,
-      "nominal_attack": 0.192
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.714,
+      "form": {
+        "start": 0.2941
+      },
+      "cut": "phrase start",
+      "accent_beat": 524.1438
     },
     {
       "title": "CRYSTAL CITY",
       "track": 2,
-      "target": 514.4,
-      "start": 516.4008,
-      "shift": 2.0008,
-      "attack": 0.576,
+      "target": 538.0643,
+      "start": 538.0562,
+      "shift": -0.0081,
+      "attack": 0.808,
       "on_beat": true,
-      "on_downbeat": false,
-      "phrase": false,
-      "nominal_attack": 0.235
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.808,
+      "form": {
+        "start": 0.4118
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 551.9692
     },
     {
       "title": "LENS OF GOD",
       "track": 2,
-      "target": 542.4,
-      "start": 542.9054,
-      "shift": 0.5054,
-      "attack": 0.647,
+      "target": 579.7888,
+      "start": 579.7969,
+      "shift": 0.0081,
+      "attack": 0.2,
       "on_beat": true,
       "on_downbeat": true,
       "phrase": true,
-      "nominal_attack": 0.165
+      "nominal_attack": 0.2,
+      "form": {
+        "start": 0.5882
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 593.7115
     },
     {
       "title": "RAYTRACE INFINITY",
       "track": 2,
-      "target": 570.4,
-      "start": 569.3746,
-      "shift": -1.0254,
-      "attack": 0.867,
+      "target": 607.6287,
+      "start": 607.6246,
+      "shift": -0.0041,
+      "attack": 0.298,
       "on_beat": true,
       "on_downbeat": true,
       "phrase": true,
-      "nominal_attack": 0.431
+      "nominal_attack": 0.204,
+      "form": {
+        "start": 0.7059
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 621.5354
     },
     {
       "title": "METROPOLIS",
       "track": 2,
-      "target": 602.4,
-      "start": 600.6138,
-      "shift": -1.7862,
-      "attack": 0.631,
+      "target": 635.445,
+      "start": 635.4508,
+      "shift": 0.0058,
+      "attack": 0.51,
       "on_beat": true,
       "on_downbeat": true,
-      "phrase": false,
-      "nominal_attack": 0.251
+      "phrase": true,
+      "nominal_attack": 0.51,
+      "form": {
+        "start": 0.8235
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 663.2808
     },
     {
       "title": "ASCENDANT",
       "track": 2,
-      "target": 634.4,
-      "start": 635.7315,
-      "shift": 1.3315,
-      "attack": 0.51,
+      "target": 677.1931,
+      "start": 677.1931,
+      "shift": 0.0,
+      "attack": 0.09,
       "on_beat": true,
       "on_downbeat": true,
-      "phrase": false,
-      "nominal_attack": 0.278
+      "phrase": true,
+      "nominal_attack": 0.09,
+      "form": {
+        "start": "biggest drop -8 bars",
+        "accent": "biggest drop"
+      },
+      "cut": "phrase start + fall",
+      "accent_beat": 691.1108
     },
     {
       "title": "CREDITS",
       "track": 2,
-      "target": 666.4,
-      "start": 667.7208,
-      "shift": 1.3208,
-      "attack": 0.843,
+      "target": 705.0234,
+      "start": 705.0223,
+      "shift": -0.0011,
+      "attack": 1.0,
       "on_beat": true,
-      "on_downbeat": false,
-      "phrase": false,
-      "nominal_attack": 0.176
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 1.0,
+      "form": {
+        "start": 0.5162,
+        "accent": "start +11 bars +3 beats",
+        "min_bars": 13
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 725.4531
     },
     {
       "title": "THE END",
       "track": 2,
-      "target": 696.4,
-      "start": 696.6185,
-      "shift": 0.2185,
-      "attack": 1.0,
+      "target": 731.1069,
+      "start": 731.1069,
+      "shift": 0.0,
+      "attack": 0.529,
       "on_beat": true,
-      "on_downbeat": false,
+      "on_downbeat": true,
       "phrase": false,
-      "nominal_attack": 0.027
+      "nominal_attack": 0.529,
+      "form": {
+        "start": "tail",
+        "accent": "track end -2 bars -1 s"
+      },
+      "cut": "fall",
+      "accent_beat": 732.8438
     }
   ],
   "tracks": [
@@ -401,13 +462,14 @@
     },
     {
       "track": 2,
-      "source": "Rigid Arpeggios.wav",
+      "source": "Cyberpunk Assembly Extended.wav",
       "start_seconds": 412.4,
-      "mean_attack": 0.6572,
+      "mean_attack": 0.5349,
       "on_beat": 10,
-      "on_downbeat": 5,
-      "phrase_starts": 2,
-      "nominal_mean_attack": 0.26060000000000005
+      "on_downbeat": 10,
+      "phrase_starts": 9,
+      "nominal_mean_attack": 0.5255,
+      "directed_by": "form"
     }
   ]
 }

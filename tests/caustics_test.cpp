@@ -291,12 +291,13 @@ public:
         : ctx_(ctx), ring_(ctx), maps_(ctx, ring_, maxResolution),
           tracer_(ctx, ring_, width, height, modern::tracerCapacity({})) {}
 
-    Result run(const TestScene& scene, const TraceSettings& settings, std::uint32_t seed) {
+    Result run(const TestScene& scene, const TraceSettings& settings, std::uint32_t seed,
+               bool reuse = false) {
         const modern::SceneGpu gpu(ctx_, scene.statics);
         VkCommandBuffer cmd = ring_.begin();
         modern::TraceExtras extras;
         if (scene.frame.caustics) {
-            maps_.prepare(scene.statics, scene.frame, scene.frame.caustics->photons, seed);
+            maps_.prepare(scene.statics, scene.frame, scene.frame.caustics->photons, seed, reuse);
             extras.causticMaps = &maps_.maps();
             extras.causticReceivers = &maps_.receiverTable();
             extras.photons = [this](VkCommandBuffer c, const modern::PhotonScene& p) { maps_.record(c, p); };
@@ -449,6 +450,25 @@ void testDeterminism(Harness& h) {
         sum += v;
     CHECK(sum > 0);
     std::printf("(c) the same seed: the same map, in any photon order; another seed: another map\n");
+
+    // The window's fast mode keeps the maps while nothing the photons read changes, and they are the maps a
+    // fresh shot gives; a new seed, a moved caster or a reuse-free frame shoots again.
+    const Plane first = h.run(s, settings, 11, true).map;
+    CHECK(!h.maps().reused() && first.values == a.values);
+    const Plane kept = h.run(s, settings, 11, true).map;
+    CHECK(h.maps().reused() && kept.values == a.values);
+    h.run(s, settings, 12, true);
+    CHECK(!h.maps().reused());
+    TestScene moved = s;
+    moved.frame.instances[0].transform.m[1][3] += 0.01f;
+    h.run(moved, settings, 12, true);
+    CHECK(!h.maps().reused());
+    h.run(moved, settings, 12, false);
+    CHECK(!h.maps().reused());
+    const Plane after = h.run(moved, settings, 12, true).map;
+    CHECK(!h.maps().reused()); // a frame without reuse leaves no key behind
+    CHECK(h.run(moved, settings, 12, true).map.values == after.values && h.maps().reused());
+    std::printf("(c) reuse: unchanged inputs keep the maps, which equal a fresh shot\n");
 }
 
 // --- (d), (f) ----------------------------------------------------------------------------------------------

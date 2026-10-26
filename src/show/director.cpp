@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace evo::show {
 
@@ -56,8 +57,8 @@ std::optional<SceneCut> megamixCut(double t) {
     if (shot.source == Effect::Finale)
         return std::nullopt; // the room
     const double since = std::max(t - times[row], 0.0);
-    return SceneCut{static_cast<int>(shot.source),
-                    shot.frozen ? shot.sourceSeconds : shot.sourceSeconds + since, shot.frozen};
+    const double source = megamixSource(static_cast<int>(row));
+    return SceneCut{static_cast<int>(shot.source), shot.frozen ? source : source + since, shot.frozen};
 }
 
 } // namespace
@@ -81,6 +82,45 @@ PortalPhase portalPhase(const TimelineFrame& frame) {
 
 double megamixStart(int row) {
     return megamixTimes()[static_cast<std::size_t>(std::clamp(row, 0, static_cast<int>(kRows)))];
+}
+
+double megamixSource(int row) {
+    const auto index = static_cast<std::size_t>(std::clamp(row, 0, static_cast<int>(kRows) - 1));
+    const MegamixShot& shot = kMegamixShots[index];
+    return shot.from == MegamixFrom::ShipPass ? wormholePass() + shot.sourceSeconds : shot.sourceSeconds;
+}
+
+double wormholePass() {
+    static const double pass = [] {
+        // modern::shipTimes' rule on the chapter's own frame: its downbeats in chapter seconds, D the last
+        // one at or before the accent, the pass the first one from 21 % of the chapter on, at least 2 s
+        // before D.
+        const TimelineFrame head = sampleTimeline(chapterStart(static_cast<int>(Effect::Wormhole)));
+        const BeatGridView grid = beatGrid(head.track);
+        const double begin = head.trackSeconds - head.localSeconds;
+        const double duration = std::max(head.chapterDuration, 1e-3);
+        const double accent = std::clamp(head.accentSeconds, 0.0, duration);
+        std::vector<double> bars;
+        for (int b = std::max(grid.beatAt(begin), 0); b < grid.count(); ++b) {
+            const double at = grid.beatTime(b) - begin;
+            if (at > duration)
+                break;
+            if (at >= -1e-9 && grid.bar(b) == 0)
+                bars.push_back(at);
+        }
+        double drop = accent;
+        for (const double b : bars)
+            if (b <= accent + 1e-6)
+                drop = b;
+        double from = 0.21 * duration;
+        for (const double b : bars)
+            if (b >= from) {
+                from = b;
+                break;
+            }
+        return head.showSeconds - head.localSeconds + std::min(from, drop - 2.0);
+    }();
+    return pass;
 }
 
 std::optional<SceneCut> sceneCut(const TimelineFrame& frame) {

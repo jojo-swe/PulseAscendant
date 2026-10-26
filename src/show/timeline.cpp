@@ -17,15 +17,6 @@
 namespace evo::show {
 
 static_assert(cues.size() == generated::chapterCount, "cues.hpp and cue_data.hpp disagree on the chapters");
-
-constexpr bool targetsMatchDirection() {
-    for (std::size_t i = 0; i < cues.size(); ++i)
-        if (cues[i].target != generated::chapterTargets[i])
-            return false;
-    return true;
-}
-static_assert(targetsMatchDirection(),
-              "cues.hpp targets differ from tools/show_targets.json; edit both or regenerate cue_data.hpp");
 static_assert(generated::chapterStarts[0] == 0.0, "the show starts with chapter 0");
 
 namespace {
@@ -75,7 +66,10 @@ const std::vector<Direction>& directions() {
             d.duration = end - d.start;
             d.track = trackAt(d.start);
             const double offset = d.start - trackStart(d.track);
-            d.accent = findAccent(d.track, offset, d.duration);
+            // A chapter of a form-directed track names the tracked beat its accent lands on; D (the downbeat
+            // at or before the accent) is then that beat itself when it is a downbeat.
+            const double beat = generated::chapterAccents[chapter];
+            d.accent = beat >= 0 ? beat - d.start : findAccent(d.track, offset, d.duration);
             d.flowStart = flow;
             flow += d.duration * baseFlowRate(cues[chapter]) + smoothFlow(d.track, offset + d.duration) -
                     smoothFlow(d.track, offset);
@@ -147,8 +141,8 @@ BeatGridView beatGrid(int track) {
 }
 
 double showDuration() {
-    // From whole frames, so 34 135 680 frames is exactly the decimal 711.16 (adding the track lengths in
-    // seconds would round at every step).
+    // From whole frames, so the duration is the exact decimal of the 48 kHz frame count (adding the track
+    // lengths in seconds would round at every step).
     std::uint64_t frames = 0;
     for (int track = 0; track < trackCount(); ++track)
         frames += trackFrames(track);

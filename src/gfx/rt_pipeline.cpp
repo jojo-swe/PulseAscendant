@@ -3,6 +3,7 @@
 #include "gfx/shader.hpp"
 #include "gfx/vk_check.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
@@ -110,6 +111,13 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         // groups.
         Modules modules(device);
         std::vector<VkPipelineShaderStageCreateInfo> stages;
+        // Every stage gets the same constants (a shader ignores the ids it does not declare).
+        std::vector<VkSpecializationMapEntry> entries;
+        for (std::uint32_t i = 0; i < shaders.specialization.size(); ++i)
+            entries.push_back({i, i * std::uint32_t(sizeof(std::uint32_t)), sizeof(std::uint32_t)});
+        const VkSpecializationInfo specialization{static_cast<std::uint32_t>(entries.size()), entries.data(),
+                                                  shaders.specialization.size() * sizeof(std::uint32_t),
+                                                  shaders.specialization.data()};
         std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups;
         const auto addStage = [&](const std::filesystem::path& spv, VkShaderStageFlagBits stage) {
             const std::vector<std::uint32_t> words = loadSpirv(spv);
@@ -129,6 +137,7 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
             info.stage = stage;
             info.module = modules.modules.back();
             info.pName = "main";
+            info.pSpecializationInfo = entries.empty() ? nullptr : &specialization;
             stages.push_back(info);
             return static_cast<std::uint32_t>(stages.size() - 1);
         };
@@ -143,6 +152,9 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
                 closestHit, addStage(hit.intersection, VK_SHADER_STAGE_INTERSECTION_BIT_KHR)));
         }
 
+        missGroups_ = static_cast<std::uint32_t>(shaders.misses.size());
+        triangleGroups_ = static_cast<std::uint32_t>(shaders.closestHits.size());
+        proceduralGroups_ = static_cast<std::uint32_t>(shaders.proceduralHits.size());
         VkRayTracingPipelineCreateInfoKHR pipelineInfo{
             VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
         pipelineInfo.stageCount = static_cast<std::uint32_t>(stages.size());
@@ -151,7 +163,7 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         pipelineInfo.pGroups = groups.data();
         pipelineInfo.maxPipelineRayRecursionDepth = kMaxRecursionDepth; // only the raygen traces
         pipelineInfo.layout = layout_;
-        vkCheck(vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo,
+        vkCheck(vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, ctx.pipelineCache(), 1, &pipelineInfo,
                                                nullptr, &pipeline_),
                 ("vkCreateRayTracingPipelinesKHR(" + name + ")").c_str());
 
@@ -239,6 +251,25 @@ void RayTracingPipeline::push(VkCommandBuffer cmd, const void* data, std::uint32
 
 void RayTracingPipeline::traceRays(VkCommandBuffer cmd, std::uint32_t width, std::uint32_t height) {
     vkCmdTraceRaysKHR(cmd, &raygenRegion_, &missRegion_, &hitRegion_, &callableRegion_, width, height, 1);
+}
+
+RayTracingPipeline::StackSizes RayTracingPipeline::stackSizes() const {
+    StackSizes sizes;
+    const VkDevice device = ctx_.device();
+    const auto size = [&](std::uint32_t group, VkShaderGroupShaderKHR shader) {
+        return vkGetRayTracingShaderGroupStackSizeKHR(device, pipeline_, group, shader);
+    };
+    sizes.raygen = size(0, VK_SHADER_GROUP_SHADER_GENERAL_KHR);
+    for (std::uint32_t i = 0; i < missGroups_; ++i)
+        sizes.miss = std::max(sizes.miss, size(1 + i, VK_SHADER_GROUP_SHADER_GENERAL_KHR));
+    for (std::uint32_t k = 0; k < triangleGroups_ + proceduralGroups_; ++k) {
+        const std::uint32_t group = 1 + missGroups_ + k;
+        sizes.closestHit = std::max(sizes.closestHit, size(group, VK_SHADER_GROUP_SHADER_CLOSEST_HIT_KHR));
+        if (k >= triangleGroups_)
+            sizes.intersection =
+                std::max(sizes.intersection, size(group, VK_SHADER_GROUP_SHADER_INTERSECTION_KHR));
+    }
+    return sizes;
 }
 
 } // namespace evo::gfx

@@ -145,11 +145,19 @@ public:
     // up for `photons` photons and `seed`. Between ring.begin() and the trace that records this frame's maps;
     // throws before writing anything (std::logic_error outside a frame, std::invalid_argument for a frame
     // without caustics).
-    void prepare(const SceneStatic& scene, const SceneFrame& frame, std::uint32_t photons,
-                 std::uint32_t seed);
+    //
+    // `reuse` (the window's fast mode): when everything the photon pass reads is what the maps were last
+    // shot from (the scene, its instances, lights, materials and environment, the caustics, the photon count
+    // and seed; never with a particle field), record() keeps the maps instead of shooting them again: they
+    // would come out the same, so the frame is still a pure function of its time. reused() says so.
+    void prepare(const SceneStatic& scene, const SceneFrame& frame, std::uint32_t photons, std::uint32_t seed,
+                 bool reuse = false);
     // Records the clear, the photons and the resolve (TraceExtras::photons calls it with the trace's
-    // resources). Throws std::logic_error without a prepare() in this frame.
+    // resources), or nothing when prepare() found the maps current. Throws std::logic_error without a
+    // prepare() in this frame.
     void record(VkCommandBuffer cmd, const PhotonScene& scene);
+    // Whether this frame's prepare() found the maps current (record() then shoots nothing).
+    bool reused() const { return skip_; }
 
     gfx::Image& maps() { return maps_; }
     // This slot's receiver table.
@@ -174,6 +182,9 @@ private:
     std::array<gfx::Buffer, gfx::FrameRing::kFramesInFlight> tables_;
     std::uint32_t orderMultiplier_ = 1, orderOffset_ = 0;
     bool prepared_ = false; // prepare() ran in the frame being recorded
+    // What the maps were last shot from (inputKey), whether they hold it, and whether this frame keeps them.
+    std::uint64_t key_ = 0, mapsKey_ = 0;
+    bool mapsValid_ = false, skip_ = false;
     std::uint32_t photonCount_ = 0, receiverCount_ = 0, seed_ = 0;
     float unitsPerFlux_ = 0, sourceDistance_ = 0;
     std::array<float, kMaxCausticReceivers> irradianceScale_{}; // flux unit / texel area per receiver

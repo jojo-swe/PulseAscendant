@@ -276,7 +276,7 @@ void testSweep() {
     limits.detail = kTestDetail;
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::City, limits);
     CHECK(stats.shots == 9); // VECTOR CITY 2, ASCENT 1, CITY NIGHT 4, METROPOLIS 2
-    CHECK(stats.frames > 6000);
+    CHECK(stats.frames == evo::test::sweepFrames(SceneId::City));
 }
 
 // VECTOR CITY flies the 1993 flight until its accent: at every whole retro frame the camera is the 1993

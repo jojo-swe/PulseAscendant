@@ -17,7 +17,7 @@
 // weighted against the NEE density of that light (selection evaluated at the vertex the ray left: prevP,
 // prevN, prevTransmissive) or of the escape (escapePdf: every portal the direction crosses, on both sides,
 // plus the environment's share) with the power heuristic; after a delta lobe (no NEE there) it keeps weight 1.
-// Russian roulette from bounce 3; a non-finite sample contributes 0.
+// Russian roulette from bounce 3 (kRouletteBounce); a non-finite sample contributes 0.
 //
 // Noise at its sources. The path is `rough` once it has scattered off a non-delta lobe;
 // until then it is a delta chain from the camera (the camera -> mirror -> light paths).
@@ -67,6 +67,14 @@
 //
 // Every random number is randomFloat(frameSeed, pixel, sampleIndex, dimension) (random.glsl). Only this
 // shader traces rays (recursion depth 1).
+//
+// The window's fast build (rt_pathtrace_fast.rgen.spv, -DEVO_FAST; modern::TracerOptions::fast, never an
+// export; docs/PERFORMANCE.md): two in-scatter points on the primary segment instead of four
+// (medium_path.glsl), and one wavelength per path whatever the spp (no hero split, whose saved state the
+// compiler then drops). Both estimates stay unbiased, and less state is live across each trace. The volume
+// layer's extra noise costs a little light where the denoiser's history clamp cuts it (ASCENT's clouds 1.5 %,
+// one point 2.5 %). Russian roulette stays at bounce 3: from bounce 2 it amplified the survivors of dark
+// bounces past the scenes' low indirect clamps, which then cut them (2-3 % of the light).
 
 #include "common.glsl"
 #include "random.glsl"
@@ -95,6 +103,8 @@ const uint kDimsPerBounce = 8u;
 // kHeroSpp samples, the export rule of the photon maps (modern::kExportPhotonSpp).
 const uint kHeroWavelengths = 4u;
 const uint kHeroSpp = 16u;
+// The first bounce Russian roulette may end a path at (surfaces and medium vertices alike).
+const uint kRouletteBounce = 3u;
 // The share of a contribution: 1, or 1 / kHeroWavelengths once the path has split into its wavelengths.
 float gHeroWeight = 1.0;
 // [medium] The dimension that seeds a sample's media stream (medium.glsl), far from the others.
@@ -131,6 +141,7 @@ void traceScene(vec3 origin, vec3 direction, float coneWidth, float coneSpread) 
 }
 
 bool unoccluded(vec3 origin, vec3 direction, float tMax) {
+    EVO_COUNT(kCountShadowRays, 1);
     shadowVisible = 0u;
     traceRayEXT(tlas,
                 gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
@@ -147,7 +158,7 @@ vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
         return vec3(0.0);
     }
     vec3 through = vec3(1.0);
-    if ((frame.flags & kTraceFlagThinPanes) == 0u) {
+    if (!featureOn(kFeaturePanes) || (frame.flags & kTraceFlagThinPanes) == 0u) {
         return through;
     }
     HitPayload hit = payload;
@@ -155,7 +166,8 @@ vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
     for (uint i = 0u; i < kMaxShadowPanes && maxComponent(through) > 0.0; ++i) {
         payload.coneWidth = 0.0;
         payload.coneSpread = -1.0;
-        traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, kInstanceMaskPane, 0, 0, kMissIndexSky, origin, t0, direction,
+        EVO_COUNT(kCountPaneRays, 1);
+        traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, kInstanceMaskPane, 0, 0, kMissIndexPane, origin, t0, direction,
                     tMax, 0);
         if (payload.t < 0.0) {
             payload = hit;
@@ -357,6 +369,7 @@ vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, v
 // Next-event estimation at a surface: the environment with probability frame.environmentSelect, else one
 // rect light chosen at this point, one point on it, one shadow ray, weighted against the BSDF.
 vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
+    EVO_COUNT(kCountSurfaceNee, 1);
     bool transmissive = isDielectric(s);
     vec3 facing = selectionNormal(n, wo);
     float choice = bounceRand(bounce, 3u);
@@ -373,7 +386,8 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
     selectPdf *= 1.0 - environmentSelect;
     RectLight l = lights[index];
     if (l.kind == kLightTree) {
-        return sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf);
+        return featureOn(kFeatureTree) ? sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf)
+                                       : vec3(0.0);
     }
     if (!(l.area > 0.0)) {
         return vec3(0.0);
@@ -447,6 +461,7 @@ struct SampleResult {
 };
 
 SampleResult tracePath() {
+    EVO_COUNT(kCountPaths, 1);
     SampleResult r;
     r.lighting = vec3(0.0);
     r.emission = vec3(0.0);
@@ -480,7 +495,11 @@ SampleResult tracePath() {
     CausticPath caustic = causticPathStart();
     // The hero wavelengths (exports): how many, whether this pass's path has split, the hero's uniform, and the
     // state of the path as it reached the hit that split it (restored for each further wavelength).
+#ifdef EVO_FAST
+    const uint heroes = 1u; // one wavelength per path in the window's fast build
+#else
     uint heroes = frame.spp >= kHeroSpp ? kHeroWavelengths : 1u;
+#endif
     bool heroSplit = false;
     float heroU = 0.0;
     uint splitBounce = 0u;
@@ -551,6 +570,9 @@ SampleResult tracePath() {
     }
     for (uint bounce = startBounce;; ++bounce) {
         traceScene(origin, direction, coneWidth, coneSpread);
+        EVO_COUNT(pass == 1u ? kCountContinuationRays
+                             : (hero > 0u ? kCountHeroRays : (bounce == 0u ? kCountPrimaryRays : kCountBounceRays)),
+                  1);
         // A further wavelength's first hit is the split's: its medium segment was the first wavelength's.
         bool replay = hero > 0u && bounce == splitBounce;
         // [medium] The primary segment goes to the volume layer (the surface path stays unattenuated); every
@@ -599,6 +621,7 @@ SampleResult tracePath() {
             break;
         }
 
+        EVO_COUNT(kCountSurfaceHits, 1);
         Surface s = payloadSurface();
         if (payload.light != kNoLight && lights[payload.light].kind == kLightTree) {
             // Light tree: a sphere of the light tree shows its tree light's radiance (this frame's scale).
@@ -647,7 +670,7 @@ SampleResult tracePath() {
         if (rough) {
             s = regularizedSurface(s, frame.regularizeRoughness);
         }
-        if (isDielectric(s) && payload.abbe > 0.0) {
+        if (featureOn(kFeatureDispersion) && isDielectric(s) && payload.abbe > 0.0) {
             if (lambda < 0.0) {
                 float u;
                 if (heroes > 1u) {
@@ -695,7 +718,7 @@ SampleResult tracePath() {
         }
         throughput *= weight;
         rough = rough || !delta;
-        if (roulette && bounce >= 3u) {
+        if (roulette && bounce >= kRouletteBounce) {
             float survive = clamp(maxComponent(throughput), 0.05, 0.95);
             if (bounceRand(bounce, 6u) >= survive) {
                 break;
@@ -757,6 +780,7 @@ bool previousPixel(vec3 p, float w, out vec2 pixel) {
 void writeGuides(ivec2 pixel) {
     vec2 centre = vec2(gPixel) + 0.5;
     vec3 direction = cameraDirection(centre);
+    EVO_COUNT(kCountGuideRays, 1);
     traceScene(frame.cameraPosition, direction, 0.0, frame.pixelSpread);
     vec4 motion = vec4(0.0);
     vec2 previous;
@@ -781,6 +805,9 @@ void writeGuides(ivec2 pixel) {
 void main() {
     gPixel = gl_LaunchIDEXT.xy;
     ivec2 pixel = ivec2(gPixel);
+#ifdef EVO_COUNTERS
+    countersBegin();
+#endif
 
     vec3 lighting = vec3(0.0);
     vec3 emission = vec3(0.0);
@@ -825,4 +852,7 @@ void main() {
         }
         writeGuides(pixel);
     }
+#ifdef EVO_COUNTERS
+    countersEnd();
+#endif
 }

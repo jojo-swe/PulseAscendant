@@ -23,7 +23,7 @@ namespace {
 constexpr int kChannels = 2;
 constexpr int kBytesPerFrame = kChannels * static_cast<int>(sizeof(float));
 
-// Seconds to 10 significant digits, enough to show a one-frame difference: 0.5, 711.16, 711.1599792.
+// Seconds to 10 significant digits, enough to show a one-frame difference: 0.5, 300.5, 300.4999792.
 std::string formatSeconds(double seconds) {
     std::ostringstream out;
     out.imbue(std::locale::classic());

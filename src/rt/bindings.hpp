@@ -40,6 +40,7 @@
 #define EVO_BINDING_LENSING 25             // LensingUniforms
 #define EVO_BINDING_VOLUME 26              // storage image, RGBA16F: in-scattered radiance, transmittance
 #define EVO_BINDING_CAUSTIC_RECEIVERS 27   // CausticReceiver[], Material::receiver's table
-#define EVO_BINDING_COUNT 28
+#define EVO_BINDING_COUNTERS 28        // uint64[] work counters (--bench-counters), as lo, hi words
+#define EVO_BINDING_COUNT 29
 
 #endif

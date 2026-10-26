@@ -13,13 +13,14 @@ namespace evo::show {
 // same frame, however the show got there (seeking, export, playback).
 struct TimelineFrame {
     // Where we are. localSeconds and accentSeconds are seconds into the chapter; accentSeconds is the
-    // strongest hit in the middle of the chapter, where its main event belongs.
+    // strongest hit in the middle of the chapter, where its main event belongs (in Act III the tracked beat
+    // the form of its track names: generated::chapterAccents).
     double showSeconds = 0, localSeconds = 0, chapterDuration = 0, accentSeconds = 0;
     int chapter = 0;
     Effect effect = Effect::Boot;
     Transition transition = Transition::Cut;
     float chapterProgress = 0, drive = 0;
-    // The track playing (0 = Act I, 1 = Act II) and the time into it.
+    // The track playing (0 = Act I, 1 = Act II, 2 = Act III) and the time into it.
     int track = 0;
     double trackSeconds = 0;
 

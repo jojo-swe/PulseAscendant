@@ -23,8 +23,9 @@
 // dissolving back into the flight: the show spells kAscendantWaypointText with waypointTargets, the vortex is
 // formation 0), and land on their logo targets exactly on the accent, lit by
 // the sun from camera-right while the camera orbits on a 50 mm lens.
-// From the fourth bar after D the logo's rows light up one per bar from the bottom; on the chapter's last
-// downbeat the particles release and scatter outwards as light while the frame goes to phosphor white.
+// From the fourth bar after D (sooner when the chapter ends sooner: the top row is lit a bar before the
+// release) the logo's rows light up one per bar from the bottom; on the chapter's last downbeat the particles
+// release and scatter outwards as light while the frame goes to phosphor white.
 //
 // World units: GALAXY's galaxy has radius kGalaxyRadius about the origin (disc in the xz plane); ASCENDANT's
 // logo is centred on the origin, kLogoCell per font pixel, and its galaxy is kAscendantGalaxyCentre away.
@@ -73,7 +74,8 @@ float galaxyDustDensity(Vec3 world, float turn);
 
 // ASCENDANT's moments, in chapter seconds, from the beat grid: the landing (the accent), the waypoint (the
 // downbeat before D) and its hold, the release (the chapter's last downbeat), the bottom row's lighting (the
-// fourth downbeat after D) and the bar's length.
+// fourth downbeat after D, or the seventh before the release when that is sooner, but not before D) and the
+// bar's length.
 struct AscendantTimes {
     float accent, waypoint, hold, release, firstRow, bar, liftStart, liftSpread;
 };

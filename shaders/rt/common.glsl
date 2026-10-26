@@ -14,6 +14,7 @@
 #include "../common/finite.glsl" // isFinite, isInfinite, allFinite (from the bits: robust under fast-math)
 #include "../../src/rt/bindings.hpp"
 #include "types.glsl"
+#include "counters.glsl" // EVO_COUNT: nothing outside the counting build
 
 layout(set = 0, binding = EVO_BINDING_TLAS) uniform accelerationStructureEXT tlas;
 layout(set = 0, binding = EVO_BINDING_LIGHTING, rgba32f) uniform image2D lightingImage;
@@ -76,8 +77,17 @@ layout(set = 0, binding = EVO_BINDING_CAUSTIC_RECEIVERS, scalar) readonly buffer
     CausticReceiver receiverTable[]; // Material.receiver indexes it
 };
 
+// The features this pipeline is built for (types.glsl's kFeature*): all in the generic pipeline (the default);
+// a scene's own pipeline clears the others, and every hook below that tests one is then dead code.
+layout(constant_id = 0) const uint kFeatures = 0xFFFFFFFFu;
+
+bool featureOn(uint feature) {
+    return (kFeatures & feature) != 0u;
+}
+
 const uint kMissIndexSky = 0u;
 const uint kMissIndexShadow = 1u;
+const uint kMissIndexPane = 2u; // shadowTransmittance's walk through thin panes: t = -1 only
 
 // The main ray's payload (location 0). In: the ray cone at the ray's origin (coneSpread < 0: the path has
 // scattered off a rough surface and textures use kDiffuseTextureLod, as NEE does). Out, on a hit: the

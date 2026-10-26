@@ -136,9 +136,21 @@ Options parseOptions(const std::vector<std::string>& args) {
         } else if (flag == "--detail") {
             options.detail = parseDetail(flag, nextValue());
         } else if (flag == "--trace-scale") {
-            options.traceScale = parseTraceScale(flag, nextValue());
+            const std::string& value = nextValue();
+            options.autoTraceScale = value == "auto";
+            options.traceScale.reset();
+            if (!options.autoTraceScale)
+                options.traceScale = parseTraceScale(flag, value);
+        } else if (flag == "--no-fast-mode") {
+            options.fastMode = false;
         } else if (flag == "--bench") {
             options.bench = true;
+        } else if (flag == "--bench-capture") {
+            options.benchCapture = nextValue();
+            benchOnly = true;
+        } else if (flag == "--bench-counters") {
+            options.benchCounters = true;
+            benchOnly = true;
         } else if (flag == "--bench-frames") {
             options.benchFrames = parseInt(flag, nextValue(), 1, kMaxBenchFrames);
             benchOnly = true;
@@ -220,9 +232,14 @@ Options parseOptions(const std::vector<std::string>& args) {
     }
     // Exports trace at the output size, so a window frame after a reset at scale 1
     // and an export frame agree.
-    if (options.traceScale && exporting) {
+    if ((options.traceScale || options.autoTraceScale) && exporting) {
         throw std::runtime_error(
             "--trace-scale is for the window and --bench: the exports trace at the output size");
+    }
+    // The exports never take the window's shortcuts.
+    if (!options.fastMode && exporting) {
+        throw std::runtime_error(
+            "--no-fast-mode is for the window and --bench: the exports never use fast mode");
     }
     // A stream has no Esc to end it, so "run until Esc" would write nothing.
     if (options.renderStream && options.duration <= 0.0) {
@@ -246,6 +263,13 @@ float traceScaleFor(const Options& options) {
     return exporting ? 1.f : options.traceScale.value_or(kWindowTraceScale);
 }
 
+bool adaptiveTraceScale(const Options& options) {
+    const bool exporting = options.renderStream || !options.captureDir.empty();
+    if (exporting || options.traceScale)
+        return false;
+    return true; // the window and --bench adapt unless given a fixed scale
+}
+
 std::string helpText() {
     return "Usage: Evolution [options]\n"
            "\n"
@@ -259,9 +283,15 @@ std::string helpText() {
            "                       --capture-dir and --render-stream, where every frame stands alone)\n"
            "  --detail F           Detail of the 2026 scenes, 0 < F <= 1 (default 1): particle,\n"
            "                       splat, voxel and photon counts scale with it (for quick tests)\n"
-           "  --trace-scale F      Path trace at F x the window size, 0.25..1 (default 0.67), and\n"
-           "                       upscale in time; the window and --bench only (the exports always\n"
-           "                       trace at the output size)\n"
+           "  --trace-scale F      Path trace at F x the window size, 0.25..1, and upscale in time;\n"
+           "                       the window and --bench only (the exports always trace at the\n"
+           "                       output size). 'auto' (the default) traces each chapter at its\n"
+           "                       scale from a table, 0.3..0.67, to hold 30 fps; the window also\n"
+           "                       adapts it to the GPU's frame time (docs/PERFORMANCE.md)\n"
+           "  --no-fast-mode       Trace the window and --bench as the exports do: four in-scatter\n"
+           "                       points in media, photons seeded per frame, the generic pipeline,\n"
+           "                       full BLAS builds (by default the window traces in fast mode;\n"
+           "                       docs/PERFORMANCE.md)\n"
            "  --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream\n"
            "                       needs a duration greater than 0\n"
            "  --headless           Render without opening a window\n"
@@ -272,6 +302,11 @@ std::string helpText() {
            "                       --bench-frames frames from 20 % into it (after 2 warm-up frames)\n"
            "                       and print one JSON line with the GPU time of every pass\n"
            "  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)\n"
+           "  --bench-capture DIR  With --bench: also write each chapter's last timed frame to\n"
+           "                       DIR/bench_<chapter>.png (to compare the look of two runs)\n"
+           "  --bench-counters     With --bench: trace with the counting path tracer and add its work\n"
+           "                       per pixel per frame (rays by kind, NEE, medium steps) and the\n"
+           "                       frame's scene statistics to each line (slower; the same picture)\n"
            "  --chapters LIST      Chapters for --bench, comma-separated indices as --show-info\n"
            "                       numbers them, e.g. 11,14 (default: all)\n"
            "  --music PATH         Music WAV to play (default: assets/music/show.wav beside the\n"

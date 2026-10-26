@@ -161,6 +161,9 @@ int main() {
         CHECK(parseError({"--trace-scale", "0.5", "--capture-dir", "out"}) ==
               "--trace-scale is for the window and --bench: the exports trace at the output size");
         CHECK(!parseError({"--trace-scale", "0.5", "--render-stream", "--duration", "1"}).empty());
+        CHECK(evo::parseOptions({"--trace-scale", "auto"}).autoTraceScale);
+        CHECK(!evo::parseOptions({"--trace-scale", "auto"}).traceScale);
+        CHECK(!parseError({"--trace-scale", "auto", "--capture-dir", "out"}).empty());
 
         // --bench: Interactive and headless, per chapter; --bench-frames N (default 120); --chapters LIST.
         CHECK(!defaults.bench && defaults.benchFrames == 120 && defaults.chapters.empty());
@@ -177,13 +180,21 @@ int main() {
         CHECK(!parseError({"--bench", "--chapters", ""}).empty());
         CHECK(parseError({"--chapters", "1"}) == "--chapters and --bench-frames need --bench");
         CHECK(parseError({"--bench-frames", "5"}) == "--chapters and --bench-frames need --bench");
+        CHECK(!defaults.benchCounters && !bench.benchCounters);
+        CHECK(evo::parseOptions({"--bench", "--bench-counters"}).benchCounters);
+        CHECK(!parseError({"--bench-counters"}).empty());
+        CHECK(defaults.fastMode && !evo::parseOptions({"--bench", "--no-fast-mode"}).fastMode);
+        CHECK(evo::parseOptions({"--bench", "--bench-capture", "out"}).benchCapture == "out");
+        CHECK(!parseError({"--bench-capture", "out"}).empty());
+        CHECK(!parseError({"--no-fast-mode", "--capture-dir", "out"}).empty());
         CHECK(parseError({"--bench", "--capture-dir", "out"}) == "--bench cannot be combined with an export");
         CHECK(!parseError({"--bench", "--render-stream", "--duration", "1"}).empty());
 
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
         for (const char* flag :
              {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt", "--no-hud",
-              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--chapters"})
+              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--bench-counters",
+              "--bench-capture", "--chapters", "--no-fast-mode"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);

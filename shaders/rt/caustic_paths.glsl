@@ -42,7 +42,8 @@ CausticReceiver causticSource() {
 // At every hit, with the hit's own (unregularised) surface and material flags.
 void causticPathHit(inout CausticPath c, Surface material, uint flags) {
     bool delta = causticDeltaSurface(material);
-    c.atReceiver = frame.causticReceivers > 0u && (flags & kMaterialCausticReceiver) != 0u && !delta;
+    c.atReceiver = featureOn(kFeatureCaustics) && frame.causticReceivers > 0u &&
+                   (flags & kMaterialCausticReceiver) != 0u && !delta;
     c.atLink = false;
     if (c.tracking) {
         if (delta && c.links < kMaxPhotonDeltaEvents) {
@@ -81,7 +82,7 @@ void causticPathScatter(inout CausticPath c, Surface s, vec3 n, vec3 wo, vec3 wi
 
 // What an emitter hit (RectLight `light` at y, reached from the vertex x) keeps.
 vec3 causticEmissionKeep(CausticPath c, uint light, vec3 x, vec3 y) {
-    if (!c.tracking || c.links == 0u || light == kNoLight) {
+    if (!featureOn(kFeatureCaustics) || !c.tracking || c.links == 0u || light == kNoLight) {
         return vec3(1.0);
     }
     CausticReceiver source = causticSource();
@@ -91,7 +92,7 @@ vec3 causticEmissionKeep(CausticPath c, uint light, vec3 x, vec3 y) {
 // What an escape from the vertex x along d keeps of the sky's radiance `sky` (the environment's lighting):
 // the disc's part loses the Lambert share when the disc is the source.
 vec3 causticEscape(CausticPath c, vec3 x, vec3 d, vec3 sky) {
-    if (!c.tracking || c.links == 0u) {
+    if (!featureOn(kFeatureCaustics) || !c.tracking || c.links == 0u) {
         return sky;
     }
     CausticReceiver source = causticSource();
@@ -106,7 +107,7 @@ vec3 causticEscape(CausticPath c, vec3 x, vec3 d, vec3 sky) {
 // regularised delta surface has a lobe NEE can reach) keeps: sampleLight's own choice of light and point,
 // made again from the same random numbers.
 vec3 causticNeeKeep(CausticPath c, Surface s, vec3 p, vec3 n, vec3 wo, uint bounce) {
-    if (!c.atLink) {
+    if (!featureOn(kFeatureCaustics) || !c.atLink) {
         return vec3(1.0);
     }
     CausticReceiver source = causticSource();

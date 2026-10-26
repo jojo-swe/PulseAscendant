@@ -1,8 +1,9 @@
 // The 1993 side's closing screens: PORTAL (chapter 10: FINALE's grid switching off cell by cell to the prompt
 // `THE SCREEN_`), RETURN (chapter 19: the CRT dark until the accent, the switch-on flash, the POST screen and
 // `EVOLUTION.EXE /2026` typed over the last four bars), REBOOT (chapter 20: RETURN's screen and the Enter,
-// the reboot script and DOTS' cube from 419.35 s) and THE END (chapter 30: the last line, then the tube
-// switching off to a line, a dot, its afterglow and black). Their registry entries, scripts, timings and
+// the reboot script and DOTS' cube from the track's beat 14) and THE END (chapter 30: the last line, then the
+// tube switching off on the accent to a line, a dot, its afterglow and black); Act III follows the form of
+// its track, so its times come from the show's own data. Their registry entries, scripts, timings and
 // scenes on the CPU, and their pictures from the retro stage on the GPU. Runs with the validation layer on
 // and fails on any message it reports.
 
@@ -18,6 +19,8 @@
 #include "retro/the_end.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/cues.hpp"
+#include "show/era.hpp"
+#include "show/generated/cue_data.hpp"
 #include "show/timeline.hpp"
 #include "test_env.hpp"
 #include "text/font8x8.hpp"
@@ -222,7 +225,8 @@ void testRebootRegistry() {
     CHECK(info.palette == &evo::retro::rebootPalette);
 }
 
-// REBOOT opens on RETURN's last screen with the Enter, then the script on its beats, the cube from 419.35 s.
+// REBOOT opens on RETURN's last screen with the Enter, then the script on its beats (the first on the track's
+// first tracked beat), the cube from beat 14.
 void testRebootScript() {
     const TimelineFrame any = reboot(1);
     const auto screen = [](const TimelineFrame& frame, std::uint32_t f) {
@@ -241,9 +245,10 @@ void testRebootScript() {
     CHECK(within(any, starts(4, "Ray tracing hardware"), beatShow(4)));
     CHECK(within(any, starts(5, "found"), beatShow(6)));
     CHECK(within(any, starts(6, "LOADING"), beatShow(8)));
-    CHECK(std::fabs(beatShow(0) - 413.25) < 0.01);
+    const double firstBeat = evo::show::chapterStart(kRebootChapter) + evo::show::beatGrid(2).beatTime(0);
+    CHECK(std::fabs(beatShow(0) - firstBeat) < 1e-6);
     const std::uint32_t cube = evo::retro::rebootCubeFrame(any);
-    CHECK(within(any, cube, 419.35));
+    CHECK(within(any, cube, beatShow(14)));
     CHECK(!screen(any, cube - 1).empty() && screen(any, cube).empty());
     CHECK(row(screen(any, cube - 1), 4) + " " + row(screen(any, cube - 1), 5) ==
           "Ray tracing hardware .................. found");
@@ -258,7 +263,7 @@ void testRebootScript() {
     std::uint32_t in = 0;
     while (evo::retro::cardShown(any, in, kRate) < 0)
         ++in;
-    CHECK(std::fabs(static_cast<double>(in) / kRate - 1.7416) <= 1.0 / kRate);
+    CHECK(std::fabs(static_cast<double>(in) / kRate - evo::show::transitionMarks(any).bar) <= 1.0 / kRate);
 }
 
 void testRebootImages(RetroStageFixture& fixture) {
@@ -285,12 +290,15 @@ void testTheEndRegistry() {
     CHECK(info.palette == &evo::retro::theEndPalette);
 }
 
-// The caption types in centred, then the power-off: the off frame on 704.42, a line of at most 2 rows by two
-// frames later, the dot, its afterglow fading through two bars, then black to the end.
+// The caption types in centred, then the power-off: the off frame on the accent (the beat the form of Act
+// III's track names, at least two bars and a second before the end), a line of at most 2 rows by two frames
+// later, the dot, its afterglow fading through two bars, then black to the end.
 void testTheEndPowerOff() {
     const TimelineFrame any = theEnd(1);
+    const evo::show::TransitionMarks marks = evo::show::transitionMarks(any);
+    CHECK(std::fabs(marks.accent - evo::show::generated::chapterAccents[kTheEndChapter]) < 1e-6);
     const std::uint32_t off = evo::retro::theEndOffFrame(any);
-    CHECK(within(any, off, 704.42));
+    CHECK(within(any, off, marks.accent));
     const std::vector<evo::text::Item> before = evo::retro::theEndText(any, off - 1);
     CHECK(!before.empty() && before[0].text == "REALITY IS WHAT YOU RENDER");
     CHECK(before[0].x == evo::retro::kTheEndX && before[0].y == evo::retro::kTheEndY);
@@ -304,7 +312,7 @@ void testTheEndPowerOff() {
     CHECK(light(off + 3).width < 208 && light(off + 4).width < light(off + 3).width);
     const std::uint32_t dot = evo::retro::theEndDotFrame(any), black = evo::retro::theEndBlackFrame(any);
     CHECK(light(dot).width == 2 && light(dot).height == 2);
-    const double bars = static_cast<double>(black - dot) / kRate / 1.7292;
+    const double bars = static_cast<double>(black - dot) / kRate / marks.bar;
     std::printf("the end: off %.3f s, dot %.3f s, black %.3f s (%.2f bars of afterglow)\n",
                 showTime(any, off), showTime(any, dot), showTime(any, black), bars);
     CHECK(std::fabs(bars - 2) < 0.05);
@@ -318,7 +326,7 @@ void testTheEndPowerOff() {
         CHECK(evo::retro::theEndLevel(any, f) == 0 && light(f).width == 0);
         CHECK(evo::retro::theEndText(any, f).empty());
     }
-    CHECK(showTime(any, black) < 711.16 - 2);
+    CHECK(showTime(any, black) < evo::show::showDuration() - 1);
 }
 
 void testTheEndImages(RetroStageFixture& fixture) {

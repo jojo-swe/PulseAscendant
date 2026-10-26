@@ -3,7 +3,8 @@
 //   (a) the megamix rows start where the table says, on the beat grid (quarter beats, within 1 ms), from the
 //       chapter's first beat to D, which ends the last row exactly;
 //   (b) at least 8 distinct sources, each row's scene time inside its shot of the source chapter from the
-//       first to the last frame of the row, the drop held on one time;
+//       first to the last frame of the row (WORMHOLE's round its ship pass, which follows Act III's track),
+//       the drop held on one time;
 //   (c) the room holds over [D, 182.52) and around the thank-you card; every 1/60 s frame of the show has a
 //       cut only in FINALE's cut rows and in REBOOT from D on; era is 1 in cuts and 0 in the room; the card
 //       is exactly the three frames 10420-10422, which alone in FINALE do not hold the 2026 picture;
@@ -53,10 +54,12 @@ constexpr std::size_t kRows = kMegamixShots.size();
 constexpr std::array<double, kRows + 1> kListedStarts = {170.29, 171.14, 171.99, 172.84, 173.24, 173.45,
                                                          173.66, 174.09, 174.30, 174.41, 174.51, 174.93};
 
-// The shot of each cut's source chapter the cut must stay inside, in show seconds ([0, 0] for the room).
+// The shot of each cut's source chapter the cut must stay inside, in show seconds ([0, 0] for the room and
+// for WORMHOLE, whose range is wormholeRange()).
 struct Range {
     double from, to;
 };
+constexpr std::size_t kWormholeRow = 9;
 constexpr std::array<Range, kRows> kShotRanges = {{
     {131.5, 140.0},   // RAYTRACE S3
     {158.05, 165.0},  // VECTOR CITY S2, the puddle
@@ -67,9 +70,20 @@ constexpr std::array<Range, kRows> kShotRanges = {{
     {0, 0},
     {75.35, 80.65},   // TUNNEL S2
     {278.15, 289.70}, // NEBULA S2, the star
-    {488.12, 496.8},  // WORMHOLE S0, the ship crossing
+    {0, 0},           // WORMHOLE, the ship crossing: wormholeRange()
     {128.07, 131.5},  // RAYTRACE S2, the drop
 }};
+
+// WORMHOLE's ship crossing: a tenth of a second either side of its pass, which lies in the chapter's first
+// half, at least 2 s before D (modern::shipTimes; scene_ship_test checks the two agree).
+Range wormholeRange() {
+    const int chapter = static_cast<int>(Effect::Wormhole);
+    const double start = show::chapterStart(chapter), end = show::chapterStart(chapter + 1);
+    const double pass = show::wormholePass();
+    const double d = show::transitionMarks(sampleTimeline(start + .01)).downbeat;
+    CHECK(pass > start + 0.1 && pass < start + .5 * (end - start) && pass <= d - 2.0 + 1e-9);
+    return {pass - 0.1, pass + 0.1};
+}
 
 TimelineFrame finaleAt(double t) {
     const TimelineFrame frame = sampleTimeline(t);
@@ -129,13 +143,17 @@ void testSources() {
             continue;
         }
         sources.insert(shot.source);
-        const Range range = kShotRanges[row];
+        const Range range = row == kWormholeRow ? wormholeRange() : kShotRanges[row];
+        CHECK((shot.from == show::MegamixFrom::ShipPass) == (row == kWormholeRow));
+        CHECK(show::megamixSource(static_cast<int>(row)) ==
+              (row == kWormholeRow ? show::wormholePass() + shot.sourceSeconds : shot.sourceSeconds));
         for (const double t : {start, start + kFrame, (start + end) * .5, end - 1e-4}) {
             const std::optional<SceneCut> cut = show::sceneCut(finaleAt(t));
             CHECK(cut.has_value());
             CHECK(cut->chapter == static_cast<int>(shot.source));
             CHECK(cut->frozen == shot.frozen);
-            const double expected = shot.frozen ? shot.sourceSeconds : shot.sourceSeconds + (t - start);
+            const double source = show::megamixSource(static_cast<int>(row));
+            const double expected = shot.frozen ? source : source + (t - start);
             CHECK(std::abs(cut->showSeconds - expected) < 1e-9);
             CHECK(cut->showSeconds >= range.from && cut->showSeconds < range.to);
             CHECK(sampleTimeline(cut->showSeconds).effect == shot.source);
@@ -168,9 +186,19 @@ void testCutsAcrossTheShow() {
     CHECK(!show::sceneCut(finaleAt(173.66 - kFrame)).has_value());
     CHECK(!show::sceneCut(finaleAt(173.71 + kFrame)).has_value());
 
-    const double rebootD = show::transitionMarks(sampleTimeline(show::chapterStart(kReboot) + .01)).downbeat;
+    const show::TransitionMarks reboot =
+        show::transitionMarks(sampleTimeline(show::chapterStart(kReboot) + .01));
+    const double rebootD = reboot.downbeat;
     std::printf("REBOOT: D %.4f\n", rebootD);
-    CHECK(std::abs(rebootD - 426.32) < 0.02);
+    // D is a downbeat of Act III's track with the Portal's two bars either side inside the chapter, and the
+    // accent follows it within the bar.
+    const show::BeatGridView act3 = show::beatGrid(2);
+    const int dBeat = act3.beatAt(rebootD - show::chapterStart(kReboot) + 1e-6);
+    CHECK(act3.bar(dBeat) == 0);
+    CHECK(std::abs(act3.beatTime(dBeat) + show::chapterStart(kReboot) - rebootD) < 1e-6);
+    CHECK(rebootD - 2 * reboot.bar > show::chapterStart(kReboot));
+    CHECK(rebootD + 2 * reboot.bar < show::chapterStart(kGalaxy));
+    CHECK(reboot.accent > rebootD && reboot.accent < rebootD + reboot.bar);
 
     long cutFrames = 0, frames = 0, cardFrames = 0;
     for (long i = 0; i / 60.0 < show::showDuration(); ++i, ++frames) {
@@ -194,8 +222,8 @@ void testCutsAcrossTheShow() {
         cutFrames += cut ? 1 : 0;
     }
     std::printf("sweep: %ld frames, %ld with a cut\n", frames, cutFrames);
-    CHECK(frames > 60 * 700);
-    CHECK(cutFrames > 60 * 4); // the megamix's cut rows and REBOOT from D: about 3.9 s + 5.7 s
+    CHECK(frames >= static_cast<long>(60 * show::showDuration()));
+    CHECK(cutFrames > 60 * 4); // the megamix's cut rows (about 3.9 s) and REBOOT from D to GALAXY
     CHECK(cardFrames == show::kThankYouFrames);
 }
 

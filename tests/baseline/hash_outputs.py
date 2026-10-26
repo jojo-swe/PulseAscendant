@@ -54,6 +54,11 @@ stream_studio_ascent changed.
 Then regenerated for RAYTRACE's cirrus (no lavender), INFINITY's slate haze and GLENZ's floor shot: only
 raytrace_2026 changed.
 Then regenerated for PLASMA's layered strands inside the slab: only plasma_wipe changed.
+Then regenerated for Act III's new track, whose chapters follow the form of the track: galaxy_20 (now a
+fifth into GALAXY, found from --show-info), reboot_10 and reboot_60 changed; every Act I and II output
+stayed byte for byte.
+Then regenerated for the extended Act III track (its chapters follow its 17-phrase form): only galaxy_20
+changed, through the track's reactivity; the real-time fast mode left every export byte for byte.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How a change uses it (run from evolution/ after building the linux preset):
@@ -75,6 +80,7 @@ Exit code 1 when --check finds a difference.
 
 import argparse
 import hashlib
+import json
 import os
 import shutil
 import struct
@@ -82,7 +88,8 @@ import subprocess
 import sys
 import zlib
 
-# name, show seconds, spp, width, height, EVO_FORCE_ERA (None: as the show has it), Studio?
+# name, show seconds (or a chapter's title and a fraction of it, from --show-info: Act III follows the form of
+# its track), spp, width, height, EVO_FORCE_ERA (None: as the show has it), Studio?
 CAPTURES = [
     ("studio_night_40", 202.68, 2, 160, 90, None, True),  # the first reference frames
     ("reboot_60", 424.14576, 2, 160, 90, None, True),  # the first reference frames
@@ -94,7 +101,7 @@ CAPTURES = [
     ("boot_50", 3.5, 2, 160, 90, None, False),
     ("plasma_wipe", 55.7, 2, 160, 90, None, False),
     ("nebula_40", 274.5, 2, 160, 90, None, False),
-    ("galaxy_20", 437.3, 2, 160, 90, None, False),
+    ("galaxy_20", ("GALAXY", 0.2), 2, 160, 90, None, False),
     ("flyby_2026", 15.0, 2, 160, 90, "1", False),
     ("raytrace_2026", 120.0, 2, 160, 90, "1", False),
 ]
@@ -141,6 +148,16 @@ def mean_luminance(path):
     return total / (255.0 * width * height)
 
 
+def show_time(exe, when):
+    """Show seconds: `when` itself, or for (title, fraction) that far into that chapter (--show-info)."""
+    if not isinstance(when, tuple):
+        return when
+    title, fraction = when
+    info = json.loads(run([exe, "--show-info"], None))
+    chapter = next(c for c in info["chapters"] if c["title"] == title)
+    return round(chapter["start"] + fraction * chapter["duration"], 4)
+
+
 def sha256(path):
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
@@ -171,7 +188,8 @@ def main():
     for name, seconds, spp, width, height, force_era, studio in CAPTURES:
         directory = os.path.join(args.outdir, name)
         os.makedirs(directory)
-        out = run([args.exe, "--capture-dir", directory, "--time", repr(seconds), "--width", str(width),
+        when = show_time(args.exe, seconds)
+        out = run([args.exe, "--capture-dir", directory, "--time", repr(when), "--width", str(width),
                    "--height", str(height), "--spp", str(spp), "--validation"], force_era)
         path = out.decode().strip().splitlines()[-1]
         sums[name] = sha256(path)

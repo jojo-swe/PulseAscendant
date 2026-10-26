@@ -59,12 +59,14 @@ std::vector<text::Item> hudItems(const show::TimelineFrame& frame, std::uint32_t
 
 Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings& settings)
     : ring_(ring), timers_(ctx, ring, kMaxGpuScopes), crt_(checked(settings).crt), hud_(settings.hud),
-      hudTitle_(settings.hudTitle), mode_(settings.mode), spp_(settings.spp),
+      hudTitle_(settings.hudTitle), mode_(settings.mode),
+      fast_(settings.fast && settings.mode == RenderMode::Interactive), spp_(settings.spp),
       maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)),
       shutterSeconds_(settings.mode == RenderMode::Export ? settings.shutterSeconds : 0.0),
       submitPerSlice_(settings.mode == RenderMode::Export && settings.submitPerSlice), text_(ctx, ring),
-      retro_(ctx, ring, text_), modern_(ctx, ring, settings.width, settings.height, settings.detail,
-                                        settings.sceneFactory, settings.sceneMap, settings.traceScale),
+      retro_(ctx, ring, text_),
+      modern_(ctx, ring, settings.width, settings.height, settings.detail, settings.sceneFactory,
+              settings.sceneMap, settings.traceScale, modern::TracerOptions{settings.counters, fast_}),
       compositor_(ctx, ring, text_, settings.width, settings.height),
       cards_(ctx, ring, [this](show::Effect effect) { return modern_.nowCard(effect); }) {
     modern_.setTimers(&timers_);
@@ -148,7 +150,7 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
         const HistoryState state{stats_.historyReset,
                                  history_.framesSinceReset(),
                                  mode_,
-                                 frameSpp(mode_, spp_, history_.framesSinceReset()),
+                                 frameSpp(mode_, spp_, history_.framesSinceReset(), fast_),
                                  maxBounces_,
                                  modern::frameSeedFor(scene.showSeconds, seedFrames),
                                  shutterSeconds_,

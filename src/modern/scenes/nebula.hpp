@@ -40,7 +40,7 @@
 // The sun is the environment's disc, kPlasmaPlanetSun, fixed: the camera moves, the planet does not.
 //   shot 0, until two bars before D: from orbit over the night side, the sea the only light, the limb's air
 //          a thin line above it;
-//   shot 1: the camera cranes up the tangent towards the sun; on D (468.55) its disc clears the limb, exactly
+//   shot 1: the camera cranes up the tangent towards the sun; on D its disc clears the limb, exactly
 //          (plasmaPlanetSunClearance crosses 0 on D);
 //   shot 2, from D: towards the sun and down over the terminator, which crosses the frame as the camera
 //          descends into the morning;

@@ -1,6 +1,6 @@
 {
-  "frames": 34135680,
-  "duration": 711.16,
+  "frames": 35405760,
+  "duration": 737.62,
   "sample_rate": 48000,
   "channels": 2,
   "encoding": "PCM signed 16 bit",
@@ -23,12 +23,12 @@
       "sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d"
     },
     {
-      "source": "Rigid Arpeggios.mp3",
-      "runtime_file": "assets/music/Rigid Arpeggios.wav",
-      "frames": 14340480,
-      "sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335"
+      "source": "Cyberpunk Assembly Extended.mp3",
+      "runtime_file": "assets/music/Cyberpunk Assembly Extended.wav",
+      "frames": 15610560,
+      "sha256": "ac84f8b68f55d1896362c1f0c7ca8a41bc7490263cdd6b97880e62287a123f5a"
     }
   ],
-  "sha256": "39db88573e32440e6f0d57e1c646ab4d594833472af719acf61421924b9bc585",
+  "sha256": "1d8d38e7d39ca31bbe507639748a6f402dfa87aaf753639c198564d44e2defea",
   "runtime_file": "assets/music/show.wav"
 }

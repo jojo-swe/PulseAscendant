@@ -1,7 +1,7 @@
 {
   "method": "100 Hz log spectral flux; autocorrelation + comb tempo with 120 BPM log-normal prior; tempo disambiguated by phase-optimised bass onset mean on 90-180 BPM candidate grids (switch at >= 5 % better); DP beat tracking; +/-6 beat local linear smoothing (follows tempo drift); 4/4 bar position from bass onset and harmonic change in +/-24 beat windows",
   "meter": 4,
-  "bpm_median": 139.811,
+  "bpm_median": 139.795,
   "tracks": [
     {
       "source": "Amiga Trance Demo.wav",
@@ -39,21 +39,21 @@
       "tracker_jitter_ms_p90": 4.62
     },
     {
-      "source": "Rigid Arpeggios.wav",
-      "sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335",
-      "frames": 14340480,
-      "bpm_median": 138.298,
-      "beats": 686,
-      "downbeats": 175,
-      "tempo_comb_bpm": 92.296,
+      "source": "Cyberpunk Assembly Extended.wav",
+      "sha256": "ac84f8b68f55d1896362c1f0c7ca8a41bc7490263cdd6b97880e62287a123f5a",
+      "frames": 15610560,
+      "bpm_median": 138.053,
+      "beats": 748,
+      "downbeats": 187,
+      "tempo_comb_bpm": 92.245,
       "tempo_method": "bass-grid",
       "tempo_candidates": {
-        "137.90": 0.2139,
-        "110.44": 0.1564,
-        "91.91": 0.162
+        "137.99": 0.5204,
+        "91.99": 0.3254
       },
       "tracker_jitter_ms_median": 2.31,
-      "tracker_jitter_ms_p90": 4.62
+      "tracker_jitter_ms_p90": 5.38,
+      "bar_lines_from": "form (tools/song_form.py)"
     }
   ]
 }

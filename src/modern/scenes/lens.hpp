@@ -90,6 +90,10 @@ std::uint32_t lensPhotonCount(std::uint32_t full, SceneDetail detail);
 // settling downbeat D for target = the accent), or 0 without one.
 double lensBarLine(const show::TimelineFrame& frame, double target);
 double lensDownbeatBefore(const show::TimelineFrame& frame, double target);
+// LENS OF GOD's D, in chapter seconds: where its focus starts the walk onto the accent and the camera comes
+// down by the foreground tessera. The focus walks onto the accent, so this is the downbeat at least most of a
+// beat before it: a bar before the accent when the accent is itself a downbeat (as Act III's form puts it).
+double godSettle(const show::TimelineFrame& frame);
 // The chapter's continuous beat position at the frame: beats since the chapter's settling downbeat D (whole
 // numbers on the beats, linear between them).
 double lensBeatsSinceD(const show::TimelineFrame& frame);
@@ -157,9 +161,9 @@ double godSpotDiameter(const show::TimelineFrame& frame);
 
 // The chapter cameras (pure functions of localSeconds, chapterDuration, accentSeconds and the beat grid):
 //   LENS         shot 0 until D: the plan view matched to 1993's rotozoom; shot 1 from D: low beside the
-//   ball. LENS OF GOD  shot 0: orbit; shot 1 from the bar line nearest 8.7 s: down to the lens's rim; shot 2
-//   from D:
-//                low by the foreground tessera; shot 3 from the bar line nearest 22.1 s: back up to orbit.
+//   ball. LENS OF GOD  shot 0: orbit; shot 1 from four bars before D: down to the lens's rim; shot 2 from D
+//   (godSettle): low by the foreground tessera; shot 3 from four bars after the accent's downbeat: back up
+//   to orbit.
 // Any other effect gets LENS's camera.
 Camera lensCamera(const show::TimelineFrame& frame);
 float lensExposureEV(show::Effect effect);

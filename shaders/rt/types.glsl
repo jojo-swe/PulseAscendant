@@ -64,6 +64,24 @@ const uint kTraceFlagNee = 1u; // FrameUniforms.flags
 const uint kTraceFlagRussianRoulette = 2u;
 const uint kTraceFlagFixedLightSelection = 4u; // the original fixed selectWeights (comparisons)
 const uint kTraceFlagThinPanes = 8u; // the frame has thin-walled glass (shadow rays then pass through it)
+const uint kTraceFlagFilteredGrid = 16u; // the grid's density through the sampler's filter (not lavapipe)
+// The features a path tracer pipeline is built for (common.glsl's kFeatures, specialization constant 0;
+// rt::kFeature* in src/rt/gpu_types.hpp): every one in the generic pipeline; a scene's own pipeline (the
+// window's fast mode) only those its frames use, so the compiler drops the rest and their registers.
+const uint kFeatureLensing = 1u;      // bent main rays
+const uint kFeatureFog = 2u;          // height fog
+const uint kFeatureGrid = 4u;         // a grid medium
+const uint kFeatureCaustics = 8u;     // caustic photon maps (and the paths they exclude)
+const uint kFeaturePanes = 16u;       // thin-walled glass panes on shadow rays
+const uint kFeatureTree = 32u;        // the light tree
+const uint kFeatureDispersion = 64u;  // glass with an Abbe number
+const uint kFeatureRetro = 128u;      // the retro screen
+const uint kFeatureStudioPatterns = 256u; // wood, brushed metal, concrete, the CRT's glass, key caps
+const uint kFeatureCityPatterns = 512u;   // facades, streets, trails, signs
+const uint kFeatureShipPatterns = 1024u;  // hull, planet, the wormhole's wall and rings
+const uint kFeatureSeaPatterns = 2048u;   // sea beads, DOTS' light ring
+const uint kFeaturePlasmaSea = 4096u;     // PLASMA PLANET's sea
+const uint kFeatureTesserae = 8192u;      // the 1993 rotozoom's stones
 // TLAS instance masks: thin-walled glass panes, and everything else (shadow rays see only the latter).
 const uint kInstanceMaskSolid = 1u;
 const uint kInstanceMaskPane = 2u;

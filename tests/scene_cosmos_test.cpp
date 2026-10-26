@@ -5,8 +5,9 @@
 //     16,777,216 stars, and those are the full-detail configuration (the frames' counts, the capacities) and
 //     the scene's own nowCard at any detail; the galaxy's frames splat 3x3 in the window;
 // (a) also: the text waypoint (waypointTargets) holds every particle on its pixel of the line;
-// (w) the show's waypoint spells kAscendantWaypointText over 643.97 - 644.04, at least 80 % of its glyph cells
-//     covered at 643.99, dissolved into the flight before the landing, which stays exact on 646.18;
+// (w) the show's waypoint spells kAscendantWaypointText over its four frames from the downbeat a bar before
+//     D, at least 80 % of its glyph cells covered in the middle of them, dissolved into the flight before the
+//     landing, which stays exact on the accent: the biggest drop of Act III's track (the form's beat);
 // (a) ASCENDANT's flight (the CPU twin): before its lift-off every particle is in the core, at the waypoint and
 //     through its hold every particle is on its waypoint formation, on the accent every particle is on its
 //     logo target, until the release it stays within the logo's sway, after it it has scattered;
@@ -38,6 +39,7 @@
 #include "render/renderer.hpp"
 #include "rt/particles.hpp"
 #include "show/director.hpp"
+#include "show/generated/cue_data.hpp"
 #include "show/timeline.hpp"
 #include "text/font8x8.hpp"
 #include "retro/boot.hpp"
@@ -87,6 +89,38 @@ int chapterOf(show::Effect effect) {
         if (show::sampleTimeline(show::chapterStart(c)).effect == effect)
             return c;
     throw std::runtime_error("no such chapter");
+}
+
+// A chapter's downbeats in show seconds, from the beat grid.
+std::vector<double> downbeatsOf(int chapter) {
+    const double start = show::chapterStart(chapter), end = show::chapterStart(chapter + 1);
+    const show::TimelineFrame head = show::sampleTimeline(start);
+    const double offset = head.showSeconds - head.trackSeconds;
+    const show::BeatGridView grid = show::beatGrid(head.track);
+    std::vector<double> out;
+    for (int b = 0; b < grid.count(); ++b) {
+        const double t = grid.beatTime(b) + offset;
+        if (grid.bar(b) == 0 && t >= start - 1e-6 && t <= end + 1e-6)
+            out.push_back(t);
+    }
+    return out;
+}
+
+// The downbeat a bar before `t` (a downbeat of the chapter) and the chapter's last downbeat at least a
+// quarter second before its end, in show seconds.
+double downbeatBefore(int chapter, double t) {
+    double before = -1;
+    for (const double d : downbeatsOf(chapter))
+        if (d < t - 1e-3)
+            before = d;
+    return before;
+}
+double lastDownbeat(int chapter) {
+    double last = -1;
+    for (const double d : downbeatsOf(chapter))
+        if (d <= show::chapterStart(chapter + 1) - 0.25)
+            last = d;
+    return last;
 }
 
 show::TimelineFrame at(int chapter, double local) {
@@ -169,12 +203,16 @@ void testFlight() {
                 "every %.3f s, release %.3f (show %.3f)\n",
                 t.liftStart, t.liftSpread, t.waypoint, t.hold, t.accent, t.firstRow, t.bar, t.release,
                 show::chapterStart(chapter) + t.release);
-    // The waypoint one bar before D (643.96), the release on the chapter's last downbeat of the beat grid
-    // (666.43; the directed 666.71 is no downbeat of the grid, whose bars here are 1.73 s).
-    CHECK(std::abs(show::chapterStart(chapter) + t.waypoint - 643.96) < 0.05);
-    CHECK(std::abs(show::chapterStart(chapter) + t.release - 666.43) < 0.05);
-    CHECK(t.liftStart + t.liftSpread < t.waypoint && t.waypoint + t.hold < t.accent && t.accent < t.firstRow &&
-          t.firstRow + 6 * t.bar < t.release);
+    // The landing on the accent, the biggest drop of Act III's track (D: the accent is its downbeat); the
+    // waypoint one bar before D; the release on the chapter's last downbeat of the beat grid; every row lit
+    // (one a bar, from the bottom) before the release.
+    const double start = show::chapterStart(chapter);
+    const double drop = show::generated::chapterAccents[chapter];
+    CHECK(std::abs(start + t.accent - drop) < 1e-3);
+    CHECK(std::abs(start + t.waypoint - downbeatBefore(chapter, drop)) < 1e-3);
+    CHECK(std::abs(start + t.release - lastDownbeat(chapter)) < 1e-3);
+    CHECK(t.liftStart + t.liftSpread < t.waypoint && t.waypoint + t.hold < t.accent &&
+          t.accent <= t.firstRow + 1e-3 && t.firstRow + 6 * t.bar < t.release);
 
     const std::uint32_t count = modern::kAscendantParticles;
     const modern::ParticleFrame p = modern::ascendantParticleFrame(at(chapter, t.accent), count);
@@ -250,19 +288,22 @@ void testFlight() {
 // --- (w) the show's waypoint
 // ----------------------------------------------------------------------------------------------
 
-// ASCENDANT's frames spell kAscendantWaypointText (formation 1): the formation is reached on the waypoint and
-// holds for its four frames, 643.97 to 644.04 (each within a frame); at 643.99 at least 80 % of its glyph
-// cells (the lit pixels of the 8x8 font) hold a particle; half a second before the accent it has dissolved
-// into the flight; and the logo still lands on the accent (646.18) with no error, as from the vortex.
+// ASCENDANT's frames spell kAscendantWaypointText (formation 1): the formation is reached on the waypoint
+// (the downbeat a bar before D) and holds for its four frames; in the middle of them at least 80 % of its
+// glyph cells (the lit pixels of the 8x8 font) hold a particle; half a second before the accent it has
+// dissolved into the flight; and the logo still lands on the accent (the biggest drop) with no error, as
+// from the vortex.
 void testWaypointText() {
     const int chapter = chapterOf(show::Effect::Ascendant);
     const double start = show::chapterStart(chapter);
     const modern::AscendantTimes t = modern::ascendantTimes(at(chapter, 0.0));
     std::printf("(w) the waypoint holds %.4f - %.4f, the logo lands on %.4f\n", start + t.waypoint,
                 start + t.waypoint + t.hold, start + t.accent);
-    CHECK(std::abs(start + t.waypoint - 643.97) <= 1.0 / 60);
-    CHECK(std::abs(start + t.waypoint + t.hold - 644.04) <= 1.0 / 60);
-    CHECK(std::abs(start + t.accent - 646.18) < 0.01);
+    const double drop = show::generated::chapterAccents[chapter];
+    const double waypoint = downbeatBefore(chapter, drop);
+    CHECK(std::abs(start + t.waypoint - waypoint) <= 1.0 / 60);
+    CHECK(std::abs(start + t.waypoint + t.hold - (waypoint + 4.0 / 60)) <= 1.0 / 60);
+    CHECK(std::abs(start + t.accent - drop) < 1e-3);
 
     const modern::WaypointTargets text = modern::waypointTargets(modern::kAscendantWaypointText);
     CHECK(text.text == "HI. YES, YOU.");
@@ -297,9 +338,9 @@ void testWaypointText() {
         }
         return double(std::count(covered.begin(), covered.end(), true)) / double(text.pixels.size());
     };
-    const double held = coverage(643.99);
+    const double held = coverage(start + t.waypoint + 0.5 * t.hold);
     const double gone = coverage(start + t.accent - 0.5);
-    std::printf("(w) \"%s\": %zu glyph cells, %.1f %% covered at 643.99, %.1f %% half a second before the "
+    std::printf("(w) \"%s\": %zu glyph cells, %.1f %% covered in the hold, %.1f %% half a second before the "
                 "landing\n",
                 text.text.c_str(), text.pixels.size(), 100.0 * held, 100.0 * gone);
     CHECK(held >= 0.8);
@@ -395,7 +436,14 @@ void testReboot() {
     const double start = show::chapterStart(galaxy);
     const modern::RebootMarks m = modern::rebootMarks(at(galaxy, 0.0));
     std::printf("(r) REBOOT's crossing %.3f, accent %.3f (show seconds)\n", start + m.crossing, start + m.accent);
-    CHECK(std::abs(start + m.crossing - 426.32) < 0.03 && std::abs(start + m.accent - 426.75) < 0.03);
+    // REBOOT's accent is the beat its form names, a beat after its D (the crossing, a downbeat).
+    const int reboot = chapterOf(show::Effect::Reboot);
+    CHECK(std::abs(start + m.accent - show::generated::chapterAccents[reboot]) < 1e-3);
+    const show::BeatGridView grid = show::beatGrid(2);
+    const double act3 = show::chapterStart(reboot);
+    const int crossing = grid.beatAt(start + m.crossing - act3 + 1e-4);
+    CHECK(grid.bar(crossing) == 0 && std::abs(grid.beatTime(crossing) + act3 - (start + m.crossing)) < 1e-3);
+    CHECK(std::abs(grid.beatTime(crossing + 1) + act3 - (start + m.accent)) < 1e-3);
     // From the crossing the director shows GALAXY at negative chapter time, and the camera flies on without a
     // jump into the chapter's own approach (shot 0) up to its cut.
     const float cut = modern::shots::barsOf(at(galaxy, 0.0)).at(-4);
@@ -641,7 +689,7 @@ int main(int argc, char** argv) {
             test::SweepLimits limits;
             limits.maxCameraStep = 3.f;
             const test::SweepStats stats = test::checkSceneSweep(SceneId::Cosmos, limits);
-            CHECK(stats.frames > 3000);
+            CHECK(stats.frames == test::sweepFrames(SceneId::Cosmos));
         });
         timed("p", [&] { test::checkChapterPictures(ctx, SceneId::Cosmos); });
         CHECK(ctx.validationMessageCount() == 0);

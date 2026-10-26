@@ -9,17 +9,25 @@
 namespace evo {
 
 // --bench: the window's rendering, headless and timed on the GPU, so it can be measured
-// on RTX hardware. Interactive mode at --width x --height, --spp (1), --trace-scale (0.67) and
+// on RTX hardware. Interactive mode at --width x --height, --spp (1), --trace-scale (by default each
+// chapter at autoTraceScale, app/auto_scale.hpp, as the window starts it), the window's fast
+// mode (unless --no-fast-mode) and
 // --detail, with the window's CRT and HUD settings (title included); every path-traced scene of the chosen
 // chapters is prepared first. Per chapter (--chapters, default all, in the order given): two warm-up frames
-// (the history reset's 4 and 2 spp), then --bench-frames frames 1/--fps apart from 20 % into the chapter, two
-// in flight as in the window. Then one JSON line on stdout:
+// (the history reset's extra samples: 4 and 2 spp, 2 and 1 in fast mode), then --bench-frames frames 1/--fps
+// apart from 20 % into the chapter, two in flight as in the window. Then one JSON line on stdout:
 //   {"chapter", "title", "scene", "frames", "spp", "traceScale", "width", "height", "traceWidth",
-//    "traceHeight", "device", "timestamps", "gpuMs": {"total", "retro", "fill", "tlas", "trace", "denoise",
-//    "upscale", "tonemap", "compositor"}, "fps"}
+//    "traceHeight", "device", "timestamps", "gpuMs": {"total", "retro", "fill", "particles", "medium",
+//    "tlas", "photons", "trace", "splats", "denoise", "upscale", "bloom", "tonemap", "compositor"}, "cpuMs",
+//    "waitMs", "fast", "fps"}
 // gpuMs are means over the timed frames (a pass a frame did not run counts 0); timestamps is false (and every
-// time 0) on a queue without timestamps; fps counts the timed frames over their wall-clock time, waits for
-// the GPU included. Progress goes to stderr. Throws std::runtime_error for a chapter the show does not have.
+// time 0) on a queue without timestamps; cpuMs is the mean wall-clock time of recording a frame
+// (Renderer::render: the scene's frame, uploads, command recording) and waitMs the mean time ring.begin()
+// waited for the GPU; fps counts the timed frames over their wall-clock time, waits for the GPU included.
+// With --bench-counters the tracer is the counting build and each line also has "counters" (the path
+// tracer's work per trace pixel per frame, modern::kCounterNames) and "stats" (the last timed frame's
+// render::ModernStage::FrameStats). Progress goes to stderr. Throws std::runtime_error for a chapter the show
+// does not have.
 int runBench(const Options& options);
 
 // One bench result as its JSON line (without the newline).
@@ -32,7 +40,10 @@ struct BenchRecord {
     unsigned width = 0, height = 0, traceWidth = 0, traceHeight = 0;
     bool timestamps = false;
     std::vector<std::pair<std::string, double>> gpuMs; // in the order of benchPasses()
+    double cpuMs = 0.0, waitMs = 0.0;
+    bool fast = false; // the window's fast mode (--no-fast-mode: false)
     double fps = 0.0;
+    std::vector<std::pair<std::string, double>> counters, stats; // --bench-counters only (else empty)
 };
 std::string benchJson(const BenchRecord& record);
 // The passes every line reports, in order.

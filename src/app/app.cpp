@@ -1,5 +1,6 @@
 #include "app/app.hpp"
 
+#include "app/auto_scale.hpp"
 #include "app/capture.hpp"
 #include "app/clock.hpp"
 #include "gfx/context.hpp"
@@ -105,6 +106,7 @@ struct Surface {
 gfx::Context createWindowedContext(const Options& options) {
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
+    contextOptions.pipelineCacheFile = gfx::pipelineCachePath(); // no recompiles on the next run
     contextOptions.loader =
         reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
     if (!contextOptions.loader)
@@ -267,9 +269,13 @@ int runWindowed(const Options& options) {
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     settings.detail = modern::SceneDetail{options.detail};
     settings.traceScale = traceScaleFor(options); // 0.67 by default: traced below the window size, upscaled
+    settings.fast = options.fastMode;             // the window's fast mode unless --no-fast-mode
     render::Renderer renderer(ctx, ring, settings);
     renderer.prepareAll(); // every scene's BLASes and the pipeline now, not as a hitch at a chapter start
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
+    // --trace-scale auto (the default): the trace scale follows the chapter and the GPU's frame time.
+    const bool adaptive = adaptiveTraceScale(options);
+    TraceScaleController scaleController(settings.width, settings.height);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
     // The secret part: called up by its four keys, or from the start with --secret-part, when the music
@@ -377,6 +383,20 @@ int runWindowed(const Options& options) {
         }
 
         const show::TimelineFrame frame = show::sampleTimeline(clock.now());
+        if (adaptive) {
+            // Before the frame is recorded: a change waits for the frames in flight and resets the history.
+            const VkExtent2D output = renderer.output().extent();
+            if (output.width != settings.width || output.height != settings.height) {
+                settings.width = output.width;
+                settings.height = output.height;
+                scaleController.resize(output.width, output.height);
+            }
+            double gpuMs = 0.0;
+            for (const auto& [name, ms] : renderer.lastStats().gpuMs)
+                if (name == "total")
+                    gpuMs = ms;
+            renderer.setTraceScale(scaleController.update(frame.chapter, gpuMs));
+        }
         // The audio stream failed mid-show (or came back): say so, as at the start.
         if (clock.silent() != silent) {
             silent = clock.silent();
@@ -433,6 +453,7 @@ int runRenderStream(const Options& options) {
 #endif
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
+    contextOptions.pipelineCacheFile = gfx::pipelineCachePath(); // no recompiles on the next run
     gfx::Context ctx = gfx::Context::create(contextOptions);
 
     // The epsilon keeps products like 0.7 * 10 = 7.000000000000001 from adding a frame.

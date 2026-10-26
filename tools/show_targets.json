@@ -1,6 +1,7 @@
 {
-  "max_chapter_seconds": 40,
-  "tracks": ["Amiga Trance Demo", "Guitar Trance", "Rigid Arpeggios"],
+  "max_chapter_seconds": 42,
+  "tracks": ["Amiga Trance Demo", "Guitar Trance", "Cyberpunk Assembly Extended"],
+  "act_iii": "Act III (the chapters with a \"form\") follows the form of its track, found by tools/song_form.py and recorded in music/form.json, so a new Act III track needs no edit here. If a track's form calls for it, these are the values to adjust: the events and bar offsets of GALAXY, ASCENDANT and THE END; the fractions of PLASMA PLANET to METROPOLIS (their place between GALAXY and ASCENDANT) and of CREDITS (between ASCENDANT and THE END); the accents; and max_chapter_seconds. tools/direct_music.py explains the expressions, music/README.md the swap.",
   "chapters": [
     {"title": "BOOT", "target": 0, "track": 0},
     {"title": "FLYBY", "target": 8, "track": 0},
@@ -22,16 +23,16 @@
     {"title": "SPHERE STORM", "target": 344.0, "track": 1},
     {"title": "SINGULARITY", "target": 368.0, "track": 1},
     {"title": "RETURN", "target": 390.0, "track": 1},
-    {"title": "REBOOT", "target": 412.4, "track": 2},
-    {"title": "GALAXY", "target": 430.4, "track": 2},
-    {"title": "PLASMA PLANET", "target": 458.4, "track": 2},
-    {"title": "WORMHOLE", "target": 486.4, "track": 2},
-    {"title": "CRYSTAL CITY", "target": 514.4, "track": 2},
-    {"title": "LENS OF GOD", "target": 542.4, "track": 2},
-    {"title": "RAYTRACE INFINITY", "target": 570.4, "track": 2},
-    {"title": "METROPOLIS", "target": 602.4, "track": 2},
-    {"title": "ASCENDANT", "target": 634.4, "track": 2},
-    {"title": "CREDITS", "target": 666.4, "track": 2},
-    {"title": "THE END", "target": 696.4, "track": 2}
+    {"title": "REBOOT", "track": 2, "form": {"start": "track start", "accent": "middle +1 beat"}},
+    {"title": "GALAXY", "track": 2, "form": {"start": "first drop"}},
+    {"title": "PLASMA PLANET", "track": 2, "form": {"start": 0.1176}},
+    {"title": "WORMHOLE", "track": 2, "form": {"start": 0.2941}},
+    {"title": "CRYSTAL CITY", "track": 2, "form": {"start": 0.4118}},
+    {"title": "LENS OF GOD", "track": 2, "form": {"start": 0.5882}},
+    {"title": "RAYTRACE INFINITY", "track": 2, "form": {"start": 0.7059}},
+    {"title": "METROPOLIS", "track": 2, "form": {"start": 0.8235}},
+    {"title": "ASCENDANT", "track": 2, "form": {"start": "biggest drop -8 bars", "accent": "biggest drop"}},
+    {"title": "CREDITS", "track": 2, "form": {"start": 0.5162, "accent": "start +11 bars +3 beats", "min_bars": 13}},
+    {"title": "THE END", "track": 2, "form": {"start": "tail", "accent": "track end -2 bars -1 s"}}
   ]
 }

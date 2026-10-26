@@ -12,6 +12,7 @@
 #include "retro/scroller.hpp"
 #include "retro_stage_fixture.hpp"
 #include "show/cues.hpp"
+#include "show/generated/cue_data.hpp"
 #include "show/music_curves.hpp"
 #include "show/timeline.hpp"
 #include "test_env.hpp"
@@ -260,8 +261,11 @@ void testCredits() {
             after += item.text;
         CHECK(after.find(std::string(evo::retro::creditGlyphs(texts[c])[0])) != std::string::npos);
     }
-    // THE END? lands centred on the accent (688.02 s) and holds there, flat.
-    CHECK(std::fabs(start + frame.accentSeconds - 688.02) < 0.01);
+    // THE END? lands centred on the accent (the beat the form of Act III's track names, three beats after
+    // the bar line it enters on) and holds there, flat, for at least a bar.
+    const double accentBeat = evo::show::generated::chapterAccents[kCreditsChapter];
+    CHECK(std::fabs(start + frame.accentSeconds - accentBeat) < 1e-6);
+    CHECK(frame.chapterDuration - frame.accentSeconds > frame.beatSeconds * 4);
     const auto accent = static_cast<std::uint32_t>(std::floor(frame.accentSeconds * 35));
     for (std::uint32_t f = accent + 1; f < static_cast<std::uint32_t>(frame.chapterDuration * 35); f += 13) {
         const std::vector<Item> items = evo::retro::creditsText(frame, f);

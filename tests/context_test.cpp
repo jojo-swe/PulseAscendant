@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -76,6 +78,30 @@ void testCountsValidationMessages() {
     CHECK(evo::gfx::validationMessagesReported() > before);
 }
 
+// The pipeline cache file: written when the Context goes, with this device's header; a file of another
+// device's or of garbage is ignored rather than handed to the driver.
+void testPipelineCacheFile() {
+    const std::filesystem::path file = std::filesystem::temp_directory_path() / "evo_context_test_cache.bin";
+    std::filesystem::remove(file);
+    {
+        auto ctx = evo::gfx::Context::create({.pipelineCacheFile = file});
+        CHECK(ctx.pipelineCache() != VK_NULL_HANDLE);
+    }
+    CHECK(std::filesystem::exists(file) &&
+          std::filesystem::file_size(file) >= sizeof(VkPipelineCacheHeaderVersionOne));
+    {
+        std::ofstream(file, std::ios::binary | std::ios::trunc) << "not a pipeline cache";
+        auto ctx = evo::gfx::Context::create({.pipelineCacheFile = file});
+        CHECK(ctx.pipelineCache() != VK_NULL_HANDLE);
+    }
+    CHECK(std::filesystem::file_size(file) >= sizeof(VkPipelineCacheHeaderVersionOne)); // rewritten
+    std::filesystem::remove(file);
+    {
+        auto ctx = evo::gfx::Context::create({});
+        CHECK(ctx.pipelineCache() != VK_NULL_HANDLE); // a cache without a file
+    }
+}
+
 } // namespace
 
 int main() {
@@ -84,6 +110,7 @@ int main() {
         testReportsMissingExtension();
         testRefusesSecondLiveContext();
         testCountsValidationMessages();
+        testPipelineCacheFile();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());
         return 1;

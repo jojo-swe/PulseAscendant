@@ -266,7 +266,17 @@ float accentOf(const show::TimelineFrame& frame) {
     return std::clamp(static_cast<float>(frame.accentSeconds), 0.f, chapterLength(frame));
 }
 
+// The beat's length at the accent (the one ending on it).
+double godBeat(const show::TimelineFrame& frame) {
+    const show::BeatGridView grid = show::beatGrid(frame.track);
+    const double start = frame.trackSeconds - frame.localSeconds;
+    const int b = std::max(grid.beatAt(start + accentOf(frame) + 1e-6), 1);
+    return grid.beatTime(b) - grid.beatTime(b - 1);
+}
+
 float settleOf(const show::TimelineFrame& frame) {
+    if (frame.effect == show::Effect::LensOfGod)
+        return static_cast<float>(godSettle(frame));
     return static_cast<float>(lensDownbeatBefore(frame, accentOf(frame)));
 }
 
@@ -334,8 +344,11 @@ Vec3 godSide() {
 Camera godChapterCamera(const show::TimelineFrame& frame) {
     const auto t = static_cast<float>(frame.localSeconds);
     const float settle = settleOf(frame);
-    const auto descent = static_cast<float>(lensBarLine(frame, 8.7));
-    const auto rise = static_cast<float>(lensBarLine(frame, 22.1));
+    // Down to the rim from four bars before D; back up to orbit from four bars after the accent's downbeat.
+    const double bar = 4.0 * godBeat(frame);
+    const auto descent = static_cast<float>(lensBarLine(frame, settle - 4.0 * bar));
+    const auto rise =
+        static_cast<float>(lensBarLine(frame, lensDownbeatBefore(frame, accentOf(frame)) + 4.0 * bar));
     const Vec3 h = godHeading(), p = godSide(), up{0.f, 1.f, 0.f};
     const Vec3 lens = godLensCentre(frame);
     const Vec3 orbitEnd = h * 1700.f + p * 520.f + Vec3{0.f, 1150.f, 0.f};
@@ -419,6 +432,10 @@ double lensBarLine(const show::TimelineFrame& frame, double target) {
         }
     }
     return best;
+}
+
+double godSettle(const show::TimelineFrame& frame) {
+    return lensDownbeatBefore(frame, accentOf(frame) - 0.75 * godBeat(frame));
 }
 
 double lensDownbeatBefore(const show::TimelineFrame& frame, double target) {

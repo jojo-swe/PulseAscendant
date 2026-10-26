@@ -16,7 +16,7 @@ const uint kLensDimension = 0x6C656E73u; // the disc march's jitter, far from th
 
 // Whether this frame bends rays.
 bool lensingActive() {
-    return frame.lensing != 0u;
+    return featureOn(kFeatureLensing) && frame.lensing != 0u;
 }
 
 // v turned by `angle` towards the unit vector n (perpendicular to v, towards the hole).
@@ -187,6 +187,7 @@ void traceLensed(vec3 origin, vec3 direction, float coneWidth, float coneSpread)
         }
         payload.coneWidth = coneWidth;
         payload.coneSpread = coneSpread;
+        EVO_COUNT(kCountLensSegments, i > 0u ? 1u : 0u);
         traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, kMissIndexSky, p, 0.0, d, len, 0);
         if (phase == 2u) {
             if (rs > 0.0) {
