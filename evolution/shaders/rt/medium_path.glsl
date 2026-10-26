@@ -39,7 +39,7 @@ const uint kMediumSegmentEnd = 2u;       // the path ends in the medium
 // stay below it).
 const uint kMediumBounceOffset = 64u;
 #ifdef EVO_FAST
-const uint kPrimaryScatterSamples = 1u; // the window's fast build (pathtrace.rgen)
+const uint kPrimaryScatterSamples = 2u; // the window's fast build (pathtrace.rgen); one was visibly darker
 #else
 const uint kPrimaryScatterSamples = 4u; // modern::kPrimaryScatterSamples
 #endif

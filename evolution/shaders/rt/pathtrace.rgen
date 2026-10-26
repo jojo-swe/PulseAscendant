@@ -69,11 +69,12 @@
 // shader traces rays (recursion depth 1).
 //
 // The window's fast build (rt_pathtrace_fast.rgen.spv, -DEVO_FAST; modern::TracerOptions::fast, never an
-// export; docs/PERFORMANCE.md): Russian roulette from bounce kRouletteBounce = 2 instead of 3, one in-scatter
-// point on the primary segment instead of four (medium_path.glsl), and one wavelength per path whatever the
-// spp (no hero split, whose saved state the compiler then drops). Every estimate stays unbiased; the
-// window's temporal history and the denoiser absorb the extra variance, and less state is live across each
-// trace.
+// export; docs/PERFORMANCE.md): two in-scatter points on the primary segment instead of four
+// (medium_path.glsl), and one wavelength per path whatever the spp (no hero split, whose saved state the
+// compiler then drops). Both estimates stay unbiased, and less state is live across each trace. The volume
+// layer's extra noise costs a little light where the denoiser's history clamp cuts it (ASCENT's clouds 1.5 %,
+// one point 2.5 %). Russian roulette stays at bounce 3: from bounce 2 it amplified the survivors of dark
+// bounces past the scenes' low indirect clamps, which then cut them (2-3 % of the light).
 
 #include "common.glsl"
 #include "random.glsl"
@@ -103,11 +104,7 @@ const uint kDimsPerBounce = 8u;
 const uint kHeroWavelengths = 4u;
 const uint kHeroSpp = 16u;
 // The first bounce Russian roulette may end a path at (surfaces and medium vertices alike).
-#ifdef EVO_FAST
-const uint kRouletteBounce = 2u;
-#else
 const uint kRouletteBounce = 3u;
-#endif
 // The share of a contribution: 1, or 1 / kHeroWavelengths once the path has split into its wavelengths.
 float gHeroWeight = 1.0;
 // [medium] The dimension that seeds a sample's media stream (medium.glsl), far from the others.

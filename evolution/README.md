@@ -586,9 +586,10 @@ Options:
                        output size). 'auto' (the window's default) adapts it per chapter
                        to hold 60 fps, 0.4..0.67; --bench uses 0.67 unless given 'auto'
                        (then each chapter's scale from the table, docs/PERFORMANCE.md)
-  --no-fast-mode       Trace the window and --bench as the exports do: Russian roulette
-                       from bounce 3, four in-scatter points in media, every photon (by
-                       default the window traces in fast mode; docs/PERFORMANCE.md)
+  --no-fast-mode       Trace the window and --bench as the exports do: four in-scatter
+                       points in media, photons seeded per frame, the generic pipeline,
+                       full BLAS builds (by default the window traces in fast mode;
+                       docs/PERFORMANCE.md)
   --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
                        needs a duration greater than 0
   --headless           Render without opening a window
