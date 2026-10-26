@@ -58,6 +58,8 @@ def main(exe, extra):
     ms = studio["gpuMs"]
     if studio["timestamps"] and not (ms["trace"] > 0 and ms["upscale"] > 0 and ms["total"] > 0):
         sys.exit(f"STUDIO NIGHT at scale 0.67 must time the trace and the upscale: {ms}")
+    if studio.get("fast") is not True:
+        sys.exit(f"--bench renders in the window's fast mode by default: {studio}")
     print(f"bench: {json.dumps(studio)}")
 
     # Two chapters in the order given, at scale 1: no upscale pass; BOOT has no 2026 scene (the placeholder).

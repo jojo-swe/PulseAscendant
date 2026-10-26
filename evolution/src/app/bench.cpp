@@ -69,7 +69,8 @@ std::string benchJson(const BenchRecord& r) {
             out += (out.empty() ? "" : ",") + jsonString(name) + ":" + number(value, 4);
         return "{" + out + "}";
     };
-    std::string extra = ",\"cpuMs\":" + number(r.cpuMs, 4) + ",\"waitMs\":" + number(r.waitMs, 4);
+    std::string extra = ",\"cpuMs\":" + number(r.cpuMs, 4) + ",\"waitMs\":" + number(r.waitMs, 4) +
+                        ",\"fast\":" + (r.fast ? "true" : "false");
     if (!r.counters.empty())
         extra += ",\"counters\":" + object(r.counters);
     if (!r.stats.empty())
@@ -110,6 +111,8 @@ int runBench(const Options& options) {
     settings.detail = modern::SceneDetail{options.detail};
     settings.traceScale = traceScaleFor(options);
     settings.counters = options.benchCounters;
+    settings.fast = options.fastMode; // as the window renders
+    settings.fast = options.fastMode; // as the window renders
     render::Renderer renderer(ctx, ring, settings);
 
     const double step = 1.0 / options.fps;
@@ -179,6 +182,7 @@ int runBench(const Options& options) {
             record.gpuMs.emplace_back(pass,
                                       frames.empty() ? 0.0 : sums[pass] / static_cast<double>(frames.size()));
         record.fps = seconds > 0.0 ? options.benchFrames / seconds : 0.0;
+        record.fast = settings.fast;
         record.cpuMs = 1000.0 * cpuSeconds / options.benchFrames;
         record.waitMs = 1000.0 * waitSeconds / options.benchFrames;
         if (options.benchCounters) {

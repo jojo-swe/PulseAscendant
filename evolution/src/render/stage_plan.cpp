@@ -66,10 +66,11 @@ HistoryReset HistoryTracker::advance(const HistoryKey& key, bool skippedSinceLas
     return reset;
 }
 
-std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset) {
-    if (mode != RenderMode::Interactive || framesSinceReset >= kResetSpp.size())
+std::uint32_t frameSpp(RenderMode mode, std::uint32_t spp, std::uint32_t framesSinceReset, bool fast) {
+    const std::array<std::uint32_t, 2>& reset = fast ? kFastResetSpp : kResetSpp;
+    if (mode != RenderMode::Interactive || framesSinceReset >= reset.size())
         return spp;
-    return std::max(spp, kResetSpp[framesSinceReset]);
+    return std::max(spp, reset[framesSinceReset]);
 }
 
 post::DenoiseSettings denoiseSettingsFor(const HistoryState& state) {

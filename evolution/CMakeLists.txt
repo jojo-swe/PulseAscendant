@@ -211,6 +211,10 @@ evo_add_shaders(evo_modern
     ${EVO_MODERN_SCENE_SHADERS})
 # The counting raygen (--bench-counters: shaders/rt/counters.glsl), rt_pathtrace_counters.rgen.spv.
 evo_add_shader_variants(evo_modern SUFFIX counters DEFINES EVO_COUNTERS SHADERS shaders/rt/pathtrace.rgen)
+# The window's fast raygen (modern::TracerOptions::fast: shaders/rt/pathtrace.rgen's EVO_FAST), and counting.
+evo_add_shader_variants(evo_modern SUFFIX fast DEFINES EVO_FAST SHADERS shaders/rt/pathtrace.rgen)
+evo_add_shader_variants(evo_modern SUFFIX fast_counters DEFINES EVO_FAST EVO_COUNTERS SHADERS
+    shaders/rt/pathtrace.rgen)
 
 # The run modes (windowed, render stream, capture, device info) and the show clock; SDL3 provides the
 # window, the Vulkan surface and the timer.

@@ -137,6 +137,8 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.detail = parseDetail(flag, nextValue());
         } else if (flag == "--trace-scale") {
             options.traceScale = parseTraceScale(flag, nextValue());
+        } else if (flag == "--no-fast-mode") {
+            options.fastMode = false;
         } else if (flag == "--bench") {
             options.bench = true;
         } else if (flag == "--bench-counters") {
@@ -227,6 +229,11 @@ Options parseOptions(const std::vector<std::string>& args) {
         throw std::runtime_error(
             "--trace-scale is for the window and --bench: the exports trace at the output size");
     }
+    // The exports never take the window's shortcuts.
+    if (!options.fastMode && exporting) {
+        throw std::runtime_error(
+            "--no-fast-mode is for the window and --bench: the exports never use fast mode");
+    }
     // A stream has no Esc to end it, so "run until Esc" would write nothing.
     if (options.renderStream && options.duration <= 0.0) {
         throw std::runtime_error("--render-stream needs --duration greater than 0");
@@ -265,6 +272,9 @@ std::string helpText() {
            "  --trace-scale F      Path trace at F x the window size, 0.25..1 (default 0.67), and\n"
            "                       upscale in time; the window and --bench only (the exports always\n"
            "                       trace at the output size)\n"
+           "  --no-fast-mode       Trace the window and --bench as the exports do: Russian roulette\n"
+           "                       from bounce 3, four in-scatter points in media, every photon (by\n"
+           "                       default the window traces in fast mode; docs/PERFORMANCE.md)\n"
            "  --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream\n"
            "                       needs a duration greater than 0\n"
            "  --headless           Render without opening a window\n"

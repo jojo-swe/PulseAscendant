@@ -28,6 +28,10 @@ namespace {
 constexpr float kPlaceholderExposureEV = 0.f;
 // The smallest trace size per axis (unless the output is smaller).
 constexpr std::uint32_t kMinTraceSize = 16;
+// The window's fast mode (modern::TracerOptions::fast): a frame's caustic photons are its scene's / this,
+// at least kFastMinPhotons.
+constexpr std::uint32_t kFastPhotonDivisor = 4;
+constexpr std::uint32_t kFastMinPhotons = 1024;
 // The upscaler's history: how much of it survives a frame (UpscaleSettings::feedback) and its clip box.
 constexpr float kUpscaleFeedback = 0.9f;
 constexpr float kUpscaleClipGamma = 1.f;
@@ -388,7 +392,16 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
         // Such exports also resolve the maps at kExportMapFactor times the receivers' resolution, where the maps
         // hold it.
         const bool fine = state.mode == RenderMode::Export && state.spp >= modern::kExportPhotonSpp;
-        const std::uint32_t photons = slices[0].caustics->photons * (fine ? modern::kExportPhotonFactor : 1u);
+        // The window's fast mode: a quarter of the photons, from one seed per chapter (the maps' grain stands
+        // still instead of flickering, and maps of unchanged inputs are kept, CausticMaps::prepare).
+        const bool fast = tracerOptions_.fast && interactive;
+        const std::uint32_t scenePhotons = slices[0].caustics->photons;
+        const std::uint32_t photons =
+            fast ? std::min(scenePhotons, std::max(kFastMinPhotons, scenePhotons / kFastPhotonDivisor))
+                 : scenePhotons * (fine ? modern::kExportPhotonFactor : 1u);
+        const std::uint32_t seed =
+            fast ? rt::pcgHash(0x43415553u ^ (0x9E3779B9u * static_cast<std::uint32_t>(frame.chapter + 1)))
+                 : rt::pcgHash(modern::frameSeedFor(frame.showSeconds, 0) ^ 0x43415553u);
         const modern::SceneFrame* causticFrame = &slices[0];
         modern::SceneFrame fineFrame;
         if (fine) {
@@ -396,11 +409,12 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
             fineFrame.caustics = modern::exportCaustics(*slices[0].caustics, caustics_->maxResolution());
             causticFrame = &fineFrame;
         }
-        frameStats_.photons = photons;
-        for (const modern::CausticReceiver& r : causticFrame->caustics->receivers)
-            frameStats_.causticTexels += r.resolution * r.resolution;
-        caustics_->prepare(object.staticScene(), *causticFrame, photons,
-                           rt::pcgHash(modern::frameSeedFor(frame.showSeconds, 0) ^ 0x43415553u));
+        caustics_->prepare(object.staticScene(), *causticFrame, photons, seed, fast);
+        if (!caustics_->reused()) {
+            frameStats_.photons = photons;
+            for (const modern::CausticReceiver& r : causticFrame->caustics->receivers)
+                frameStats_.causticTexels += r.resolution * r.resolution;
+        }
         extras.causticMaps = &caustics_->maps();
         extras.causticReceivers = &caustics_->receiverTable();
         extras.photons = [this](VkCommandBuffer c, const modern::PhotonScene& p) { caustics_->record(c, p); };

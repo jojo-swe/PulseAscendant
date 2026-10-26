@@ -46,6 +46,9 @@ struct RenderSettings {
     // --bench-counters: the path tracer's counting build (modern::TracerOptions::counters), whose work
     // counters ModernStage::takeCounters() reads. Slower; the same picture.
     bool counters = false;
+    // The window's fast mode (modern::TracerOptions::fast; docs/PERFORMANCE.md): Interactive only, ignored in
+    // Export. The window and --bench set it unless --no-fast-mode; tests and exports leave it off.
+    bool fast = false;
     // Test hooks: the modern stage's scene factory and effect -> scene map (empty: the show's).
     modern::SceneFactory sceneFactory;
     modern::SceneMap sceneMap;
@@ -156,6 +159,7 @@ private:
     bool hud_;
     bool hudTitle_;
     RenderMode mode_;
+    bool fast_; // RenderSettings::fast, in Interactive mode only
     std::uint32_t spp_;
     std::uint32_t maxBounces_;
     double shutterSeconds_;

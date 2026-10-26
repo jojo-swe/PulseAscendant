@@ -38,6 +38,9 @@ struct Options {
     // The trace resolution as a fraction of the output (--trace-scale, kMinTraceScale..1); unset = the
     // mode's (traceScaleFor). The exports refuse it: they always trace at the output size.
     std::optional<float> traceScale;
+    // The window's fast mode (render::RenderSettings::fast) for the window and --bench; --no-fast-mode turns
+    // it off. The exports never use it.
+    bool fastMode = true;
     // --bench: Interactive and headless, every chapter of `chapters` (empty: all) for benchFrames frames,
     // one JSON line each on stdout (app/bench.hpp).
     bool bench = false;

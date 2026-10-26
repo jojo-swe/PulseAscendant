@@ -82,7 +82,8 @@ std::atomic<std::uint32_t> gPipelinesCreated{0};
 gfx::RtShaders shaders(const TracerOptions& options) {
     const std::filesystem::path dir = gfx::shaderDir();
     gfx::RtShaders s;
-    s.raygen = dir / (options.counters ? "rt_pathtrace_counters.rgen.spv" : "rt_pathtrace.rgen.spv");
+    s.raygen = dir / (std::string("rt_pathtrace") + (options.fast ? "_fast" : "") +
+                      (options.counters ? "_counters" : "") + ".rgen.spv");
     // miss 0: sky, 1: shadow, 2: the end of a shadow ray's walk through thin panes
     s.misses = {dir / "rt_sky.rmiss.spv", dir / "rt_shadow.rmiss.spv", dir / "rt_pane.rmiss.spv"};
     s.closestHits = {dir / "rt_pbr.rchit.spv", dir / "rt_glass.rchit.spv", dir / "rt_emissive.rchit.spv",

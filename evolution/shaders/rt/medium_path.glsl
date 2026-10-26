@@ -38,7 +38,11 @@ const uint kMediumSegmentEnd = 2u;       // the path ends in the medium
 // The continuation's bounces draw the per-bounce random dimensions of bounce + this (the surface path's own
 // stay below it).
 const uint kMediumBounceOffset = 64u;
+#ifdef EVO_FAST
+const uint kPrimaryScatterSamples = 1u; // the window's fast build (pathtrace.rgen)
+#else
 const uint kPrimaryScatterSamples = 4u; // modern::kPrimaryScatterSamples
+#endif
 // Equiangular sampling of the primary segment's points serves frames with 1 to this many tree lights (stars
 // in a nebula); a city's thousands of lamps leave it to the majorant. The share of the points it draws:
 const uint kEquiangularMaxLights = 64u;   // modern::kEquiangularMaxLights
@@ -234,7 +238,7 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout bool rough, inout
         mediumRequestLight(x, direction, ph, throughput, u, treeWord);
     }
     vec3 wi = hgSample(g, direction, vec2(bounceRand(bounce, 0u), bounceRand(bounce, 1u)));
-    if (roulette && bounce >= 3u) {
+    if (roulette && bounce >= kRouletteBounce) {
         float survive = clamp(maxComponent(throughput), 0.05, 0.95);
         if (bounceRand(bounce, 6u) >= survive) {
             return kMediumSegmentEnd;

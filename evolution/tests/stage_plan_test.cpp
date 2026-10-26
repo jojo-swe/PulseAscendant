@@ -424,6 +424,11 @@ void testResetSpp() {
     CHECK(frameSpp(RenderMode::Interactive, 1, 1000) == 1);
     CHECK(frameSpp(RenderMode::Interactive, 3, 0) == 4 && frameSpp(RenderMode::Interactive, 3, 1) == 3);
     CHECK(frameSpp(RenderMode::Interactive, 8, 0) == 8);
+    // The window's fast mode: 2, then 1 (kFastResetSpp); exports never take it.
+    CHECK(frameSpp(RenderMode::Interactive, 1, 0, true) == 2 &&
+          frameSpp(RenderMode::Interactive, 1, 1, true) == 1);
+    CHECK(frameSpp(RenderMode::Interactive, 3, 0, true) == 3 &&
+          frameSpp(RenderMode::Export, 1, 0, true) == 1);
     for (const std::uint32_t frames : {0u, 1u, 2u})
         CHECK(frameSpp(RenderMode::Export, 1, frames) == 1 && frameSpp(RenderMode::Export, 64, frames) == 64);
 }

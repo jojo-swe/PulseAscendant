@@ -582,6 +582,9 @@ Options:
   --trace-scale F      Path trace at F x the window size, 0.25..1 (default 0.67), and
                        upscale in time; the window and --bench only (the exports always
                        trace at the output size)
+  --no-fast-mode       Trace the window and --bench as the exports do: Russian roulette
+                       from bounce 3, four in-scatter points in media, every photon (by
+                       default the window traces in fast mode; docs/PERFORMANCE.md)
   --duration S         Seconds to run; 0 runs until Esc (default 0). --render-stream
                        needs a duration greater than 0
   --headless           Render without opening a window
@@ -691,7 +694,7 @@ them, two frames in flight. Each chapter prints one JSON line on stdout (progres
  "width":2560,"height":1440,"traceWidth":1715,"traceHeight":965,"device":"NVIDIA GeForce RTX 4090",
  "timestamps":true,"gpuMs":{"total":…,"retro":…,"fill":…,"particles":…,"medium":…,"tlas":…,"photons":…,
  "trace":…,"splats":…,"denoise":…,"upscale":…,"bloom":…,"tonemap":…,"compositor":…},"cpuMs":…,"waitMs":…,
- "fps":…}
+ "fast":true,"fps":…}
 ```
 
 `gpuMs` are GPU timestamp times per pass, averaged over the timed frames (a pass a frame did not run counts

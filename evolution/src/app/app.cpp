@@ -267,6 +267,7 @@ int runWindowed(const Options& options) {
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     settings.detail = modern::SceneDetail{options.detail};
     settings.traceScale = traceScaleFor(options); // 0.67 by default: traced below the window size, upscaled
+    settings.fast = options.fastMode;             // the window's fast mode unless --no-fast-mode
     render::Renderer renderer(ctx, ring, settings);
     renderer.prepareAll(); // every scene's BLASes and the pipeline now, not as a hitch at a chapter start
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
