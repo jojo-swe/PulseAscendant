@@ -1,0 +1,133 @@
+#pragma once
+
+// The Ship scene: the starship of scenes/ship_asset.hpp at its hero shot, WORMHOLE
+// (chapter 23): over an ocean planet, through a gate into a wormhole, a tube of luminous gas spiralling round
+// the flight path with basalt rings 1 km apart inside it, each ring a circle of gold lamps that light the ship
+// as it passes. The ship, its plumes, its stars and its motion blur are the asset any scene can fly.
+//
+// The flight, cut on bar lines (chapter seconds from the beat grid; WORMHOLE's in brackets):
+// - shot 0, the gate [0, 4.35): over the planet's limb, a slow crane towards the gate and the glowing mouth
+//   of the wormhole behind it, the sun at its far end;
+// - shot 1, the crossing [4.35, 9.14): a locked-off camera beside the path; the ship crosses the picture at
+//   300 m/s, at its centre on a downbeat [6.09], engines trailing volumetric fire (the export shutter's
+//   motion blur); the camera pans after it and follows it towards the gate;
+// - shot 2, into the tunnel [9.14, D 15.67): a chase from behind and above; the afterburner lights on the cut
+//   and the ship accelerates into the mouth and through the rings until, on D, it covers one ring per beat;
+// - shot 3, riding [D, 22.62): from D a ring arrives on every beat, its lamps sweeping the hull; the camera
+//   closes in beside the ship and holds there from the accent [16.15], the rings and the wall streaking past;
+// - shot 4, into the light [22.62, end): where the music breaks the camera lets the ship go; it pulls away
+//   down the tunnel into the sun at its end (the one anamorphic streak of Act III) and the picture floods
+//   to white over the last bars.
+// The ship banks with FLYBY's 1993 attitude (retro::flybyAttitude), in the phase that shows its attitude at
+// kShipAttitudeAtPass on the pass; the planet lies as far behind the pass whenever it falls, so the crossing
+// is the same shot wherever the music puts it.
+//
+// The render frame is the ship's own: the ship stands still at the origin in its model space and the world
+// moves around it (every world point X is rendered at R^T (X - P), P the ship's position, R its attitude), so
+// coordinates stay small however far it flies. Cameras keep the world's up. Metres; the ship flies along
+// world +z.
+
+#include "modern/modern_scene.hpp"
+#include "modern/scene.hpp"
+#include "modern/scenes/ship_asset.hpp"
+#include "show/timeline.hpp"
+
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+namespace evo::modern {
+
+// The full-detail configuration the WORMHOLE card states (the scene test pins the card to it).
+inline constexpr float kWormholeRingSpacing = 1000.f; // metres: "1 KM RINGS"
+inline constexpr float kWormholeRingRadius = 140.f, kWormholeRingTube = 10.f;
+inline constexpr std::uint32_t kShipAirSplats = 98304; // the planet's atmosphere shell
+inline constexpr float kShipCruise = 300.f;            // metres per second in shots 0 and 1
+inline constexpr float kShipPlanetRadius = 6000.f;
+inline constexpr double kShipAttitudeAtPass = 6.0931; // the 1993 attitude's time on the pass
+// Towards the 5800 K sun in the world: dead ahead, at the far end of the wormhole (the tunnel leads into it,
+// and its open end frames it).
+inline constexpr Vec3 kShipSunDirection{0.f, 0.f, 1.f};
+// The wormhole: a tube of luminous gas round the flight path (kWormholeWallRadius), opening from the gate as a
+// horn kWormholeMouthRadius wide over kWormholeMouthLength metres; its wall (Pattern WormholeWall, pbr.rchit)
+// is drawn kWormholeLength metres on from wherever it starts (the mouth, or 2 to 3 km behind the ship once it
+// is in), its far end open on the sun.
+inline constexpr float kWormholeWallRadius = 460.f, kWormholeMouthRadius = 640.f;
+inline constexpr float kWormholeMouthLength = 900.f, kWormholeLength = 20000.f;
+// Every ring carries kWormholeRingLights gold lamps round its inner face, lights of the light tree, so the
+// rings light the ship as they pass it; kWormholeRingSlots rings are lit at a time (those near the ship).
+inline constexpr std::uint32_t kWormholeRingLights = 72, kWormholeRingSlots = 11;
+
+// The chapter's times (chapter seconds), from its beat grid: the cut to the crossing (the last downbeat over
+// a second before the pass), the pass (the ship at the crossing camera's centre), the cut into the tunnel, D
+// (the downbeat at or before the accent), the break (the fourth downbeat after D, or the one two bars before
+// the end when that comes sooner), the white-out's start (the next one) and the end.
+struct ShipTimes {
+    double crossing = 0, pass = 0, tunnel = 0, drop = 0, accent = 0, release = 0, whiteout = 0, duration = 0;
+    double beat = 0.5; // the beat's length at D
+};
+ShipTimes shipTimes(const show::TimelineFrame& frame);
+struct ShipShot {
+    double start, end;
+};
+std::vector<ShipShot> shipShots(const show::TimelineFrame& frame);
+
+// The ship in the world at a frame: its position along +z (metres; double, it travels tens of kilometres) and
+// its attitude (model space to world, rows).
+struct ShipPose {
+    double z = 0;
+    std::array<Vec3, 3> rows;
+};
+ShipPose shipPose(const show::TimelineFrame& frame);
+// How far the ship has flown at a frame, and the world z of ring k (rings at D's position + k km).
+double shipDistance(const show::TimelineFrame& frame);
+double shipRingZ(const show::TimelineFrame& frame, int k);
+
+// The camera of a frame in the render frame (the ship's model space).
+Camera shipCamera(const show::TimelineFrame& frame);
+
+// The throttle at a frame: 0.7 cruising with the bass; the afterburner lights on the cut into the tunnel
+// (a flash that decays over a quarter of a second) and flares again on D.
+float shipThrottle(const show::TimelineFrame& frame);
+// The exposure (EV) of a frame, set per shot; the white-out of the last bars is the show's exposure key
+// (post::exposureKeys), not this.
+float shipExposureEV(const show::TimelineFrame& frame);
+// The anamorphic streak (SceneFrame::anamorphic): in the last shot only, rising from its start to the
+// white-out's, the one streak of Act III.
+float shipAnamorphic(const show::TimelineFrame& frame);
+// The world z of the gate: the first ring, the wormhole's mouth.
+double shipGateZ(const show::TimelineFrame& frame);
+
+struct ShipStats {
+    std::uint32_t stars = 0, airSplats = 0, splats = 0;
+    std::array<std::uint32_t, 3> plumeGrid{};
+    std::uint32_t plumeVoxels = 0, triangles = 0;
+    std::uint32_t lamps = 0; // the rings' lamps lit at a time: the light tree's lights
+};
+ShipStats shipStats(SceneDetail detail = {});
+
+class Ship final : public ModernScene {
+public:
+    explicit Ship(SceneDetail detail = {});
+
+    const SceneStatic& staticScene() const override { return static_; }
+    SceneFrame frame(const show::TimelineFrame& frame) const override;
+    Camera camera(const show::TimelineFrame& frame) const override { return shipCamera(frame); }
+    bool samplesRetro() const override { return false; }
+    std::string nowCard(show::Effect effect) const override;
+
+    const ShipStats& stats() const { return stats_; }
+    const ShipAsset& asset() const { return *asset_; }
+    // The frame's material table (the ship's seams, engines and strobe; the rings' glow).
+    std::vector<rt::Material> materials(const show::TimelineFrame& frame) const;
+    std::uint32_t ringMaterial() const;
+
+private:
+    SceneStatic static_;
+    std::unique_ptr<ShipAsset> asset_;
+    ShipStats stats_;
+    std::uint32_t stars_ = 0, air_ = 0, lamps_ = 0;
+};
+
+} // namespace evo::modern

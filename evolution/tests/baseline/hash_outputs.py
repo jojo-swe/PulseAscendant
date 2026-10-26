@@ -1,0 +1,233 @@
+"""The byte-identity baseline: render a fixed set of outputs and print their SHA-256 sums.
+
+The set covers the path-traced Studio (every chapter, a two-dispatch spp 5 frame, the STUDIO NIGHT accent
+cut), the placeholder gradient, 1993 effects, a wipe, two chapters forced into 2026 (EVO_FORCE_ERA=1), and
+four --render-stream runs (across the accent cut, FINALE's beat swaps, STUDIO NIGHT into ASCENT, and DOTS).
+Every run passes --validation, so a validation message fails the run. It also prints the mean display
+luminance of each Studio capture (Rec. 709 weights on the 8-bit sRGB bytes / 255, the measure of
+tests/scene_fixture.cpp's checkChapterPictures).
+
+The committed SUMS and LUMINANCE files next to this script were made on lavapipe (Mesa llvmpipe). History:
+first at 4f300f6 (the shared path tracer, with the Studio and the window's reset samples), which the frozen
+feature ABI kept byte for byte; then regenerated after merging main d91fb09 (the environments, light
+selection and the trace scale), whose environments and light selection changed seven outputs (the lit Studio
+captures and streams; the merged build equals d91fb09's bytes exactly); then regenerated after the NEE
+shadow-ray fix (150714d), which changed seven outputs again: studio_night_40, finale_50, studio_night_acc,
+return_30 and the streams stream_studio_cut, stream_finale, stream_studio_ascent.
+Then regenerated after merging the Studio polish (a422931): the Studio's light rig, cameras and concrete
+changed seven outputs again (studio_night_40, finale_50, studio_night_acc, return_30 and the streams
+stream_studio_cut, stream_finale, stream_studio_ascent); reboot_60, portal_50, reboot_10 and every non-Studio
+output stayed byte for byte.
+Then, merging the export shutter, one more changed: studio_night_acc (spp 5 is two dispatches, so two time
+slices of the 180 degree shutter at the default 60 fps; mean luminance +0.13 %). Every capture at spp 4 or
+fewer and every stream (spp 1-2) has a single slice and stayed byte for byte the same.
+Then regenerated after merging the integrator v2 (path regularisation, the clamp after a rough vertex, the
+Studio's camera-only LEDs), which changed the same seven Studio outputs (mean luminance within +-0.1 %); the
+caustic photon maps and the light tree changed nothing, and no non-Studio output moved.
+Then regenerated after merging the Particles and Spheres scenes: only stream_dots and raytrace_2026 changed.
+Then regenerated for the City scene: ASCENT now renders the city, so stream_studio_ascent changed; every other
+output, the Studio's included, stayed byte for byte.
+Then regenerated for the Nebula scene (PLASMA's 2026 half and NEBULA): only nebula_40 and plasma_wipe changed.
+Then galaxy_20 changed when GALAXY moved from the placeholder to the Cosmos scene; nothing else moved.
+Then regenerated once for the epoch cards, the post grade and bloom, the 1993 screens, the FINALE megamix and
+the Studio's takes with the Portal crossings: every output changed. The cards changed every output in its card
+area (the 1993 card through the CRT, the 2026 card in the stroke face in the left margin); the grade and bloom
+every path-traced 2026 picture; the 1993 screens (phosphor, BOOT, RETURN, REBOOT, the FINALE grid, PORTAL's
+prompt) boot_50, finale_50, portal_50, the REBOOT and RETURN captures and two streams; the megamix finale_50 and
+stream_finale; the Studio's new cameras every Studio capture and stream, and flyby_2026, now the Studio. The
+Studio's mean display luminance rose by up to 714 % (reboot_60, now REBOOT's close-up on the screen) and fell by
+up to 81 % (portal_50, the CRT nearly dark once the grid has switched off).
+Then regenerated for the polish of the Studio, DOTS and the Spheres (the Studio's sky, town glow, dawn,
+CRT glass, key caps and per-shot exposure; DOTS' identity colours, logo and cameras; RAYTRACE's air, caustics
+and cameras): the Studio's captures and streams, flyby_2026, raytrace_2026 and stream_dots changed; boot_50,
+plasma_wipe, nebula_40 and galaxy_20 stayed byte for byte. The night darkened: studio_night_40 -36 %,
+studio_night_acc -49 %, reboot_60 -23 %.
+Then regenerated for the polish of the Nebula, Tunnel, Cosmos and Singularity scenes (PLASMA's strands, NEBULA's
+relief and shafts, GALAXY's arms and REBOOT's cube of stars): galaxy_20, nebula_40 and plasma_wipe changed; nothing
+else moved.
+Then regenerated after the polish merges (the city's ASCENT, the nebula, GALAXY and REBOOT's cube of stars, and the
+Studio's DOS listing): galaxy_20, nebula_40, plasma_wipe, reboot_10, reboot_60, stream_studio_ascent and
+studio_night_40 changed; the Studio's luminance moved by 0.05 % or less.
+Then regenerated for NEBULA's darker pillar faces and star A's fronts: only nebula_40 changed.
+Then regenerated for the City's distant facades (lit window blocks and wall tones past the prefilter): only
+stream_studio_ascent changed.
+Then regenerated for RAYTRACE's cirrus (no lavender), INFINITY's slate haze and GLENZ's floor shot: only
+raytrace_2026 changed.
+Then regenerated for PLASMA's layered strands inside the slab: only plasma_wipe changed.
+Then regenerated for Act III's new track, whose chapters follow the form of the track: galaxy_20 (now a
+fifth into GALAXY, found from --show-info), reboot_10 and reboot_60 changed; every Act I and II output
+stayed byte for byte.
+Then regenerated for the extended Act III track (its chapters follow its 17-phrase form): only galaxy_20
+changed, through the track's reactivity; the real-time fast mode left every export byte for byte.
+They are lavapipe-only: another driver or GPU gives other bytes.
+
+How a change uses it (run from evolution/ after building the linux preset):
+
+    python3 tests/baseline/hash_outputs.py build/linux/bin/Evolution build/linux/build-out/baseline \\
+        --check tests/baseline/SUMS --luminance tests/baseline/LUMINANCE
+
+- A change whose output must stay byte-exact (a scene without a medium, a scene without caustic receivers,
+  and every pure ABI or refactoring change) passes --check: every sum must match.
+- A change to the picture on purpose (new environments, a new integrator, a polish of the Studio, ...) checks
+  the luminance instead: --luminance prints each Studio capture's change against the committed value, and the
+  change commits a new SUMS/LUMINANCE in the same commit, saying so in its commit message, so the next change
+  compares against the new reference.
+
+Usage: hash_outputs.py <Evolution> <outdir> [--check SUMS] [--luminance LUMINANCE] [--write]
+  --write   also writes <outdir>/SUMS and <outdir>/LUMINANCE (copy them here to update the reference).
+Exit code 1 when --check finds a difference.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import struct
+import subprocess
+import sys
+import zlib
+
+# name, show seconds (or a chapter's title and a fraction of it, from --show-info: Act III follows the form of
+# its track), spp, width, height, EVO_FORCE_ERA (None: as the show has it), Studio?
+CAPTURES = [
+    ("studio_night_40", 202.68, 2, 160, 90, None, True),  # the first reference frames
+    ("reboot_60", 424.14576, 2, 160, 90, None, True),  # the first reference frames
+    ("finale_50", 176.4, 2, 160, 90, None, True),
+    ("portal_50", 188.26, 2, 160, 90, None, True),
+    ("studio_night_acc", 212.0, 5, 160, 90, None, True),  # after the accent cut, two dispatches
+    ("return_30", 397.17, 2, 160, 90, None, True),
+    ("reboot_10", 414.4, 1, 96, 54, None, True),
+    ("boot_50", 3.5, 2, 160, 90, None, False),
+    ("plasma_wipe", 55.7, 2, 160, 90, None, False),
+    ("nebula_40", 274.5, 2, 160, 90, None, False),
+    ("galaxy_20", ("GALAXY", 0.2), 2, 160, 90, None, False),
+    ("flyby_2026", 15.0, 2, 160, 90, "1", False),
+    ("raytrace_2026", 120.0, 2, 160, 90, "1", False),
+]
+# name, start seconds, duration, fps, spp (all at 96x54)
+STREAMS = [
+    ("stream_studio_cut", 209.3, 1, 10, 1),
+    ("stream_finale", 178.0, 1, 8, 2),
+    ("stream_studio_ascent", 213.0, 5, 2, 2),
+    ("stream_dots", 40.0, 2, 4, 1),
+]
+
+
+def run(command, force_era):
+    env = dict(os.environ)
+    env.pop("EVO_FORCE_ERA", None)
+    if force_era is not None:
+        env["EVO_FORCE_ERA"] = force_era
+    result = subprocess.run(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr.decode(errors="replace"))
+        sys.exit(f"{' '.join(command)} exited with {result.returncode}")
+    return result.stdout
+
+
+def mean_luminance(path):
+    """Mean display luminance of an 8-bit RGB PNG with filter type 0 (what Evolution writes)."""
+    with open(path, "rb") as f:
+        data = f.read()
+    pos, width, height, idat = 8, 0, 0, []
+    while pos < len(data):
+        (length,) = struct.unpack(">I", data[pos:pos + 4])
+        kind, body = data[pos + 4:pos + 8], data[pos + 8:pos + 8 + length]
+        if kind == b"IHDR":
+            width, height = struct.unpack(">II", body[:8])
+        elif kind == b"IDAT":
+            idat.append(body)
+        pos += 12 + length
+    raw = zlib.decompress(b"".join(idat))
+    stride, total = 1 + width * 3, 0.0
+    for row in range(height):
+        line = raw[row * stride + 1:(row + 1) * stride]
+        r, g, b = sum(line[0::3]), sum(line[1::3]), sum(line[2::3])
+        total += 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return total / (255.0 * width * height)
+
+
+def show_time(exe, when):
+    """Show seconds: `when` itself, or for (title, fraction) that far into that chapter (--show-info)."""
+    if not isinstance(when, tuple):
+        return when
+    title, fraction = when
+    info = json.loads(run([exe, "--show-info"], None))
+    chapter = next(c for c in info["chapters"] if c["title"] == title)
+    return round(chapter["start"] + fraction * chapter["duration"], 4)
+
+
+def sha256(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def read_table(path):
+    table = {}
+    with open(path) as f:
+        for line in f:
+            if line.strip() and not line.startswith("#"):
+                value, name = line.split()
+                table[name] = value
+    return table
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("exe")
+    parser.add_argument("outdir")
+    parser.add_argument("--check")
+    parser.add_argument("--luminance")
+    parser.add_argument("--write", action="store_true")
+    args = parser.parse_args()
+
+    shutil.rmtree(args.outdir, ignore_errors=True)
+    os.makedirs(args.outdir)
+    sums, luminance = {}, {}
+    for name, seconds, spp, width, height, force_era, studio in CAPTURES:
+        directory = os.path.join(args.outdir, name)
+        os.makedirs(directory)
+        when = show_time(args.exe, seconds)
+        out = run([args.exe, "--capture-dir", directory, "--time", repr(when), "--width", str(width),
+                   "--height", str(height), "--spp", str(spp), "--validation"], force_era)
+        path = out.decode().strip().splitlines()[-1]
+        sums[name] = sha256(path)
+        if studio:
+            luminance[name] = mean_luminance(path)
+    for name, seconds, duration, fps, spp in STREAMS:
+        path = os.path.join(args.outdir, name + ".rgb")
+        with open(path, "wb") as f:
+            f.write(run([args.exe, "--render-stream", "--time", repr(seconds), "--duration", str(duration),
+                         "--fps", str(fps), "--width", "96", "--height", "54", "--spp", str(spp),
+                         "--validation"], None))
+        sums[name] = sha256(path)
+
+    sums_text = "".join(f"{value}  {name}\n" for name, value in sums.items())
+    luminance_text = "".join(f"{value:.6f}  {name}\n" for name, value in luminance.items())
+    sys.stdout.write(sums_text)
+    sys.stdout.write("# mean display luminance (Studio)\n" + luminance_text)
+    if args.write:
+        with open(os.path.join(args.outdir, "SUMS"), "w") as f:
+            f.write(sums_text)
+        with open(os.path.join(args.outdir, "LUMINANCE"), "w") as f:
+            f.write(luminance_text)
+
+    failed = False
+    if args.luminance:
+        reference = read_table(args.luminance)
+        for name, value in luminance.items():
+            base = float(reference[name])
+            print(f"luminance {name}: {value:.6f} vs {base:.6f} ({100.0 * (value - base) / base:+.2f} %)")
+    if args.check:
+        reference = read_table(args.check)
+        for name in sorted(set(reference) | set(sums)):
+            if reference.get(name) != sums.get(name):
+                print(f"DIFFERS: {name}")
+                failed = True
+        print("byte-identical to " + args.check if not failed else "NOT byte-identical to " + args.check)
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

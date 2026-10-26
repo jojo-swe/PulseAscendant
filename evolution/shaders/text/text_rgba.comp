@@ -1,0 +1,29 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The 2026 text pass: blends each glyph's colour by its alpha over the RGBA8 image wherever the font is set,
+// clipped per pixel to the image.
+
+#include "glyphs.glsl"
+
+layout(set = 0, binding = 1, rgba8) uniform image2D target;
+
+void main() {
+    GlyphInstance glyph = currentGlyph();
+    if (!fontPixelSet(glyph)) {
+        return;
+    }
+    int scale = glyphScale(glyph);
+    ivec2 origin = blockOrigin(glyph);
+    ivec2 size = imageSize(target);
+    vec4 color = unpackUnorm4x8(glyph.rgba);
+    for (int dy = 0; dy < scale; ++dy) {
+        for (int dx = 0; dx < scale; ++dx) {
+            ivec2 pixel = origin + ivec2(dx, dy);
+            if (all(greaterThanEqual(pixel, ivec2(0))) && all(lessThan(pixel, size))) {
+                vec4 below = imageLoad(target, pixel);
+                imageStore(target, pixel, vec4(mix(below.rgb, color.rgb, color.a), mix(below.a, 1.0, color.a)));
+            }
+        }
+    }
+}

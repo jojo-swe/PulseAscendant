@@ -1,0 +1,68 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_ray_query : require
+
+// Test fixture for light_selection_test (compiled for the test only): evaluates shaders/rt/lights.glsl's
+// per-point light selection with the path tracer's own bindings for the frame, the lights, the retro screen
+// and the environment (common.glsl's numbers), and writes the results out.
+//
+// mode 0, one invocation per point k, writing kStride floats at k * kStride:
+//   per light i (i < frame.lightCount <= kMaxLights): lightImportance at 2i, lightSelectPdf at 2i + 1;
+//   then lightPower(i) for every light at 2 kMaxLights + i, luminance(environmentLighting(-normal)) at
+//   3 kMaxLights + i.
+// mode 1, one invocation per (pick j, point k): pickLight((j + 0.5) / pickCount) at point k, writing at
+// 2 (k * pickCount + j) the index chosen (-1 when pickLight returns false) and its pdf.
+
+#include "../rt/common.glsl"
+#include "../rt/lights.glsl"
+
+layout(local_size_x = 64, local_size_y = 1) in;
+
+struct ProbePoint {
+    vec3 p;
+    uint transmissive;
+    vec3 n;
+    float pad;
+};
+
+layout(scalar, set = 0, binding = 27) readonly buffer Points { ProbePoint points[]; };
+layout(scalar, set = 0, binding = 28) writeonly buffer Results { float results[]; };
+
+layout(push_constant) uniform PushConstants {
+    uint mode;
+    uint pointCount;
+    uint pickCount;
+    uint pad;
+} pc;
+
+const uint kMaxLights = 8u;
+const uint kStride = 4u * kMaxLights;
+
+void main() {
+    uint x = gl_GlobalInvocationID.x;
+    if (pc.mode == 0u) {
+        if (x >= pc.pointCount) {
+            return;
+        }
+        ProbePoint q = points[x];
+        bool transmissive = q.transmissive != 0u;
+        for (uint i = 0u; i < frame.lightCount && i < kMaxLights; ++i) {
+            results[x * kStride + 2u * i] = lightImportance(i, q.p, q.n, transmissive);
+            results[x * kStride + 2u * i + 1u] = lightSelectPdf(i, q.p, q.n, transmissive);
+            results[x * kStride + 2u * kMaxLights + i] = lightPower(lights[i]);
+            results[x * kStride + 3u * kMaxLights + i] = luminance(environmentLighting(-lightNormal(lights[i])));
+        }
+        return;
+    }
+    if (x >= pc.pointCount * pc.pickCount) {
+        return;
+    }
+    uint k = x / pc.pickCount;
+    uint j = x % pc.pickCount;
+    ProbePoint q = points[k];
+    uint index;
+    float pdf;
+    bool picked = pickLight((float(j) + 0.5) / float(pc.pickCount), q.p, q.n, q.transmissive != 0u, index, pdf);
+    results[2u * x] = picked ? float(index) : -1.0;
+    results[2u * x + 1u] = pdf;
+}

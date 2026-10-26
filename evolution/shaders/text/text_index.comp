@@ -1,0 +1,28 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The 1993 text pass: writes the low byte of each glyph's colour as a palette index into the R8_UINT index
+// image wherever the font is set, clipped per pixel to the image.
+
+#include "glyphs.glsl"
+
+layout(set = 0, binding = 1, r8ui) uniform writeonly uimage2D target;
+
+void main() {
+    GlyphInstance glyph = currentGlyph();
+    if (!fontPixelSet(glyph)) {
+        return;
+    }
+    int scale = glyphScale(glyph);
+    ivec2 origin = blockOrigin(glyph);
+    ivec2 size = imageSize(target);
+    uint index = glyph.rgba & 0xffu;
+    for (int dy = 0; dy < scale; ++dy) {
+        for (int dx = 0; dx < scale; ++dx) {
+            ivec2 pixel = origin + ivec2(dx, dy);
+            if (all(greaterThanEqual(pixel, ivec2(0))) && all(lessThan(pixel, size))) {
+                imageStore(target, pixel, uvec4(index));
+            }
+        }
+    }
+}

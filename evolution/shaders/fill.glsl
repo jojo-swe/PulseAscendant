@@ -1,0 +1,91 @@
+// The body of fill.comp and fill_hdr.comp: the includer declares outImage and
+// vec4 encodeFill(vec3 color), which turns the pattern's display-encoded colour into what outImage holds.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// show::Transition values.
+const uint kPortal = 1u;
+const uint kWipe = 3u;
+
+const float kChapterCount = 31.0;
+const float kTau = 6.2831853;
+
+// Must match FillPushConstants in src/gfx/fill_pass.cpp (32 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    float localSeconds; // seconds into the chapter
+    float era;          // 0 = 1993, 1 = 2026
+    float kick;         // [0, 1]
+    float beatPhase;    // [0, 1) through the current beat
+    float wipe;         // the Wipe edge as a fraction of the width
+    uint chapter;       // bits 0-15: chapter index; bits 16-31: show::Transition
+} pc;
+
+uint chapterIndex() {
+    return pc.chapter & 0xffffu;
+}
+
+uint transition() {
+    return pc.chapter >> 16;
+}
+
+// A cosine palette around the colour wheel; shift moves along the wheel from the chapter's hue.
+vec3 chapterHue(float shift) {
+    float hue = float(chapterIndex()) / kChapterCount + shift;
+    return 0.5 + 0.5 * cos(kTau * (hue + vec3(0.0, 1.0, 2.0) / 3.0));
+}
+
+vec3 look1993(uvec2 pixel, vec2 uv) {
+    uint level = min(uint((uv.x + uv.y) * 0.5 * 4.0), 3u);
+    uvec2 cell = pixel / 32u;
+    if (((cell.x + cell.y) & 1u) == 1u) {
+        level = 3u - level;
+    }
+    return chapterHue(0.0) * (float(level) + 1.0) / 4.0;
+}
+
+vec3 look2026(vec2 uv) {
+    vec3 deep = chapterHue(0.0) * 0.15;
+    vec3 glow = mix(chapterHue(0.12), vec3(1.0), 0.35);
+    float sweep = 0.5 + 0.5 * sin(3.14159265 * uv.x + 0.5 * pc.localSeconds);
+    return mix(deep, glow, smoothstep(0.0, 1.0, 0.7 * (1.0 - uv.y) + 0.3 * sweep));
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= pc.width || pixel.y >= pc.height) {
+        return;
+    }
+
+    vec2 size = vec2(pc.width, pc.height);
+    vec2 position = vec2(pixel) + 0.5;
+    vec2 uv = position / size;
+
+    vec3 then = look1993(pixel, uv);
+    vec3 now = look2026(uv);
+    float wipeEdge = pc.wipe * size.x;
+    vec3 color;
+    if (transition() == kWipe) {
+        color = position.x < wipeEdge ? now : then;
+    } else if (transition() == kPortal) {
+        color = mix(then, now, clamp(pc.era, 0.0, 1.0));
+    } else {
+        color = pc.era >= 0.5 ? now : then;
+    }
+
+    float t = pc.localSeconds;
+    vec2 center = vec2(0.5 + 0.3 * sin(t), 0.5 + 0.3 * cos(t)) * size;
+    float radius = mix(0.2, 0.26, clamp(pc.kick, 0.0, 1.0)) * size.y;
+    if (distance(position, center) <= radius) {
+        color = vec3(1.0 - 0.5 * clamp(pc.beatPhase, 0.0, 1.0));
+    }
+
+    // The pixel centres in [edge - 1, edge + 1): exactly two columns wherever the edge falls.
+    float fromEdge = position.x - wipeEdge;
+    if (transition() == kWipe && pc.wipe > 0.0 && pc.wipe < 1.0 && fromEdge >= -1.0 && fromEdge < 1.0) {
+        color = vec3(1.0);
+    }
+
+    imageStore(outImage, ivec2(pixel), encodeFill(color));
+}

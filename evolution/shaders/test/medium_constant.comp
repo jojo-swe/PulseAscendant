@@ -1,0 +1,31 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Test fixture for medium_test (compiled for the test only): a grid medium's voxels as a pure function of
+// (uvw, seconds, params), in two modes (params[3].w).
+//
+// Mode 0, constant: density params[0].x and emission params[0].yzw in every voxel.
+// Mode 1, smooth noise (medium_test.cpp's noiseVoxel() mirrors it): density
+//     params[1].x * (0.55 + 0.45 * sin(6 u + 2 t) * cos(5 v) * sin(4 w + 1))
+// and emission params[1].yzw * that density.
+// Mode 2, a ball: density params[2].x inside the sphere of radius params[2].y about the box's centre, 0
+// outside, emission params[0].yzw * density (a "nebula" to look at).
+
+#include "../modern/medium_common.glsl"
+
+vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
+    float mode = params[3].w;
+    if (mode > 1.5) {
+        vec3 c = uvw - 0.5;
+        float r = length(c);
+        float swirl = 0.5 + 0.5 * sin(18.0 * uvw.x + 11.0 * uvw.y * uvw.z + 3.0 * seconds);
+        float density = r < params[2].y ? params[2].x * (1.0 - r / params[2].y) * (0.4 + 0.6 * swirl) : 0.0;
+        return vec4(density, params[0].yzw * density);
+    }
+    if (mode > 0.5) {
+        float density = params[1].x * (0.55 + 0.45 * sin(6.0 * uvw.x + 2.0 * seconds) * cos(5.0 * uvw.y) *
+                                                  sin(4.0 * uvw.z + 1.0));
+        return vec4(density, params[1].yzw * density);
+    }
+    return params[0];
+}

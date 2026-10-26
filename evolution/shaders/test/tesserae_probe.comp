@@ -1,0 +1,27 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_scalar_block_layout : require
+
+// Test fixture for scene_lens_test (compiled for the test only): runs shaders/rt/tesserae.glsl over the 1993
+// rotozoom tile, one invocation per texel (u = i % 128, v = i / 128, plus 128 * pc.wrap on both to check the
+// tiling): the palette index and its 8-bit sRGB colour.
+
+layout(local_size_x = 64, local_size_y = 1) in;
+
+layout(scalar, set = 0, binding = 0) writeonly buffer Results { uvec4 results[]; };
+
+layout(push_constant) uniform PushConstants {
+    int wrap;
+} pc;
+
+#include "../rt/tesserae.glsl"
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= 128u * 128u) {
+        return;
+    }
+    ivec2 texel = ivec2(int(i % 128u), int(i / 128u)) + 128 * pc.wrap;
+    uint index = rotozoomIndex(texel);
+    results[i] = uvec4(index, uvec3(rotozoomColour(index)));
+}

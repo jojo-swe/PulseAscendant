@@ -1,0 +1,70 @@
+#version 460
+
+// The denoiser's export firefly filter, before everything else: each pixel's
+// demodulated illumination is scaled down so that its luminance is at most k times the second-largest
+// luminance of its 3x3 neighbourhood. When the centre is the largest that is the largest of its (up to 8)
+// neighbours, and otherwise the centre never exceeds it; so the bound is k times the largest neighbour. A
+// lone bright pixel is clamped; anything two pixels wide (a 2x2 highlight, a line of CRT text) keeps its
+// value. The result is what the accumulate pass reads instead of demodulating the lighting itself.
+//
+// A pixel on a geometry edge (a 3x3 neighbour at another depth or facing another way, or a hit beside a
+// miss) is kept as it is: a highlight along an edge is one pixel wide by nature, and at 64 spp it is a dotted
+// line of single glints (the RETURN shot's window sill: glints 3-13 pixels apart that fill in at 256 spp),
+// which a local test cannot tell from fireflies otherwise. Fireflies on edges are rare by comparison.
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform readonly image2D lightingImage;
+layout(set = 0, binding = 1, rgba16f) uniform readonly image2D albedoImage;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D illuminationImage; // demodulated, clamped
+layout(set = 0, binding = 3, rgba16f) uniform readonly image2D normalImage;
+layout(set = 0, binding = 4, r32f) uniform readonly image2D depthImage;
+
+// Must match FireflyPush in src/post/denoiser.cpp (12 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    float k;
+} pc;
+
+const float kEdgeDepth = 0.05;  // |z_q - z| > 0.05 z: another surface (as the accumulate pass's guides)
+const float kEdgeNormal = 0.9;  // dot(n_q, n) < 0.9: a crease
+
+vec3 illuminationAt(ivec2 q) {
+    return demodulate(imageLoad(lightingImage, q).rgb, imageLoad(albedoImage, q).rgb);
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
+        return;
+    }
+    vec3 illumination = illuminationAt(p);
+    float lum = luminance(illumination);
+    float depth = imageLoad(depthImage, p).r;
+    vec3 normal = imageLoad(normalImage, p).xyz;
+    bool edge = false;
+    float largest = -1.0; // no neighbour (a 1x1 image): no bound
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            ivec2 q = p + ivec2(dx, dy);
+            if ((dx == 0 && dy == 0) || q.x < 0 || q.y < 0 || q.x >= int(pc.width) || q.y >= int(pc.height)) {
+                continue;
+            }
+            largest = max(largest, luminance(illuminationAt(q)));
+            float qDepth = imageLoad(depthImage, q).r;
+            edge = edge || isHit(qDepth) != isHit(depth) ||
+                   (isHit(depth) && !(abs(qDepth - depth) <= kEdgeDepth * depth &&
+                                      dot(imageLoad(normalImage, q).xyz, normal) >= kEdgeNormal));
+        }
+    }
+    float bound = pc.k * largest;
+    if (!edge && largest >= 0.0 && lum > bound) {
+        illumination *= bound / lum; // lum > bound >= 0
+    }
+    imageStore(illuminationImage, p, vec4(illumination, 0.0));
+}

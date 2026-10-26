@@ -5,3 +5,4 @@ music/source/
 assets/music/*.wav
 *.user
 __pycache__/
+evolution/docs/plans/

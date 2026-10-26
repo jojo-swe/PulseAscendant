@@ -1,0 +1,100 @@
+#version 460
+
+// The splat tests' points (tests/splat_test.cpp), selected by params[3].w:
+//   0  a row: point i at params[0].xyz + i * params[2].xyz, radius params[0].w, flux params[1].rgb (count 1:
+//      one point; a zero step: count identical points);
+//   1  a cloud: hashed positions in the box params[0].xyz +- params[0].w, hashed colours of flux up to
+//      params[1].x, radius params[1].y (many points per pixel, for the order tests);
+//   2  a two-arm logarithmic spiral galaxy about params[0].xyz in the plane spanned by x and y, outer radius
+//      params[0].w, tilted by params[2].x radians about x, turning at params[1].y radians per second, total
+//      flux params[1].x, star radius params[1].z (the test image, and the moving splats of the ModernStage
+//      tests).
+// Compiled twice: with SPLAT_PERMUTE_IDS, invocation k computes point (k * 0x9E3779B1 + 0x7F4A7C15) mod count
+// instead of point k, a bijection for a power-of-two count, so the same points arrive in another order.
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "../modern/splat_common.glsl"
+
+uint hashId(uint v) {
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float unitFloat(uint h) {
+    return float(h >> 8u) * (1.0 / 16777216.0);
+}
+
+SplatPoint rowPoint(uint id, vec4 params[4]) {
+    SplatPoint s;
+    s.position = params[0].xyz + float(id) * params[2].xyz;
+    s.radius = params[0].w;
+    s.flux = params[1].rgb;
+    return s;
+}
+
+SplatPoint cloudPoint(uint id, vec4 params[4]) {
+    uint h = hashId(id ^ 0xC10Du);
+    vec3 u = vec3(unitFloat(h), unitFloat(hashId(h)), unitFloat(hashId(h + 1u)));
+    uint c = hashId(h + 2u);
+    SplatPoint s;
+    s.position = params[0].xyz + (2.0 * u - 1.0) * params[0].w;
+    s.flux = params[1].x * vec3(unitFloat(c), unitFloat(hashId(c)), unitFloat(hashId(c + 1u)));
+    s.radius = params[1].y;
+    return s;
+}
+
+SplatPoint spiralPoint(uint id, float seconds, vec4 params[4]) {
+    uint h = hashId(id ^ 0x5A1Au);
+    float u0 = unitFloat(h), u1 = unitFloat(hashId(h)), u2 = unitFloat(hashId(h + 1u)),
+          u3 = unitFloat(hashId(h + 2u));
+    float outer = params[0].w;
+    SplatPoint s;
+    vec2 p;
+    float temperature; // 0 cool red .. 1 hot blue
+    if (u0 < 0.15) { // the bulge: a dense round core
+        float r = 0.2 * outer * pow(u1, 1.5);
+        float a = 6.2831853 * u2;
+        p = r * vec2(cos(a), sin(a));
+        temperature = 0.15 * u3;
+    } else if (u0 < 0.35) { // the disc between the arms: exponential in radius
+        float r = -0.3 * outer * log(1.0 - 0.96 * u1);
+        float a = 6.2831853 * u2;
+        p = r * vec2(cos(a), sin(a));
+        temperature = 0.3 * u3;
+    } else { // two logarithmic arms, r = a e^(b theta), with a Gaussian scatter about the spine
+        float r = outer * (0.1 + 0.9 * u1);
+        float theta = log(r / (0.1 * outer)) / 0.35 + ((u0 < 0.675) ? 0.0 : 3.14159265);
+        float sigma = 0.05 * outer * (0.6 + r / outer);
+        float g = sqrt(-2.0 * log(max(u2, 1e-7)));
+        vec2 offset = sigma * g * vec2(cos(6.2831853 * u3), sin(6.2831853 * u3));
+        p = r * vec2(cos(theta), sin(theta)) + offset;
+        temperature = clamp(1.2 - 0.6 * g, 0.0, 1.0); // young blue stars along the spine
+    }
+    float turn = params[1].y * seconds;
+    p = mat2(cos(turn), sin(turn), -sin(turn), cos(turn)) * p;
+    float tilt = params[2].x; // about the x axis: 0 face-on to a camera on the z axis
+    s.position = params[0].xyz + vec3(p.x, p.y * cos(tilt), p.y * sin(tilt));
+    vec3 cool = vec3(1.0, 0.55, 0.3), hot = vec3(0.55, 0.7, 1.0);
+    vec3 colour = mix(cool, hot, temperature);
+    // A few bright stars among many faint ones.
+    float brightness = 0.25 + 6.0 * pow(unitFloat(hashId(h + 3u)), 12.0);
+    s.flux = params[1].x / float(pc.count) * colour * brightness;
+    s.radius = params[1].z;
+    return s;
+}
+
+SplatPoint splatPoint(uint id, float seconds, vec4 params[4]) {
+#ifdef SPLAT_PERMUTE_IDS
+    id = (id * 0x9E3779B1u + 0x7F4A7C15u) & (pc.count - 1u);
+#endif
+    uint mode = uint(params[3].w);
+    if (mode == 1u) {
+        return cloudPoint(id, params);
+    }
+    if (mode == 2u) {
+        return spiralPoint(id, seconds, params);
+    }
+    return rowPoint(id, params);
+}

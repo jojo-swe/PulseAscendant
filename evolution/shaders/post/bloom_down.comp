@@ -1,0 +1,43 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// One step down post::Bloom's chain: target pixel q = the [1 3 3 1] / 8 x [1 3 3 1] / 8 weighted mean of the
+// source's 4x4 block from 2q - 1 to 2q + 2, read clamped to the edge. Every source pixel gives out a quarter
+// of itself in all (1/4 per axis is 1/8 + 3/8 to its two targets), so the chain keeps the picture's energy
+// per area. The first step reads the HDR image: non-finite light counts as 0, and light is clamped to
+// [0, the half maximum].
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly image2D source;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D target;
+
+// Must match DownPush in src/post/bloom.cpp (16 bytes).
+layout(push_constant) uniform PushConstants {
+    uint width; // the target's size
+    uint height;
+    uint sourceWidth;
+    uint sourceHeight;
+} pc;
+
+const float kWeights[4] = float[4](1.0, 3.0, 3.0, 1.0);
+
+void main() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    if (q.x >= int(pc.width) || q.y >= int(pc.height)) {
+        return;
+    }
+    ivec2 high = ivec2(int(pc.sourceWidth) - 1, int(pc.sourceHeight) - 1);
+    vec3 sum = vec3(0.0);
+    for (int j = 0; j < 4; ++j) {
+        vec3 row = vec3(0.0);
+        for (int i = 0; i < 4; ++i) {
+            ivec2 p = clamp(2 * q + ivec2(i - 1, j - 1), ivec2(0), high);
+            row += kWeights[i] * clamp(finiteOrZero(imageLoad(source, p).rgb), vec3(0.0), vec3(kHalfMax));
+        }
+        sum += kWeights[j] * row;
+    }
+    imageStore(target, q, vec4(sum * (1.0 / 64.0), 1.0));
+}

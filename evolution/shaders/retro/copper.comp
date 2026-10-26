@@ -1,0 +1,54 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// GLENZ's background (chapter 5): copper bars, the raster bars a 1993 demo changed the palette for on every
+// scanline. Six horizontal bars, two each of red, gold and green, ride round a vertical drum: bar i sits at
+// angle a = 1.3 t + i * 2pi / 6, at row 100 + A sin(a) with A itself swaying slowly, and in front when cos(a)
+// is larger. Each bar is 15 rows tall in 5 brightness steps, brightest in the middle; a row shows the
+// frontmost bar covering it, or black. Every pixel of a row has the same index (bits 0..3 of the glenz
+// palette, retro/glenz.hpp: 0 black, 1 + 5 * colour + step), which the glenz faces OR their codes into. The
+// time is pc.retroSeconds, so the bars are a pure function of retroFrame.
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D indexImage;
+
+// Must match RetroPushConstants in src/render/retro_stage.cpp (12 bytes).
+layout(push_constant) uniform PushConstants {
+    uint retroFrame;    // floor(localSeconds * retroRate)
+    uint chapter;       // the chapter index
+    float retroSeconds; // retroFrame / retroRate: the chapter-local time of this retro frame
+} pc;
+
+// Must match kGlenzCopperBars / kGlenzCopperSteps (src/retro/glenz.hpp).
+const uint kColours = 3u;
+const uint kSteps = 5u;
+const uint kBars = 6u;
+const float kHalfHeight = 7.5; // rows from a bar's middle to its edge
+const float kTau = 6.28318530718;
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= kRetroWidth || pixel.y >= kRetroHeight) {
+        return;
+    }
+
+    float t = pc.retroSeconds;
+    float y = float(pixel.y) + 0.5;
+    float amplitude = 72.0 + 14.0 * sin(t * 0.37);
+    uint index = 0u;
+    float nearest = -2.0;
+    for (uint i = 0u; i < kBars; ++i) {
+        float angle = t * 1.3 + float(i) * kTau / float(kBars);
+        float offset = abs(y - (100.0 + amplitude * sin(angle)));
+        float depth = cos(angle);
+        if (offset < kHalfHeight && depth > nearest) {
+            nearest = depth;
+            uint shade = kSteps - 1u - min(kSteps - 1u, uint(offset / (kHalfHeight / float(kSteps))));
+            index = 1u + (i % kColours) * kSteps + shade;
+        }
+    }
+    imageStore(indexImage, ivec2(pixel), uvec4(index));
+}

@@ -1,0 +1,59 @@
+{
+  "method": "100 Hz log spectral flux; autocorrelation + comb tempo with 120 BPM log-normal prior; tempo disambiguated by phase-optimised bass onset mean on 90-180 BPM candidate grids (switch at >= 5 % better); DP beat tracking; +/-6 beat local linear smoothing (follows tempo drift); 4/4 bar position from bass onset and harmonic change in +/-24 beat windows",
+  "meter": 4,
+  "bpm_median": 139.795,
+  "tracks": [
+    {
+      "source": "Amiga Trance Demo.wav",
+      "sha256": "ab3fe61cc8971828365a5cbe99b8a6ac69cfe47d8edc179f1f4dbcbec1f69c59",
+      "frames": 9312000,
+      "bpm_median": 141.561,
+      "beats": 458,
+      "downbeats": 117,
+      "tempo_comb_bpm": 113.227,
+      "tempo_method": "bass-grid",
+      "tempo_candidates": {
+        "169.84": 0.1151,
+        "142.15": 0.2578,
+        "112.72": 0.1602,
+        "94.76": 0.1837
+      },
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 5.38
+    },
+    {
+      "source": "Guitar Trance.wav",
+      "sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d",
+      "frames": 10483200,
+      "bpm_median": 140.541,
+      "beats": 511,
+      "downbeats": 126,
+      "tempo_comb_bpm": 93.74,
+      "tempo_method": "bass-grid",
+      "tempo_candidates": {
+        "140.38": 0.2596,
+        "112.17": 0.1607,
+        "93.61": 0.1833
+      },
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 4.62
+    },
+    {
+      "source": "Cyberpunk Assembly Extended.wav",
+      "sha256": "ac84f8b68f55d1896362c1f0c7ca8a41bc7490263cdd6b97880e62287a123f5a",
+      "frames": 15610560,
+      "bpm_median": 138.053,
+      "beats": 748,
+      "downbeats": 187,
+      "tempo_comb_bpm": 92.245,
+      "tempo_method": "bass-grid",
+      "tempo_candidates": {
+        "137.99": 0.5204,
+        "91.99": 0.3254
+      },
+      "tracker_jitter_ms_median": 2.31,
+      "tracker_jitter_ms_p90": 5.38,
+      "bar_lines_from": "form (tools/song_form.py)"
+    }
+  ]
+}

@@ -1,0 +1,858 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The path tracer's integrator: one invocation per pixel traces this dispatch's samples (push constants) and
+// keeps a running mean of lighting, emission and albedo over the frame's samples; one dispatch of the frame
+// (the first, unless the export shutter splits the frame into time slices: then the first of the middle
+// slice) also writes the depth, normal and motion guides from the unjittered centre ray. Every slice has its
+// own camera, instances and lights in frame (the uniforms), so a slice traces its own moment.
+//
+// Per sample: box-filter jitter in the pixel's subpixel window (push constants; the whole pixel by default)
+// and a thin-lens origin; then a loop over bounces. A hit's emission at the primary hit goes to the emission
+// image; later it adds throughput * Le * w_MIS. At every
+// surface with a non-delta lobe, next-event estimation samples the environment with probability
+// frame.environmentSelect, and otherwise picks one rect light by its weight at the shading point, samples a
+// uniform point on it and casts a shadow ray (portals and the environment: to infinity, the sky beyond),
+// adding throughput * f cos * Le / pdf_NEE * w_MIS. A BSDF ray that hits a light, or escapes to the sky, is
+// weighted against the NEE density of that light (selection evaluated at the vertex the ray left: prevP,
+// prevN, prevTransmissive) or of the escape (escapePdf: every portal the direction crosses, on both sides,
+// plus the environment's share) with the power heuristic; after a delta lobe (no NEE there) it keeps weight 1.
+// Russian roulette from bounce 3 (kRouletteBounce); a non-finite sample contributes 0.
+//
+// Noise at its sources. The path is `rough` once it has scattered off a non-delta lobe;
+// until then it is a delta chain from the camera (the camera -> mirror -> light paths).
+// - Regularisation: at every vertex after the first rough one each lobe, the coat too, has a roughness of at
+//   least frame.regularizeRoughness. The surface is changed before NEE and BSDF sampling, so bsdfEval (NEE),
+//   bsdfSample and the pdf the next hit weighs against all see the same BSDF: MIS stays consistent. Diffuse ->
+//   mirror -> small light paths become glossy, which NEE reaches (caustics come from the caustics' photons).
+// - The clamp: a contribution made after a rough vertex is clamped to a luminance of frame.clampIndirect. The
+//   primary hit's NEE and camera -> delta chain -> light are never clamped.
+// - Camera-only emission (kMaterialCameraOnlyEmission, an LED): counted at the primary hit and along a delta
+//   chain only, never after a rough vertex; such a surface is never a light (checkSceneFrame).
+// - Dispersion: at the path's first dielectric with abbe > 0 it picks a hero wavelength, uniform in
+//   [380, 780] nm (heroWavelength: the pixel's samples spread evenly over the spectrum), and multiplies its
+//   throughput by spectralRgb(lambda) (spectral.glsl: mean (1, 1, 1), so the estimate stays unbiased per
+//   channel); every dispersive surface on the path then has the IOR dispersiveIor(ior, abbe, lambda). abbe 0
+//   leaves glass as it was.
+// - Hero wavelengths (exports: frame.spp >= kHeroSpp): at that first dispersive dielectric the path splits
+//   into kHeroWavelengths copies at wavelengths a kHeroWavelengths-th of the range apart (the hero's uniform
+//   plus k / kHeroWavelengths, wrapped; the heroes of a pixel's samples stratify the first kHeroWavelengths-th:
+//   heroSetWavelength), each with spectralRgb(lambda_k) and a share 1 / kHeroWavelengths of
+//   everything it adds from there (gHeroWeight, after the clamp). The copies replay the hit that split them
+//   (the same ray, traced again, without its medium segment, which the first copy already took) and then
+//   draw the same random numbers, so where the glass disperses little they take nearly the same path and
+//   their colours average to the spectrum's instead of one wavelength's: the chroma noise of glass drops by
+//   about the square root of kHeroWavelengths. A delta refraction sends each wavelength its own way, so
+//   nothing is shared beyond the split (the wavelengths cannot weigh each other); in the window (1 spp) the
+//   path keeps one wavelength.
+//
+// Glass interiors and panes. A segment that ends on the inside of a solid dielectric
+// (the ray leaves along its outward geometric normal) crossed its interior: the throughput takes its
+// Beer-Lambert transmittance exp(-absorption * t) (payload.absorption, Material.baseColor2 on a dielectric;
+// clear glass has none, and nested glass counts the inner body's absorption on its own segments). A
+// thin-walled dielectric (kMaterialThinWalled, stained glass) does not refract: thinDielectricSample()
+// passes light straight through, tinted, or mirrors it. Passing straight through, a pane is a filter on the
+// segment, not a vertex of the path: the path keeps the vertex before it for MIS (prevP, previousPdf, the
+// distance to a light), the caustic exclusion ignores it, and shadow rays pass through panes too, taking
+// their tint (shadowTransmittance: panes are their own TLAS mask). So next-event estimation reaches lights
+// through stained glass, and its coloured light is sampled, not found by chance.
+//
+// the hooks, each with a stub that keeps the original picture byte for byte until its task fills it:
+// environment.glsl (the sky a miss sees, and environment sampling: Task 2), lights.glsl (per-point light
+// selection: Task 3; the light tree: Task 12), medium.glsl and medium_path.glsl (participating media and the
+// volume layer: Task 11, behind mediumActive() at the hooks marked "[medium]"), caustics.glsl and
+// lensing.glsl (bent main rays: Task 25). the caustics' caustic photon maps also exclude, in caustic_paths.glsl,
+// the light the maps already hold (a receiver's non-delta bounce, then only delta surfaces, then the photons'
+// light): without caustics in the frame that changes nothing.
+//
+// Every random number is randomFloat(frameSeed, pixel, sampleIndex, dimension) (random.glsl). Only this
+// shader traces rays (recursion depth 1).
+//
+// The window's fast build (rt_pathtrace_fast.rgen.spv, -DEVO_FAST; modern::TracerOptions::fast, never an
+// export; docs/PERFORMANCE.md): two in-scatter points on the primary segment instead of four
+// (medium_path.glsl), and one wavelength per path whatever the spp (no hero split, whose saved state the
+// compiler then drops). Both estimates stay unbiased, and less state is live across each trace. The volume
+// layer's extra noise costs a little light where the denoiser's history clamp cuts it (ASCENT's clouds 1.5 %,
+// one point 2.5 %). Russian roulette stays at bounce 3: from bounce 2 it amplified the survivors of dark
+// bounces past the scenes' low indirect clamps, which then cut them (2-3 % of the light).
+
+#include "common.glsl"
+#include "random.glsl"
+#include "bsdf.glsl"
+#include "environment.glsl"
+#include "lights.glsl"
+#include "medium.glsl"
+#include "spectral.glsl"
+
+layout(push_constant) uniform Push {
+    uint sampleBase;  // the frame's first sample traced by this dispatch
+    uint sampleCount; // samples this dispatch traces
+    vec2 windowOrigin; // the subpixel window's corner relative to the pixel's ((0, 0): the whole pixel)
+    vec2 windowSize;   // its size in pixels ((1, 1): the whole pixel)
+    uint guides;       // non-zero: this dispatch also writes the guides (the volume layer, depth, normal, motion)
+} pc;
+
+layout(location = 0) rayPayloadEXT HitPayload payload;
+layout(location = 1) rayPayloadEXT uint shadowVisible;
+
+const float kRayMax = 1e30;
+// Random dimensions: 0-1 pixel jitter, 2-3 lens, then kDimsPerBounce per bounce (0-2 BSDF sample, 3 the light
+// choice, 4-5 the point on it, 6 Russian roulette, 7 the hero wavelength).
+const uint kDimsPerBounce = 8u;
+// Exports trace kHeroWavelengths wavelengths through dispersive glass (the window one): frames of at least
+// kHeroSpp samples, the export rule of the photon maps (modern::kExportPhotonSpp).
+const uint kHeroWavelengths = 4u;
+const uint kHeroSpp = 16u;
+// The first bounce Russian roulette may end a path at (surfaces and medium vertices alike).
+const uint kRouletteBounce = 3u;
+// The share of a contribution: 1, or 1 / kHeroWavelengths once the path has split into its wavelengths.
+float gHeroWeight = 1.0;
+// [medium] The dimension that seeds a sample's media stream (medium.glsl), far from the others.
+const uint kMediumSeedDimension = 0x6D656469u;
+
+uvec2 gPixel;
+uint gSample;
+
+float rand(uint dimension) {
+    return randomFloat(frame.frameSeed, gPixel, gSample, dimension);
+}
+
+// [medium] The first bounce whose dimensions bounce 0 draws: 0, except while the path is the primary
+// segment's continuation in a medium (medium_path.glsl's kMediumBounceOffset), which must not reuse the
+// surface path's numbers.
+uint gBounceOffset = 0u;
+
+float bounceRand(uint bounce, uint k) {
+    return rand(4u + (bounce + gBounceOffset) * kDimsPerBounce + k);
+}
+
+void traceMain(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
+    payload.coneWidth = coneWidth;
+    payload.coneSpread = coneSpread;
+    traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, kMissIndexSky, origin, 0.0, direction, kRayMax, 0);
+}
+
+#include "lensing.glsl" // after the payload and rand(), which its traceLensed() uses
+
+// Every main ray: bent around a black hole while the frame has lensing, else straight (traceLensed
+// is then traceMain's very trace; one call site keeps lavapipe's inlined pipeline small).
+void traceScene(vec3 origin, vec3 direction, float coneWidth, float coneSpread) {
+    traceLensed(origin, direction, coneWidth, coneSpread);
+}
+
+bool unoccluded(vec3 origin, vec3 direction, float tMax) {
+    EVO_COUNT(kCountShadowRays, 1);
+    shadowVisible = 0u;
+    traceRayEXT(tlas,
+                gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
+                kInstanceMaskSolid, 0, 0, kMissIndexShadow, origin, 0.0, direction, tMax, 1);
+    return shadowVisible != 0u;
+}
+
+// What a shadow ray lets through: 0 when a solid surface is in the way, else the product of the thin panes'
+// transmission it crosses (each its tint times 1 - R', thinDielectricSample's), at most 8 of them. It traces
+// the panes with the main payload, which it restores.
+const uint kMaxShadowPanes = 8u;
+vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
+    if (!unoccluded(origin, direction, tMax)) {
+        return vec3(0.0);
+    }
+    vec3 through = vec3(1.0);
+    if (!featureOn(kFeaturePanes) || (frame.flags & kTraceFlagThinPanes) == 0u) {
+        return through;
+    }
+    HitPayload hit = payload;
+    float t0 = 0.0;
+    for (uint i = 0u; i < kMaxShadowPanes && maxComponent(through) > 0.0; ++i) {
+        payload.coneWidth = 0.0;
+        payload.coneSpread = -1.0;
+        EVO_COUNT(kCountPaneRays, 1);
+        traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, kInstanceMaskPane, 0, 0, kMissIndexPane, origin, t0, direction,
+                    tMax, 0);
+        if (payload.t < 0.0) {
+            payload = hit;
+            return through;
+        }
+        float r = fresnelDielectric(abs(dot(direction, payload.normal)), 1.0 / clamp(payload.ior, 1.0, 4.0));
+        through *= clamp(payload.baseColor, 0.0, 1.0) * ((1.0 - r) / (1.0 + r));
+        t0 = payload.t + 1e-4 * (1.0 + payload.t);
+        if (!(t0 < tMax)) {
+            payload = hit;
+            return through;
+        }
+    }
+    payload = hit;
+    return maxComponent(through) > 0.0 ? vec3(0.0) : through; // more panes than any window has
+}
+
+// A ray origin off the surface, on the side the new direction leaves to, scaled with the position's size.
+vec3 offsetOrigin(vec3 p, vec3 ng, vec3 direction) {
+    float scale = 1e-4 * (1.0 + maxComponent(abs(p)));
+    return p + ng * (dot(direction, ng) >= 0.0 ? scale : -scale);
+}
+
+vec3 cameraDirection(vec2 pixelPosition) {
+    vec2 ndc = vec2(2.0 * pixelPosition.x / float(frame.width) - 1.0,
+                    1.0 - 2.0 * pixelPosition.y / float(frame.height));
+    return normalize(frame.cameraForward + ndc.x * frame.tanHalfFovY * frame.aspect * frame.cameraRight +
+                     ndc.y * frame.tanHalfFovY * frame.cameraUp);
+}
+
+// The thin lens's aperture, frame.aperture across: a disc for the 24 and 35 mm lenses; from the 50 mm up
+// (tanHalfFovY below kBladedTanHalfFov) an iris of kApertureBlades straight blades, the regular polygon of the
+// disc's area turned by kBladeTurn, so that the portraits' out-of-focus highlights take its shape. A uniform
+// point of the unit-area-equivalent shape (the unit disc's area, radius 1 for the disc).
+const uint kApertureBlades = 6u;
+const float kBladedTanHalfFov = 0.24; // between the 35 mm lens (0.284 at 16:9) and the 50 mm (0.204)
+const float kBladeTurn = 0.2617994;   // 15 degrees
+vec2 sampleAperture(vec2 u) {
+    if (frame.tanHalfFovY >= kBladedTanHalfFov) {
+        return sampleConcentricDisk(u);
+    }
+    // One of the polygon's triangles (its centre and two corners), then a uniform point of it: sqrt(u.y)
+    // from the centre towards the far side, the reused fraction of u.x across it.
+    float n = float(kApertureBlades);
+    float pick = u.x * n;
+    float k = min(floor(pick), n - 1.0);
+    float across = pick - k;
+    float corner = sqrt(6.2831853 / (n * sin(6.2831853 / n))); // the corners' radius: the polygon's area is pi
+    float a0 = kBladeTurn + 6.2831853 * k / n;
+    float a1 = a0 + 6.2831853 / n;
+    return sqrt(u.y) * corner * mix(vec2(cos(a0), sin(a0)), vec2(cos(a1), sin(a1)), across);
+}
+
+Surface payloadSurface() {
+    Surface s;
+    s.baseColor = payload.baseColor;
+    s.roughness = payload.roughness;
+    s.metallic = payload.metallic;
+    s.ior = payload.ior;
+    s.transmission = payload.transmission;
+    s.coat = payload.coat;
+    s.coatRoughness = payload.coatRoughness;
+    s.emission = payload.emission;
+    return s;
+}
+
+// The demodulation albedo: diffuse baseColor, metal F0, glass 1.
+vec3 demodulationAlbedo(Surface s) {
+    if (isDielectric(s)) {
+        return vec3(1.0);
+    }
+    float r = (bsdfIor(s) - 1.0) / (bsdfIor(s) + 1.0);
+    vec3 base = clamp(s.baseColor, 0.0, 1.0);
+    vec3 f0 = mix(vec3(r * r), base, clamp(s.metallic, 0.0, 1.0));
+    return mix(base, f0, clamp(s.metallic, 0.0, 1.0));
+}
+
+// Whether the shading normal n and the geometric normal ng agree that wi leaves on wo's side (reflection) or
+// on the other (transmission). Where they disagree (wi grazes a faceted surface whose smooth normal leans
+// away), the ray would start on the wrong side of the geometry and leak through it; both NEE and BSDF
+// sampling drop such directions, so their MIS weights still sum to one over the rest.
+bool sidesAgree(vec3 n, vec3 ng, vec3 wo, vec3 wi) {
+    return (dot(wi, n) * dot(wo, n) > 0.0) == (dot(wi, ng) * dot(wo, ng) > 0.0);
+}
+
+// The normal light selection weighs a light's orientation against (lights.glsl): the shading normal turned
+// to wo's side, where the BSDF reflects (it mirrors its frame so that wo is above it). NEE and the MIS weight
+// of the next hit (prevN) both use it.
+vec3 selectionNormal(vec3 n, vec3 wo) {
+    return dot(n, wo) < 0.0 ? -n : n;
+}
+
+// Adds a contribution, clamped to frame.clampIndirect in luminance when it comes after a rough vertex, and
+// weighted by the path's share of its wavelengths (gHeroWeight).
+void addContribution(inout vec3 radiance, vec3 c, bool rough) {
+    if (rough) {
+        float l = luminance(c);
+        if (l > frame.clampIndirect) {
+            c *= frame.clampIndirect / l;
+        }
+    }
+    radiance += c * gHeroWeight;
+}
+
+// The hero wavelength's uniform at a bounce: the pixel's samples walk the spectrum in golden-ratio steps from
+// one random start per pixel and frame (a rotated Kronecker sequence: each sample is still uniform, but the
+// samples of a pixel cover [0, 1) evenly), so dispersive glass converges to its colours, not to chroma noise.
+float heroWavelength(uint bounce) {
+    float start = randomFloat(frame.frameSeed, gPixel, 0u, 4u + bounce * kDimsPerBounce + 7u);
+    return fract(start + float(gSample) * 0.6180339887);
+}
+
+// The hero's uniform when the path splits into `heroes` wavelengths (exports): the pixel's spp samples
+// stratify the first 1 / heroes of the range from one random start per pixel and frame, whatever bounce
+// they split at, so with the copies' offsets k / heroes the pixel's wavelengths are spp * heroes evenly
+// spaced ones (64 at 16 spp, 6.25 nm apart, no two alike). Each sample's uniform is still uniform. The
+// golden-ratio walk does not suit this: its steps times heroes (2.47 for 4) leave half of each quarter
+// sparse, and a set of wavelengths a quarter of the range apart is far from grey (from orange to blue as
+// the start moves), so the pixels kept the colour of their sparse halves.
+float heroSetWavelength(uint heroes) {
+    float start = randomFloat(frame.frameSeed, gPixel, 0u, 4u + 7u);
+    return fract(start + float(gSample) / float(max(frame.spp, 1u) * heroes));
+}
+
+// Next-event estimation towards the environment: one direction from sampleEnvironment(), one shadow ray to
+// infinity, weighted against the BSDF with the whole NEE density of an escaping direction (escapePdf).
+vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, bool transmissive,
+                            vec3 facing) {
+    vec2 uv = vec2(bounceRand(bounce, 4u), bounceRand(bounce, 5u));
+    vec3 wi;
+    vec3 le;
+    float environmentDensity;
+    if (!sampleEnvironment(uv, wi, le, environmentDensity)) {
+        return vec3(0.0);
+    }
+    if (!sidesAgree(n, ng, wo, wi)) {
+        return vec3(0.0);
+    }
+    float bsdfPdf;
+    vec3 f = bsdfEval(s, n, wo, wi, bsdfPdf);
+    if (!(maxComponent(f) > 0.0)) {
+        return vec3(0.0);
+    }
+    vec3 origin = offsetOrigin(p, ng, wi);
+    float lightPdf = escapePdf(origin, wi, p, facing, transmissive);
+    if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
+        return vec3(0.0);
+    }
+    vec3 through = shadowTransmittance(origin, wi, kRayMax);
+    if (!(maxComponent(through) > 0.0)) {
+        return vec3(0.0);
+    }
+    return f * le * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) * mediumTransmittance(origin, wi, kRayMax);
+}
+
+// Next-event estimation towards the light tree, chosen with probability selectPdf: one sphere
+// light by the walk (light_tree.glsl; its own random word, dimension 7), one direction in its cone, one
+// shadow ray to the sphere's near surface lifted off it, weighted against the BSDF.
+vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, vec3 facing, bool transmissive,
+                     float selectPdf) {
+    uint k;
+    float treePdf;
+    uint word = randomHash(frame.frameSeed, gPixel, gSample, 4u + bounce * kDimsPerBounce + 7u);
+    if (!pickTreeLight(word, frame.treeLightCount, p, facing, transmissive, treeUniformSelection(), k, treePdf)) {
+        return vec3(0.0);
+    }
+    TreeLight light = treeLights[k];
+    vec3 wi;
+    float dist;
+    float conePdf;
+    if (!sampleSphereCone(p, light.center, light.radius, vec2(bounceRand(bounce, 4u), bounceRand(bounce, 5u)), wi,
+                          dist, conePdf)) {
+        return vec3(0.0);
+    }
+    if (!sidesAgree(n, ng, wo, wi)) {
+        return vec3(0.0);
+    }
+    float bsdfPdf;
+    vec3 f = bsdfEval(s, n, wo, wi, bsdfPdf);
+    if (!(maxComponent(f) > 0.0)) {
+        return vec3(0.0);
+    }
+    float lightPdf = selectPdf * treePdf * conePdf;
+    if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
+        return vec3(0.0);
+    }
+    vec3 origin = offsetOrigin(p, ng, wi);
+    vec3 q = p + dist * wi;
+    vec3 toTarget = offsetOrigin(q, safeNormalize(q - light.center, -wi), -wi) - origin;
+    float tMax = length(toTarget);
+    vec3 through = tMax > 0.0 ? shadowTransmittance(origin, toTarget / tMax, tMax) : vec3(0.0);
+    if (!(maxComponent(through) > 0.0)) {
+        return vec3(0.0);
+    }
+    return f * light.emission * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+           mediumTransmittance(origin, toTarget / tMax, tMax);
+}
+
+// Next-event estimation at a surface: the environment with probability frame.environmentSelect, else one
+// rect light chosen at this point, one point on it, one shadow ray, weighted against the BSDF.
+vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
+    EVO_COUNT(kCountSurfaceNee, 1);
+    bool transmissive = isDielectric(s);
+    vec3 facing = selectionNormal(n, wo);
+    float choice = bounceRand(bounce, 3u);
+    float environmentSelect = frame.environmentSelect;
+    if (choice < environmentSelect) {
+        return sampleEnvironmentLight(s, p, n, ng, wo, bounce, transmissive, facing);
+    }
+    uint index;
+    float selectPdf;
+    if (!pickLight((choice - environmentSelect) / (1.0 - environmentSelect), p, facing, transmissive, index,
+                   selectPdf)) {
+        return vec3(0.0);
+    }
+    selectPdf *= 1.0 - environmentSelect;
+    RectLight l = lights[index];
+    if (l.kind == kLightTree) {
+        return featureOn(kFeatureTree) ? sampleTreeLight(s, p, n, ng, wo, bounce, facing, transmissive, selectPdf)
+                                       : vec3(0.0);
+    }
+    if (!(l.area > 0.0)) {
+        return vec3(0.0);
+    }
+    vec2 uv = vec2(bounceRand(bounce, 4u), bounceRand(bounce, 5u));
+    vec3 q = l.corner + uv.x * l.edgeU + uv.y * l.edgeV;
+    vec3 toLight = q - p;
+    float dist2 = dot(toLight, toLight);
+    if (!(dist2 > 0.0)) {
+        return vec3(0.0);
+    }
+    float dist = sqrt(dist2);
+    vec3 wi = toLight / dist;
+    float cosLight = -dot(wi, lightNormal(l));
+    if (!(cosLight > 0.0)) {
+        return vec3(0.0); // the shaded point sees the light's back
+    }
+    if (!sidesAgree(n, ng, wo, wi)) {
+        return vec3(0.0);
+    }
+    float bsdfPdf;
+    vec3 f = bsdfEval(s, n, wo, wi, bsdfPdf);
+    if (!(maxComponent(f) > 0.0)) {
+        return vec3(0.0);
+    }
+    float lightPdf = selectPdf * rectSolidAnglePdf(l, dist, cosLight);
+    vec3 origin = offsetOrigin(p, ng, wi);
+    if (l.kind == kLightPortal) {
+        // Portals may overlap as seen from p (one behind another), and the environment may be sampled too:
+        // NEE then reaches this direction through each of them, so its density is the sum over every portal
+        // the direction crosses plus the environment's, the same sum that weighs a BSDF ray escaping this
+        // way. With this portal's density alone the weights of the two strategies would not sum to one.
+        lightPdf = escapePdf(origin, wi, p, facing, transmissive);
+    }
+    if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
+        return vec3(0.0);
+    }
+    // A portal is an opening: the shadow ray goes on into the sky, which must be clear too. Other lights are
+    // surfaces: it goes from the offset origin to the sampled point lifted off the light on its emitting side,
+    // so it ends short of the light's plane at any angle. (Along wi, which leaves p, not the offset origin, and
+    // cut short by a fraction of the distance, it ended beside the point and, for an oblique wi from a surface
+    // facing the light, past the light's plane: the light occluded itself and NEE lost light.)
+    vec3 shadowDirection = wi;
+    float tMax = kRayMax;
+    if (l.kind != kLightPortal) {
+        vec3 toTarget = offsetOrigin(q, lightNormal(l), -wi) - origin;
+        tMax = length(toTarget);
+        if (!(tMax > 0.0)) {
+            return vec3(0.0);
+        }
+        shadowDirection = toTarget / tMax;
+    }
+    vec3 through = shadowTransmittance(origin, shadowDirection, tMax);
+    if (!(maxComponent(through) > 0.0)) {
+        return vec3(0.0);
+    }
+    vec3 le = lightRadiance(l, uv, wi);
+    return f * le * through * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf) *
+           mediumTransmittance(origin, shadowDirection, tMax);
+}
+
+// Caustics: the caustic photon maps' double-count exclusion (every use below is marked "Task 13").
+#include "caustic_paths.glsl"
+// [medium] The participating-media integrator: needs the helpers above.
+#include "medium_path.glsl"
+
+struct SampleResult {
+    vec3 lighting;
+    vec3 emission;
+    vec3 albedo;
+};
+
+SampleResult tracePath() {
+    EVO_COUNT(kCountPaths, 1);
+    SampleResult r;
+    r.lighting = vec3(0.0);
+    r.emission = vec3(0.0);
+    r.albedo = vec3(1.0);
+
+    vec2 jitter = vec2(rand(0u), rand(1u));
+    vec3 direction = cameraDirection(vec2(gPixel) + pc.windowOrigin + jitter * pc.windowSize);
+    vec3 origin = frame.cameraPosition;
+    if (frame.aperture > 0.0) {
+        vec3 focus = origin + direction * (frame.focusDistance / dot(direction, frame.cameraForward));
+        vec2 lens = sampleAperture(vec2(rand(2u), rand(3u))) * (0.5 * frame.aperture);
+        origin += frame.cameraRight * lens.x + frame.cameraUp * lens.y;
+        direction = normalize(focus - origin);
+    }
+
+    bool nee = (frame.flags & kTraceFlagNee) != 0u;
+    bool roulette = (frame.flags & kTraceFlagRussianRoulette) != 0u;
+    vec3 throughput = vec3(1.0);
+    float coneWidth = 0.0;
+    float coneSpread = frame.pixelSpread;
+    bool previousDelta = true; // nothing to weigh the camera ray's hit against
+    bool passedPane = false;   // the ray left prevP and has since only passed straight through thin panes
+    float previousPdf = 0.0;
+    // The vertex the current ray left, where NEE chose its light: the MIS partner of what the ray finds is
+    // that vertex's NEE density.
+    vec3 prevP = origin;
+    vec3 prevN = frame.cameraForward;
+    bool prevTransmissive = false;
+    bool rough = false;   // the path has scattered off a non-delta lobe (else: a delta chain from the camera)
+    float lambda = -1.0;  // the hero wavelength in nm, once the path has met dispersive glass
+    CausticPath caustic = causticPathStart();
+    // The hero wavelengths (exports): how many, whether this pass's path has split, the hero's uniform, and the
+    // state of the path as it reached the hit that split it (restored for each further wavelength).
+#ifdef EVO_FAST
+    const uint heroes = 1u; // one wavelength per path in the window's fast build
+#else
+    uint heroes = frame.spp >= kHeroSpp ? kHeroWavelengths : 1u;
+#endif
+    bool heroSplit = false;
+    float heroU = 0.0;
+    uint splitBounce = 0u;
+    vec3 splitOrigin = origin, splitDirection = direction, splitThroughput = throughput, splitPrevP = prevP,
+         splitPrevN = prevN;
+    float splitConeWidth = 0.0, splitConeSpread = 0.0, splitPreviousPdf = 0.0;
+    bool splitPreviousDelta = true, splitPassedPane = false, splitPrevTransmissive = false, splitRough = false;
+    CausticPath splitCaustic = caustic;
+    // [medium] This sample's media stream and volume layer.
+    if (mediumActive()) {
+        mediumSeed(randomHash(frame.frameSeed, gPixel, gSample, kMediumSeedDimension));
+        gMediumVolume = vec4(0.0, 0.0, 0.0, 1.0);
+        gMediumContinue = false;
+    }
+
+    // [medium] Two passes of the one bounce loop below (not indented for them): the surface path, then, when
+    // the primary segment's in-scattering continues as a path of its own, that path from bounce 1, its
+    // radiance into the volume layer. One loop, so the ray tracing code is not duplicated.
+    uint firstBounce = 0u;
+    vec3 surfaceLighting = vec3(0.0);
+    for (uint pass = 0u; pass < 2u; ++pass) {
+    if (pass == 1u) {
+        if (!mediumActive() || !gMediumContinue) {
+            break;
+        }
+        surfaceLighting = r.lighting;
+        r.lighting = vec3(0.0);
+        firstBounce = 1u;
+        gBounceOffset = kMediumBounceOffset;
+        origin = gMediumContinueOrigin;
+        direction = gMediumContinueDirection;
+        throughput = gMediumContinueThroughput;
+        coneWidth = 0.0;
+        coneSpread = -1.0;
+        previousDelta = false;
+        previousPdf = gMediumContinuePdf;
+        prevP = origin;
+        prevN = direction;
+        prevTransmissive = true;
+        rough = true; // it starts at a medium vertex
+        lambda = -1.0;
+        caustic = causticPathStart();
+    }
+    gHeroWeight = 1.0;
+    heroSplit = false;
+    // The wavelengths: the path, then (once it has split) the other wavelengths from the hit that split it.
+    for (uint hero = 0u; hero < heroes; ++hero) {
+    uint startBounce = firstBounce;
+    if (hero > 0u) {
+        if (!heroSplit) {
+            break;
+        }
+        origin = splitOrigin;
+        direction = splitDirection;
+        throughput = splitThroughput;
+        coneWidth = splitConeWidth;
+        coneSpread = splitConeSpread;
+        previousDelta = splitPreviousDelta;
+        passedPane = splitPassedPane;
+        previousPdf = splitPreviousPdf;
+        prevP = splitPrevP;
+        prevN = splitPrevN;
+        prevTransmissive = splitPrevTransmissive;
+        rough = splitRough;
+        caustic = splitCaustic;
+        lambda = -1.0;
+        startBounce = splitBounce;
+    }
+    for (uint bounce = startBounce;; ++bounce) {
+        traceScene(origin, direction, coneWidth, coneSpread);
+        EVO_COUNT(pass == 1u ? kCountContinuationRays
+                             : (hero > 0u ? kCountHeroRays : (bounce == 0u ? kCountPrimaryRays : kCountBounceRays)),
+                  1);
+        // A further wavelength's first hit is the split's: its medium segment was the first wavelength's.
+        bool replay = hero > 0u && bounce == splitBounce;
+        // [medium] The primary segment goes to the volume layer (the surface path stays unattenuated); every
+        // later segment is delta-tracked and may end in a medium vertex, from which the path goes on.
+        if (mediumActive() && !replay) {
+            uint event = mediumStep(bounce, nee, roulette, rough, throughput, r.lighting, origin, direction,
+                                    coneSpread, previousDelta, previousPdf, prevP, prevN, prevTransmissive);
+            if (event == kMediumSegmentEnd) {
+                break;
+            }
+            if (event == kMediumSegmentScattered) {
+                caustic = causticPathStart(); // a medium vertex ends any chain the photon maps hold
+                continue;
+            }
+        }
+        if (heroes > 1u && !heroSplit) {
+            // Until the path splits: where it stands as this ray ends on its surface.
+            splitBounce = bounce;
+            splitOrigin = origin;
+            splitDirection = direction;
+            splitThroughput = throughput;
+            splitConeWidth = coneWidth;
+            splitConeSpread = coneSpread;
+            splitPreviousDelta = previousDelta;
+            splitPassedPane = passedPane;
+            splitPreviousPdf = previousPdf;
+            splitPrevP = prevP;
+            splitPrevN = prevN;
+            splitPrevTransmissive = prevTransmissive;
+            splitRough = rough;
+            splitCaustic = caustic;
+        }
+        if (payload.t < 0.0) {
+            vec3 sky = payload.emission;
+            if (bounce == 0u) {
+                r.emission = sky;
+            } else {
+                float w = 1.0;
+                if (nee && !previousDelta) {
+                    w = powerHeuristic(previousPdf, escapePdf(origin, direction, prevP, prevN, prevTransmissive));
+                }
+                // Caustics: the photon map's share of the source disc is excluded.
+                addContribution(r.lighting, throughput * causticEscape(caustic, prevP, direction, sky) * w,
+                                rough);
+            }
+            break;
+        }
+
+        EVO_COUNT(kCountSurfaceHits, 1);
+        Surface s = payloadSurface();
+        if (payload.light != kNoLight && lights[payload.light].kind == kLightTree) {
+            // Light tree: a sphere of the light tree shows its tree light's radiance (this frame's scale).
+            s.emission = treeHitEmission(payload.primitive, payload.frontFace != 0u, s.emission);
+        }
+        vec3 p = payload.position;
+        vec3 n = payload.normal;
+        vec3 ng = payload.geometricNormal;
+        vec3 wo = -direction;
+        bool thinPane = isDielectric(s) && (payload.materialFlags & kMaterialThinWalled) != 0u;
+        float hitT = payload.t; // NEE's shadow rays reuse the payload
+        // Seen through panes since the last vertex: the distance from it (prevP) to this hit.
+        float fromPrevious = passedPane ? length(p - prevP) : hitT;
+        if (bounce > 0u && dot(direction, ng) > 0.0 && maxComponent(payload.absorption) > 0.0) {
+            throughput *= dielectricTransmittance(payload.absorption, payload.t); // inside the glass
+        }
+        if (!thinPane) {
+            causticPathHit(caustic, payloadSurface(), payload.materialFlags);
+        }
+        if (bounce == 0u) {
+            r.emission = s.emission;
+            r.albedo = demodulationAlbedo(s);
+        } else if (maxComponent(s.emission) > 0.0 && !replay &&
+                   (!rough || (payload.materialFlags & kMaterialCameraOnlyEmission) == 0u)) {
+            float w = 1.0;
+            if (nee && !previousDelta && payload.light != kNoLight) {
+                RectLight l = lights[payload.light];
+                float cosLight = abs(dot(direction, lightNormal(l)));
+                float lightPdf = 0.0;
+                if (l.kind == kLightTree) { // Light tree: the tree's density of this sphere, from prevP
+                    lightPdf = treeHitPdf(payload.light, payload.primitive, prevP, prevN, prevTransmissive);
+                } else if (l.area > 0.0 && cosLight > 0.0) {
+                    lightPdf = lightChoicePdf(payload.light, prevP, prevN, prevTransmissive) *
+                               rectSolidAnglePdf(l, fromPrevious, cosLight);
+                }
+                w = powerHeuristic(previousPdf, lightPdf);
+            }
+            // Caustics: the photon map's share of the source light is excluded.
+            vec3 keep = causticEmissionKeep(caustic, payload.light, prevP, p);
+            addContribution(r.lighting, throughput * s.emission * w * keep, rough);
+        }
+        if (bounce >= frame.maxBounces) {
+            break;
+        }
+
+        if (rough) {
+            s = regularizedSurface(s, frame.regularizeRoughness);
+        }
+        if (featureOn(kFeatureDispersion) && isDielectric(s) && payload.abbe > 0.0) {
+            if (lambda < 0.0) {
+                float u;
+                if (heroes > 1u) {
+                    if (!heroSplit) {
+                        heroSplit = true;
+                        heroU = heroSetWavelength(heroes);
+                        gHeroWeight = 1.0 / float(heroes);
+                    }
+                    u = fract(heroU + float(hero) / float(heroes));
+                } else {
+                    u = heroWavelength(bounce);
+                }
+                lambda = kSpectralMinNm + kSpectralRangeNm * u;
+                throughput *= spectralRgb(lambda);
+            }
+            s.ior = dispersiveIor(s.ior, payload.abbe, lambda);
+        }
+
+        if (nee && (frame.lightCount > 0u || frame.environmentSelect > 0.0) && !thinPane &&
+            bsdfHasNonDeltaLobe(s)) {
+            addContribution(r.lighting,
+                            throughput * sampleLight(s, p, n, ng, wo, bounce) *
+                                causticNeeKeep(caustic, s, p, n, wo, bounce),
+                            rough);
+        }
+
+        vec3 u = vec3(bounceRand(bounce, 0u), bounceRand(bounce, 1u), bounceRand(bounce, 2u));
+        vec3 wi;
+        vec3 weight;
+        float pdf;
+        bool delta;
+        if (thinPane) {
+            thinDielectricSample(s, n, wo, u.x, wi, weight);
+            pdf = 0.0;
+            delta = true;
+        } else if (!bsdfSample(s, n, wo, u, wi, weight, pdf, delta)) {
+            break;
+        }
+        if (!sidesAgree(n, ng, wo, wi)) {
+            break;
+        }
+        bool passing = thinPane && dot(wi, wo) < 0.0; // straight through the pane
+        if (!thinPane) {
+            causticPathScatter(caustic, s, n, wo, wi, delta);
+        }
+        throughput *= weight;
+        rough = rough || !delta;
+        if (roulette && bounce >= kRouletteBounce) {
+            float survive = clamp(maxComponent(throughput), 0.05, 0.95);
+            if (bounceRand(bounce, 6u) >= survive) {
+                break;
+            }
+            throughput /= survive;
+        }
+        if (!(maxComponent(throughput) > 0.0) || !allFinite(throughput)) {
+            break;
+        }
+
+        // The ray cone: its width grows with distance; after a rough bounce textures use a fixed level.
+        if (coneSpread >= 0.0) {
+            coneWidth += coneSpread * hitT;
+        }
+        if (!delta) {
+            coneSpread = -1.0;
+        }
+        passedPane = passing;
+        if (!passing) {
+            previousDelta = delta;
+            previousPdf = pdf;
+            prevP = p;
+            prevN = selectionNormal(n, wo);
+            prevTransmissive = isDielectric(s);
+        }
+        origin = offsetOrigin(p, ng, wi);
+        direction = wi;
+    }
+    } // the wavelengths
+    gHeroWeight = 1.0;
+    if (pass == 1u) { // [medium] the continuation's radiance belongs to the volume layer
+        gMediumVolume.rgb += r.lighting;
+        r.lighting = surfaceLighting;
+        gBounceOffset = 0u;
+    }
+    } // [medium] the passes
+    return r;
+}
+
+// Where a world point (or a direction, w = 0) was in the previous frame's picture, in pixels; false behind
+// the previous camera.
+bool previousPixel(vec3 p, float w, out vec2 pixel) {
+    vec3 v = p - frame.prevPosition * w;
+    float z = dot(v, frame.prevForward);
+    pixel = vec2(0.0);
+    if (!(z > 0.0)) {
+        return false;
+    }
+    float ndcX = dot(v, frame.prevRight) / (z * frame.prevTanHalfFovY * frame.prevAspect);
+    float ndcY = dot(v, frame.prevUp) / (z * frame.prevTanHalfFovY);
+    pixel = vec2((ndcX + 1.0) * 0.5 * float(frame.width), (1.0 - ndcY) * 0.5 * float(frame.height));
+    return true;
+}
+
+// depth, normal and motion from the unjittered centre ray through a pinhole. The motion is where the hit
+// surface point was in the previous frame's picture (its prevPosition: the point under its instance's
+// previous transform, or around a sphere's prevCenter) minus where it is now; without a previous camera it is
+// invalid (z = 0).
+void writeGuides(ivec2 pixel) {
+    vec2 centre = vec2(gPixel) + 0.5;
+    vec3 direction = cameraDirection(centre);
+    EVO_COUNT(kCountGuideRays, 1);
+    traceScene(frame.cameraPosition, direction, 0.0, frame.pixelSpread);
+    vec4 motion = vec4(0.0);
+    vec2 previous;
+    if (payload.t < 0.0) {
+        imageStore(depthImage, pixel, vec4(-1.0));
+        imageStore(normalImage, pixel, vec4(0.0));
+        if (frame.prevValid != 0u && previousPixel(direction, 0.0, previous)) {
+            motion = vec4(previous - centre, 1.0, 0.0);
+        }
+    } else {
+        float depth = dot(payload.position - frame.cameraPosition, frame.cameraForward);
+        imageStore(depthImage, pixel, vec4(depth));
+        vec3 n = dot(payload.normal, direction) > 0.0 ? -payload.normal : payload.normal; // facing the camera
+        imageStore(normalImage, pixel, vec4(n, payload.roughness));
+        if (frame.prevValid != 0u && previousPixel(payload.prevPosition, 1.0, previous)) {
+            motion = vec4(previous - centre, 1.0, 0.0);
+        }
+    }
+    imageStore(motionImage, pixel, motion);
+}
+
+void main() {
+    gPixel = gl_LaunchIDEXT.xy;
+    ivec2 pixel = ivec2(gPixel);
+#ifdef EVO_COUNTERS
+    countersBegin();
+#endif
+
+    vec3 lighting = vec3(0.0);
+    vec3 emission = vec3(0.0);
+    vec3 albedo = vec3(0.0);
+    vec4 volume = vec4(0.0); // [medium]
+    for (uint i = 0u; i < pc.sampleCount; ++i) {
+        gSample = pc.sampleBase + i;
+        SampleResult r = tracePath();
+        // One bad sample must not poison the picture or the history.
+        lighting += allFinite(r.lighting) ? r.lighting : vec3(0.0);
+        emission += allFinite(r.emission) ? r.emission : vec3(0.0);
+        albedo += allFinite(r.albedo) ? r.albedo : vec3(1.0);
+        if (mediumActive()) {
+            volume += mediumSafeVolume(gMediumVolume);
+        }
+    }
+
+    // The running mean over the frame's samples so far.
+    float before = float(pc.sampleBase);
+    float after = float(pc.sampleBase + pc.sampleCount);
+    if (pc.sampleBase > 0u) {
+        lighting += imageLoad(lightingImage, pixel).rgb * before;
+        emission += imageLoad(emissionImage, pixel).rgb * before;
+        albedo += imageLoad(albedoImage, pixel).rgb * before;
+    }
+    imageStore(lightingImage, pixel, vec4(lighting / after, 1.0));
+    // The emission image is half precision: its largest finite value bounds an emitter's radiance.
+    imageStore(emissionImage, pixel, vec4(min(emission / after, vec3(65504.0)), 1.0));
+    imageStore(albedoImage, pixel, vec4(albedo / after, 1.0));
+    // [medium] The volume layer (L_v, T): a running mean over the frame's samples, like the lighting.
+    if (mediumActive()) {
+        if (pc.sampleBase > 0u) {
+            volume += imageLoad(volumeImage, pixel) * before;
+        }
+        imageStore(volumeImage, pixel, min(volume / after, vec4(65504.0)));
+    }
+
+    if (pc.guides != 0u) {
+        // The volume layer without a medium in the frame: (0, 0, 0, 1).
+        if (!mediumActive()) {
+            imageStore(volumeImage, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+        }
+        writeGuides(pixel);
+    }
+#ifdef EVO_COUNTERS
+    countersEnd();
+#endif
+}

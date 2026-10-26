@@ -1,0 +1,43 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_scalar_block_layout : require
+
+// Test fixture for spheres_test (compiled for the test only): runs shaders/rt/sphere.glsl, the math the
+// intersection shader and the sphere closest-hits share, on a list of rays and spheres. Per case: (hit, t,
+// kind, 0) and (sphereUv of the unit normal at the hit, 0, 0); a miss writes (0, 0, 0, 0).
+
+#include "../rt/sphere.glsl"
+
+layout(local_size_x = 64) in;
+
+struct SphereCase { // 48 bytes
+    vec3 origin;
+    float tMin;
+    vec3 direction;
+    float tMax;
+    vec3 center;
+    float radius;
+};
+
+layout(set = 0, binding = 0, scalar) readonly buffer Cases { SphereCase cases[]; };
+layout(set = 0, binding = 1, scalar) writeonly buffer Results { vec4 results[]; }; // two per case
+
+layout(push_constant) uniform Push { uint count; } pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.count) {
+        return;
+    }
+    SphereCase c = cases[i];
+    float t;
+    uint kind;
+    if (!sphereIntersect(c.origin, c.direction, c.center, c.radius, c.tMin, c.tMax, t, kind)) {
+        results[2u * i] = vec4(0.0);
+        results[2u * i + 1u] = vec4(0.0);
+        return;
+    }
+    vec3 n = normalize(c.origin + t * c.direction - c.center);
+    results[2u * i] = vec4(1.0, t, float(kind), 0.0);
+    results[2u * i + 1u] = vec4(sphereUv(n), 0.0, 0.0);
+}
