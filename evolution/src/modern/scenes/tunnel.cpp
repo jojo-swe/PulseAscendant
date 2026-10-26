@@ -269,7 +269,7 @@ EnvironmentDesc tunnelSky() {
 // white with the phosphor's blue in it rather than any tint of its own.
 FogDesc tunnelFog() {
     FogDesc fog;
-    fog.density = 0.09f;
+    fog.density = 0.05f; // thin enough that the near walls' checker shows through the lights' glow
     fog.baseHeight = 0.f;
     fog.falloff = 0.3f;
     fog.albedo = {0.7f, 0.66f, 0.6f};
@@ -582,10 +582,12 @@ Tunnel::Tunnel(SceneDetail detail) : detail_(detail) {
     // The tube's glazed ceramic in 1993's checker: a deep cobalt and a warm charcoal (1993's second tube
     // colour taken to a fired glaze, never violet): under a clear glaze the beads reflect in it, so the
     // checker shows between the ribs; three glazes from glassy to eggshell.
+    // The two differ in value as well as hue (about 5:1), or the warm haze and the lights' glow, which tint
+    // both alike, leave nothing of the checker.
     constexpr Vec3 kGlazeA[kVariants] = {
-        {0.075f, 0.13f, 0.32f}, {0.085f, 0.14f, 0.34f}, {0.065f, 0.11f, 0.28f}};
+        {0.1f, 0.19f, 0.47f}, {0.11f, 0.2f, 0.5f}, {0.09f, 0.17f, 0.42f}};
     constexpr Vec3 kGlazeB[kVariants] = {
-        {0.16f, 0.13f, 0.11f}, {0.17f, 0.14f, 0.12f}, {0.14f, 0.115f, 0.1f}};
+        {0.04f, 0.034f, 0.03f}, {0.045f, 0.038f, 0.033f}, {0.036f, 0.031f, 0.028f}};
     constexpr float kGlazeRoughness[kVariants] = {0.02f, 0.06f, 0.14f};
     for (std::uint32_t v = 0; v < kVariants; ++v) {
         for (const std::uint32_t k : {kPanelA + v, kPanelB + v}) {
