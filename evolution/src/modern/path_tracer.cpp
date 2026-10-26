@@ -516,7 +516,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         u.width = width_;
         u.height = height_;
         u.frameSeed = settings.frameSeed;
-        u.spp = settings.spp; // spp and instanceCount: not read by the shaders (for a debugger's eyes)
+        u.spp = settings.spp; // exports stratify their hero wavelengths over it; instanceCount is for a debugger
         u.maxBounces = settings.maxBounces;
         u.flags = (settings.nee ? rt::kTraceFlagNee : 0u) |
                   (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
