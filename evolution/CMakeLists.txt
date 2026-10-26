@@ -692,9 +692,10 @@ add_test(NAME storyboard
             ${CMAKE_BINARY_DIR}/build-out/storyboard_test)
 set_tests_properties(storyboard PROPERTIES TIMEOUT 300 PROCESSORS 2)
 
-# --show-info prints the show as JSON without touching SDL video or Vulkan.
-add_test(NAME show_info COMMAND Evolution --show-info)
-set_tests_properties(show_info PROPERTIES PASS_REGULAR_EXPRESSION "\"duration\":711\\.16[,}]")
+# --show-info prints the show as JSON without touching SDL video or Vulkan; its duration is the soundtrack's.
+add_test(NAME show_info
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/show_info_test.py $<TARGET_FILE:Evolution>
+            ${CMAKE_SOURCE_DIR}/music/show-audio.json)
 
 # The process-level exit codes: 0 on success, 1 for bad usage, 2 when the GPU lacks a requirement.
 add_test(NAME exit_codes

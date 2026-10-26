@@ -1,9 +1,14 @@
 #include "show/cues.hpp"
+#include "show/era.hpp"
 #include "show/generated/beat_data.hpp"
+#include "show/generated/cue_data.hpp"
+#include "show/music_curves.hpp"
 #include "show/timeline.hpp"
 
 #include <cmath>
 #include <cstdio>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -25,8 +30,17 @@ bool unit(float value) {
     return std::isfinite(value) && value >= 0.f && value <= 1.f;
 }
 
+// Act I and II are fixed (194.00 s and 218.40 s); Act III is whatever track the show was prepared with.
+constexpr double kActThree = 412.4;
+
+double showEnd() {
+    return evo::show::showDuration();
+}
+
 void checkChapters() {
-    CHECK(std::abs(evo::show::showDuration() - 711.16) < 1e-9);
+    CHECK(evo::show::trackCount() == 3);
+    CHECK(std::abs(evo::show::showDuration() - (kActThree + evo::show::trackFrames(2) / 48000.0)) < 1e-9);
+    CHECK(evo::show::trackStart(2) == kActThree);
     CHECK(evo::show::chapterCount() == 31);
     CHECK(evo::show::chapterStart(0) == 0.0);
     CHECK(evo::show::chapterStart(11) == 194.0);
@@ -51,26 +65,46 @@ void checkChapters() {
     CHECK(reboot.trackSeconds == 0.0);
     CHECK(sampleTimeline(412.39).track == 1);
 
-    CHECK(sampleTimeline(711.159).chapter == 30);
-    CHECK(sampleTimeline(711.159).effect == Effect::TheEnd);
-    CHECK(sampleTimeline(711.16).chapter == 0); // the end wraps to the start
+    CHECK(sampleTimeline(showEnd() - .001).chapter == 30);
+    CHECK(sampleTimeline(showEnd() - .001).effect == Effect::TheEnd);
+    CHECK(sampleTimeline(showEnd()).chapter == 0); // the end wraps to the start
     CHECK(sampleTimeline(-5).chapter == 0);
     CHECK(sampleTimeline(std::nan("")).chapter == 0);
-    CHECK(std::abs(evo::show::wrapShowTime(711.16 + 10) - 10) < 1e-9);
+    CHECK(std::abs(evo::show::wrapShowTime(showEnd() + 10) - 10) < 1e-9);
 
     // No chapter straddles two tracks.
     for (int i = 0; i + 1 < evo::show::chapterCount(); ++i)
         CHECK(sampleTimeline(evo::show::chapterStart(i)).track ==
               sampleTimeline(evo::show::chapterStart(i + 1) - 1e-6).track);
 
-    // Accents sit in the middle of their chapter, where the parent looked for them.
+    // Accents sit in the middle of their chapter, where the parent looked for them; a chapter of Act III,
+    // which follows the form of its track, has its accent on the tracked beat the form names, inside the
+    // chapter, and D on that beat when it is a downbeat.
+    int directed = 0;
     for (int i = 0; i < evo::show::chapterCount(); ++i) {
         const evo::show::TimelineFrame frame = sampleTimeline(evo::show::chapterStart(i) + .01);
         CHECK(frame.chapter == i);
         CHECK(frame.effect == evo::show::cues[i].effect);
-        CHECK(frame.accentSeconds >= .28 * frame.chapterDuration);
-        CHECK(frame.accentSeconds <= .76 * frame.chapterDuration);
+        const double beat = evo::show::generated::chapterAccents[i];
+        if (beat < 0) {
+            CHECK(frame.accentSeconds >= .28 * frame.chapterDuration);
+            CHECK(frame.accentSeconds <= .76 * frame.chapterDuration);
+            continue;
+        }
+        ++directed;
+        CHECK(frame.track == 2);
+        CHECK(frame.accentSeconds > 0 && frame.accentSeconds < frame.chapterDuration);
+        CHECK(std::abs(evo::show::chapterStart(i) + frame.accentSeconds - beat) < 1e-9);
+        const evo::show::BeatGridView grid = evo::show::beatGrid(frame.track);
+        const int b = grid.beatAt(beat - kActThree);
+        CHECK(std::abs(grid.beatTime(b) + kActThree - beat) < 1e-6);
+        const evo::show::TransitionMarks marks = evo::show::transitionMarks(frame);
+        if (grid.bar(b) == 0)
+            CHECK(std::abs(marks.downbeat - beat) < 1e-6);
+        else
+            CHECK(marks.downbeat < beat && beat - marks.downbeat < marks.bar);
     }
+    CHECK(directed == 11);
 }
 
 void checkMusic() {
@@ -89,7 +123,7 @@ void checkBeats() {
     // Within one beat the phase only rises; it stays in [0, 1] everywhere.
     evo::show::TimelineFrame previous = sampleTimeline(0);
     CHECK(previous.beatPhase == 0.f); // before the first tracked beat
-    for (int ms = 1; ms < 711160; ++ms) {
+    for (int ms = 1; ms < showEnd() * 1000; ++ms) {
         const evo::show::TimelineFrame frame = sampleTimeline(ms / 1000.0);
         CHECK(unit(frame.beatPhase));
         CHECK(frame.beatSeconds >= .2f);
@@ -108,7 +142,7 @@ void checkBeats() {
 
 void checkFlow() {
     double previous = sampleTimeline(0).flowSeconds;
-    for (int step = 1; step < 71116; ++step) {
+    for (int step = 1; step < showEnd() * 100; ++step) {
         const double flow = sampleTimeline(step / 100.0).flowSeconds;
         CHECK(std::isfinite(flow));
         CHECK(flow >= previous);
@@ -118,7 +152,9 @@ void checkFlow() {
 
 void checkShowInfo() {
     const std::string json = evo::show::showInfoJson();
-    CHECK(json.find("\"duration\":711.16") != std::string::npos);
+    std::ostringstream duration;
+    duration << std::setprecision(12) << "\"duration\":" << showEnd() << ",";
+    CHECK(json.find(duration.str()) != std::string::npos);
     CHECK(json.find("\"chapters\":[") != std::string::npos);
     CHECK(json.find("\"title\":\"RAYTRACE\"") != std::string::npos);
     CHECK(json.find("\"effect\":\"StudioNight\"") != std::string::npos);
