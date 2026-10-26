@@ -373,6 +373,142 @@ controller corrects a wrong entry within about half a second (it lowers the scal
 60 fps at 720p would need about another 2x in the five slowest chapters, and 1440p about 4x on top: that
 needs the RTX's cost per ray, which the counters and Nsight will show (see "Open items").
 
+## Round 2: fewer rays per pixel (perf-realtime-2)
+
+Round 1 got to 30 fps at 720p mostly by tracing fewer pixels. Round 2 cuts the work per traced pixel in the
+window's fast mode. The picture's expectation stays the same, and exports are unchanged: the baseline sums match
+after every commit, and none of the new code is in the export build. The work counters below come from
+`--bench-counters` on lavapipe at 480x270 (322x181 traced), 4 frames from 20 % into each chapter. They do not
+depend on the GPU. The RTX figures are **estimates** from the round-1 model, with f scaled by the traces per
+pixel; nothing here was measured on an RTX.
+
+### What changed
+
+1. **One trace for a shadow ray through stained glass** (7a71aef). In fast mode, when every pane in a frame is
+   a Glass mesh, the pane instances are FORCE_NO_OPAQUE. They are not opaque only to a shadow ray traced
+   without the opaque flag; every other ray keeps the flag. The Glass hit group's any-hit (`shaders/rt/pane.rahit`)
+   multiplies the pane's transmission (tint times 1 - R', as the walk did) into a four-word payload and ignores
+   the hit. A fourth miss shader marks the ray unoccluded. The Glass scene's BLASes are built with
+   NO_DUPLICATE_ANY_HIT_INVOCATION, so each pane counts once. This replaces one occlusion ray, then one
+   closest-hit trace per pane with the 37-word payload saved and restored, then one more trace that missed.
+   GLASS CATHEDRAL drops from 15.90 to 13.84 traces per pixel, and its fast-mode picture on lavapipe is
+   byte-identical to the walk's.
+2. **Roulette on faint shadow rays and on paths from bounce 2, weighted after the clamp** (065c8e9).
+   - **Shadow rays.** A next-event estimate made after a rough vertex has an upper bound before its shadow ray
+     is traced: the unshadowed estimate, clamped. If that bound is below a level, the shadow ray is traced with
+     probability bound / level. The level is 1/4096 of display white at the frame's exposure, or 1/32 of what
+     the sample has added to its pixel so far, whichever is larger. A rouletted ray also skips the light's
+     transmittance through the media and the panes.
+   - **Paths.** Russian roulette also runs at bounce 2, with the survival probability already used from
+     bounce 3.
+   - **Why the mean holds.** Both weights (1 / probability) multiply the contribution *after* the indirect
+     clamp, so the expectation is exactly that of the clamped estimate. Round 1's roulette from bounce 2
+     divided the throughput before the clamp; the clamp then cut the amplified survivors, and that was the
+     darkening it measured.
+   - **Scope.** Only the surface path is rouletted. Rouletting the volume layer's continuation too made its
+     noise high enough for the denoiser's history clamp to cut light: up to 0.9 % darker, and 3-13 % with a
+     roulette at the continuation's start (LENS OF GOD's clouds, METROPOLIS's haze).
+   - `EVO_NEE_ROULETTE=<display level>` overrides 1/4096; `0` turns the shadow-ray roulette off, for A/B runs.
+3. **Four in-scatter points in fast mode again** (1292936). The look check below found the two points of
+   round 1 out of tolerance against the full window: METROPOLIS's lit haze was 7.3 % darker and ASCENT's
+   clouds 1.6 % darker, both through the volume history clamp. Three points still left METROPOLIS at -3.3 %.
+   Four, as the exports trace, bring every chapter within 0.5 %. This costs two shadow rays per pixel in the
+   chapters with a medium, paid for by items 1 and 2.
+
+Not done:
+- **A single-pass light pick.** It would halve the rect-importance evaluations, but those are a few
+  thousand flops per pixel.
+- **Guides from the jittered primary hit** (saves the guide trace, 1 per pixel). It would move the
+  denoiser's and upscaler's guides off the pixel centre, which changes the picture at edges and with depth of
+  field.
+- **Fewer photons for LENS OF GOD.** It re-shoots its 1,048,576 photons every frame because the lens moves;
+  fewer photons showed in round 1.
+
+### Counters and estimates
+
+Per trace pixel per frame, fast mode, round 1 (69d140e) -> now (1292936). The estimate columns are the
+round-1 model at the round-1 table scales:
+
+| Chapter | traces/px, round 1 -> now | shadow | bounce + continuation | grid lookups | f round 1 -> now | est. fps 720p at the table scale, before -> after | table scale | est. fps 1440p (scale 0.30), before -> after |
+|---|---|---|---|---|---|---|---|---|
+| GLASS CATHEDRAL | 15.90 -> 14.84 | 7.50 -> 7.04 | 6.40 -> 5.81 | 0 -> 0 | 0.76 -> 0.71 | 32 -> 34 | 0.30 | 8 -> 9 |
+| CITY NIGHT | 13.39 -> 14.03 | 6.67 -> 7.89 | 4.91 -> 4.34 | 0 -> 0 | 0.85 -> 0.89 | 39 -> 37 | 0.30 | 10 -> 10 |
+| ASCENT | 14.25 -> 14.76 | 7.14 -> 8.30 | 5.11 -> 4.46 | 71 -> 83 | 0.82 -> 0.85 | 32 -> 31 | 0.35 | 11 -> 11 |
+| VECTOR CITY | 13.63 -> 13.99 | 6.67 -> 7.64 | 4.96 -> 4.34 | 0 -> 0 | 0.87 -> 0.89 | 37 -> 37 | 0.35 | 13 -> 13 |
+| TUNNEL | 16.12 -> 16.13 | 8.26 -> 9.15 | 5.86 -> 4.98 | 0 -> 0 | 0.89 -> 0.89 | 35 -> 35 | 0.40 | 16 -> 16 |
+| METROPOLIS | 10.78 -> 12.01 | 5.13 -> 6.66 | 3.65 -> 3.35 | 0 -> 0 | 0.83 -> 0.92 | 34 -> 31 | 0.45 | 20 -> 18 |
+| RAYTRACE | 10.08 -> 11.76 | 4.45 -> 6.29 | 3.63 -> 3.46 | 60 -> 80 | 0.83 -> 0.97 | 35 -> 30 | 0.45 | 20 -> 17 |
+| PARTICLE OCEAN | 9.52 -> 11.06 | 3.85 -> 5.60 | 3.67 -> 3.46 | 0 -> 0 | 0.75 -> 0.87 | 34 -> 29 | 0.50 | 24 -> 21 |
+| RAYTRACE INFINITY | 11.25 -> 12.88 | 4.91 -> 6.77 | 4.34 -> 4.11 | 0 -> 0 | 0.84 -> 0.96 | 36 -> 32 | 0.50 | 25 -> 22 |
+| LENS OF GOD | 12.68 -> 14.13 | 6.09 -> 7.86 | 4.59 -> 4.27 | 180 -> 212 | 0.80 -> 0.89 | 33 -> 29 | 0.55 | 28 -> 25 |
+| FINALE | 2.98 -> 2.89 | 0.46 -> 0.40 | 0.52 -> 0.49 | 0 -> 0 | 0.85 -> 0.82 | 34 -> 35 | 0.55 | 29 -> 30 |
+| NEBULA | 6.09 -> 7.95 | 2.60 -> 4.46 | 1.49 -> 1.49 | 674 -> 1036 | 0.50 -> 0.65 | 50 -> 39 | 0.67 | 60 -> 48 |
+| PLASMA | 6.43 -> 7.99 | 2.72 -> 4.28 | 1.71 -> 1.71 | 367 -> 508 | 0.50 -> 0.62 | 54 -> 44 | 0.67 | 66 -> 54 |
+
+The model is round 1's: t = T(1440p, 0.67) x f x traced pixels / (1715x965) + 2 ms, now with f = f(round 1) x
+traces after / traces before. It treats every trace as equally expensive. That understates the gain in GLASS
+CATHEDRAL, whose removed pane traces each ran a closest-hit and copied the payload twice. It also ignores
+the LENS OF GOD photon pass, which runs every frame and does not shrink with the trace scale.
+
+The look: mean display level of the last of 30 frames at 480x270 on lavapipe, fast mode against
+`--no-fast-mode`, at the base commit (69d140e) and after this round:
+
+| Chapter | fast vs full, round 1 | fast vs full, now |
+|---|---|---|
+| GLASS CATHEDRAL | -0.56 % | -0.42 % |
+| ASCENT | -1.58 % | -0.15 % |
+| CITY NIGHT | -0.72 % | -0.13 % |
+| LENS OF GOD | +0.07 % | -0.11 % |
+| RAYTRACE INFINITY | +1.76 % | -0.08 % |
+| METROPOLIS | -7.25 % | -0.15 % |
+| RAYTRACE | -0.34 % | -0.03 % |
+| PARTICLE OCEAN | +0.01 % | -0.19 % |
+| NEBULA | -1.11 % | -0.02 % |
+| FINALE, STUDIO NIGHT, PLASMA PLANET, CRYSTAL CITY | - | -0.03, +0.01, +0.00, +0.06 % |
+
+TUNNEL and VECTOR CITY are still in their 1993 halves at that point of the chapter, so this check does not
+cover them. Their counters move the same way as the City's and the medium chapters'. By eye, the captures of
+LENS OF GOD, METROPOLIS, ASCENT and GLASS CATHEDRAL match the full window. Before this round, the two-point
+volume layer had made the clouds and haze visibly flatter.
+
+### The result, and the table
+
+What the round bought, per chapter (estimates):
+- **Items 1 and 2 on their own** (two in-scatter points; an intermediate build that also rouletted the
+  continuation): GLASS CATHEDRAL went from 15.90 to 11.25 traces per pixel, ASCENT 14.25 to 10.90, CITY
+  NIGHT 13.39 to 10.12, TUNNEL 16.12 to 11.38. That is an estimated 41-50 fps at the round-1 scales. Leaving the
+  continuation alone gave back about 0.3-0.6 of those traces.
+- **What the look cost.** Item 3 adds about 1.8-2.0 in-scatter shadow rays per pixel in every chapter with a
+  medium. That brings the medium chapters back to about round 1's ray counts, now with every chapter within
+  0.5 % of the full window instead of 7 %. Without those added rays, items 1 and 2 save 3.1 traces per pixel
+  in GLASS CATHEDRAL, 2.0 in TUNNEL, 1.5 in ASCENT, 0.7 in METROPOLIS and 0.2-0.4 in LENS OF GOD and RAYTRACE
+  INFINITY.
+- **Net, against round 1's table:**
+  - GLASS CATHEDRAL gains: est. 32 -> 34 fps.
+  - TUNNEL, VECTOR CITY, CITY NIGHT, ASCENT and FINALE are within about ±1.5 fps of round 1.
+  - The chapters whose fog round 1 had thinned to two points lose 10-17 % of their estimate: METROPOLIS,
+    RAYTRACE, PARTICLE OCEAN, RAYTRACE INFINITY, LENS OF GOD, NEBULA and PLASMA.
+- **Not met: the 40 fps target.** No chapter has a 40 fps margin at its table scale.
+- **Table changes** (`app/auto_scale.cpp`), to keep every chapter at or above 30 est. fps: two entries go down,
+  PARTICLE OCEAN 0.50 -> 0.45 (est. 36 fps) and LENS OF GOD 0.55 -> 0.50 (est. 35 fps). Every other entry
+  stays (the lowest estimates are RAYTRACE at 30.1 and METROPOLIS at 30.6, both at 0.45). The window's
+  controller still lowers any chapter that misses 31 ms.
+- **Scales for 40 fps** (est.): GLASS CATHEDRAL and CITY NIGHT 0.25, ASCENT and VECTOR CITY 0.30, TUNNEL,
+  METROPOLIS and RAYTRACE 0.35, PARTICLE OCEAN and RAYTRACE INFINITY 0.40, LENS OF GOD 0.45, NEBULA 0.65,
+  PLASMA 0.67.
+
+### Open items after round 2
+
+- **The volume layer is now the largest cost in the medium chapters:** four in-scatter shadow rays and a
+  continuation path of 2-3 traces, 40-55 % of their rays. It cannot be thinned without darkening, because its
+  noise meets the denoiser's history clamp. Two directions:
+  - a volume-layer history that tolerates more noise (a wider clamp on that layer only, checked against the
+    full window);
+  - the round-1 item of a second dispatch for it.
+- **Measure on the RTX:** `Evolution --bench --width 1280 --height 720`, with `EVO_NEE_ROULETTE=0` as the A/B
+  for item 2. The any-hit's cost on the RTX and the photon pass of LENS OF GOD (1,048,576 photons every frame)
+  are not in the model.
+
 ## Open items
 
 - Fill `app/auto_scale.cpp`'s table from `--bench --trace-scale S` runs on the RTX.
