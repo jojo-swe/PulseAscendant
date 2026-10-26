@@ -14,8 +14,8 @@
 //     1993 frame (both in linear light), and the scene's palette ring is the 1993 palette's;
 // (t) at the nebula's projected centre the volume layer's transmittance is below 0.8 and its radiance above 0;
 //     PLASMA on its accent has the camera inside the cloud: T < 0.5 at the frame's centre;
-// (u) PLASMA PLANET: the sun clears the limb on D (468.55) within a frame, hidden before and up after it, and
-//     the shots change on their bar lines;
+// (u) PLASMA PLANET: the sun clears the limb on D (the accent's downbeat) within a frame, hidden before and
+//     up after it, and the shots change on their bar lines;
 // (r) the reveal: star A is hidden behind the centre pillar a bar before the downbeat D (the transmittance to
 //     it under 0.1) and shows on the accent (above 0.3), as the analytic pillars say (the camera's line to A
 //     grazes the centre pillar's edge between them);
@@ -42,6 +42,7 @@
 #include "render/renderer.hpp"
 #include "retro/palette.hpp"
 #include "rt/particles.hpp"
+#include "show/generated/cue_data.hpp"
 #include "show/timeline.hpp"
 
 #include "scene_fixture.hpp"
@@ -576,7 +577,9 @@ void testSunrise() {
     const double end = at(chapter, 0.0).chapterDuration;
     std::printf("(u) PLASMA PLANET: crane %.3f s, sunrise (D) %.3f s = show %.3f, low pass %.3f s\n",
                 times.craneStart, times.sunrise, show::chapterStart(chapter) + times.sunrise, times.lowPass);
-    CHECK(std::abs(show::chapterStart(chapter) + times.sunrise - 468.55) < 0.03);
+    // D is the beat the form of Act III's track names for the chapter's accent (a downbeat).
+    const double accentBeat = show::generated::chapterAccents[chapter];
+    CHECK(std::abs(show::chapterStart(chapter) + times.sunrise - accentBeat) < 1e-3);
     // The sun stays behind the planet until D and clears the limb on D, within a frame: from then on it is up.
     double rise = -1;
     float previous = -1e9f;
@@ -791,7 +794,7 @@ int main(int argc, char** argv) {
             test::SweepLimits limits;
             limits.maxCameraStep = 40.f;
             const test::SweepStats stats = test::checkSceneSweep(SceneId::Nebula, limits);
-            CHECK(stats.frames > 3000);
+            CHECK(stats.frames == test::sweepFrames(SceneId::Nebula));
             for (const show::Effect e : {show::Effect::Plasma, show::Effect::Nebula, show::Effect::PlasmaPlanet}) {
                 const int chapter = chapterOf(e);
                 const double duration = at(chapter, 0.0).chapterDuration;

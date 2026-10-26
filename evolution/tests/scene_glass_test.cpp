@@ -163,7 +163,7 @@ void testSweep() {
     limits.maxCameraStep = 0.6f;
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Glass, limits);
     CHECK(stats.shots == 10);
-    CHECK(stats.frames > 4000);
+    CHECK(stats.frames == evo::test::sweepFrames(SceneId::Glass));
     // Every frame's caustics are valid (every 1/10 s of the three chapters).
     const modern::Glass glass({1.f / 256});
     int frames = 0;
