@@ -5,6 +5,7 @@
 #include <vk_mem_alloc.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <stdexcept>
 #include <string>
@@ -21,6 +22,11 @@ struct ContextOptions {
     std::vector<const char*> instanceExtensions;    // from SDL when windowed; empty headless
     std::vector<const char*> extraDeviceExtensions; // appended to the required list (swapchain, tests)
     PFN_vkGetInstanceProcAddr loader = nullptr;     // nullptr -> volkInitialize()
+    // A file the device's pipeline cache is loaded from (when it holds this device's data: the header's
+    // vendor, device and cache UUID) and saved back to when the Context goes (empty: no file, the cache lives
+    // as long as the Context). Every pipeline is created through the cache, so a second run of the program
+    // compiles nothing it compiled before. Reading or writing the file never fails the run.
+    std::filesystem::path pipelineCacheFile;
 };
 
 // What the device reports for ray tracing (VkPhysicalDeviceRayTracingPipelinePropertiesKHR and
@@ -98,6 +104,9 @@ public:
     // VK_LOD_CLAMP_NONE): for mipmapped textures.
     VkSampler trilinearSampler() const { return trilinearSampler_; }
 
+    // The device's pipeline cache (ContextOptions::pipelineCacheFile), which every pipeline is created with.
+    VkPipelineCache pipelineCache() const { return pipelineCache_; }
+
     // Names an object for the validation layer's messages and for debuggers. A no-op without
     // VK_EXT_debug_utils (validation off) or for an empty name.
     void setObjectName(VkObjectType type, std::uint64_t handle, const char* name) const;
@@ -105,6 +114,7 @@ public:
 private:
     Context() = default;
     void destroy() noexcept;
+    void savePipelineCache() const noexcept; // to pipelineCacheFile_, if any
 
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT messenger_ = VK_NULL_HANDLE;
@@ -117,6 +127,8 @@ private:
     VkSampler nearestSampler_ = VK_NULL_HANDLE;
     VkSampler linearSampler_ = VK_NULL_HANDLE;
     VkSampler trilinearSampler_ = VK_NULL_HANDLE;
+    VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
+    std::filesystem::path pipelineCacheFile_;
     RayTracingProperties rayTracing_{};
     bool validation_ = false;
     bool syncValidation_ = false;

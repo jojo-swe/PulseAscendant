@@ -106,6 +106,7 @@ struct Surface {
 gfx::Context createWindowedContext(const Options& options) {
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
+    contextOptions.pipelineCacheFile = gfx::pipelineCachePath(); // no recompiles on the next run
     contextOptions.loader =
         reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
     if (!contextOptions.loader)
@@ -452,6 +453,7 @@ int runRenderStream(const Options& options) {
 #endif
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
+    contextOptions.pipelineCacheFile = gfx::pipelineCachePath(); // no recompiles on the next run
     gfx::Context ctx = gfx::Context::create(contextOptions);
 
     // The epsilon keeps products like 0.7 * 10 = 7.000000000000001 from adding a frame.

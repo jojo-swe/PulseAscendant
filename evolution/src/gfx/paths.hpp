@@ -9,6 +9,10 @@ namespace evo::gfx {
 // Directory holding the compiled SPIR-V: <executable dir>/shaders, or $EVO_SHADER_DIR when set (tests).
 std::filesystem::path shaderDir();
 
+// The pipeline cache file of the program's runs (ContextOptions::pipelineCacheFile): pipeline_cache.bin
+// beside the shader directory, or $EVO_PIPELINE_CACHE when set ("0": none).
+std::filesystem::path pipelineCachePath();
+
 // A path from UTF-8 text: command-line arguments (UTF-8 on every platform, see main.cpp) and the paths SDL
 // returns. Constructing a path from a plain std::string would read it in the Windows ANSI code page.
 inline std::filesystem::path pathFromUtf8(std::string_view utf8) {

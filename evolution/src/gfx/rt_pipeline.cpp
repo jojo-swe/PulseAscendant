@@ -163,7 +163,7 @@ RayTracingPipeline::RayTracingPipeline(Context& ctx, const RtShaders& shaders,
         pipelineInfo.pGroups = groups.data();
         pipelineInfo.maxPipelineRayRecursionDepth = kMaxRecursionDepth; // only the raygen traces
         pipelineInfo.layout = layout_;
-        vkCheck(vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo,
+        vkCheck(vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, ctx.pipelineCache(), 1, &pipelineInfo,
                                                nullptr, &pipeline_),
                 ("vkCreateRayTracingPipelinesKHR(" + name + ")").c_str());
 

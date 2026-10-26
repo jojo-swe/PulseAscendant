@@ -104,6 +104,7 @@ int runBench(const Options& options) {
 
     gfx::ContextOptions contextOptions;
     contextOptions.validation = options.validation;
+    contextOptions.pipelineCacheFile = gfx::pipelineCachePath(); // no recompiles on the next run
     gfx::Context ctx = gfx::Context::create(contextOptions);
     gfx::FrameRing ring(ctx);
     render::RenderSettings settings;

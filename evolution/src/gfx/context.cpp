@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <limits>
 #include <utility>
 
@@ -439,6 +441,32 @@ Context Context::create(const ContextOptions& options) {
     ctx.setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(ctx.trilinearSampler_),
                       "trilinear");
 
+    // --- Pipeline cache ---
+    // The file's data when its header is this device's (the driver checks it too, but a foreign or torn file
+    // must never reach it), else an empty cache.
+    ctx.pipelineCacheFile_ = options.pipelineCacheFile;
+    std::vector<char> cached;
+    if (!options.pipelineCacheFile.empty()) {
+        std::ifstream in(options.pipelineCacheFile, std::ios::binary);
+        cached.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        VkPhysicalDeviceProperties device{};
+        vkGetPhysicalDeviceProperties(ctx.physicalDevice_, &device);
+        VkPipelineCacheHeaderVersionOne header{};
+        if (cached.size() >= sizeof header)
+            std::memcpy(&header, cached.data(), sizeof header);
+        const bool ours = cached.size() >= sizeof header && header.headerSize >= sizeof header &&
+                          header.headerVersion == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&
+                          header.vendorID == device.vendorID && header.deviceID == device.deviceID &&
+                          std::memcmp(header.pipelineCacheUUID, device.pipelineCacheUUID, VK_UUID_SIZE) == 0;
+        if (!ours)
+            cached.clear();
+    }
+    VkPipelineCacheCreateInfo cacheInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    cacheInfo.initialDataSize = cached.size();
+    cacheInfo.pInitialData = cached.empty() ? nullptr : cached.data();
+    vkCheck(vkCreatePipelineCache(ctx.device_, &cacheInfo, nullptr, &ctx.pipelineCache_),
+            "vkCreatePipelineCache");
+
     return ctx;
 }
 
@@ -457,7 +485,9 @@ Context::Context(Context&& other) noexcept
       nearestSampler_(std::exchange(other.nearestSampler_, VK_NULL_HANDLE)),
       linearSampler_(std::exchange(other.linearSampler_, VK_NULL_HANDLE)),
       trilinearSampler_(std::exchange(other.trilinearSampler_, VK_NULL_HANDLE)),
-      rayTracing_(other.rayTracing_), validation_(other.validation_), syncValidation_(other.syncValidation_),
+      pipelineCache_(std::exchange(other.pipelineCache_, VK_NULL_HANDLE)),
+      pipelineCacheFile_(std::move(other.pipelineCacheFile_)), rayTracing_(other.rayTracing_),
+      validation_(other.validation_), syncValidation_(other.syncValidation_),
       validationMessagesBefore_(other.validationMessagesBefore_), live_(std::exchange(other.live_, false)) {}
 
 Context& Context::operator=(Context&& other) noexcept {
@@ -474,6 +504,8 @@ Context& Context::operator=(Context&& other) noexcept {
         nearestSampler_ = std::exchange(other.nearestSampler_, VK_NULL_HANDLE);
         linearSampler_ = std::exchange(other.linearSampler_, VK_NULL_HANDLE);
         trilinearSampler_ = std::exchange(other.trilinearSampler_, VK_NULL_HANDLE);
+        pipelineCache_ = std::exchange(other.pipelineCache_, VK_NULL_HANDLE);
+        pipelineCacheFile_ = std::move(other.pipelineCacheFile_);
         rayTracing_ = other.rayTracing_;
         validation_ = other.validation_;
         syncValidation_ = other.syncValidation_;
@@ -492,6 +524,10 @@ void Context::destroy() noexcept {
             vkDestroySampler(device_, linearSampler_, nullptr);
         if (trilinearSampler_)
             vkDestroySampler(device_, trilinearSampler_, nullptr);
+        if (pipelineCache_) {
+            savePipelineCache();
+            vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
+        }
         if (commandPool_)
             vkDestroyCommandPool(device_, commandPool_, nullptr);
         if (allocator_)
@@ -509,10 +545,37 @@ void Context::destroy() noexcept {
     nearestSampler_ = VK_NULL_HANDLE;
     linearSampler_ = VK_NULL_HANDLE;
     trilinearSampler_ = VK_NULL_HANDLE;
+    pipelineCache_ = VK_NULL_HANDLE;
     allocator_ = VK_NULL_HANDLE;
     if (live_) {
         live_ = false;
         --liveContexts;
+    }
+}
+
+void Context::savePipelineCache() const noexcept {
+    if (pipelineCacheFile_.empty() || !pipelineCache_)
+        return;
+    try {
+        std::size_t size = 0;
+        if (vkGetPipelineCacheData(device_, pipelineCache_, &size, nullptr) != VK_SUCCESS || size == 0)
+            return;
+        std::vector<char> data(size);
+        if (vkGetPipelineCacheData(device_, pipelineCache_, &size, data.data()) != VK_SUCCESS)
+            return;
+        // Written beside the file and renamed over it, so another run never reads half of it.
+        std::filesystem::path temporary = pipelineCacheFile_;
+        temporary += ".tmp";
+        {
+            std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+            out.write(data.data(), static_cast<std::streamsize>(size));
+            if (!out)
+                return;
+        }
+        std::error_code error;
+        std::filesystem::rename(temporary, pipelineCacheFile_, error);
+    } catch (...) {
+        // a cache that cannot be written only costs the next run its compiles
     }
 }
 

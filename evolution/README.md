@@ -724,6 +724,12 @@ Evolution --bench --width 2560 --height 1440 --trace-scale 1 > bench-1440p-nativ
 Evolution --bench --chapters 11,19 --bench-frames 60
 ```
 
+**Pipeline cache.** Every run (window, `--bench`, `--capture-dir`, `--render-stream`) creates its pipelines
+through a Vulkan pipeline cache kept in `pipeline_cache.bin` beside the executable's `shaders` directory, so a
+second run, and every chunk of a `tools/render_video.py` render after the first, compiles nothing it compiled
+before. A file of another GPU or driver is ignored and replaced. `EVO_PIPELINE_CACHE=<path>` keeps it elsewhere,
+`EVO_PIPELINE_CACHE=0` turns it off.
+
 Exit codes: 0 on success, 1 for bad usage or a runtime error, 2 when the machine cannot run EVOLUTION
 (no Vulkan loader, no Vulkan 1.3 driver, no GPU, or a missing extension or feature; stderr names what is
 missing), and 3 when `--validation` reported any warning or error during an otherwise successful run.

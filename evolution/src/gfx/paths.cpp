@@ -20,4 +20,10 @@ std::filesystem::path shaderDir() {
     return pathFromUtf8(base) / "shaders";
 }
 
+std::filesystem::path pipelineCachePath() {
+    if (const char* overridden = std::getenv("EVO_PIPELINE_CACHE"); overridden && *overridden)
+        return std::string(overridden) == "0" ? std::filesystem::path() : pathFromUtf8(overridden);
+    return shaderDir().parent_path() / "pipeline_cache.bin";
+}
+
 } // namespace evo::gfx
