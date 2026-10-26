@@ -57,6 +57,8 @@ Then regenerated for PLASMA's layered strands inside the slab: only plasma_wipe 
 Then regenerated for Act III's new track, whose chapters follow the form of the track: galaxy_20 (now a
 fifth into GALAXY, found from --show-info), reboot_10 and reboot_60 changed; every Act I and II output
 stayed byte for byte.
+Then regenerated for the extended Act III track (its chapters follow its 17-phrase form): only galaxy_20
+changed, through the track's reactivity; the real-time fast mode left every export byte for byte.
 They are lavapipe-only: another driver or GPU gives other bytes.
 
 How a change uses it (run from evolution/ after building the linux preset):
