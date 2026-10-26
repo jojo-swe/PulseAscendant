@@ -157,7 +157,7 @@ vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
         payload.coneWidth = 0.0;
         payload.coneSpread = -1.0;
         EVO_COUNT(kCountPaneRays, 1);
-        traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, kInstanceMaskPane, 0, 0, kMissIndexSky, origin, t0, direction,
+        traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, kInstanceMaskPane, 0, 0, kMissIndexPane, origin, t0, direction,
                     tMax, 0);
         if (payload.t < 0.0) {
             payload = hit;

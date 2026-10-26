@@ -147,7 +147,7 @@ struct TraceExtras {
 };
 
 // The path tracer every 2026 scene shares: the ray tracing pipeline and its SBT (8 hit
-// groups: hitGroupFor(MaterialClass, GeometryKind), triangles then analytic spheres; misses: sky, shadow),
+// groups: hitGroupFor(MaterialClass, GeometryKind), triangles then analytic spheres; misses: sky, shadow, pane),
 // the TLAS and its scratch, the per-slot uniform, instance, light and material buffers, the dummies of the
 // feature bindings and the G-buffer. A scene's own GPU side is a SceneGpu, which trace() binds. One trace per
 // frame: a frame shows one scene.

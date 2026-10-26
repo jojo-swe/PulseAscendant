@@ -203,6 +203,7 @@ evo_add_shaders(evo_modern
     shaders/rt/pathtrace.rgen
     shaders/rt/sky.rmiss
     shaders/rt/shadow.rmiss
+    shaders/rt/pane.rmiss
     shaders/rt/pbr.rchit
     shaders/rt/glass.rchit
     shaders/rt/emissive.rchit
