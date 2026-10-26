@@ -181,14 +181,17 @@ int main() {
         CHECK(evo::parseOptions({"--bench", "--bench-counters"}).benchCounters);
         CHECK(!parseError({"--bench-counters"}).empty());
         CHECK(defaults.fastMode && !evo::parseOptions({"--bench", "--no-fast-mode"}).fastMode);
+        CHECK(evo::parseOptions({"--bench", "--bench-capture", "out"}).benchCapture == "out");
+        CHECK(!parseError({"--bench-capture", "out"}).empty());
         CHECK(!parseError({"--no-fast-mode", "--capture-dir", "out"}).empty());
         CHECK(parseError({"--bench", "--capture-dir", "out"}) == "--bench cannot be combined with an export");
         CHECK(!parseError({"--bench", "--render-stream", "--duration", "1"}).empty());
 
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
-        for (const char* flag : {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset",
-                                 "--no-crt", "--no-hud", "--spp", "--detail", "--trace-scale", "--bench",
-                                 "--bench-frames", "--bench-counters", "--chapters", "--no-fast-mode"})
+        for (const char* flag :
+             {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt", "--no-hud",
+              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--bench-counters",
+              "--bench-capture", "--chapters", "--no-fast-mode"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);
         CHECK(evo::helpText().find("keys 1-9 and 0 jump to chapters 1-10") != std::string::npos);

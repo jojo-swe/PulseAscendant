@@ -3,8 +3,10 @@ hardware checkpoint reads, sane values, and the exit code 0. Arguments after the
 --validation) are passed to every run."""
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 
 KEYS = {"chapter", "title", "scene", "frames", "spp", "traceScale", "width", "height", "traceWidth",
         "traceHeight", "device", "timestamps", "gpuMs", "fps"}
@@ -74,7 +76,15 @@ def main(exe, extra):
 
     # --bench-counters: the counting tracer's work per trace pixel and the frame's statistics. STUDIO NIGHT's
     # timed frames trace 1 spp: one path, one camera ray and one guide ray per pixel.
-    records = bench(exe, extra, ["--chapters", "11", "--bench-frames", "2", "--bench-counters"])
+    # --bench-capture writes the last timed frame as bench_<chapter>.png.
+    capture = tempfile.mkdtemp(prefix="evo_bench_")
+    records = bench(exe, extra, ["--chapters", "11", "--bench-frames", "2", "--bench-counters", "--bench-capture",
+                                 capture])
+    png = os.path.join(capture, "bench_11.png")
+    with open(png, "rb") as f:
+        head = f.read(24)
+    if head[:8] != b"\x89PNG\r\n\x1a\n" or head[16:24] != (96).to_bytes(4, "big") + (54).to_bytes(4, "big"):
+        sys.exit(f"--bench-capture: {png} is no 96x54 PNG")
     counted = records[0]
     check(counted, 11, 2, 0.67, (64, 36))
     counters, stats = counted.get("counters", {}), counted.get("stats", {})

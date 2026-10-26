@@ -594,6 +594,8 @@ Options:
                        --bench-frames frames from 20 % into it (after 2 warm-up frames)
                        and print one JSON line with the GPU time of every pass
   --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)
+  --bench-capture DIR  With --bench: also write each chapter's last timed frame to
+                       DIR/bench_<chapter>.png (to compare the look of two runs)
   --bench-counters     With --bench: trace with the counting path tracer and add its work
                        per pixel per frame (rays by kind, NEE, medium steps) and the
                        frame's scene statistics to each line (slower; the same picture)

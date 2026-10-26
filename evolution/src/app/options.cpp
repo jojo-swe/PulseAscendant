@@ -141,6 +141,9 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.fastMode = false;
         } else if (flag == "--bench") {
             options.bench = true;
+        } else if (flag == "--bench-capture") {
+            options.benchCapture = nextValue();
+            benchOnly = true;
         } else if (flag == "--bench-counters") {
             options.benchCounters = true;
             benchOnly = true;
@@ -285,6 +288,8 @@ std::string helpText() {
            "                       --bench-frames frames from 20 % into it (after 2 warm-up frames)\n"
            "                       and print one JSON line with the GPU time of every pass\n"
            "  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)\n"
+           "  --bench-capture DIR  With --bench: also write each chapter's last timed frame to\n"
+           "                       DIR/bench_<chapter>.png (to compare the look of two runs)\n"
            "  --bench-counters     With --bench: trace with the counting path tracer and add its work\n"
            "                       per pixel per frame (rays by kind, NEE, medium steps) and the\n"
            "                       frame's scene statistics to each line (slower; the same picture)\n"

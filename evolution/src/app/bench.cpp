@@ -3,6 +3,9 @@
 #include "gfx/context.hpp"
 #include "gfx/frame_ring.hpp"
 #include "gfx/gpu_timers.hpp"
+#include "gfx/paths.hpp"
+#include "gfx/readback.hpp"
+#include "image/png.hpp"
 #include "modern/modern_scene.hpp"
 #include "render/renderer.hpp"
 #include "show/timeline.hpp"
@@ -11,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -127,6 +131,9 @@ int runBench(const Options& options) {
     renderer.prepare(times); // setup: every scene's GPU side before the first timed frame
 
     gfx::GpuTimers& timers = renderer.timers();
+    std::optional<gfx::Readback> readback;
+    if (!options.benchCapture.empty())
+        readback.emplace(ctx, settings.width, settings.height);
     const VkExtent2D trace = renderer.modern().traceExtent();
     for (const int chapter : chapters) {
         const double t0 = firstTimed(chapter);
@@ -152,6 +159,8 @@ int runBench(const Options& options) {
             renderer.render(cmd, show::sampleTimeline(t0 + i * step));
             cpuSeconds += std::chrono::duration<double>(Clock::now() - begun).count();
             waitSeconds += std::chrono::duration<double>(begun - before).count();
+            if (readback && i + 1 == options.benchFrames)
+                readback->record(cmd, renderer.output()); // --bench-capture: the last timed frame
             ring.submit();
         }
         ring.waitAll();
@@ -200,6 +209,13 @@ int runBench(const Options& options) {
                             {"spp", s.spp},                 {"maxBounces", s.maxBounces},
                             {"raygenStackBytes", double(s.raygenStack)},
                             {"hitStackBytes", double(s.hitStack)}};
+        }
+        if (readback) {
+            const std::vector<std::uint8_t> rgb = readback->rgb(); // the ring is idle (waitAll above)
+            const std::filesystem::path path =
+                options.benchCapture / ("bench_" + std::to_string(chapter) + ".png");
+            image::writePng(path, options.width, options.height, rgb.data());
+            std::fprintf(stderr, "bench: %s\n", gfx::pathToUtf8(path).c_str());
         }
         std::printf("%s\n", benchJson(record).c_str());
         std::fflush(stdout);
