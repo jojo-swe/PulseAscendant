@@ -205,6 +205,8 @@ evo_add_shaders(evo_modern
     shaders/rt/sky.rmiss
     shaders/rt/shadow.rmiss
     shaders/rt/pane.rmiss
+    shaders/rt/shadow_through.rmiss
+    shaders/rt/pane.rahit
     shaders/rt/pbr.rchit
     shaders/rt/glass.rchit
     shaders/rt/emissive.rchit

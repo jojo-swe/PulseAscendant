@@ -35,7 +35,10 @@ struct BlasInput {
 // traced go.
 class BlasSet {
 public:
-    BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact = true);
+    // noDuplicateAnyHit: every mesh's geometry also NO_DUPLICATE_ANY_HIT_INVOCATION (an any-hit that sums or
+    // multiplies what it meets must see each triangle once; the traces' results are otherwise the same).
+    BlasSet(gfx::Context& ctx, const GeometryStore& store, bool compact = true,
+            bool noDuplicateAnyHit = false);
     // One BLAS per input, in order (address(i) is input i's): the analytic spheres' AABBs (rt/spheres.hpp).
     // Throws std::invalid_argument for no inputs.
     BlasSet(gfx::Context& ctx, std::span<const BlasInput> inputs, bool compact = true);
@@ -70,6 +73,8 @@ private:
 // One TLAS instance: mesh `mesh` of a BlasSet placed by `transform`, or, when `blas` is not 0, the BLAS at
 // that device address (an analytic sphere BLAS, rt/spheres.hpp and rt/particles.hpp; `mesh` is then
 // ignored). customIndex (gl_InstanceCustomIndexEXT) and hitGroup (the SBT record offset) have 24 bits.
+// notOpaque: the instance is not opaque (FORCE_NO_OPAQUE) to a ray traced without the opaque flag, which then
+// runs its hit group's any-hit (every ray traced with the opaque flag still sees it opaque).
 struct Instance {
     std::uint32_t mesh;
     Mat34 transform;
@@ -77,6 +82,7 @@ struct Instance {
     std::uint32_t hitGroup;
     std::uint8_t mask = 0xFF;
     VkDeviceAddress blas = 0;
+    bool notOpaque = false;
 };
 
 // A top-level acceleration structure rebuilt every frame. Owns one TLAS and one scratch buffer sized for

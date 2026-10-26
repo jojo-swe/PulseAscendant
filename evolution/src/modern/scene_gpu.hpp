@@ -61,6 +61,11 @@ public:
     // Whether a static material shows the retro screen (kRetroScreenTexture): the trace then samples the
     // retro image it is given, else a black texture of the tracer's own.
     bool samplesRetro() const { return samplesRetro_; }
+    // Whether the static materials have a thin glass pane of the Glass class: the meshes' BLASes are then
+    // built with NO_DUPLICATE_ANY_HIT_INVOCATION, so the window's fast mode may pass such panes on a shadow
+    // ray through the Glass hit group's any-hit (shaders/rt/pane.rahit) instead of walking them one trace
+    // each.
+    bool paneAnyHit() const { return paneAnyHit_; }
     // The device memory this scene holds, as allocated (VMA): vertices, indices, mesh records, the compacted
     // BLASes, the static spheres (buffer and BLASes) and the material table. A task that adds GPU data to the
     // scene adds it here: shared_tracer_test (b) compares it with the allocator's statistics around
@@ -70,6 +75,7 @@ public:
 private:
     const SceneStatic* source_;
     bool samplesRetro_ = false;
+    bool paneAnyHit_ = false;
     rt::GeometryStore store_;
     rt::BlasSet blases_;
     std::unique_ptr<rt::SphereBlas> spheres_;

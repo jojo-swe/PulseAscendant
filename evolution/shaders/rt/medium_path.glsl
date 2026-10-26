@@ -38,11 +38,10 @@ const uint kMediumSegmentEnd = 2u;       // the path ends in the medium
 // The continuation's bounces draw the per-bounce random dimensions of bounce + this (the surface path's own
 // stay below it).
 const uint kMediumBounceOffset = 64u;
-#ifdef EVO_FAST
-const uint kPrimaryScatterSamples = 2u; // the window's fast build (pathtrace.rgen); one was visibly darker
-#else
-const uint kPrimaryScatterSamples = 4u; // modern::kPrimaryScatterSamples
-#endif
+// modern::kPrimaryScatterSamples, in the window's fast build too: with two its noisier volume layer lost
+// light to the denoiser's history clamp (METROPOLIS's lit haze 7 % darker, ASCENT's clouds 1.6 %; three
+// points 3.3 and 0.9 %).
+const uint kPrimaryScatterSamples = 4u;
 // Equiangular sampling of the primary segment's points serves frames with 1 to this many tree lights (stars
 // in a nebula); a city's thousands of lamps leave it to the majorant. The share of the points it draws:
 const uint kEquiangularMaxLights = 64u;   // modern::kEquiangularMaxLights
@@ -176,6 +175,11 @@ vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWor
     if (!(lightPdf > 0.0) || !isFinite(lightPdf) || !(maxComponent(f) > 0.0)) {
         return vec3(0.0);
     }
+#ifdef EVO_FAST
+    if (!neeShadowTraced(f * le * (powerHeuristic(lightPdf, mediumPhasePdf(ph, c)) / lightPdf))) {
+        return vec3(0.0);
+    }
+#endif
     vec3 through = shadowTransmittance(x, shadowDirection, tMax); // stained glass colours the shafts
     if (!(maxComponent(through) > 0.0)) {
         return vec3(0.0);
@@ -187,6 +191,11 @@ vec3 mediumSampleLight(vec3 x, vec3 travel, MediumPhase ph, vec3 u, uint treeWor
 // Next-event estimates requested by the primary segment's points or a medium vertex, all traced at the one
 // mediumSampleLight call in mediumStep (lavapipe inlines every call site of a ray tracing function).
 uint gMediumRequestCount = 0u;
+#ifdef EVO_FAST
+// The fast build's roulette at a medium vertex (pathtrace.rgen's kFastRouletteBounce): its weight, for what
+// the path adds after the vertex's own estimate.
+float gMediumRouletteWeight = 1.0;
+#endif
 vec3 gMediumRequestPoint[kPrimaryScatterSamples];
 vec3 gMediumRequestTravel[kPrimaryScatterSamples];
 MediumPhase gMediumRequestPhase[kPrimaryScatterSamples];
@@ -248,6 +257,15 @@ uint mediumSegment(uint bounce, bool nee, bool roulette, inout bool rough, inout
         }
         throughput /= survive;
     }
+#ifdef EVO_FAST
+    else if (roulette && bounce == kFastRouletteBounce && gBounceOffset == 0u) {
+        float survive = clamp(maxComponent(throughput), 0.05, 0.95);
+        if (bounceRand(bounce, 6u) >= survive) {
+            return kMediumSegmentEnd;
+        }
+        gMediumRouletteWeight = 1.0 / survive; // applied once this vertex's own estimate is in (mediumStep)
+    }
+#endif
     if (!(maxComponent(throughput) > 0.0) || !allFinite(throughput)) {
         return kMediumSegmentEnd;
     }
@@ -616,6 +634,9 @@ uint mediumStep(uint bounce, bool nee, bool roulette, inout bool rough, inout ve
                 inout vec3 origin, inout vec3 direction, inout float coneSpread, inout bool previousDelta,
                 inout float previousPdf, inout vec3 prevP, inout vec3 prevN, inout bool prevTransmissive) {
     gMediumRequestCount = 0u;
+#ifdef EVO_FAST
+    gMediumRouletteWeight = 1.0;
+#endif
     uint event = kMediumSegmentSurface;
     bool neeRough = rough; // a vertex's next-event estimate is clamped as the path was before it scatters
     if (bounce == 0u) {
@@ -625,15 +646,29 @@ uint mediumStep(uint bounce, bool nee, bool roulette, inout bool rough, inout ve
                               previousDelta, previousPdf, prevP, prevN, prevTransmissive);
     }
     for (uint i = 0u; i < gMediumRequestCount; ++i) {
+#ifdef EVO_FAST
+        // A medium vertex's estimate after a rough vertex has its shadow ray rouletted (neeShadowTraced); the
+        // primary segment's points (bounce 0, the volume layer) never.
+        gNeeScale = bounce > 0u && neeRough && gBounceOffset == 0u ? gMediumRequestWeight[i] : vec3(0.0);
+        gNeeBounce = bounce;
+        gNeeWeight = 1.0;
+#endif
         vec3 c = gMediumRequestWeight[i] * mediumSampleLight(gMediumRequestPoint[i], gMediumRequestTravel[i],
                                                              gMediumRequestPhase[i], gMediumRequestRandom[i],
                                                              gMediumRequestTreeWord[i]);
         if (bounce == 0u) {
             gMediumVolume.rgb += c;
         } else {
+#ifdef EVO_FAST
+            addWeightedContribution(radiance, c, neeRough, gNeeWeight);
+#else
             addContribution(radiance, c, neeRough);
+#endif
         }
     }
+#ifdef EVO_FAST
+    gHeroWeight *= gMediumRouletteWeight;
+#endif
     return event;
 }
 

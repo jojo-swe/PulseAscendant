@@ -69,12 +69,18 @@
 // shader traces rays (recursion depth 1).
 //
 // The window's fast build (rt_pathtrace_fast.rgen.spv, -DEVO_FAST; modern::TracerOptions::fast, never an
-// export; docs/PERFORMANCE.md): two in-scatter points on the primary segment instead of four
-// (medium_path.glsl), and one wavelength per path whatever the spp (no hero split, whose saved state the
-// compiler then drops). Both estimates stay unbiased, and less state is live across each trace. The volume
-// layer's extra noise costs a little light where the denoiser's history clamp cuts it (ASCENT's clouds 1.5 %,
-// one point 2.5 %). Russian roulette stays at bounce 3: from bounce 2 it amplified the survivors of dark
-// bounces past the scenes' low indirect clamps, which then cut them (2-3 % of the light).
+// export; docs/PERFORMANCE.md): one wavelength per path whatever the spp (no hero split, whose saved state
+// the compiler then drops), which stays unbiased with less state live across each trace. It keeps the four
+// in-scatter points on the primary segment (medium_path.glsl): two made the volume layer noisy enough for the
+// denoiser's history clamp to cut its light (METROPOLIS's haze 7 %, ASCENT's clouds 1.6 %). Roulette that
+// divides the throughput stays at bounce 3: from bounce 2 it amplified the survivors of dark bounces past the
+// scenes' low indirect clamps, which then cut them (2-3 % of the light).
+// When every thin pane of the frame is a Glass mesh (kTraceFlagPaneAnyHit), a shadow ray passes the panes in
+// one trace through the Glass group's any-hit (pane.rahit, the same transmission) instead of one occlusion
+// ray plus a closest-hit trace per pane and one more that misses. The surface path (not the continuation,
+// whose noise the volume layer's history clamp would cut) also plays two roulettes whose weights apply after
+// the clamp, so both keep the expectation: the shadow rays of faint estimates after a rough vertex
+// (neeShadowTraced) and Russian roulette at bounce 2 (kFastRouletteBounce).
 
 #include "common.glsl"
 #include "random.glsl"
@@ -90,10 +96,17 @@ layout(push_constant) uniform Push {
     vec2 windowOrigin; // the subpixel window's corner relative to the pixel's ((0, 0): the whole pixel)
     vec2 windowSize;   // its size in pixels ((1, 1): the whole pixel)
     uint guides;       // non-zero: this dispatch also writes the guides (the volume layer, depth, normal, motion)
+#ifdef EVO_FAST
+    float neeRoulette; // below this luminance a later estimate's shadow ray is rouletted (0: never)
+#endif
 } pc;
 
 layout(location = 0) rayPayloadEXT HitPayload payload;
 layout(location = 1) rayPayloadEXT uint shadowVisible;
+#ifdef EVO_FAST
+// A shadow ray through thin panes' any-hit (shadowTransmittance): rgb what they let through, a its miss.
+layout(location = 2) rayPayloadEXT vec4 shadowThrough;
+#endif
 
 const float kRayMax = 1e30;
 // Random dimensions: 0-1 pixel jitter, 2-3 lens, then kDimsPerBounce per bounce (0-2 BSDF sample, 3 the light
@@ -105,8 +118,20 @@ const uint kHeroWavelengths = 4u;
 const uint kHeroSpp = 16u;
 // The first bounce Russian roulette may end a path at (surfaces and medium vertices alike).
 const uint kRouletteBounce = 3u;
-// The share of a contribution: 1, or 1 / kHeroWavelengths once the path has split into its wavelengths.
+// The share of a contribution: 1, or 1 / kHeroWavelengths once the path has split into its wavelengths. The
+// fast build (one wavelength) uses it for the weight of its Russian roulette at kFastRouletteBounce instead:
+// a factor applied after the clamp.
 float gHeroWeight = 1.0;
+#ifdef EVO_FAST
+// The window's fast mode also plays Russian roulette at this bounce of the surface path (the continuation's
+// extra noise would lose light to the volume layer's history clamp), with the same survival probability as
+// from kRouletteBounce on, but weighs what the path adds afterwards by 1 / survival after the clamp
+// (gHeroWeight) rather than dividing the throughput by it: the clamp then sees what it would have seen
+// without the roulette, so the expectation stays that of the clamped estimate. (Dividing the throughput, the
+// survivors of dark bounces were amplified past the scenes' low indirect clamps, which cut them: 2-3 % of the
+// light.)
+const uint kFastRouletteBounce = 2u;
+#endif
 // [medium] The dimension that seeds a sample's media stream (medium.glsl), far from the others.
 const uint kMediumSeedDimension = 0x6D656469u;
 
@@ -154,6 +179,20 @@ bool unoccluded(vec3 origin, vec3 direction, float tMax) {
 // the panes with the main payload, which it restores.
 const uint kMaxShadowPanes = 8u;
 vec3 shadowTransmittance(vec3 origin, vec3 direction, float tMax) {
+#ifdef EVO_FAST
+    // The window's fast mode, when every pane is a Glass mesh (kTraceFlagPaneAnyHit): one trace, solid
+    // geometry opaque, the panes not, their any-hit (pane.rahit) multiplying the same transmission into the
+    // small payload and passing on; the miss marks it unoccluded. The walk below takes a trace per pane plus
+    // one, each with the main payload saved and restored.
+    if (featureOn(kFeaturePanes) && (frame.flags & kTraceFlagPaneAnyHit) != 0u) {
+        EVO_COUNT(kCountShadowRays, 1);
+        shadowThrough = vec4(1.0, 1.0, 1.0, 0.0);
+        traceRayEXT(tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
+                    kInstanceMaskSolid | kInstanceMaskPane, 0, 0, kMissIndexShadowThrough, origin, 0.0,
+                    direction, tMax, 2);
+        return shadowThrough.a != 0.0 ? shadowThrough.rgb : vec3(0.0);
+    }
+#endif
     if (!unoccluded(origin, direction, tMax)) {
         return vec3(0.0);
     }
@@ -272,6 +311,65 @@ void addContribution(inout vec3 radiance, vec3 c, bool rough) {
     radiance += c * gHeroWeight;
 }
 
+#ifdef EVO_FAST
+// Russian roulette on the shadow rays of next-event estimates made after a rough vertex (the window's fast
+// mode, pc.neeRoulette > 0: modern_stage.cpp sets it to a fraction of one display level at the frame's
+// exposure), in the surface path only (the continuation's extra noise would lose light to the volume layer's
+// history clamp: up to 0.9 % darker when it was rouletted too, 3-13 % with a roulette at its start). The
+// caller sets gNeeScale to what it multiplies the estimate by (the path's throughput and the caustics' keep),
+// or to 0 for an estimate that is never rouletted (the primary hit's, a delta chain's, the primary segment's
+// in-scatter points), and gNeeBounce to its bounce. Before its shadow ray and the media are known, an
+// estimate's luminance is at most that of the unshadowed estimate times gNeeScale, and after the clamp at
+// most frame.clampIndirect (times gHeroWeight, the path's own roulette weight). The level is pc.neeRoulette, or
+// kNeeRelative of what the sample has added to its pixel so far if that is more: at or above it the shadow
+// ray is always traced; below, with probability luminance / level, and the caller weighs what the clamp
+// leaves of the estimate by 1 / that probability (gNeeWeight, addWeightedContribution). The expectation stays
+// exactly that of the clamped estimate; what changes is that a faint estimate is either nothing or about the
+// level bright, and most faint ones cost no shadow ray, no light's transmittance through the media and no
+// pane.
+vec3 gNeeScale = vec3(0.0);
+uint gNeeBounce = 0u;
+float gNeeWeight = 1.0;
+const uint kNeeRouletteDimension = 0x6E656552u; // far from the per-bounce dimensions
+// The level is also at least kNeeRelative times gNeeReference, the luminance of what the sample has added to
+// its pixel so far (the bounce loop keeps it): a faint estimate in a bright pixel is rouletted as well.
+float gNeeReference = 0.0;
+const float kNeeRelative = 1.0 / 32.0;
+
+// Whether the estimate whose value before its shadow ray is `unshadowed` (times gNeeScale) traces it.
+bool neeShadowTraced(vec3 unshadowed) {
+    if (!(pc.neeRoulette > 0.0) || !(maxComponent(gNeeScale) > 0.0)) {
+        return true;
+    }
+    float level = max(pc.neeRoulette, kNeeRelative * gNeeReference);
+    if (!(level > 0.0)) {
+        return true;
+    }
+    float l = min(luminance(unshadowed * gNeeScale), frame.clampIndirect) * gHeroWeight;
+    if (l >= level) {
+        return true;
+    }
+    float survive = l / level; // NaN or 0: never traced (the estimate is 0 or not finite)
+    uint dimension = kNeeRouletteDimension + gNeeBounce + gBounceOffset;
+    if (!(randomFloat(frame.frameSeed, gPixel, gSample, dimension) < survive)) {
+        return false;
+    }
+    gNeeWeight = 1.0 / survive;
+    return true;
+}
+
+// addContribution, then times weight (the roulette's 1 / survival probability) after the clamp.
+void addWeightedContribution(inout vec3 radiance, vec3 c, bool rough, float weight) {
+    if (rough) {
+        float l = luminance(c);
+        if (l > frame.clampIndirect) {
+            c *= frame.clampIndirect / l;
+        }
+    }
+    radiance += c * (weight * gHeroWeight);
+}
+#endif
+
 // The hero wavelength's uniform at a bounce: the pixel's samples walk the spectrum in golden-ratio steps from
 // one random start per pixel and frame (a rotated Kronecker sequence: each sample is still uniform, but the
 // samples of a pixel cover [0, 1) evenly), so dispersive glass converges to its colours, not to chroma noise.
@@ -316,6 +414,11 @@ vec3 sampleEnvironmentLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bo
     if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
         return vec3(0.0);
     }
+#ifdef EVO_FAST
+    if (!neeShadowTraced(f * le * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf))) {
+        return vec3(0.0);
+    }
+#endif
     vec3 through = shadowTransmittance(origin, wi, kRayMax);
     if (!(maxComponent(through) > 0.0)) {
         return vec3(0.0);
@@ -354,6 +457,11 @@ vec3 sampleTreeLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce, v
     if (!(lightPdf > 0.0) || !isFinite(lightPdf)) {
         return vec3(0.0);
     }
+#ifdef EVO_FAST
+    if (!neeShadowTraced(f * light.emission * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf))) {
+        return vec3(0.0);
+    }
+#endif
     vec3 origin = offsetOrigin(p, ng, wi);
     vec3 q = p + dist * wi;
     vec3 toTarget = offsetOrigin(q, safeNormalize(q - light.center, -wi), -wi) - origin;
@@ -440,6 +548,11 @@ vec3 sampleLight(Surface s, vec3 p, vec3 n, vec3 ng, vec3 wo, uint bounce) {
         }
         shadowDirection = toTarget / tMax;
     }
+#ifdef EVO_FAST
+    if (!neeShadowTraced(f * lightRadiance(l, uv, wi) * (powerHeuristic(lightPdf, bsdfPdf) / lightPdf))) {
+        return vec3(0.0);
+    }
+#endif
     vec3 through = shadowTransmittance(origin, shadowDirection, tMax);
     if (!(maxComponent(through) > 0.0)) {
         return vec3(0.0);
@@ -575,6 +688,11 @@ SampleResult tracePath() {
                   1);
         // A further wavelength's first hit is the split's: its medium segment was the first wavelength's.
         bool replay = hero > 0u && bounce == splitBounce;
+#ifdef EVO_FAST
+        // What the sample has added to its pixel so far (neeShadowTraced, the surface path only): the surface
+        // path's lighting and emission seen through the primary segment, plus its in-scattering.
+        gNeeReference = luminance(gMediumVolume.rgb + gMediumVolume.a * (r.lighting + r.emission));
+#endif
         // [medium] The primary segment goes to the volume layer (the surface path stays unattenuated); every
         // later segment is delta-tracked and may end in a medium vertex, from which the path goes on.
         if (mediumActive() && !replay) {
@@ -691,10 +809,20 @@ SampleResult tracePath() {
 
         if (nee && (frame.lightCount > 0u || frame.environmentSelect > 0.0) && !thinPane &&
             bsdfHasNonDeltaLobe(s)) {
+#ifdef EVO_FAST
+            // The shadow ray's roulette after a rough vertex (neeShadowTraced).
+            vec3 keep = causticNeeKeep(caustic, s, p, n, wo, bounce);
+            gNeeScale = rough && gBounceOffset == 0u ? throughput * keep : vec3(0.0);
+            gNeeBounce = bounce;
+            gNeeWeight = 1.0;
+            vec3 estimate = throughput * sampleLight(s, p, n, ng, wo, bounce) * keep;
+            addWeightedContribution(r.lighting, estimate, rough, gNeeWeight);
+#else
             addContribution(r.lighting,
                             throughput * sampleLight(s, p, n, ng, wo, bounce) *
                                 causticNeeKeep(caustic, s, p, n, wo, bounce),
                             rough);
+#endif
         }
 
         vec3 u = vec3(bounceRand(bounce, 0u), bounceRand(bounce, 1u), bounceRand(bounce, 2u));
@@ -725,6 +853,15 @@ SampleResult tracePath() {
             }
             throughput /= survive;
         }
+#ifdef EVO_FAST
+        else if (roulette && bounce == kFastRouletteBounce && gBounceOffset == 0u) {
+            float survive = clamp(maxComponent(throughput), 0.05, 0.95);
+            if (bounceRand(bounce, 6u) >= survive) {
+                break;
+            }
+            gHeroWeight /= survive; // after this vertex's own estimate, before what the path finds next
+        }
+#endif
         if (!(maxComponent(throughput) > 0.0) || !allFinite(throughput)) {
             break;
         }
