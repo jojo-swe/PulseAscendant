@@ -11,6 +11,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <locale>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -26,7 +28,7 @@ int checksPassed = 0;
         ++checksPassed;                                                                                      \
     } while (false)
 
-constexpr double kShowSeconds = 711.16;
+const double kShowSeconds = evo::show::showDuration();
 constexpr std::uint32_t kHalfSecond = 24000; // frames at 48 kHz
 
 void appendU16(std::vector<char>& out, std::uint32_t value) {
@@ -120,7 +122,12 @@ void checkRefusedMusic(const std::filesystem::path& dir) {
     writeWav(halfSecond, kHalfSecond);
     evo::ShowClock wrongLength(true, halfSecond, kShowSeconds, 0.0);
     CHECK(wrongLength.silent());
-    CHECK(wrongLength.status() == "SILENT MODE: Music length 0.5 s differs from the show 711.16 s");
+    std::ostringstream show;
+    show.imbue(std::locale::classic());
+    show.precision(10);
+    show << kShowSeconds;
+    CHECK(wrongLength.status() ==
+          "SILENT MODE: Music length 0.5 s differs from the show " + show.str() + " s");
     const double t = wrongLength.now();
     CHECK(t >= 0.0 && t < 0.5);
 }

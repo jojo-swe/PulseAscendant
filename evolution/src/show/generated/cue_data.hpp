@@ -4,9 +4,13 @@
 namespace evo::show::generated {
 inline constexpr int chapterCount = 31;
 // Directed chapter starts in show seconds, each on a tracked beat; the first is 0.
-inline constexpr double chapterStarts[chapterCount] = {0.0000,7.1731,27.1138,44.1346,60.7038,80.6485,98.8677,115.3762,149.1862,170.2923,182.5208,194.0000,215.7000,238.6900,264.4454,289.7015,321.7492,346.4715,366.4431,390.6408,412.4000,431.9762,458.5331,488.1231,516.4008,542.9054,569.3746,600.6138,635.7315,667.7208,696.6185};
-// The authored targets from tools/show_targets.json, in show seconds.
-inline constexpr double chapterTargets[chapterCount] = {0.0000,8.0000,26.0000,44.0000,62.0000,80.0000,98.0000,116.0000,150.0000,168.0000,182.0000,194.0000,214.0000,238.0000,264.0000,292.0000,322.0000,344.0000,368.0000,390.0000,412.4000,430.4000,458.4000,486.4000,514.4000,542.4000,570.4000,602.4000,634.4000,666.4000,696.4000};
+inline constexpr double chapterStarts[chapterCount] = {0.0000,7.1731,27.1138,44.1346,60.7038,80.6485,98.8677,115.3762,149.1862,170.2923,182.5208,194.0000,215.7000,238.6900,264.4454,289.7015,321.7492,346.4715,366.4431,390.6408,412.4000,440.6600,468.4877,496.3177,517.1823,538.0562,565.8838,593.7115,621.5354,649.3623,675.4469};
+// The targets from tools/show_targets.json in show seconds: as written, or found in the form of a
+// form-directed track (tools/song_form.py).
+inline constexpr double chapterTargets[chapterCount] = {0.0000,8.0000,26.0000,44.0000,62.0000,80.0000,98.0000,116.0000,150.0000,168.0000,182.0000,194.0000,214.0000,238.0000,264.0000,292.0000,322.0000,344.0000,368.0000,390.0000,412.4000,440.6600,468.4967,496.3154,517.1884,538.0614,565.8800,593.7168,621.5354,649.3645,675.4469};
+// The tracked beat each chapter's accent lands on, in show seconds, from the form of a form-directed
+// track; -1 where the show finds the accent itself (the strongest hit in the middle of the chapter).
+inline constexpr double chapterAccents[chapterCount] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,427.1831,454.5715,482.4015,510.2315,524.1438,551.9692,579.7969,607.6246,635.4508,669.7931,677.1838};
 // SHA-256 of assets/music/show.wav, the audio this data was measured from.
-inline constexpr const char* sourceSha256 = "39db88573e32440e6f0d57e1c646ab4d594833472af719acf61421924b9bc585";
+inline constexpr const char* sourceSha256 = "baa46dab11d71c103864ce9bceac7d92df6097d571ad715a37482928329b74a3";
 }

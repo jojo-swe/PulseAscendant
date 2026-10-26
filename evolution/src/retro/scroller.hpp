@@ -45,8 +45,9 @@ std::vector<text::Item> scrollerItems(std::string_view text, std::uint32_t retro
 // kCreditsGreetings, each entering at the right edge on a bar line of the chapter (kCreditsEntryBars, counted
 // with chapterDownbeat from the chapter's start) and running left at kCreditsSpeed; then kCreditsEnd enters
 // on the bar line of the chapter's downbeat D and eases in (a cubic Hermite from the scroller's speed to
-// rest) to stop centred on the accent (688.02 s), where it holds. Every glyph rides y = kCreditsBaseY + a
-// sin((x + phase) / kCreditsWavelength), phase = (time since the chapter's start) * kCreditsSpeed / 2; the
+// rest) to stop centred on the accent (three beats after D), where it holds. Every glyph rides
+// y = kCreditsBaseY + a sin((x + phase) / kCreditsWavelength), phase = (time since the chapter's start) *
+// kCreditsSpeed / 2; the
 // amplitude a follows the bass, sampled once per retro frame (show::envelope, Bass), kCreditsAmplitude +
 // kCreditsBassAmp
 // * bass, and THE END?'s eases to 0 as it lands, so it holds still. A text and scene effect at 35 retro

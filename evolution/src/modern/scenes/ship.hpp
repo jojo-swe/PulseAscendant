@@ -18,7 +18,9 @@
 // - shot 4, into the light [22.62, end): where the music breaks the camera lets the ship go; it pulls away
 //   down the tunnel into the sun at its end (the one anamorphic streak of Act III) and the picture floods
 //   to white over the last bars.
-// The ship banks with FLYBY's 1993 attitude (retro::flybyAttitude).
+// The ship banks with FLYBY's 1993 attitude (retro::flybyAttitude), in the phase that shows its attitude at
+// kShipAttitudeAtPass on the pass; the planet lies as far behind the pass whenever it falls, so the crossing
+// is the same shot wherever the music puts it.
 //
 // The render frame is the ship's own: the ship stands still at the origin in its model space and the world
 // moves around it (every world point X is rendered at R^T (X - P), P the ship's position, R its attitude), so
@@ -43,6 +45,7 @@ inline constexpr float kWormholeRingRadius = 140.f, kWormholeRingTube = 10.f;
 inline constexpr std::uint32_t kShipAirSplats = 98304; // the planet's atmosphere shell
 inline constexpr float kShipCruise = 300.f;            // metres per second in shots 0 and 1
 inline constexpr float kShipPlanetRadius = 6000.f;
+inline constexpr double kShipAttitudeAtPass = 6.0931; // the 1993 attitude's time on the pass
 // Towards the 5800 K sun in the world: dead ahead, at the far end of the wormhole (the tunnel leads into it,
 // and its open end frames it).
 inline constexpr Vec3 kShipSunDirection{0.f, 0.f, 1.f};
@@ -58,8 +61,8 @@ inline constexpr std::uint32_t kWormholeRingLights = 72, kWormholeRingSlots = 11
 
 // The chapter's times (chapter seconds), from its beat grid: the cut to the crossing (the last downbeat over
 // a second before the pass), the pass (the ship at the crossing camera's centre), the cut into the tunnel, D
-// (the downbeat at or before the accent), the break (the fourth downbeat after D), the white-out's start (the
-// next one) and the end.
+// (the downbeat at or before the accent), the break (the fourth downbeat after D, or the one two bars before
+// the end when that comes sooner), the white-out's start (the next one) and the end.
 struct ShipTimes {
     double crossing = 0, pass = 0, tunnel = 0, drop = 0, accent = 0, release = 0, whiteout = 0, duration = 0;
     double beat = 0.5; // the beat's length at D

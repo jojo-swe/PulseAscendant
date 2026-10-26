@@ -170,6 +170,14 @@ void checkChapterPictures(gfx::Context& ctx, modern::SceneId scene, const Pictur
     }
 }
 
+std::uint32_t sweepFrames(modern::SceneId scene) {
+    std::uint32_t frames = 0;
+    for (const int chapter : chaptersOf(scene))
+        frames += static_cast<std::uint32_t>(
+            std::ceil((show::chapterStart(chapter + 1) - show::chapterStart(chapter)) / kFrameSeconds));
+    return frames;
+}
+
 SweepStats checkSceneSweep(modern::SceneId scene, const SweepLimits& limits) {
     const std::vector<int> chapters = chaptersOf(scene);
     if (chapters.empty())

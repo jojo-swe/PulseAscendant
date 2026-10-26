@@ -3,8 +3,9 @@
 //   (k) the card: "1 KM RINGS" is the rings' spacing, "VOLUMETRIC" the plumes' grid (2 x 96^3 voxels at full
 //       detail), "MOTION BLUR" the crossing below; 262,144 stars at full detail, scaled by the detail;
 //   (s) the CPU sweep over every 1/60 s (cameras, shots, capacities, transforms, lights);
-//   (f) the flight: the ship banks with FLYBY's 1993 attitude; every shot starts on a bar line; the ship
-//       passes the crossing camera on a downbeat; from D a ring passes the ship on every beat;
+//   (f) the flight: the ship banks with FLYBY's 1993 attitude (phased to the pass); every shot starts on a
+//       bar line; the ship passes the crossing camera on a downbeat, where the FINALE megamix cuts to it;
+//       from D a ring passes the ship on every beat;
 //   (e) the engines: Planck's law at 6500 K is white, the plumes run from white-blue at the exit through
 //       orange to dark, the afterburner lights on the cut into the tunnel; the seams pulse on the kick and
 //       the strobe flashes on the beat;
@@ -29,6 +30,7 @@
 #include "render/modern_stage.hpp"
 #include "render/renderer.hpp"
 #include "retro/flyby_flight.hpp"
+#include "show/director.hpp"
 #include "show/timeline.hpp"
 
 #include "scene_fixture.hpp"
@@ -131,7 +133,7 @@ void testSweep() {
     limits.maxCameraStep = 14.f;
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Ship, limits);
     CHECK(stats.shots == 5);
-    CHECK(stats.frames > 1500);
+    CHECK(stats.frames == evo::test::sweepFrames(SceneId::Ship));
     std::printf("(s) %u frames, %u shots, largest camera step %.2f m\n", stats.frames, stats.shots,
                 stats.maxCameraStep);
 }
@@ -152,12 +154,15 @@ void testFlight() {
           t.accent < t.release && t.release < t.whiteout && t.whiteout < t.duration);
     for (const double cut : {t.crossing, t.pass, t.tunnel, t.drop, t.release, t.whiteout})
         CHECK(onDownbeat(head, cut));
+    // The FINALE megamix's WORMHOLE row starts its scene on the pass (show::wormholePass mirrors the rule).
+    CHECK(std::abs(show::wormholePass() - (head.showSeconds - head.localSeconds + t.pass)) < 1e-9);
     const auto shots = modern::shipShots(head);
     CHECK(shots.size() == 5);
-    // The attitude is the 1993 ship's.
+    // The attitude is the 1993 ship's, in the phase that shows its attitude at kShipAttitudeAtPass on the
+    // pass.
     for (double local = 0; local < t.duration; local += 0.25) {
         const modern::ShipPose pose = modern::shipPose(at(local));
-        const retro::FlybyAttitude a = retro::flybyAttitude(local);
+        const retro::FlybyAttitude a = retro::flybyAttitude(local - t.pass + modern::kShipAttitudeAtPass);
         for (int i = 0; i < 3; ++i)
             CHECK(std::abs(pose.rows[i].x - a.m[i][0]) < 1e-6 &&
                   std::abs(pose.rows[i].y - a.m[i][1]) < 1e-6 && std::abs(pose.rows[i].z - a.m[i][2]) < 1e-6);
@@ -183,7 +188,7 @@ void testFlight() {
                                      " at " + std::to_string(modern::shipRingZ(head, rings)));
         ++rings;
     }
-    CHECK(rings >= 25);
+    CHECK(rings >= 16 && rings >= static_cast<int>((t.duration - t.drop) / t.beat) - 1); // every beat on
     // The flight never runs backwards and is about one ring per beat at D.
     double last = -1;
     for (double local = 0; local < t.duration; local += 1.0 / 60) {
@@ -249,7 +254,7 @@ void testWormhole() {
         CHECK(nearest < 0.5f);
         ++beats;
     }
-    CHECK(beats >= 25);
+    CHECK(beats >= 16 && beats >= static_cast<int>((t.duration - t.drop) / t.beat) - 1); // every beat on
     for (double local = 0; local < t.duration; local += 1.0 / 60) {
         const show::TimelineFrame f = at(local);
         const float a = modern::shipAnamorphic(f);

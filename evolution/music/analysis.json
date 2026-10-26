@@ -34,7 +34,7 @@
     0,
     3880,
     8248,
-    14224
+    13640
   ],
   "tracks": [
     {
@@ -54,12 +54,12 @@
       "runtime_sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d"
     },
     {
-      "source": "Rigid Arpeggios.wav",
-      "frames": 14340480,
-      "duration": 298.76,
-      "envelope_samples": 5976,
-      "transient_peaks": 791,
-      "runtime_sha256": "412046876c626a4f9cac7f35a001549535c7eac06ef7f7103f8ba038fa7c6335"
+      "source": "Cyberpunk Assembly.wav",
+      "frames": 12938880,
+      "duration": 269.56,
+      "envelope_samples": 5392,
+      "transient_peaks": 598,
+      "runtime_sha256": "1851969465f03f4093f5ef9350b767b8a753810092dbe00c811b9ab6300065ac"
     }
   ]
 }

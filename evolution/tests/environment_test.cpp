@@ -47,6 +47,7 @@
 #include "rt/random.hpp"
 #include "rt/sky_constants.hpp"
 #include "rt_test_scenes.hpp"
+#include "show/era.hpp"
 #include "show/timeline.hpp"
 #include "test_env.hpp"
 
@@ -866,7 +867,9 @@ double chapterTime(int chapter, double fraction) {
 // Re-measured on the merge of Task 14 with the NEE shadow-ray fix (d91fb09 and later), which lit REBOOT more.
 // Re-measured again with the Studio's takes (STUDIO NIGHT's dolly back to the night wide, REBOOT's close-up)
 // and the per-act grade (Act II's lifted blacks): 0.07627 and 0.13525 before.
-constexpr double kStudioNightBaseline = 0.11457, kRebootBaseline = 0.17955;
+// REBOOT re-measured on Act III's new track, 2.174 s before D as 60 % was before (0.17955 on the old track):
+// the 1993 screen and the close-up's dolly sit on the new track's beats.
+constexpr double kStudioNightBaseline = 0.11457, kRebootBaseline = 0.16788;
 constexpr int kStudioNight = 11, kReboot = 20;
 
 void testStudio(gfx::Context& ctx) {
@@ -879,11 +882,15 @@ void testStudio(gfx::Context& ctx) {
     gfx::Readback readback(ctx, 160, 90);
     gfx::FrameRing ring(ctx);
     render::Renderer renderer(ctx, ring, settings);
-    for (const auto [name, chapter, fraction, baseline] :
-         {std::tuple{"STUDIO NIGHT 40 %", kStudioNight, 0.4, kStudioNightBaseline},
-          std::tuple{"REBOOT 60 %", kReboot, 0.6, kRebootBaseline}}) {
+    // REBOOT's close-up 2.174 s before its crossing (D), where 60 % of the chapter fell on Act III's first
+    // track; Act III follows the form of its track, so the time comes from the marks.
+    const double rebootD =
+        show::transitionMarks(show::sampleTimeline(chapterTime(kReboot, 0.01))).downbeat;
+    for (const auto [name, seconds, baseline] :
+         {std::tuple{"STUDIO NIGHT 40 %", chapterTime(kStudioNight, 0.4), kStudioNightBaseline},
+          std::tuple{"REBOOT, D - 2.174 s", rebootD - 2.174, kRebootBaseline}}) {
         VkCommandBuffer cmd = ring.begin();
-        renderer.render(cmd, forced2026(chapterTime(chapter, fraction)));
+        renderer.render(cmd, forced2026(seconds));
         readback.record(cmd, renderer.output());
         ring.wait(ring.submit());
         const std::vector<std::uint8_t> rgb = readback.rgb();

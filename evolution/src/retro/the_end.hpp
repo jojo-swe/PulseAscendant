@@ -12,12 +12,13 @@ namespace evo::retro {
 
 // THE END (chapter 30), the show's last screen and its last image: a tube switching off. kTheEndCaption in
 // the 8x8 font at scale 1, centred with its cursor, typed at 30 characters a second from the chapter's first
-// bar line, the underscore cursor blinking on the beat. On the accent (704.42 s) the CRT powers off:
+// bar line, the underscore cursor blinking on the beat. On the accent (two bars and a second before the end
+// at the latest, so the black comes before it) the CRT powers off:
 //   the retro frame the accent falls in (A): the picture squeezed to a band of 6 rows across the text;
 //   A + 1: 2 rows; A + 2: a 2-row line;
 //   A + 3 .. A + 5: one row narrowing to 45 % and 12 % of the text's width, then a 2 x 2 dot;
 //   from A + 6: the dot's afterglow, fading through the DAC to black over the chapter's two bars
-//   (show::transitionMarks) from A + 5; black from then to the end (711.16 s).
+//   (show::transitionMarks) from A + 5; black from then to the end of the show.
 // All in white; the light fades through theEndLevel. Phosphor persistence. A text and
 // scene effect at 35 retro frames a second.
 inline constexpr std::uint32_t kTheEndRetroRate = 35;

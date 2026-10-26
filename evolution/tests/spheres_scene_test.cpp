@@ -349,7 +349,7 @@ void testDrop() {
 void testSweep() {
     const auto start = std::chrono::steady_clock::now();
     const evo::test::SweepStats stats = evo::test::checkSceneSweep(SceneId::Spheres, {.maxCameraStep = 0.3f});
-    CHECK(stats.frames > 5000 && stats.shots == 6 + 4 + 3);
+    CHECK(stats.frames == evo::test::sweepFrames(SceneId::Spheres) && stats.shots == 6 + 4 + 3);
     CHECK(stats.maxLights == 2);
 
     // Physical sanity, frame by frame.

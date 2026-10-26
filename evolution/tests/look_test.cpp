@@ -93,12 +93,39 @@ void testJoins() {
     }
 }
 
+// A chapter's transition marks, from its middle.
+show::TransitionMarks marksOf(int chapter) {
+    return show::transitionMarks(show::sampleTimeline(middleOf(chapter)));
+}
+
+// The downbeat a bar before ASCENDANT's release (its last downbeat at least a quarter second before the end),
+// in show seconds, from the beat grid.
+double beforeAscendantRelease() {
+    constexpr int kAscendant = 28;
+    const double start = show::chapterStart(kAscendant), end = show::chapterStart(kAscendant + 1);
+    const int track = show::sampleTimeline(start).track;
+    const double offset = show::sampleTimeline(start).showSeconds - show::sampleTimeline(start).trackSeconds;
+    const show::BeatGridView grid = show::beatGrid(track);
+    std::vector<double> bars;
+    for (int b = 0; b < grid.count(); ++b) {
+        const double t = grid.beatTime(b) + offset;
+        if (grid.bar(b) == 0 && t >= start - 1e-6 && t <= end - 0.25)
+            bars.push_back(t);
+    }
+    CHECK(bars.size() >= 2);
+    return bars[bars.size() - 2];
+}
+
 // (c) The exposure keys.
 void testExposure() {
     const auto keys = post::exposureKeys();
-    // A key within one frame of every directed event.
-    for (double event : {145.80, 149.19, 209.25, 209.80, 378.0, 390.64, 394.0, 401.69, 512.92, 516.40, 520.0, 618.41,
-                         664.97, 667.72}) {
+    // A key within one frame of every directed event: Act I and II at their seconds; Act III, which follows
+    // the form of its track, at WORMHOLE's last two bars, CRYSTAL CITY's start and the end of its two-bar
+    // sunrise, METROPOLIS's accent, the bar before ASCENDANT's release, and CREDITS' start.
+    const double crystal = show::chapterStart(24);
+    for (double event : {145.80, 149.19, 209.25, 209.80, 378.0, 390.64, 394.0, 401.69,
+                         crystal - 2 * marksOf(23).bar, crystal, crystal + 2 * marksOf(24).bar,
+                         marksOf(27).accent, beforeAscendantRelease(), show::chapterStart(29)}) {
         const bool found = std::any_of(keys.begin(), keys.end(),
                                        [&](const post::ExposureKey& k) { return near(k.seconds, event, kFrame); });
         if (!found)
@@ -169,9 +196,10 @@ void testExposure() {
     CHECK(near(post::exposureOffset(show::chapterStart(19)), 6.0, 1e-6));
     CHECK(near(post::exposureOffset(398.0), 0.0, 1e-6));
     CHECK(near(post::exposureOffset(show::chapterStart(24)), 6.0, 1e-6));
-    CHECK(near(post::exposureOffset(530.0), 0.0, 1e-6));
-    CHECK(post::exposureOffset(618.41 + 0.217) > 0.29f);
-    CHECK(post::exposureOffset(559.41) == 0.f); // LENS OF GOD's clip is bloom only
+    CHECK(near(post::exposureOffset(middleOf(24)), 0.0, 1e-6));
+    const double blink = marksOf(27).accent;
+    CHECK(post::exposureOffset(blink + 0.5 * show::sampleTimeline(blink).beatSeconds) > 0.29f);
+    CHECK(post::exposureOffset(marksOf(25).accent) == 0.f); // LENS OF GOD's clip is bloom only
 }
 
 // (d) Around each crossing: the bloom gives way on the glass and returns by D + 1 bar; the palette weight is

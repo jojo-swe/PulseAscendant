@@ -1,0 +1,565 @@
+{
+  "method": "beat level = mean of the 20 Hz energy and bass envelopes over the tracked beat; contrast = mean level of the bar after minus the bar before; bar and phrase phase = the beat phase (mod 4) and bar phase (mod 8 bars) with the most squared contrast; boundary = bar line with |contrast| >= 0.12, the largest of its sign within a bar; drop = rise whose next 8 bars are >= 0.1 louder than the 8 before, strength = that lift + half the level after; tail = last fall >= 5 s before the end",
+  "tracks": [
+    {
+      "directs": false,
+      "source": "Amiga Trance Demo.wav",
+      "beats": 458,
+      "duration": 194.0,
+      "bar_phase": 0,
+      "phrase_phase": 16,
+      "phrase_bars": 8,
+      "phrase_starts": [
+        7.1731,
+        20.73,
+        34.3508,
+        47.9623,
+        61.5523,
+        75.1323,
+        88.6992,
+        102.2554,
+        115.7992,
+        129.3354,
+        142.8546,
+        156.3654,
+        169.8708,
+        183.3638
+      ],
+      "boundaries": [
+        {
+          "beat": 64,
+          "time": 27.5392,
+          "kind": "rise",
+          "contrast": 0.333
+        },
+        {
+          "beat": 92,
+          "time": 39.4569,
+          "kind": "fall",
+          "contrast": -0.195
+        },
+        {
+          "beat": 96,
+          "time": 41.1577,
+          "kind": "rise",
+          "contrast": 0.269
+        },
+        {
+          "beat": 188,
+          "time": 80.2246,
+          "kind": "fall",
+          "contrast": -0.225
+        },
+        {
+          "beat": 192,
+          "time": 81.92,
+          "kind": "rise",
+          "contrast": 0.285
+        },
+        {
+          "beat": 252,
+          "time": 107.3369,
+          "kind": "fall",
+          "contrast": -0.144
+        },
+        {
+          "beat": 284,
+          "time": 120.8792,
+          "kind": "rise",
+          "contrast": 0.149
+        },
+        {
+          "beat": 304,
+          "time": 129.3354,
+          "kind": "rise",
+          "contrast": 0.211
+        },
+        {
+          "beat": 336,
+          "time": 142.8546,
+          "kind": "rise",
+          "contrast": 0.191
+        },
+        {
+          "beat": 396,
+          "time": 168.1838,
+          "kind": "fall",
+          "contrast": -0.383
+        },
+        {
+          "beat": 400,
+          "time": 169.8708,
+          "kind": "rise",
+          "contrast": 0.446
+        },
+        {
+          "beat": 432,
+          "time": 183.3638,
+          "kind": "fall",
+          "contrast": -0.288
+        },
+        {
+          "beat": 444,
+          "time": 188.4238,
+          "kind": "rise",
+          "contrast": 0.133
+        },
+        {
+          "beat": 452,
+          "time": 191.8368,
+          "kind": "fall",
+          "contrast": -0.52
+        }
+      ],
+      "drops": [
+        {
+          "beat": 64,
+          "time": 27.5392,
+          "lift": 0.253,
+          "strength": 0.523
+        },
+        {
+          "beat": 284,
+          "time": 120.8792,
+          "lift": 0.262,
+          "strength": 0.569
+        },
+        {
+          "beat": 304,
+          "time": 129.3354,
+          "lift": 0.227,
+          "strength": 0.58
+        },
+        {
+          "beat": 400,
+          "time": 169.8708,
+          "lift": 0.127,
+          "strength": 0.542
+        }
+      ],
+      "events": {
+        "track start": 0.0,
+        "track end": 194.0,
+        "first drop": 27.5392,
+        "biggest drop": 129.3354,
+        "tail": 183.3638
+      }
+    },
+    {
+      "directs": false,
+      "source": "Guitar Trance.wav",
+      "beats": 511,
+      "duration": 218.4,
+      "bar_phase": 0,
+      "phrase_phase": 20,
+      "phrase_bars": 8,
+      "phrase_starts": [
+        9.23,
+        22.99,
+        36.53,
+        50.28,
+        64.0154,
+        77.7262,
+        91.4238,
+        105.1069,
+        118.7792,
+        132.4423,
+        146.0846,
+        159.6977,
+        173.2915,
+        186.8946,
+        200.4538,
+        213.9931
+      ],
+      "boundaries": [
+        {
+          "beat": 52,
+          "time": 22.99,
+          "kind": "fall",
+          "contrast": -0.181
+        },
+        {
+          "beat": 72,
+          "time": 31.3915,
+          "kind": "rise",
+          "contrast": 0.222
+        },
+        {
+          "beat": 136,
+          "time": 58.8669,
+          "kind": "fall",
+          "contrast": -0.174
+        },
+        {
+          "beat": 144,
+          "time": 62.2992,
+          "kind": "rise",
+          "contrast": 0.186
+        },
+        {
+          "beat": 208,
+          "time": 89.7146,
+          "kind": "rise",
+          "contrast": 0.243
+        },
+        {
+          "beat": 304,
+          "time": 130.7369,
+          "kind": "fall",
+          "contrast": -0.277
+        },
+        {
+          "beat": 320,
+          "time": 137.56,
+          "kind": "rise",
+          "contrast": 0.127
+        },
+        {
+          "beat": 332,
+          "time": 142.6762,
+          "kind": "rise",
+          "contrast": 0.127
+        },
+        {
+          "beat": 336,
+          "time": 144.3815,
+          "kind": "fall",
+          "contrast": -0.344
+        },
+        {
+          "beat": 340,
+          "time": 146.0846,
+          "kind": "rise",
+          "contrast": 0.316
+        },
+        {
+          "beat": 404,
+          "time": 173.2915,
+          "kind": "fall",
+          "contrast": -0.465
+        },
+        {
+          "beat": 416,
+          "time": 178.3962,
+          "kind": "rise",
+          "contrast": 0.288
+        },
+        {
+          "beat": 432,
+          "time": 185.1962,
+          "kind": "rise",
+          "contrast": 0.217
+        },
+        {
+          "beat": 440,
+          "time": 188.5908,
+          "kind": "fall",
+          "contrast": -0.174
+        },
+        {
+          "beat": 504,
+          "time": 215.7231,
+          "kind": "fall",
+          "contrast": -0.298
+        }
+      ],
+      "drops": [
+        {
+          "beat": 72,
+          "time": 31.3915,
+          "lift": 0.258,
+          "strength": 0.532
+        },
+        {
+          "beat": 208,
+          "time": 89.7146,
+          "lift": 0.119,
+          "strength": 0.41
+        },
+        {
+          "beat": 332,
+          "time": 142.6762,
+          "lift": 0.174,
+          "strength": 0.488
+        },
+        {
+          "beat": 340,
+          "time": 146.0846,
+          "lift": 0.227,
+          "strength": 0.567
+        },
+        {
+          "beat": 416,
+          "time": 178.3962,
+          "lift": 0.171,
+          "strength": 0.547
+        },
+        {
+          "beat": 432,
+          "time": 185.1962,
+          "lift": 0.275,
+          "strength": 0.688
+        }
+      ],
+      "events": {
+        "track start": 0.0,
+        "track end": 218.4,
+        "first drop": 31.3915,
+        "biggest drop": 185.1962,
+        "tail": 188.5908
+      }
+    },
+    {
+      "directs": true,
+      "source": "Cyberpunk Assembly.wav",
+      "beats": 620,
+      "duration": 269.56,
+      "bar_phase": 0,
+      "phrase_phase": 0,
+      "phrase_bars": 8,
+      "phrase_starts": [
+        0.4268,
+        14.3485,
+        28.26,
+        42.1715,
+        56.0877,
+        70.0015,
+        83.9177,
+        97.8315,
+        111.7438,
+        125.6562,
+        139.5692,
+        153.4838,
+        167.3969,
+        181.3115,
+        195.2246,
+        209.1354,
+        223.0508,
+        236.9623,
+        250.8769,
+        264.7838
+      ],
+      "boundaries": [
+        {
+          "beat": 32,
+          "time": 14.3485,
+          "kind": "rise",
+          "contrast": 0.149
+        },
+        {
+          "beat": 64,
+          "time": 28.26,
+          "kind": "rise",
+          "contrast": 0.544
+        },
+        {
+          "beat": 68,
+          "time": 29.9969,
+          "kind": "fall",
+          "contrast": -0.178
+        },
+        {
+          "beat": 120,
+          "time": 52.6092,
+          "kind": "fall",
+          "contrast": -0.13
+        },
+        {
+          "beat": 128,
+          "time": 56.0877,
+          "kind": "rise",
+          "contrast": 0.4
+        },
+        {
+          "beat": 156,
+          "time": 68.2638,
+          "kind": "fall",
+          "contrast": -0.309
+        },
+        {
+          "beat": 160,
+          "time": 70.0015,
+          "kind": "rise",
+          "contrast": 0.318
+        },
+        {
+          "beat": 188,
+          "time": 82.1777,
+          "kind": "fall",
+          "contrast": -0.275
+        },
+        {
+          "beat": 192,
+          "time": 83.9177,
+          "kind": "rise",
+          "contrast": 0.336
+        },
+        {
+          "beat": 240,
+          "time": 104.7823,
+          "kind": "fall",
+          "contrast": -0.135
+        },
+        {
+          "beat": 256,
+          "time": 111.7438,
+          "kind": "rise",
+          "contrast": 0.267
+        },
+        {
+          "beat": 260,
+          "time": 113.4815,
+          "kind": "fall",
+          "contrast": -0.149
+        },
+        {
+          "beat": 288,
+          "time": 125.6562,
+          "kind": "rise",
+          "contrast": 0.416
+        },
+        {
+          "beat": 316,
+          "time": 137.8292,
+          "kind": "fall",
+          "contrast": -0.349
+        },
+        {
+          "beat": 320,
+          "time": 139.5692,
+          "kind": "rise",
+          "contrast": 0.332
+        },
+        {
+          "beat": 348,
+          "time": 151.7454,
+          "kind": "fall",
+          "contrast": -0.291
+        },
+        {
+          "beat": 384,
+          "time": 167.3969,
+          "kind": "rise",
+          "contrast": 0.525
+        },
+        {
+          "beat": 412,
+          "time": 179.57,
+          "kind": "fall",
+          "contrast": -0.43
+        },
+        {
+          "beat": 416,
+          "time": 181.3115,
+          "kind": "rise",
+          "contrast": 0.419
+        },
+        {
+          "beat": 444,
+          "time": 193.4846,
+          "kind": "fall",
+          "contrast": -0.365
+        },
+        {
+          "beat": 448,
+          "time": 195.2246,
+          "kind": "rise",
+          "contrast": 0.445
+        },
+        {
+          "beat": 476,
+          "time": 207.3962,
+          "kind": "fall",
+          "contrast": -0.412
+        },
+        {
+          "beat": 512,
+          "time": 223.0508,
+          "kind": "rise",
+          "contrast": 0.508
+        },
+        {
+          "beat": 540,
+          "time": 235.2238,
+          "kind": "fall",
+          "contrast": -0.405
+        },
+        {
+          "beat": 544,
+          "time": 236.9623,
+          "kind": "rise",
+          "contrast": 0.373
+        },
+        {
+          "beat": 568,
+          "time": 247.3992,
+          "kind": "fall",
+          "contrast": -0.332
+        },
+        {
+          "beat": 576,
+          "time": 250.8769,
+          "kind": "rise",
+          "contrast": 0.338
+        },
+        {
+          "beat": 604,
+          "time": 263.0469,
+          "kind": "fall",
+          "contrast": -0.266
+        },
+        {
+          "beat": 612,
+          "time": 266.5146,
+          "kind": "fall",
+          "contrast": -0.399
+        }
+      ],
+      "drops": [
+        {
+          "beat": 64,
+          "time": 28.26,
+          "lift": 0.325,
+          "strength": 0.603
+        },
+        {
+          "beat": 128,
+          "time": 56.0877,
+          "lift": 0.18,
+          "strength": 0.489
+        },
+        {
+          "beat": 288,
+          "time": 125.6562,
+          "lift": 0.319,
+          "strength": 0.682
+        },
+        {
+          "beat": 384,
+          "time": 167.3969,
+          "lift": 0.423,
+          "strength": 0.807
+        },
+        {
+          "beat": 448,
+          "time": 195.2246,
+          "lift": 0.115,
+          "strength": 0.551
+        },
+        {
+          "beat": 512,
+          "time": 223.0508,
+          "lift": 0.459,
+          "strength": 0.886
+        }
+      ],
+      "events": {
+        "track start": 0.0,
+        "track end": 269.56,
+        "first drop": 28.26,
+        "biggest drop": 223.0508,
+        "tail": 263.0469
+      }
+    }
+  ]
+}

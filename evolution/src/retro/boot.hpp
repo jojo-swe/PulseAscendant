@@ -131,7 +131,7 @@ void addRect(RetroScene& scene, int x0, int y0, int x1, int y1, std::uint8_t ind
 // Chapter 20, REBOOT: the Studio's CRT boots 1993 again. It opens on RETURN's last screen (the BIOS line and
 // `C:\DEMO>EVOLUTION.EXE /2026`) as the Enter lands on the track's first frame, then on its beats:
 // `Reinitialising reality ...` (b0), `Ray tracing hardware .................. found` (b4, the dots at 30 a
-// second, the answer on b6) and `LOADING...` (b8). From b14 (419.35 s) the text gives way to DOTS' 512-point
+// second, the answer on b6) and `LOADING...` (b8). From b14 the text gives way to DOTS' 512-point
 // cube, spinning on black as the first effect of the re-run, until the portal takes the camera through the
 // glass. The 1993 card is typed bottom-left throughout. Phosphor persistence; BOOT's DOS colours, with DOTS'
 // shade ramp from kDotsRamp. rebootScreen is the screen as text, as bootScreen (empty once the cube shows).
