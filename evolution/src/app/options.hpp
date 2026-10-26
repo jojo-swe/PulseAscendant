@@ -63,8 +63,8 @@ inline constexpr int kMaxBenchFrames = 100000;
 // The trace scale a run renders with: --trace-scale, or 1 for the exports (--capture-dir, --render-stream),
 // which trace at the output size, and kWindowTraceScale for the window and --bench.
 float traceScaleFor(const Options& options);
-// Whether the trace scale adapts per chapter (app/auto_scale.hpp): in the window unless --trace-scale F, in
-// --bench only with --trace-scale auto (the table's scale per chapter, no controller), never in an export.
+// Whether the trace scale adapts per chapter (app/auto_scale.hpp): in the window and --bench unless
+// --trace-scale F (--bench takes the table's scale per chapter, no controller), never in an export.
 bool adaptiveTraceScale(const Options& options);
 
 inline constexpr int kMinSpp = 1;

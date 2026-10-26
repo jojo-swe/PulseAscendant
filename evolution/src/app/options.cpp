@@ -267,7 +267,7 @@ bool adaptiveTraceScale(const Options& options) {
     const bool exporting = options.renderStream || !options.captureDir.empty();
     if (exporting || options.traceScale)
         return false;
-    return options.autoTraceScale || !options.bench; // the window adapts by default, --bench on request
+    return true; // the window and --bench adapt unless given a fixed scale
 }
 
 std::string helpText() {
@@ -285,9 +285,9 @@ std::string helpText() {
            "                       splat, voxel and photon counts scale with it (for quick tests)\n"
            "  --trace-scale F      Path trace at F x the window size, 0.25..1, and upscale in time;\n"
            "                       the window and --bench only (the exports always trace at the\n"
-           "                       output size). 'auto' (the window's default) adapts it per chapter\n"
-           "                       to hold 60 fps, 0.4..0.67; --bench uses 0.67 unless given 'auto'\n"
-           "                       (then each chapter's scale from the table, docs/PERFORMANCE.md)\n"
+           "                       output size). 'auto' (the default) traces each chapter at its\n"
+           "                       scale from a table, 0.3..0.67, to hold 30 fps; the window also\n"
+           "                       adapts it to the GPU's frame time (docs/PERFORMANCE.md)\n"
            "  --no-fast-mode       Trace the window and --bench as the exports do: four in-scatter\n"
            "                       points in media, photons seeded per frame, the generic pipeline,\n"
            "                       full BLAS builds (by default the window traces in fast mode;\n"

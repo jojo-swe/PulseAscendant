@@ -19,38 +19,39 @@ float quantised(float scale) {
 } // namespace
 
 const std::array<float, 31>& autoTraceScaleTable() {
-    // Estimates from the RTX 4080 measurements in docs/PERFORMANCE.md and the fast mode's expected gains; to
-    // be replaced per chapter by the largest scale whose `--bench --trace-scale S` reaches 60 fps there.
-    // The 1993-only chapters (BOOT, CREDITS, THE END) trace nothing.
+    // At 1280x720: the largest scale estimated to hold 30 fps on an RTX 4080 (docs/PERFORMANCE.md: the
+    // measured 1440p frame times, the fast mode's work per pixel, a frame's cost going with its traced
+    // pixels). To be replaced per chapter by the largest scale whose `--bench --width 1280 --height 720
+    // --trace-scale S` reaches 30 fps there. The 1993-only chapters (BOOT, CREDITS, THE END) trace nothing.
     static const std::array<float, 31> table = {
         0.67f, // 0 BOOT
         0.67f, // 1 FLYBY
         0.67f, // 2 DOTS
         0.67f, // 3 PLASMA
-        0.5f,  // 4 TUNNEL
+        0.4f,  // 4 TUNNEL
         0.67f, // 5 GLENZ
         0.67f, // 6 LENS
-        0.6f,  // 7 RAYTRACE
-        0.5f,  // 8 VECTOR CITY
-        0.67f, // 9 FINALE
+        0.45f, // 7 RAYTRACE
+        0.35f, // 8 VECTOR CITY
+        0.55f, // 9 FINALE
         0.67f, // 10 PORTAL
         0.67f, // 11 STUDIO NIGHT
-        0.45f, // 12 ASCENT
-        0.45f, // 13 CITY NIGHT
+        0.35f, // 12 ASCENT
+        0.3f,  // 13 CITY NIGHT
         0.67f, // 14 NEBULA
-        0.45f, // 15 GLASS CATHEDRAL
-        0.6f,  // 16 PARTICLE OCEAN
-        0.6f,  // 17 SPHERE STORM
+        0.3f,  // 15 GLASS CATHEDRAL
+        0.5f,  // 16 PARTICLE OCEAN
+        0.67f, // 17 SPHERE STORM
         0.67f, // 18 SINGULARITY
         0.67f, // 19 RETURN
         0.67f, // 20 REBOOT
         0.67f, // 21 GALAXY
         0.67f, // 22 PLASMA PLANET
         0.67f, // 23 WORMHOLE
-        0.6f,  // 24 CRYSTAL CITY
-        0.6f,  // 25 LENS OF GOD
-        0.6f,  // 26 RAYTRACE INFINITY
-        0.55f, // 27 METROPOLIS
+        0.67f, // 24 CRYSTAL CITY
+        0.55f, // 25 LENS OF GOD
+        0.5f,  // 26 RAYTRACE INFINITY
+        0.45f, // 27 METROPOLIS
         0.67f, // 28 ASCENDANT
         0.67f, // 29 CREDITS
         0.67f, // 30 THE END
@@ -101,7 +102,7 @@ float TraceScaleController::update(int chapter, double gpuMs) {
         return scale_;
     smoothed_ = smoothed_ < 0.0 ? gpuMs : smoothed_ + 0.1 * (gpuMs - smoothed_);
     over_ = smoothed_ > 1.1 * kAutoBudgetMs ? over_ + 1 : 0;
-    under_ = smoothed_ < 0.6 * kAutoBudgetMs ? under_ + 1 : 0;
+    under_ = smoothed_ < 0.5 * kAutoBudgetMs ? under_ + 1 : 0;
     if (over_ >= kDownFrames && scale_ > kAutoMinTraceScale) {
         // The pixels that fit the budget, a little under: at least one step down.
         const float fits = scale_ * static_cast<float>(std::sqrt(kAutoBudgetMs / smoothed_)) * 0.95f;

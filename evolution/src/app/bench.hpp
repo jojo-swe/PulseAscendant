@@ -9,8 +9,8 @@
 namespace evo {
 
 // --bench: the window's rendering, headless and timed on the GPU, so it can be measured
-// on RTX hardware. Interactive mode at --width x --height, --spp (1), --trace-scale (0.67; with "auto" each
-// chapter at autoTraceScale, app/auto_scale.hpp), the window's fast
+// on RTX hardware. Interactive mode at --width x --height, --spp (1), --trace-scale (by default each
+// chapter at autoTraceScale, app/auto_scale.hpp, as the window starts it), the window's fast
 // mode (unless --no-fast-mode) and
 // --detail, with the window's CRT and HUD settings (title included); every path-traced scene of the chosen
 // chapters is prepared first. Per chapter (--chapters, default all, in the order given): two warm-up frames

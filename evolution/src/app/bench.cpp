@@ -140,7 +140,8 @@ int runBench(const Options& options) {
     const bool adaptive = adaptiveTraceScale(options);
     for (const int chapter : chapters) {
         const double t0 = firstTimed(chapter);
-        // --trace-scale auto: the chapter's scale from the table (no controller: reproducible numbers).
+        // The adaptive scale (unless --trace-scale F): the chapter's scale from the table, no controller, so
+        // the numbers are reproducible.
         if (adaptive)
             renderer.setTraceScale(autoTraceScale(chapter, settings.width, settings.height));
         const VkExtent2D trace = renderer.modern().traceExtent();
