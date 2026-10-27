@@ -1,5 +1,6 @@
-# Renders EVOLUTION at 3840x2160, 60 fps and -Spp samples per pixel into dist\render\EVOLUTION-2160p60.mp4 (H.264
-# High, BT.709, AAC 384 kb/s): configures and builds the Release preset, checks for ffmpeg, then runs
+# Renders EVOLUTION at 3840x2160 (or -Height 1440 / 1080), 60 fps and -Spp samples per pixel into
+# dist\render\EVOLUTION-<height>p60.mp4 (H.264 High, BT.709, AAC 384 kb/s): configures and builds the Release
+# preset, checks for ffmpeg, then runs
 # tools\render_video.py, which renders in 10-second chunks. Interrupted? Run the same command again: finished
 # chunks are kept and the render carries on from the first missing one.
 #
@@ -8,6 +9,9 @@
 #   tools\render_4k.ps1 -Bench                   (time a frame per chapter and estimate the render first)
 #   tools\render_4k.ps1 -Spp 64                  (-Spp 16 (default, about 0.25 of the 64-spp time); -Spp 64 for
 #                                                maximum quality; -Bench times frames at the same -Spp)
+#   tools\render_4k.ps1 -Height 1080             (1920x1080; -Height 1440: 2560x1440; default 2160: 3840x2160)
+#   tools\render_4k.ps1 -ShutterSlices 4         (the 180 degree shutter in 4 time slices whatever -Spp: motion
+#                                                blur at -Spp 4, which otherwise has none; other bytes)
 #   tools\render_4k.ps1 -Preset windows-vs2022   (pick the CMake preset; by default the newest Visual Studio)
 #
 # Presets: "windows" (Visual Studio 2026, CMake 4.2 or newer), "windows-vs2022" (Visual Studio 2022) and
@@ -16,6 +20,8 @@ param(
     [ValidateSet("x264", "hevc_nvenc", "ffv1")] [string] $Codec = "x264",
     [ValidateSet("auto", "windows", "windows-vs2022", "windows-ninja")] [string] $Preset = "auto",
     [int] $Spp = 16,
+    [ValidateSet(2160, 1440, 1080)] [int] $Height = 2160,
+    [ValidateRange(0, 8)] [int] $ShutterSlices = 0,
     [switch] $Coda,
     [switch] $Bench
 )
@@ -62,11 +68,16 @@ cmake --build --preset $Preset --target Evolution
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
 New-Item -ItemType Directory -Force "dist\render" | Out-Null
-$out = if ($Codec -eq "ffv1") { "dist\render\EVOLUTION-2160p60.mkv" } else { "dist\render\EVOLUTION-2160p60.mp4" }
+$width = @{ 2160 = 3840; 1440 = 2560; 1080 = 1920 }[$Height]
+$name = "EVOLUTION-$($Height)p60"
+if ($ShutterSlices -gt 0) { $name += "-s$ShutterSlices" }
+$out = if ($Codec -eq "ffv1") { "dist\render\$name.mkv" } else { "dist\render\$name.mp4" }
 [string[]] $arguments = @("tools\render_video.py", "--exe", "build\$Preset\bin\Evolution.exe",
-                          "--music", "assets\music\show.wav", "--out", $out, "--width", "3840",
-                          "--height", "2160", "--fps", "60", "--spp", "$Spp", "--codec", $Codec)
+                          "--music", "assets\music\show.wav", "--out", $out, "--width", "$width",
+                          "--height", "$Height", "--fps", "60", "--spp", "$Spp", "--codec", $Codec)
 if ($Coda) { $arguments += "--coda" }
 if ($Bench) { $arguments += "--bench" }
+# Options for Evolution itself go after "--" (render_video.py passes them on and records them with the parts).
+if ($ShutterSlices -gt 0) { $arguments += @("--", "--shutter-slices", "$ShutterSlices") }
 & $pythonExe @pythonArgs @arguments
 exit $LASTEXITCODE
