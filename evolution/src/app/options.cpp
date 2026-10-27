@@ -114,6 +114,7 @@ double parseAudioOffset(const std::string& flag, const std::string& text) {
 Options parseOptions(const std::vector<std::string>& args) {
     Options options;
     bool benchOnly = false; // --chapters or --bench-frames given
+    bool targetFpsGiven = false;
 
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string& flag = args[i];
@@ -141,6 +142,12 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.traceScale.reset();
             if (!options.autoTraceScale)
                 options.traceScale = parseTraceScale(flag, value);
+        } else if (flag == "--target-fps") {
+            const std::string& value = nextValue();
+            if (value != "30" && value != "60")
+                throw std::runtime_error(flag + " must be 30 or 60, got '" + value + "'");
+            options.targetFps = value == "30" ? 30 : 60;
+            targetFpsGiven = true;
         } else if (flag == "--no-fast-mode") {
             options.fastMode = false;
         } else if (flag == "--bench") {
@@ -239,6 +246,9 @@ Options parseOptions(const std::vector<std::string>& args) {
         throw std::runtime_error(
             "--trace-scale is for the window and --bench: the exports trace at the output size");
     }
+    if (targetFpsGiven && (exporting || options.benchExport)) {
+        throw std::runtime_error("--target-fps is for the window and --bench: the exports take the time they need");
+    }
     // The exports never take the window's shortcuts.
     if (!options.fastMode && exporting) {
         throw std::runtime_error(
@@ -289,8 +299,11 @@ std::string helpText() {
            "  --trace-scale F      Path trace at F x the window size, 0.25..1, and upscale in time;\n"
            "                       the window and --bench only (the exports always trace at the\n"
            "                       output size). 'auto' (the default) traces each chapter at its\n"
-           "                       scale from a table, 0.3..0.67, to hold 30 fps; the window also\n"
-           "                       adapts it to the GPU's frame time (docs/PERFORMANCE.md)\n"
+           "                       scale from a table, 0.25..0.67, to hold --target-fps; the window\n"
+           "                       also adapts it to the GPU's frame time (docs/PERFORMANCE.md)\n"
+           "  --target-fps N       What 'auto' aims for: 60 (the default; 0.25..0.67) or 30 fps\n"
+           "                       (0.3..0.67, sharper): its table, also --bench's, and the GPU\n"
+           "                       budget the window holds\n"
            "  --no-fast-mode       Trace the window and --bench as the exports do: photons seeded\n"
            "                       per frame, the generic pipeline,\n"
            "                       full BLAS builds, every shadow ray traced and walked through\n"

@@ -275,7 +275,7 @@ int runWindowed(const Options& options) {
     gfx::Swapchain swapchain(ctx, surface.handle, width, height);
     // --trace-scale auto (the default): the trace scale follows the chapter and the GPU's frame time.
     const bool adaptive = adaptiveTraceScale(options);
-    TraceScaleController scaleController(settings.width, settings.height);
+    TraceScaleController scaleController(settings.width, settings.height, options.targetFps);
     bool needRecreate = swapchain.extent().width == 0; // started minimised
 
     // The secret part: called up by its four keys, or from the start with --secret-part, when the music

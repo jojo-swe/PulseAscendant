@@ -43,6 +43,7 @@ struct BenchRecord {
     double cpuMs = 0.0, waitMs = 0.0;
     bool fast = false; // the window's fast mode (--no-fast-mode: false)
     bool exportFrames = false; // --bench-export: export frames ("export": true in the line)
+    int targetFps = 0;         // the table the chapter's scale came from (--target-fps; 0: a fixed scale)
     double fps = 0.0;
     std::vector<std::pair<std::string, double>> counters, stats; // --bench-counters only (else empty)
 };

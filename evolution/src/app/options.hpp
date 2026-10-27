@@ -40,6 +40,9 @@ struct Options {
     std::optional<float> traceScale;
     // --trace-scale auto: the adaptive scale (app/auto_scale.hpp); the window's default (adaptiveTraceScale).
     bool autoTraceScale = false;
+    // The frame rate the window's adaptive trace scale aims for (--target-fps 30|60, app/auto_scale.hpp): its
+    // table and its controller's GPU budget. The window and --bench; 60 by default.
+    int targetFps = 60;
     // The window's fast mode (render::RenderSettings::fast) for the window and --bench; --no-fast-mode turns
     // it off. The exports never use it.
     bool fastMode = true;

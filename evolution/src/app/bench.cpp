@@ -78,7 +78,8 @@ std::string benchJson(const BenchRecord& r) {
         return "{" + out + "}";
     };
     std::string extra = ",\"cpuMs\":" + number(r.cpuMs, 4) + ",\"waitMs\":" + number(r.waitMs, 4) +
-                        ",\"fast\":" + (r.fast ? "true" : "false") + (r.exportFrames ? ",\"export\":true" : "");
+                        ",\"fast\":" + (r.fast ? "true" : "false") + (r.exportFrames ? ",\"export\":true" : "") +
+                        (r.targetFps > 0 ? ",\"targetFps\":" + std::to_string(r.targetFps) : "");
     if (!r.counters.empty())
         extra += ",\"counters\":" + object(r.counters);
     if (!r.stats.empty())
@@ -150,7 +151,7 @@ int runBench(const Options& options) {
         // The adaptive scale (unless --trace-scale F): the chapter's scale from the table, no controller, so
         // the numbers are reproducible.
         if (adaptive)
-            renderer.setTraceScale(autoTraceScale(chapter, settings.width, settings.height));
+            renderer.setTraceScale(autoTraceScale(chapter, settings.width, settings.height, options.targetFps));
         const VkExtent2D trace = renderer.modern().traceExtent();
         std::fprintf(stderr, "bench: chapter %d (%s), %d frames\n", chapter, show::sampleTimeline(t0).title,
                      options.benchFrames);
@@ -217,6 +218,7 @@ int runBench(const Options& options) {
         record.fps = seconds > 0.0 ? options.benchFrames / seconds : 0.0;
         record.fast = settings.fast && !options.benchExport;
         record.exportFrames = options.benchExport;
+        record.targetFps = adaptive ? options.targetFps : 0;
         record.cpuMs = 1000.0 * cpuSeconds / options.benchFrames;
         record.waitMs = 1000.0 * waitSeconds / options.benchFrames;
         if (options.benchCounters) {
