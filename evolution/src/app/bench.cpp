@@ -25,8 +25,10 @@ namespace evo {
 
 namespace {
 
-// The reset frames (4 and 2 spp in the window) before the timed ones.
+// The reset frames (4 and 2 spp in the window) before the timed ones; --bench-export's frames stand alone, so
+// one frame (first uses: pipelines, BLASes) is enough there.
 constexpr int kWarmUpFrames = 2;
+constexpr int kExportWarmUpFrames = 1;
 // Where in a chapter the timed frames start.
 constexpr double kChapterFraction = 0.2;
 
@@ -76,7 +78,7 @@ std::string benchJson(const BenchRecord& r) {
         return "{" + out + "}";
     };
     std::string extra = ",\"cpuMs\":" + number(r.cpuMs, 4) + ",\"waitMs\":" + number(r.waitMs, 4) +
-                        ",\"fast\":" + (r.fast ? "true" : "false");
+                        ",\"fast\":" + (r.fast ? "true" : "false") + (r.exportFrames ? ",\"export\":true" : "");
     if (!r.counters.empty())
         extra += ",\"counters\":" + object(r.counters);
     if (!r.stats.empty())
@@ -112,30 +114,35 @@ int runBench(const Options& options) {
     settings.height = static_cast<std::uint32_t>(options.height);
     settings.crt = options.crt;
     settings.hud = options.hud;
-    settings.hudTitle = true; // as the window draws
-    settings.mode = render::RenderMode::Interactive;
+    settings.hudTitle = !options.benchExport; // as the window draws (an export draws no title)
+    settings.mode = options.benchExport ? render::RenderMode::Export : render::RenderMode::Interactive;
     settings.spp = static_cast<std::uint32_t>(samplesPerPixel(options));
     settings.detail = modern::SceneDetail{options.detail};
     settings.traceScale = traceScaleFor(options);
     settings.counters = options.benchCounters;
-    settings.fast = options.fastMode; // as the window renders
-    settings.fast = options.fastMode; // as the window renders
+    settings.fast = options.fastMode; // as the window renders (an export never uses it)
+    if (options.benchExport) {
+        // As --render-stream renders (app.cpp's runRenderStream).
+        settings.shutterSeconds = 0.5 / options.fps;
+        settings.submitPerSlice = true;
+    }
     render::Renderer renderer(ctx, ring, settings);
 
     const double step = 1.0 / options.fps;
+    const int warmUp = options.benchExport ? kExportWarmUpFrames : kWarmUpFrames;
     const auto firstTimed = [&](int chapter) {
         const double start = show::chapterStart(chapter);
         return start + kChapterFraction * (chapterEnd(chapter) - start);
     };
     std::vector<double> times;
     for (const int chapter : chapters)
-        for (int i = -kWarmUpFrames; i < options.benchFrames; ++i)
+        for (int i = -warmUp; i < options.benchFrames; ++i)
             times.push_back(firstTimed(chapter) + i * step);
     renderer.prepare(times); // setup: every scene's GPU side before the first timed frame
 
     gfx::GpuTimers& timers = renderer.timers();
     std::optional<gfx::Readback> readback;
-    if (!options.benchCapture.empty())
+    if (!options.benchCapture.empty() || options.benchExport)
         readback.emplace(ctx, settings.width, settings.height);
     const bool adaptive = adaptiveTraceScale(options);
     for (const int chapter : chapters) {
@@ -147,7 +154,7 @@ int runBench(const Options& options) {
         const VkExtent2D trace = renderer.modern().traceExtent();
         std::fprintf(stderr, "bench: chapter %d (%s), %d frames\n", chapter, show::sampleTimeline(t0).title,
                      options.benchFrames);
-        for (int i = -kWarmUpFrames; i < 0; ++i) {
+        for (int i = -warmUp; i < 0; ++i) {
             VkCommandBuffer cmd = ring.begin();
             renderer.render(cmd, show::sampleTimeline(t0 + i * step));
             ring.submit();
@@ -158,6 +165,7 @@ int runBench(const Options& options) {
         renderer.modern().takeCounters(); // and their work
 
         using Clock = std::chrono::steady_clock;
+        std::vector<std::uint8_t> exportFrame; // --bench-export: the last frame read back
         const auto start = Clock::now();
         double cpuSeconds = 0.0, waitSeconds = 0.0;
         for (int i = 0; i < options.benchFrames; ++i) {
@@ -167,6 +175,14 @@ int runBench(const Options& options) {
             renderer.render(cmd, show::sampleTimeline(t0 + i * step));
             cpuSeconds += std::chrono::duration<double>(Clock::now() - begun).count();
             waitSeconds += std::chrono::duration<double>(begun - before).count();
+            if (options.benchExport) {
+                // As an export: every frame read back and converted before the next is recorded (cpuMs then
+                // includes the slices' waits, FrameRing::split).
+                readback->record(cmd, renderer.output());
+                ring.wait(ring.submit());
+                exportFrame = readback->rgb();
+                continue;
+            }
             if (readback && i + 1 == options.benchFrames)
                 readback->record(cmd, renderer.output()); // --bench-capture: the last timed frame
             ring.submit();
@@ -199,7 +215,8 @@ int runBench(const Options& options) {
             record.gpuMs.emplace_back(pass,
                                       frames.empty() ? 0.0 : sums[pass] / static_cast<double>(frames.size()));
         record.fps = seconds > 0.0 ? options.benchFrames / seconds : 0.0;
-        record.fast = settings.fast;
+        record.fast = settings.fast && !options.benchExport;
+        record.exportFrames = options.benchExport;
         record.cpuMs = 1000.0 * cpuSeconds / options.benchFrames;
         record.waitMs = 1000.0 * waitSeconds / options.benchFrames;
         if (options.benchCounters) {
@@ -222,12 +239,14 @@ int runBench(const Options& options) {
                             {"splats", s.splats},
                             {"spp", s.spp},
                             {"maxBounces", s.maxBounces},
+                            {"slices", s.slices},
                             {"raygenStackBytes", double(s.raygenStack)},
                             {"hitStackBytes", double(s.hitStack)},
                             {"pipelineFeatures", double(s.pipelineFeatures)}};
         }
-        if (readback) {
-            const std::vector<std::uint8_t> rgb = readback->rgb(); // the ring is idle (waitAll above)
+        if (!options.benchCapture.empty()) {
+            // The ring is idle (waitAll above).
+            const std::vector<std::uint8_t> rgb = options.benchExport ? exportFrame : readback->rgb();
             const std::filesystem::path path =
                 options.benchCapture / ("bench_" + std::to_string(chapter) + ".png");
             image::writePng(path, options.width, options.height, rgb.data());

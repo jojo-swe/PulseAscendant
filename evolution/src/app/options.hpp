@@ -49,6 +49,10 @@ struct Options {
     int benchFrames = 120;
     bool benchCounters = false; // --bench-counters: the work counters and scene statistics per chapter
     std::filesystem::path benchCapture; // --bench-capture DIR: each chapter's last timed frame as a PNG
+    // --bench-export: --bench times export frames instead (--render-stream's: Export mode, --spp, default
+    // kExportSpp, the 180 degree shutter at --fps, the output size traced, one submit per time slice, each
+    // frame read back before the next), so an export's cost per pass and its work counters can be measured.
+    bool benchExport = false;
     std::vector<int> chapters; // --chapters LIST: chapter indices, as --show-info numbers them
     // --secret-part[=WORD]: the window and --render-stream run the part of retro/secret_part.hpp instead of
     // the show (--time and --duration then count its seconds); WORD is checked as the patient's answer.

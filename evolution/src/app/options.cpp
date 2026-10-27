@@ -148,6 +148,9 @@ Options parseOptions(const std::vector<std::string>& args) {
         } else if (flag == "--bench-capture") {
             options.benchCapture = nextValue();
             benchOnly = true;
+        } else if (flag == "--bench-export") {
+            options.benchExport = true;
+            benchOnly = true;
         } else if (flag == "--bench-counters") {
             options.benchCounters = true;
             benchOnly = true;
@@ -232,7 +235,7 @@ Options parseOptions(const std::vector<std::string>& args) {
     }
     // Exports trace at the output size, so a window frame after a reset at scale 1
     // and an export frame agree.
-    if ((options.traceScale || options.autoTraceScale) && exporting) {
+    if ((options.traceScale || options.autoTraceScale) && (exporting || options.benchExport)) {
         throw std::runtime_error(
             "--trace-scale is for the window and --bench: the exports trace at the output size");
     }
@@ -254,17 +257,17 @@ Options parseOptions(const std::vector<std::string>& args) {
 }
 
 int samplesPerPixel(const Options& options) {
-    const bool exporting = options.renderStream || !options.captureDir.empty();
+    const bool exporting = options.renderStream || !options.captureDir.empty() || options.benchExport;
     return options.spp.value_or(exporting ? kExportSpp : kWindowSpp);
 }
 
 float traceScaleFor(const Options& options) {
-    const bool exporting = options.renderStream || !options.captureDir.empty();
+    const bool exporting = options.renderStream || !options.captureDir.empty() || options.benchExport;
     return exporting ? 1.f : options.traceScale.value_or(kWindowTraceScale);
 }
 
 bool adaptiveTraceScale(const Options& options) {
-    const bool exporting = options.renderStream || !options.captureDir.empty();
+    const bool exporting = options.renderStream || !options.captureDir.empty() || options.benchExport;
     if (exporting || options.traceScale)
         return false;
     return true; // the window and --bench adapt unless given a fixed scale
@@ -305,6 +308,8 @@ std::string helpText() {
            "  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)\n"
            "  --bench-capture DIR  With --bench: also write each chapter's last timed frame to\n"
            "                       DIR/bench_<chapter>.png (to compare the look of two runs)\n"
+           "  --bench-export       With --bench: time export frames (--render-stream's: --spp,\n"
+           "                       default 64, the shutter at --fps, traced at the output size)\n"
            "  --bench-counters     With --bench: trace with the counting path tracer and add its work\n"
            "                       per pixel per frame (rays by kind, NEE, medium steps) and the\n"
            "                       frame's scene statistics to each line (slower; the same picture)\n"
