@@ -614,6 +614,9 @@ Options:
   --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)
   --bench-capture DIR  With --bench: also write each chapter's last timed frame to
                        DIR/bench_<chapter>.png (to compare the look of two runs)
+  --shutter-slices N   Exports: trace each frame in N time slices of the 180 degree
+                       shutter, 1..8, at most --spp (default one per 4 samples: 4 at
+                       16 spp, none at 4 or fewer); other bytes than the default
   --bench-export       With --bench: time export frames (--render-stream's: --spp,
                        default 64, the shutter at --fps, traced at the output size)
   --bench-counters     With --bench: trace with the counting path tracer and add its work

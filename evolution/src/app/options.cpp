@@ -155,6 +155,8 @@ Options parseOptions(const std::vector<std::string>& args) {
         } else if (flag == "--bench-capture") {
             options.benchCapture = nextValue();
             benchOnly = true;
+        } else if (flag == "--shutter-slices") {
+            options.shutterSlices = parseInt(flag, nextValue(), 1, 8);
         } else if (flag == "--bench-export") {
             options.benchExport = true;
             benchOnly = true;
@@ -246,6 +248,9 @@ Options parseOptions(const std::vector<std::string>& args) {
         throw std::runtime_error(
             "--trace-scale is for the window and --bench: the exports trace at the output size");
     }
+    if (options.shutterSlices != 0 && !exporting && !options.benchExport) {
+        throw std::runtime_error("--shutter-slices is for the exports and --bench-export: the window has no shutter");
+    }
     if (targetFpsGiven && (exporting || options.benchExport)) {
         throw std::runtime_error("--target-fps is for the window and --bench: the exports take the time they need");
     }
@@ -321,6 +326,9 @@ std::string helpText() {
            "  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)\n"
            "  --bench-capture DIR  With --bench: also write each chapter's last timed frame to\n"
            "                       DIR/bench_<chapter>.png (to compare the look of two runs)\n"
+           "  --shutter-slices N   Exports: trace each frame in N time slices of the 180 degree\n"
+           "                       shutter, 1..8, at most --spp (default one per 4 samples: 4 at\n"
+           "                       16 spp, none at 4 or fewer); other bytes than the default\n"
            "  --bench-export       With --bench: time export frames (--render-stream's: --spp,\n"
            "                       default 64, the shutter at --fps, traced at the output size)\n"
            "  --bench-counters     With --bench: trace with the counting path tracer and add its work\n"

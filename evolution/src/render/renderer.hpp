@@ -44,6 +44,9 @@ struct RenderSettings {
     // one per frame, so a long 4K frame never sits in one submit (Windows' 2 s TDR). Same bytes either way;
     // the CLI's exports set it, the window ignores it.
     bool submitPerSlice = false;
+    // Exports only: the export shutter's time slices (--shutter-slices; HistoryState::shutterSlices), 0 for
+    // the default of one per 4 samples, at most 8. Another count gives other bytes.
+    std::uint32_t shutterSlices = 0;
     // --bench-counters: the path tracer's counting build (modern::TracerOptions::counters), whose work
     // counters ModernStage::takeCounters() reads. Slower; the same picture.
     bool counters = false;
@@ -165,6 +168,7 @@ private:
     std::uint32_t maxBounces_;
     double shutterSeconds_;
     bool submitPerSlice_;
+    std::uint32_t shutterSlices_;
     HistoryTracker history_;
     bool modernRanLastFrame_ = false;
     text::TextPass text_; // before the stages that draw with it

@@ -63,7 +63,8 @@ Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings
       fast_(settings.fast && settings.mode == RenderMode::Interactive), spp_(settings.spp),
       maxBounces_(resolveMaxBounces(settings.mode, settings.maxBounces)),
       shutterSeconds_(settings.mode == RenderMode::Export ? settings.shutterSeconds : 0.0),
-      submitPerSlice_(settings.mode == RenderMode::Export && settings.submitPerSlice), text_(ctx, ring),
+      submitPerSlice_(settings.mode == RenderMode::Export && settings.submitPerSlice),
+      shutterSlices_(settings.mode == RenderMode::Export ? settings.shutterSlices : 0u), text_(ctx, ring),
       retro_(ctx, ring, text_),
       modern_(ctx, ring, settings.width, settings.height, settings.detail, settings.sceneFactory,
               settings.sceneMap, settings.traceScale,
@@ -155,7 +156,8 @@ void Renderer::render(VkCommandBuffer cmd, const show::TimelineFrame& frame) {
                                  maxBounces_,
                                  modern::frameSeedFor(scene.showSeconds, seedFrames),
                                  shutterSeconds_,
-                                 submitPerSlice_};
+                                 submitPerSlice_,
+                                 shutterSlices_};
         modern_.render(cmd, scene, state, plan.retro ? &retro_.image() : nullptr);
         stats_.frameSeed = state.frameSeed;
         stats_.spp = state.spp;

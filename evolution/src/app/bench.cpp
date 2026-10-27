@@ -126,6 +126,7 @@ int runBench(const Options& options) {
         // As --render-stream renders (app.cpp's runRenderStream).
         settings.shutterSeconds = 0.5 / options.fps;
         settings.submitPerSlice = true;
+        settings.shutterSlices = static_cast<std::uint32_t>(options.shutterSlices);
     }
     render::Renderer renderer(ctx, ring, settings);
 

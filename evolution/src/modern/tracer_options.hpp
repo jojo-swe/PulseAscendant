@@ -27,9 +27,10 @@ using Counters = std::array<std::uint64_t, kCounterCount>;
 // render::ModernStage the caustic photons from a seed fixed per chapter, the photon maps reused while their
 // inputs do not change, the particle field's BLAS refit between rebuilds, and in render::Renderer half the
 // extra samples of a history's first two frames (render::kFastResetSpp). `scenePipelines`: a pipeline of its
-// own per scene (PathTracer::preparePipeline: only the features the scene's frames use), in the window's fast
-// mode and in exports; the same picture as the generic pipeline (byte for byte on lavapipe: bench_test and
-// the baseline sums), with less code and live state in the raygen.
+// own per scene (PathTracer::preparePipeline: only the features the scene's frames use), built up front in
+// the window's fast mode; in exports one per set of features a frame uses, built when a frame first needs it.
+// The same picture as the generic pipeline (byte for byte on lavapipe: bench_test and the baseline sums),
+// with less code and live state in the raygen.
 struct TracerOptions {
     bool counters = false;
     bool fast = false;

@@ -56,6 +56,10 @@ struct Options {
     // kExportSpp, the 180 degree shutter at --fps, the output size traced, one submit per time slice, each
     // frame read back before the next), so an export's cost per pass and its work counters can be measured.
     bool benchExport = false;
+    // --shutter-slices N: exports (and --bench-export) trace each frame in N time slices of the 180 degree
+    // shutter (1..8, at most --spp) instead of one per 4 samples. 0: that default. Another count gives other
+    // bytes: an option, never the default.
+    int shutterSlices = 0;
     std::vector<int> chapters; // --chapters LIST: chapter indices, as --show-info numbers them
     // --secret-part[=WORD]: the window and --render-stream run the part of retro/secret_part.hpp instead of
     // the show (--time and --duration then count its seconds); WORD is checked as the patient's answer.

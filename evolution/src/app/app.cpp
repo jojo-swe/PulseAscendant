@@ -474,6 +474,7 @@ int runRenderStream(const Options& options) {
     settings.shutterSeconds = 0.5 / options.fps; // a 180 degree shutter; the window has none
     settings.detail = modern::SceneDetail{options.detail};
     settings.submitPerSlice = true; // one submit per time slice: no frame-long submit to trip a GPU watchdog
+    settings.shutterSlices = static_cast<std::uint32_t>(options.shutterSlices); // 0: one per 4 samples
     render::Renderer renderer(ctx, ring, settings);
     // The GPU side of every path-traced scene the range shows (BLASes, and on the first the pipeline and the
     // shared images) as setup, before the first frame.

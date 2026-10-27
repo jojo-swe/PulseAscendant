@@ -79,6 +79,14 @@ gfx::ImageDesc imageDesc(std::uint32_t width, std::uint32_t height) {
             "modern"};
 }
 
+// EVO_SCENE_PIPELINES=0 keeps the generic pipeline (a diagnostic, to compare the two).
+modern::TracerOptions withScenePipelines(modern::TracerOptions options) {
+    const char* forced = std::getenv("EVO_SCENE_PIPELINES");
+    if (forced && std::string(forced) == "0")
+        options.scenePipelines = false;
+    return options;
+}
+
 float checkedScale(float scale) {
     if (!validTraceScale(scale))
         throw std::invalid_argument("ModernStage: the trace scale must be in (0, 1], got " +
@@ -113,7 +121,7 @@ ModernStage::ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t 
     : ctx_(ctx), ring_(ring), width_(width), height_(height), traceScale_(checkedScale(traceScale)),
       traceWidth_(traceSize(width, height, traceScale).width),
       traceHeight_(traceSize(width, height, traceScale).height), detail_(detail),
-      tracerOptions_(tracerOptions),
+      tracerOptions_(withScenePipelines(tracerOptions)),
       factory_(factory ? std::move(factory) : modern::SceneFactory(&modern::makeScene)),
       map_(map ? std::move(map) : modern::SceneMap(&modern::sceneFor)), fill_(ctx, gfx::FillTarget::Hdr),
       tonemap_(ctx, ring), hdr_(ctx, hdrDesc(width, height)), image_(ctx, imageDesc(width, height)) {}
@@ -206,11 +214,10 @@ void ModernStage::prepare(modern::SceneId id) {
     if (medium)
         medium_ = std::move(medium);
     gpus_[index] = std::move(gpu);
-    // The window's fast mode and exports: the scene's own pipeline, with only the features its frames use (a
-    // frame that needs more, which the probe missed, traces with the generic pipeline). EVO_SCENE_PIPELINES=0
-    // keeps the generic one (a diagnostic, to compare the two).
-    const char* scenePipelines = std::getenv("EVO_SCENE_PIPELINES");
-    if (tracerOptions_.scenePipelines && !(scenePipelines && std::string(scenePipelines) == "0"))
+    // The window's fast mode: the scene's own pipeline, with only the features its frames use (a frame that
+    // needs more, which the probe missed, traces with the generic pipeline). Exports build one per set of
+    // features as their frames need it (PathTracer::trace).
+    if (tracerOptions_.fast && tracerOptions_.scenePipelines)
         tracer_->preparePipeline(sceneFeatures(id));
 }
 
@@ -367,7 +374,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     // The export shutter: the scene's frame at each slice's time, clamped into the frame's chapter. The
     // window (and an export at 4 spp or fewer, or without a shutter) has one slice: the frame itself.
     const std::uint32_t sliceCount =
-        modern::shutterSlices(state.spp, interactive ? 0.0 : state.shutterSeconds);
+        modern::shutterSlices(state.spp, interactive ? 0.0 : state.shutterSeconds, state.shutterSlices);
     std::vector<modern::SceneFrame> slices;
     std::vector<double> sliceLocal; // each slice's chapter-local time
     slices.reserve(sliceCount);
@@ -391,6 +398,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     const post::SubpixelWindow window =
         post::subpixelWindow(traceWidth_, traceHeight_, width_, height_, state.framesSinceReset, interactive);
     trace.spp = state.spp;
+    trace.samplesPerDispatch = modern::samplesPerDispatch(state.spp, sliceCount);
     trace.maxBounces = state.maxBounces;
     trace.frameSeed = state.frameSeed;
     trace.clampIndirect = scene.clampIndirect;
