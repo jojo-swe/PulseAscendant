@@ -40,6 +40,9 @@ struct Options {
     std::optional<float> traceScale;
     // --trace-scale auto: the adaptive scale (app/auto_scale.hpp); the window's default (adaptiveTraceScale).
     bool autoTraceScale = false;
+    // The frame rate the window's adaptive trace scale aims for (--target-fps 30|60, app/auto_scale.hpp): its
+    // table and its controller's GPU budget. The window and --bench; 60 by default.
+    int targetFps = 60;
     // The window's fast mode (render::RenderSettings::fast) for the window and --bench; --no-fast-mode turns
     // it off. The exports never use it.
     bool fastMode = true;
@@ -49,6 +52,14 @@ struct Options {
     int benchFrames = 120;
     bool benchCounters = false; // --bench-counters: the work counters and scene statistics per chapter
     std::filesystem::path benchCapture; // --bench-capture DIR: each chapter's last timed frame as a PNG
+    // --bench-export: --bench times export frames instead (--render-stream's: Export mode, --spp, default
+    // kExportSpp, the 180 degree shutter at --fps, the output size traced, one submit per time slice, each
+    // frame read back before the next), so an export's cost per pass and its work counters can be measured.
+    bool benchExport = false;
+    // --shutter-slices N: exports (and --bench-export) trace each frame in N time slices of the 180 degree
+    // shutter (1..8, at most --spp) instead of one per 4 samples. 0: that default. Another count gives other
+    // bytes: an option, never the default.
+    int shutterSlices = 0;
     std::vector<int> chapters; // --chapters LIST: chapter indices, as --show-info numbers them
     // --secret-part[=WORD]: the window and --render-stream run the part of retro/secret_part.hpp instead of
     // the show (--time and --duration then count its seconds); WORD is checked as the patient's answer.

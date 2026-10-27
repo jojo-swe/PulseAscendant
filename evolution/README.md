@@ -381,8 +381,9 @@ computed from the device's handle size and alignments (lavapipe's and RTX's diff
 - **Trace resolution and the temporal upscaler** (`src/post/upscale.*`, `shaders/post/upscale.comp`). The
   window path traces at `--trace-scale` × its size (at least 16 pixels per axis; by default `auto`: each
   chapter starts at its scale from a table for 1280x720, scaled with the output's size and kept within
-  0.3..0.67, and the window lowers it while the GPU misses 30 fps and raises it again when there is room for
-  60, src/app/auto_scale.hpp) and the
+  0.25..0.67, and the window lowers it while the GPU misses 60 fps and raises it again when there is room
+  for twice that; `--target-fps 30` holds 30 fps with a sharper table, 0.3..0.67, src/app/auto_scale.hpp)
+  and the
   denoised picture is upscaled to the window size in time: from its second frame after a reset the window
   traces each pixel's samples in a window one output pixel wide, moved over the trace pixel by a 16-frame
   Halton (2, 3) sequence, and the upscaler accumulates them where they fell (each output pixel weights the
@@ -592,8 +593,11 @@ Options:
   --trace-scale F      Path trace at F x the window size, 0.25..1, and upscale in time;
                        the window and --bench only (the exports always trace at the
                        output size). 'auto' (the default) traces each chapter at its
-                       scale from a table, 0.3..0.67, to hold 30 fps; the window also
-                       adapts it to the GPU's frame time (docs/PERFORMANCE.md)
+                       scale from a table, 0.25..0.67, to hold --target-fps; the window
+                       also adapts it to the GPU's frame time (docs/PERFORMANCE.md)
+  --target-fps N       What 'auto' aims for: 60 (the default; 0.25..0.67) or 30 fps
+                       (0.3..0.67, sharper): its table, also --bench's, and the GPU
+                       budget the window holds
   --no-fast-mode       Trace the window and --bench as the exports do: photons seeded
                        per frame, the generic pipeline,
                        full BLAS builds, every shadow ray traced and walked through
@@ -610,6 +614,11 @@ Options:
   --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)
   --bench-capture DIR  With --bench: also write each chapter's last timed frame to
                        DIR/bench_<chapter>.png (to compare the look of two runs)
+  --shutter-slices N   Exports: trace each frame in N time slices of the 180 degree
+                       shutter, 1..8, at most --spp (default one per 4 samples: 4 at
+                       16 spp, none at 4 or fewer); other bytes than the default
+  --bench-export       With --bench: time export frames (--render-stream's: --spp,
+                       default 64, the shutter at --fps, traced at the output size)
   --bench-counters     With --bench: trace with the counting path tracer and add its work
                        per pixel per frame (rays by kind, NEE, medium steps) and the
                        frame's scene statistics to each line (slower; the same picture)
@@ -679,7 +688,7 @@ the window adds `0x9E3779B9` per frame since its last reset, so its first frame 
 seed and, at equal bounces, equals the export frame at spp max(`--spp`, 4) byte for byte while that is below
 16 (where both filter the same way). The bounces cannot be set from the command line (the window 4, exports 6), so a real window frame never
 equals a real export frame; only the tests, which set both, see the equality. The window traces below its
-size (`--trace-scale`, by default `auto`: 0.3 to 0.67) and the exports at the output size, so the equality holds at
+size (`--trace-scale`, by default `auto`: 0.25 to 0.67) and the exports at the output size, so the equality holds at
 `--trace-scale 1`; at a lower scale the window's first frame after a reset equals a frame rendered in Export
 mode at the same scale (the tests pin both), and seeking stays deterministic: the jitter and the upscaler's
 history follow only the frames since the last reset. The window's fast mode (on unless `--no-fast-mode`,

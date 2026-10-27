@@ -1340,6 +1340,8 @@ Weather cityWeather(const show::TimelineFrame& frame) {
 
 MediumFrame cityMedium(const show::TimelineFrame& frame) {
     MediumFrame m;
+    // METROPOLIS's haze, lit by the 41,839 lamps of the whole city, came out 3.5 % darker at half rate.
+    m.halfRate = frame.effect != Effect::Metropolis;
     const auto local = static_cast<float>(frame.localSeconds);
     FogDesc fog;
     fog.albedo = {0.93f, 0.94f, 0.96f};
@@ -1374,6 +1376,7 @@ MediumFrame cityMedium(const show::TimelineFrame& frame) {
         grid.densityScale = 1.f;
         grid.albedo = {0.97f, 0.97f, 0.98f};
         grid.phaseG = 0.7f; // silver edges towards the moon
+        grid.emissionScale = 0.f; // the deck scatters and emits nothing (city_clouds.comp bakes no emission)
         const Vec3 size = kCloudHi - kCloudLo;
         const float wind = 0.004f * local;
         const Vec3 climb{kRoomWindowX + 50.f, 0.f, kAscentWindowZ + 80.f}; // where the camera bursts out

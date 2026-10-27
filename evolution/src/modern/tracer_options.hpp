@@ -25,12 +25,16 @@ using Counters = std::array<std::uint64_t, kCounterCount>;
 // (rt_pathtrace_fast.rgen.spv: one wavelength per path, thin panes passed by an any-hit, faint shadow rays
 // and paths from bounce 2 rouletted after the clamp), in
 // render::ModernStage the caustic photons from a seed fixed per chapter, the photon maps reused while their
-// inputs do not change, the particle field's BLAS refit between rebuilds, a pipeline of its own per scene
-// (PathTracer::preparePipeline: only the features the scene's frames use), and in render::Renderer half the
-// extra samples of a history's first two frames (render::kFastResetSpp).
+// inputs do not change, the particle field's BLAS refit between rebuilds, and in render::Renderer half the
+// extra samples of a history's first two frames (render::kFastResetSpp). `scenePipelines`: a pipeline of its
+// own per scene (PathTracer::preparePipeline: only the features the scene's frames use), built up front in
+// the window's fast mode; in exports one per set of features a frame uses, built when a frame first needs it.
+// The same picture as the generic pipeline (byte for byte on lavapipe: bench_test and the baseline sums),
+// with less code and live state in the raygen.
 struct TracerOptions {
     bool counters = false;
     bool fast = false;
+    bool scenePipelines = false;
 };
 
 } // namespace evo::modern

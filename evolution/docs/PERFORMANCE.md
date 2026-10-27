@@ -47,9 +47,16 @@ every trace, occupancy) rather than at the number of samples; the sections below
 ### --bench, --bench-counters, --bench-capture
 
 ```sh
-# The acceptance run: every chapter at 720p as the window renders it (fast mode, each chapter at its table
-# scale); every line's "fps" must be at least 30
+# The acceptance runs: every chapter at 720p as the window renders it (fast mode, each chapter at its table
+# scale): the 60 fps table (the default since round 3; every line's "fps" should be at least 60) and the
+# 30 fps one (at least 30)
 Evolution --bench --width 1280 --height 720 > bench-720p.jsonl
+Evolution --bench --width 1280 --height 720 --target-fps 30 > bench-720p-30.jsonl
+# Export frames as --render-stream renders them (round 3): s/frame ("fps"), per-pass GPU time, and with
+# --bench-counters the work per pixel and the slice count, per chapter
+Evolution --bench --bench-export --width 3840 --height 2160 --spp 16 --bench-frames 2 > bench-export-4k16.jsonl
+# The half-rate volume layer off (round 3), for an A/B
+EVO_HALF_VOLUME=0 Evolution --bench --width 1280 --height 720 --chapters 15,13,12,4 > bench-full-volume.jsonl
 # The same at 1440p
 Evolution --bench --width 2560 --height 1440 > bench-1440p.jsonl
 # The old fixed scale, to compare with the RTX 4080 numbers above (fast mode on, then off)
@@ -511,6 +518,257 @@ What the round bought, per chapter (estimates):
 - **Measure on the RTX:** `Evolution --bench --width 1280 --height 720`, with `EVO_NEE_ROULETTE=0` as the A/B
   for item 2. The any-hit's cost on the RTX and the photon pass of LENS OF GOD (1,048,576 photons every frame)
   are not in the model.
+
+## Round 3: the volume layer at half rate, 60 fps, and the export (perf-realtime-3)
+
+As in round 2, the counters come from `--bench-counters` on lavapipe at 480x270 (322x181 traced), 4 frames from
+20 % into each chapter, and the look check is the mean display level of the last of 30 frames at 480x270 against
+`--no-fast-mode`. Every RTX figure is an **estimate** from the round-1 model with f scaled by traces per pixel.
+Nothing here was measured on an RTX GPU. The default exports are byte-identical after every commit
+(`hash_outputs.py --check`).
+
+### What changed (window)
+
+1. **The volume layer at half rate** (8837ac2; fast mode). The volume layer is the primary segment's
+   in-scattered light: four shadow rays and a continuation path of 2-3 traces with its own shadow rays, which
+   was 40-70 % of the rays in the chapters with fog. It is now traced on a checkerboard that flips every frame.
+   - **Traced pixels** (`medium_path.glsl`'s `mediumLayerSkipped`) do the full layer.
+   - **The other pixels** only estimate the transmittance (the fog's closed form and the grid's ratio-tracking
+     walk; no rays).
+   - **The fill.** The denoiser's temporal pass (`accumulate.comp`'s `volumeAt`) fills each such pixel from its
+     four traced neighbours. It takes their radiance per unit opacity (1 - T), weighted by how close their
+     transmittance is to its own (the volume à-trous's stop) and never across a hit and a miss, and multiplies
+     it by its own opacity. This happens before the history clamp, which then takes the 3x3 min/max of the
+     filled layer.
+   - **Where it is off.** Frames with an emitting grid (LENS OF GOD's disc, NEBULA, PLASMA, PLASMA PLANET) keep
+     the whole layer, because their emission is the layer's detail. So does a medium whose scene sets
+     `MediumFrame::halfRate = false`. The city's cloud deck now declares `emissionScale = 0` (its bake writes no
+     emission, and the exports are byte-identical), so ASCENT gets the half rate.
+   - **METROPOLIS keeps the whole layer.** Its haze is lit by 41,839 small lamps, so its in-scattered light
+     arrives on few samples. The half-rate layer was 3.5 % darker there than `--no-fast-mode` with the 3x3 box.
+     Wider boxes (the traced pixels of the 5x5, or the nearest 9-12 traced) were 6-8 % brighter: the full
+     window's own clamp darkens that haze. The boxes tried were the traced 5x5, the nearest traced pixels, and
+     one neighbour copied instead of the mean. They moved the other chapters by up to ±2 %, so the 3x3 of the
+     filled layer stays.
+   - `EVO_HALF_VOLUME=0` turns it off (A/B). `denoiser_test` checks the fill on both parities and at a
+     transmittance edge.
+2. **A 60 fps target, the window's default** (2461a27). `--target-fps 30|60` (window and `--bench`, default 60)
+   picks the table the chapters start from and the controller's GPU budget:
+   - **60:** a 15.5 ms budget and scales 0.25..0.67.
+   - **30:** the previous 31 ms and 0.3..0.67. Its table is unchanged, so it is now the sharper mode with margin.
+
+   The 60 fps table (`autoTraceScaleTable60`) holds estimates:
+   - **The 13 chapters measured on the RTX:** the round-1 model with the round-3 counters.
+   - **The others:** their export traces per sample at the measured chapters' median cost per trace
+     (13.8 ns at 1440p), with the fast mode's f taken as 0.85.
+
+### Counters and estimates (window, 1280x720)
+
+Traces per pixel and f: round 2 (63dd1c1) -> round 3. "30 fps table" is the current 30 fps table, with the
+round-2 work -> the round-3 work. The 60 fps columns use the new table. At 1440p the 60 fps table's scales
+reach the 0.25 floor in every listed chapter.
+
+| Chapter | traces/px | f | 30 fps table @720p: est. fps | 60 fps table @720p | est. fps @720p (60 table) | est. fps @1440p (60 table, 0.25) | est. fps @1440p (30 table, 0.3) |
+|---|---|---|---|---|---|---|---|
+| GLASS CATHEDRAL | 14.84 -> 10.38 | 0.71 -> 0.50 | 0.30: 34 -> 47 | 0.25 | 65 | 18 | 9 -> 13 |
+| CITY NIGHT | 14.03 -> 9.74 | 0.89 -> 0.62 | 0.30: 37 -> 52 | 0.25 | 72 | 20 | 10 -> 14 |
+| ASCENT | 14.76 -> 10.34 | 0.85 -> 0.60 | 0.30: 41 -> 57 | 0.25 | 78 | 22 | 11 -> 15 |
+| VECTOR CITY | 13.99 -> 9.72 | 0.89 -> 0.62 | 0.35: 37 -> 51 | 0.30 | 67 | 26 | 13 -> 19 |
+| TUNNEL | 16.13 -> 11.29 | 0.89 -> 0.62 | 0.40: 35 -> 49 | 0.30 | 81 | 32 | 16 -> 23 |
+| METROPOLIS | 12.01 -> 12.01 | 0.92 -> 0.92 | 0.40: 38 -> 38 | 0.25 | 88 | 25 | 18 -> 18 |
+| RAYTRACE | 11.76 -> 8.04 | 0.97 -> 0.66 | 0.40: 37 -> 53 | 0.35 | 67 | 35 | 17 -> 25 |
+| PARTICLE OCEAN | 11.06 -> 7.49 | 0.87 -> 0.59 | 0.45: 36 -> 51 | 0.35 | 80 | 42 | 21 -> 30 |
+| RAYTRACE INFINITY | 12.88 -> 8.43 | 0.96 -> 0.63 | 0.45: 38 -> 56 | 0.40 | 69 | 47 | 22 -> 33 |
+| LENS OF GOD | 14.13 -> 14.13 | 0.89 -> 0.89 | 0.50: 35 -> 35 | 0.35 | 67 | 35 | 25 -> 25 |
+| FINALE | 2.89 -> 2.89 | 0.82 -> 0.82 | 0.55: 35 -> 35 | 0.35 | 79 | 42 | 30 -> 30 |
+| NEBULA | 7.95 -> 7.95 | 0.65 -> 0.65 | 0.67: 39 -> 39 | 0.50 | 66 | 66 | 48 -> 48 |
+| PLASMA | 7.99 -> 7.99 | 0.62 -> 0.62 | 0.67: 45 -> 45 | 0.50 | 75 | 75 | 54 -> 54 |
+
+The 60 fps table's entries for the chapters not measured on the RTX (estimated from traces per pixel): FLYBY,
+PORTAL, RETURN, REBOOT, GLENZ and CRYSTAL CITY 0.4, STUDIO NIGHT and PLASMA PLANET 0.45, LENS 0.55, DOTS 0.35;
+SPHERE STORM, SINGULARITY, GALAXY, WORMHOLE and ASCENDANT (1-2.5 traces per pixel) 0.67.
+
+**60 fps status (estimates).** Every listed chapter is at 60 fps or more at 720p with the 60 fps table: the
+slowest are GLASS CATHEDRAL (65), NEBULA (66), and VECTOR CITY, RAYTRACE and LENS OF GOD (67).
+- **Where it comes from, per chapter** (round 2's estimate at its 30 fps scale -> now):
+  - **The eight chapters with the half-rate layer:** about 1.4x from real work (30-33 % fewer traces at the
+    same scale). The rest is fewer pixels: GLASS CATHEDRAL 34 -> 47 fps (work) -> 65 (scale 0.3 -> 0.25);
+    TUNNEL 35 -> 49 -> 81 (0.4 -> 0.3); RAYTRACE INFINITY 38 -> 56 -> 69 (0.45 -> 0.4).
+  - **METROPOLIS, LENS OF GOD, FINALE, NEBULA and PLASMA:** all of it is fewer pixels. METROPOLIS goes 0.4 ->
+    0.25, which is 0.39x the traced pixels; LENS OF GOD and FINALE 0.5/0.55 -> 0.35; NEBULA and PLASMA 0.67 ->
+    0.5.
+- **What it looks like.** At 0.25 the window traces 320x180 for a 720p picture. Next to the 30 fps table (0.3),
+  GLASS CATHEDRAL and ASCENT look a little softer by eye on lavapipe, with more stair-stepping on window edges
+  and facades. The temporal upscaler hides most of it while the camera moves.
+- **1440p.** 60 fps is out of reach for the heavy chapters: 18-35 est. fps at the 0.25 floor (640x360 traced).
+
+**The look** (mean display level, fast mode against `--no-fast-mode`, last of 30 frames at 480x270, which
+the table clamps to scale 0.65-0.67):
+
+| Chapter | round 2 | round 3 |
+|---|---|---|
+| GLASS CATHEDRAL | -0.42 % | -0.86 % |
+| ASCENT | -0.15 % | -1.19 % |
+| CITY NIGHT | -0.13 % | -0.27 % |
+| LENS OF GOD (whole layer) | -0.11 % | -0.11 % |
+| RAYTRACE INFINITY | -0.08 % | -1.25 % |
+| METROPOLIS (whole layer) | -0.15 % | -0.08 % |
+| RAYTRACE | -0.03 % | -0.89 % |
+| PARTICLE OCEAN | -0.19 % | -0.50 % |
+
+All are within ±1.5 %, but the half-rate layer moves every chapter that has it about 0.3-1.2 % darker. The
+filled pixels are smoother than traced ones, so the history clamp's box is a little narrower. TUNNEL and VECTOR
+CITY are in their 1993 halves at that point, as before. By eye the captures match the full window's, haze and
+shafts included.
+
+**Lavapipe, same-load A/B** (480x270, scale 0.67, 8 frames, two interleaved pairs, best of each; GPU ms of
+the trace pass, `EVO_HALF_VOLUME=0` -> on):
+- TUNNEL 2743 -> 2256 (-18 %), RAYTRACE 549 -> 431 (-21 %), CITY NIGHT 1256 -> 1066 (-15 %), GLASS CATHEDRAL
+  579 -> 489 (-16 %).
+- METROPOLIS, which keeps the whole layer, is the control: 926 -> 957 (+3 %, noise).
+
+Lavapipe gains less than the 30 % fewer traces: the skipped pixels still walk the medium for their
+transmittance, and ALU-heavy shading weighs more there than on an RTX.
+
+### What changed (exports)
+
+3. **A pipeline per scene's features in exports** (60dbd22, 477f66e). Exports now trace with the specialized
+   pipelines of the window's fast mode, which so far only the window used.
+   - **One pipeline per set of features.** The first frame that uses a set builds its pipeline at the trace, so
+     no prepare-time probe is needed (the probe had asked scenes for extra frames, which `motion_test`
+     counts).
+   - **Same pictures.** The pictures are the generic pipeline's: the baseline sums are byte-identical on
+     lavapipe, where specialization costs nothing.
+   - **Expected RTX gain (not measured).** On the RTX the export raygen drops the code and live state of every
+     feature a frame does not use. Outside dispersive glass that includes the hero-wavelength split: four
+     wavelengths at 16 spp and 15 saved variables live across every trace. Round 1 put the RTX's per-ray
+     slowness down to live state and register pressure, so this is the most likely export gain, but its size
+     is unknown until measured: run the export bench with `EVO_SCENE_PIPELINES=0` and without it.
+4. **`--bench --bench-export`** (472105f): times export frames per chapter as `--render-stream` renders them
+   (Export mode, `--spp`, the shutter, a submit per slice, each frame read back before the next) and reports
+   each pass's GPU time and, with `--bench-counters`, the work per pixel and the slice count.
+5. **`--shutter-slices N`** (477f66e; exports, 1..8, at most `--spp`; `render_4k.ps1 -ShutterSlices N`): traces
+   each frame in N slices of the 180 degree shutter instead of one per 4 samples.
+   - **Why.** An export of 4 spp or fewer had no motion blur at all; with `--shutter-slices 4` it traces four
+     slices of 1 sample.
+   - **Cost.** The same number of samples, plus a TLAS build, a particle rebuild and the scene's frame per extra
+     slice.
+   - **Opt-in.** It changes the bytes, so it is an option. Without it every export is as before.
+6. `render_4k.ps1 -Height 2160|1440|1080` picks the size (output `EVOLUTION-<height>p60[-s<slices>].mp4`).
+
+**What else was checked, and is not redundant or not worth it:**
+- **The particle field's BLAS** is rebuilt per slice, because the particles move between slices. A refit would
+  save a few ms per frame on the RTX.
+- **Photon maps** are shot once per frame, from the first slice, with a seed per frame (byte identity).
+- **The grid bake** happens once per frame. **The TLAS** is built once per slice (0.1-1 ms on the RTX).
+- **The host waits.** The host waits once per slice (`FrameRing::split`, against Windows' TDR) and once per frame
+  (the readback). The CPU work between them (the slices' scene frames, light trees, instance packing, the
+  RGB conversion) is roughly 20-200 ms per frame on a desktop CPU. That is under 1 % of a 4K frame of 10-130 s,
+  and a few % at 1080p and 4 spp.
+- **Pipelines, descriptors and BLASes** are built once per process (`pipeline_cache.bin` keeps compiles across
+  chunks).
+- **The denoiser's 4K passes** are a few ms.
+
+The cost of an export frame is the path tracing: 16 spp at 4K is 133 M paths and 2-5 G traces.
+
+### The export on an RTX 4080: ETA (estimates)
+
+The model, per chapter, uses its 2026 frames at 60 fps (`planStages`: 38,000 of the film's 44,258 frames trace)
+and its export work:
+- **Export work per sample.** From `--bench --bench-export --spp 16 --bench-counters` at 160x90: traces per
+  sample. Against the window's (round 1, `--no-fast-mode`) that is 0.74-1.19x, but 2.07x in GLASS CATHEDRAL,
+  which walks its panes, splits into four hero wavelengths and shoots 4x the photons.
+- **The 13 chapters measured on the RTX:** the 1440p window time x 4K/1440p pixels x 16 x that ratio.
+- **The rest:** traces per sample x 13.8 ns (24.7 ns for the glass scenes), the measured chapters' median cost
+  per trace.
+
+The model gives 1.9-128 s per 4K/16 spp frame. The owner measured 16-180 s, so the table gives the model (k = 1)
+and the model scaled to the measured maximum (k = 1.4). The 1993 frames are counted at 0.05 s. The model does not
+count the export's scene pipelines (item 3), so it applies to the build the owner measured.
+
+| Setting (60 fps, whole film) | k = 1 | k = 1.4 |
+|---|---|---|
+| 3840x2160, 16 spp | 252 h (10.5 days) | 352 h (14.7 days) |
+| 2560x1440, 16 spp | 112 h (4.7 days) | 157 h (6.5 days) |
+| 1920x1080, 16 spp | 63 h (2.6 days) | 88 h (3.7 days) |
+| 1920x1080, 8 spp | 32 h | 44 h |
+| 1920x1080, 4 spp (`--shutter-slices 4`) | 16 h | 22 h |
+| 1280x720, 8 spp (`--shutter-slices 4`) | 14 h | 20 h |
+| 1280x720, 16 spp | 28 h | 39 h |
+
+**Where the time goes.** Glass scenes are about 44 % of it: GLASS CATHEDRAL alone is 27 % (an estimated
+128 s per 4K frame), CRYSTAL CITY 13 % and GLENZ 3 %. Then CITY NIGHT, METROPOLIS and ASCENT, about 6-7 % each.
+
+**Recommended within about 24 hours: 1920x1080, 60 fps, 4 spp, the shutter in 4 slices** (est. 16-22 h):
+
+```
+tools\render_4k.ps1 -Height 1080 -Spp 4 -ShutterSlices 4 -Bench   # first: the ETA on this card
+tools\render_4k.ps1 -Height 1080 -Spp 4 -ShutterSlices 4
+```
+
+or directly:
+
+```
+py tools\render_video.py --exe build\windows\bin\Evolution.exe --music assets\music\show.wav --out dist\render\EVOLUTION-1080p60-s4.mp4 --width 1920 --height 1080 --fps 60 --spp 4 -- --shutter-slices 4
+```
+
+**What 4 spp gives up** against 16:
+- **Denoiser:** the export firefly filter and the finer à-trous and chroma passes (they start at 16 spp).
+- **Spectrum:** the four-wavelength hero split, so the glass's dispersion is noisier in colour.
+- **Caustics:** the 4x photons and finer caustic maps.
+- **Noise:** the per-pixel noise is 2x.
+- **Kept:** motion blur, through `--shutter-slices 4`. Without it a 4 spp frame has none.
+
+The best-looking option is 1080p at 16 spp: est. 2.6-3.7 days, or less if the scene pipelines pay off on the
+RTX. If 8 spp at 1080p comes in at 24 h or less on the card (`-Bench`), it is the better trade: two to four
+slices of motion blur, half the noise of 4 spp.
+
+**Within 5 hours** (the owner's later limit, target ≤ 4.5 h). The estimates below also count fixed costs:
+about 15 ms + 12 ms per slice of CPU and readback per frame, 10 s of start-up per chunk, and the 1993 frames.
+
+| Setting (whole film) | est. h, k = 1 | k = 1.4 |
+|---|---|---|
+| **1600x900, 30 fps, 2 spp, `--shutter-slices 2`** | **3.1** | **4.2** |
+| 1280x720, 30 fps, 3 spp, `--shutter-slices 3` | 3.1 | 4.1 |
+| 1152x648, 30 fps, 4 spp, `--shutter-slices 4` | 3.3 | 4.5 |
+| 1280x720, 30 fps, 4 spp, `--shutter-slices 4` | 4.0 | 5.4 |
+| 1920x1080, 30 fps, 2 spp | 4.3 | 5.9 |
+| 1280x720, 60 fps, 2 spp | 4.1 | 5.5 |
+| 1920x1080, 30 fps, 1 spp (no motion blur) | 2.2 | 3.0 |
+
+**Recommended: 1600x900 at 30 fps, 2 spp, two shutter slices.**
+- **Why 30 fps.** Every 60 fps setting under the limit drops to 1-2 spp at 720p or less. 30 fps halves the
+  frames, and its 180 degree shutter blurs over 1/60 s.
+- **Why 900p.** For the same samples per frame, 900p at 2 spp looked about as clean after the export denoiser as
+  720p at 3-4 spp (480x270 proxies on lavapipe), with more detail.
+- **What below 16 spp gives up.**
+  - The firefly filter, the hero split and the 4x photons.
+  - The colour of GLASS CATHEDRAL's dispersed flare changes from frame to frame: one wavelength per sample.
+  - Two slices give two-step motion blur on the fastest lights.
+
+```
+py tools\render_video.py --exe build\windows\bin\Evolution.exe --width 1600 --height 900 --fps 30 --spp 2 --chunk 30 --bench -- --shutter-slices 2
+py tools\render_video.py --exe build\windows\bin\Evolution.exe --music assets\music\show.wav --out dist\render\EVOLUTION-900p30.mp4 --width 1600 --height 900 --fps 30 --spp 2 --chunk 30 -- --shutter-slices 2
+```
+
+### Open items after round 3
+
+- **Measure on the RTX.**
+  - Window: `Evolution --bench --width 1280 --height 720` (the 60 fps table) and `--target-fps 30`, with
+    `EVO_HALF_VOLUME=0` as the A/B for item 1.
+  - Exports: `Evolution --bench --bench-export --width 1920 --height 1080 --spp 16 --bench-frames 2`, with and
+    without `EVO_SCENE_PIPELINES=0` (item 3's gain), then `render_video.py --bench` for the ETA.
+- **METROPOLIS's haze**, and the volume layer's history clamp in general. The full window's 3x3 min/max clamp
+  darkens a haze lit by thousands of lamps (a wider box gives 6-8 % more light). A clamp that holds the mean of
+  heavy-tailed samples would let METROPOLIS take the half rate too, but it changes the full window's look.
+- **The glass in exports.**
+  - The window's one-trace any-hit for shadow rays through panes (round 2) would save GLASS CATHEDRAL's pane walk
+    in exports too, about 11 % of its traces. It multiplies the panes' transmission in traversal order, which an
+    RTX does not fix, so the result's last bits could differ between runs; it was left out.
+  - Shader execution reordering (`VK_NV_ray_tracing_invocation_reorder`, RTX 40 series) is the next candidate
+    for the incoherent export paths. It cannot be tested on lavapipe.
+- **A split volume dispatch** (round 1's item). The half-rate layer already halves the volume work, and on
+  lavapipe a split would show nothing, so it waits for Nsight's register and spill numbers.
 
 ## Open items
 

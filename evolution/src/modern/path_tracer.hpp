@@ -68,6 +68,13 @@ struct TraceSettings {
     // neeRoulette and its estimate weighed by the inverse (shaders/rt/pathtrace.rgen's neeShadowTraced: the
     // expectation stays the same); 0 traces every one.
     float neeRoulette = 0.f;
+    // The window's fast mode only (ignored otherwise): the volume layer at half rate. 0 traces it in every
+    // pixel; 1 only where x + y is even, 2 only where it is odd (shaders/rt/medium_path.glsl's
+    // mediumLayerSkipped); the denoiser fills the others (post::DenoiseSettings::volumeHalf, the same value).
+    std::uint32_t halfVolume = 0;
+    // Samples per trace dispatch, 1..kSppPerDispatch: kSppPerDispatch unless an export asks for more time
+    // slices than spp / kSppPerDispatch (--shutter-slices; modern::samplesPerDispatch).
+    std::uint32_t samplesPerDispatch = 4;
 };
 
 // Samples per trace dispatch: an export at many spp is split so that no dispatch runs long enough to trip a
@@ -225,10 +232,13 @@ public:
     // every frame whose traceFeatures() it covers: the generic pipeline's code with every feature outside
     // `features` compiled out (fewer registers on GPUs whose ray tracing occupancy follows the pipeline's
     // largest shader). Frames it does not cover keep the generic pipeline. A no-op for kFeatureAll or a set
-    // already built. The window's fast mode builds one per scene (render::ModernStage::prepare).
+    // already built. The window's fast mode builds one per scene (render::ModernStage::prepare); exports one per
+    // set of features at the trace of the first frame that uses it (TracerOptions::scenePipelines).
     void preparePipeline(std::uint32_t features);
     // The pipelines built so far: the generic one and the specialized ones.
     std::uint32_t pipelineCount() const { return 1u + static_cast<std::uint32_t>(specialized_.size()); }
+    // The specialized pipelines' shader binding tables (bytes; bufferBytes() counts them too).
+    VkDeviceSize scenePipelineBytes() const;
     // The features of the pipeline the last trace() used (kFeatureAll: the generic one).
     std::uint32_t lastPipelineFeatures() const { return lastFeatures_; }
 

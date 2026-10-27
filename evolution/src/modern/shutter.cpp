@@ -20,6 +20,22 @@ std::uint32_t shutterSlices(std::uint32_t spp, double shutterSeconds) {
     return std::min(dispatches, kMaxShutterSlices);
 }
 
+std::uint32_t shutterSlices(std::uint32_t spp, double shutterSeconds, std::uint32_t requested) {
+    if (requested == 0)
+        return shutterSlices(spp, shutterSeconds);
+    if (!(shutterSeconds > 0.0))
+        return 1;
+    return std::min({requested, std::max(spp, 1u), kMaxShutterSlices});
+}
+
+std::uint32_t samplesPerDispatch(std::uint32_t spp, std::uint32_t slices) {
+    spp = std::max(spp, 1u);
+    slices = std::max(slices, 1u);
+    if ((spp + kSamplesPerSlice - 1) / kSamplesPerSlice >= slices)
+        return kSamplesPerSlice; // the default split: dispatches of 4, as many as the slices need or more
+    return (spp + slices - 1) / slices;
+}
+
 double sliceOffset(std::uint32_t k, std::uint32_t slices, double shutterSeconds) {
     if (slices == 0 || k >= slices)
         throw std::invalid_argument("sliceOffset: slice " + std::to_string(k) + " of " +

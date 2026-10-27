@@ -1280,6 +1280,17 @@ void testShutterMath() {
     CHECK(modern::shutterSlices(33, s) == 8);
     CHECK(modern::shutterSlices(12, s) == 3);
     CHECK(modern::shutterSlices(64, 0.0) == 1);
+    // --shutter-slices: the requested count (0: the default above), at most spp and 8; the default split of
+    // 4 samples per dispatch unless the slices need more dispatches.
+    CHECK(modern::shutterSlices(16, s, 0) == 4 && modern::shutterSlices(5, s, 0) == 2);
+    CHECK(modern::shutterSlices(4, s, 4) == 4 && modern::shutterSlices(4, s, 8) == 4);
+    CHECK(modern::shutterSlices(16, s, 8) == 8 && modern::shutterSlices(64, s, 2) == 2);
+    CHECK(modern::shutterSlices(16, 0.0, 4) == 1);
+    for (std::uint32_t spp = 1; spp <= 64; ++spp)
+        CHECK(modern::samplesPerDispatch(spp, modern::shutterSlices(spp, s)) == 4);
+    CHECK(modern::samplesPerDispatch(4, 4) == 1 && modern::samplesPerDispatch(8, 4) == 2);
+    CHECK(modern::samplesPerDispatch(16, 8) == 2 && modern::samplesPerDispatch(6, 4) == 2);
+    CHECK(modern::samplesPerDispatch(64, 2) == 4);
     // Offsets are the slices' midpoints within [-shutter / 2, shutter / 2].
     CHECK(modern::sliceOffset(0, 1, s) == 0.0);
     CHECK(std::abs(modern::sliceOffset(0, 2, s) + 0.25 * s) < 1e-15);

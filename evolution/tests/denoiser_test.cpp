@@ -1637,6 +1637,47 @@ void testVolumeLayer(gfx::Context& ctx) {
     history.denoiser().resetHistory();
     const Output reset = history.runOne(second, noFilter());
     CHECK(reset.volume(3, 4, 0) == halfToFloat(floatToHalf(0.4f)) && reset.volumeLength(3, 4) == 1.0f);
+
+    // The window's half-rate volume layer (volumeHalf): the pixels that did not trace it hold their own
+    // transmittance and no radiance; each is filled from its traced 4-neighbours as their radiance per unit
+    // opacity times its own. A layer of 0.4 per unit opacity, T 0.5 on the left and 0.8 on the right, comes
+    // back whole on both checkerboard parities, at the border between the two too (the transmittance stop
+    // keeps each side's own neighbours), and its traced pixels as they were.
+    for (std::uint32_t parity = 1; parity <= 2; ++parity) {
+        Frame sparse = flatFrame();
+        for (std::uint32_t y = 0; y < kSize; ++y)
+            for (std::uint32_t x = 0; x < kSize; ++x) {
+                const float t = x < kSize / 2 ? 0.5f : 0.8f;
+                const bool traced = ((x + y + parity) & 1u) != 0;
+                float* vol = sparse.at(sparse.volume, x, y);
+                vol[0] = vol[1] = vol[2] = traced ? 0.4f * (1.0f - t) : 0.0f;
+                vol[3] = t;
+            }
+        post::DenoiseSettings half = noFilter();
+        half.volumeAtrousIterations = 0;
+        half.volumeHalf = parity;
+        Harness filled(ctx);
+        const Output o = filled.runOne(sparse, half);
+        bool whole = true;
+        for (std::uint32_t y = 1; y < kSize - 1; ++y)
+            for (std::uint32_t x = 1; x < kSize - 1; ++x) {
+                const float t = x < kSize / 2 ? 0.5f : 0.8f;
+                const float expected = 0.4f * (1.0f - t);
+                whole = whole && std::fabs(o.volume(x, y, 0) - expected) <= expected / 512.0f &&
+                        o.volume(x, y, 3) == halfToFloat(floatToHalf(t));
+            }
+        CHECK(whole);
+    }
+    bool refused = false;
+    try {
+        post::DenoiseSettings wrong;
+        wrong.volumeHalf = 3;
+        Harness h(ctx);
+        h.runOne(flatFrame(), wrong);
+    } catch (const std::invalid_argument&) {
+        refused = true;
+    }
+    CHECK(refused);
 }
 
 // A silhouette in fog: in-scattered light 0.4 in front of a far wall left of column 32 and 0.1 in front of a

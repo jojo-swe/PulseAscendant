@@ -156,7 +156,8 @@ constexpr std::uint32_t hitGroupFor(MaterialClass c, GeometryKind k) {
 // (shaders/rt/pane.rahit).
 inline constexpr std::uint32_t kTraceFlagNee = 1u, kTraceFlagRussianRoulette = 2u,
                                kTraceFlagFixedLightSelection = 4u, kTraceFlagThinPanes = 8u,
-                               kTraceFlagFilteredGrid = 16u, kTraceFlagPaneAnyHit = 32u;
+                               kTraceFlagFilteredGrid = 16u, kTraceFlagPaneAnyHit = 32u,
+                               kTraceFlagHalfVolume = 64u, kTraceFlagHalfVolumeOdd = 128u;
 // The features a path tracer pipeline is built for (shaders/rt/types.glsl's kFeature*, specialization
 // constant 0 of every path tracer shader): kFeatureAll in the generic pipeline; a scene's own pipeline (the
 // window's fast mode) only those its frames use, so the driver's compiler drops the rest of the code and its

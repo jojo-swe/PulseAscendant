@@ -66,6 +66,10 @@ const uint kTraceFlagFixedLightSelection = 4u; // the original fixed selectWeigh
 const uint kTraceFlagThinPanes = 8u; // the frame has thin-walled glass (shadow rays then pass through it)
 const uint kTraceFlagFilteredGrid = 16u; // the grid's density through the sampler's filter (not lavapipe)
 const uint kTraceFlagPaneAnyHit = 32u;   // fast mode: shadow rays pass the panes through pane.rahit
+// Fast mode: the volume layer at half rate (medium_path.glsl's mediumLayerSkipped): only pixels whose x + y
+// (+ 1 with kTraceFlagHalfVolumeOdd) is even trace the primary segment's in-scattering and continuation.
+const uint kTraceFlagHalfVolume = 64u;
+const uint kTraceFlagHalfVolumeOdd = 128u;
 // The features a path tracer pipeline is built for (common.glsl's kFeatures, specialization constant 0;
 // rt::kFeature* in src/rt/gpu_types.hpp): every one in the generic pipeline; a scene's own pipeline (the
 // window's fast mode) only those its frames use, so the compiler drops the rest and their registers.

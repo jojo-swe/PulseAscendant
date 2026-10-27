@@ -183,6 +183,21 @@ int main() {
         CHECK(!defaults.benchCounters && !bench.benchCounters);
         CHECK(evo::parseOptions({"--bench", "--bench-counters"}).benchCounters);
         CHECK(!parseError({"--bench-counters"}).empty());
+        CHECK(!defaults.benchExport && evo::parseOptions({"--bench", "--bench-export"}).benchExport);
+        CHECK(!parseError({"--bench-export"}).empty());
+        CHECK(defaults.targetFps == 60);
+        CHECK(defaults.shutterSlices == 0);
+        CHECK(evo::parseOptions({"--render-stream", "--duration", "1", "--shutter-slices", "4"}).shutterSlices == 4);
+        CHECK(evo::parseOptions({"--bench", "--bench-export", "--shutter-slices", "8"}).shutterSlices == 8);
+        CHECK(!parseError({"--shutter-slices", "4"}).empty());
+        CHECK(!parseError({"--render-stream", "--duration", "1", "--shutter-slices", "9"}).empty());
+        CHECK(evo::parseOptions({"--target-fps", "30"}).targetFps == 30);
+        CHECK(evo::parseOptions({"--bench", "--target-fps", "60"}).targetFps == 60);
+        CHECK(parseError({"--target-fps", "45"}) == "--target-fps must be 30 or 60, got '45'");
+        CHECK(!parseError({"--target-fps", "30", "--render-stream", "--duration", "1"}).empty());
+        CHECK(!parseError({"--bench", "--bench-export", "--target-fps", "30"}).empty());
+        CHECK(evo::samplesPerPixel(evo::parseOptions({"--bench", "--bench-export"})) == evo::kExportSpp);
+        CHECK(evo::samplesPerPixel(evo::parseOptions({"--bench", "--bench-export", "--spp", "16"})) == 16);
         CHECK(defaults.fastMode && !evo::parseOptions({"--bench", "--no-fast-mode"}).fastMode);
         CHECK(evo::parseOptions({"--bench", "--bench-capture", "out"}).benchCapture == "out");
         CHECK(!parseError({"--bench-capture", "out"}).empty());
@@ -193,7 +208,7 @@ int main() {
         CHECK(evo::helpText().find("--render-stream") != std::string::npos);
         for (const char* flag :
              {"--no-audio", "--mute", "--music", "--show-info", "--audio-offset", "--no-crt", "--no-hud",
-              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--bench-counters",
+              "--spp", "--detail", "--trace-scale", "--bench", "--bench-frames", "--bench-counters", "--bench-export", "--target-fps", "--shutter-slices",
               "--bench-capture", "--chapters", "--no-fast-mode"})
             CHECK(evo::helpText().find(flag) != std::string::npos);
         CHECK(evo::helpText().find("Calibrate A/V sync") != std::string::npos);

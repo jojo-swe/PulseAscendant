@@ -84,6 +84,9 @@ struct HistoryState {
     // so no single submit traces the whole frame. The same commands run in the same order, so the frame's
     // bytes do not change. The window never splits, whatever this says.
     bool submitPerSlice = false;
+    // Export only: the time slices a frame is traced in (--shutter-slices; modern::shutterSlices), 0 for the
+    // default of one per 4 samples. More slices than that trace fewer samples per dispatch.
+    std::uint32_t shutterSlices = 0;
 };
 
 // Decides, frame by frame, whether the temporal history continues. A reset on the first frame (and after
