@@ -3,6 +3,7 @@ name: EVOLUTION Windows build
 on:
   push:
     tags: ['evolution-v*']
+    branches: ['evolution-build']
   workflow_dispatch:
 
 permissions:
