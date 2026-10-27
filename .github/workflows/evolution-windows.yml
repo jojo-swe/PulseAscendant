@@ -45,7 +45,7 @@ jobs:
       - name: Package
         run: |
           $bin = "evolution/build/windows-vs2022/bin"
-          $out = "EVOLUTION"
+          $out = "pkg/EVOLUTION"
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item "$bin/Evolution.exe" $out
           Copy-Item "$bin/shaders" $out -Recurse
@@ -55,6 +55,7 @@ jobs:
           Copy-Item evolution/docs/RELEASE-README.txt "$out/README.txt"
           Get-ChildItem $out -Recurse | Measure-Object -Property Length -Sum
           Compress-Archive -Path $out -DestinationPath EVOLUTION-windows-x64.zip
+          Get-Item EVOLUTION-windows-x64.zip
 
       - uses: actions/upload-artifact@v4
         with:
