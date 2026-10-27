@@ -1,0 +1,72 @@
+name: EVOLUTION Windows build
+
+on:
+  push:
+    tags: ['evolution-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vulkan SDK (glslangValidator)
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.4.304.1
+          install_runtime: false
+          cache: true
+          stripdown: true
+
+      - name: Show music
+        run: |
+          choco install ffmpeg -y --no-progress
+          New-Item -ItemType Directory -Force evolution/assets/music | Out-Null
+          Invoke-WebRequest "https://raw.githubusercontent.com/${{ github.repository }}/preview/show.flac" -OutFile show.flac
+          ffmpeg -v error -y -i show.flac -map_metadata -1 -fflags +bitexact -flags:a +bitexact -c:a pcm_s16le evolution/assets/music/show.wav
+          (Get-FileHash evolution/assets/music/show.wav -Algorithm SHA256).Hash
+
+      - name: Configure
+        working-directory: evolution
+        run: cmake --preset windows-vs2022
+
+      - name: Build
+        working-directory: evolution
+        run: cmake --build --preset windows-vs2022 --target Evolution Evolution_shaders
+
+      - name: Package
+        run: |
+          $bin = "evolution/build/windows-vs2022/bin"
+          $out = "EVOLUTION"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item "$bin/Evolution.exe" $out
+          Copy-Item "$bin/shaders" $out -Recurse
+          Copy-Item "$bin/assets" $out -Recurse
+          Copy-Item evolution/LICENSE $out
+          Copy-Item evolution/licenses $out -Recurse
+          Copy-Item evolution/docs/RELEASE-README.txt "$out/README.txt"
+          Get-ChildItem $out -Recurse | Measure-Object -Property Length -Sum
+          Compress-Archive -Path $out -DestinationPath EVOLUTION-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EVOLUTION-windows-x64
+          path: EVOLUTION-windows-x64.zip
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: EVOLUTION ${{ github.ref_name }}
+          body: |
+            EVOLUTION, a tribute to Second Reality (Future Crew, 1993). Windows x64; needs a graphics card with Vulkan hardware ray tracing.
+            Download EVOLUTION-windows-x64.zip, unzip, run Evolution.exe (README.txt inside).
+            Code: jojo · Music: joyolo · Concept: John
+          files: EVOLUTION-windows-x64.zip
