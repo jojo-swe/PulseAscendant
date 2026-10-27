@@ -17,6 +17,12 @@ inline constexpr std::uint32_t kMaxShutterSlices = 8;
 // How many slices a frame of `spp` samples is split into: one per dispatch of kSppPerDispatch (4) samples,
 // at most kMaxShutterSlices; 1 without a shutter (shutterSeconds <= 0) and for spp <= 4. spp 0 counts as 1.
 std::uint32_t shutterSlices(std::uint32_t spp, double shutterSeconds);
+// The same with `requested` slices (an export's --shutter-slices; 0: the default above): at most spp and
+// kMaxShutterSlices, 1 without a shutter.
+std::uint32_t shutterSlices(std::uint32_t spp, double shutterSeconds, std::uint32_t requested);
+// The samples per trace dispatch of a frame of `spp` samples in `slices` slices: kSppPerDispatch (4), or fewer
+// when the slices need more dispatches than that gives (one slice per dispatch at least).
+std::uint32_t samplesPerDispatch(std::uint32_t spp, std::uint32_t slices);
 
 // Slice k of `slices` is centred in the k-th of `slices` equal parts of the shutter interval, which is
 // centred on the frame's time: ((k + 0.5) / slices - 0.5) * shutterSeconds seconds from it. Throws

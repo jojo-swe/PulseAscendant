@@ -79,6 +79,26 @@ int main() {
         c.resize(640, 360);
         CHECK(near(c.update(4, 0.0), kAutoMaxTraceScale));
 
+        // The 60 fps target: its own table (never above the 30 fps one), budget and softest scale.
+        CHECK(evo::autoBudgetMs(60) < evo::autoBudgetMs(30) && evo::autoBudgetMs(30) == evo::kAutoBudgetMs);
+        CHECK(near(evo::autoMinTraceScale(60), 0.25f) && near(evo::autoMinTraceScale(30), kAutoMinTraceScale));
+        for (int chapter = 0; chapter < 31; ++chapter) {
+            const float s60 = evo::autoTraceScale(chapter, 1280, 720, 60);
+            CHECK(s60 >= evo::kAutoMinTraceScale60 && s60 <= evo::autoTraceScale(chapter, 1280, 720, 30));
+            CHECK(evo::autoTraceScale(chapter, 2560, 1440, 60) >= evo::kAutoMinTraceScale60);
+        }
+        CHECK(near(evo::autoTraceScale(21, 1280, 720, 60), kAutoMaxTraceScale));    // GALAXY
+        CHECK(near(evo::autoTraceScale(15, 1280, 720, 60), 0.25f));                 // GLASS CATHEDRAL
+        CHECK(near(evo::autoTraceScale(15, 2560, 1440, 60), evo::kAutoMinTraceScale60));
+        // Its controller lowers the scale at a sustained miss of the 60 fps budget, which the 30 fps one keeps.
+        evo::TraceScaleController e(1280, 720, 60);
+        const float start60 = e.update(11, 0.0);
+        CHECK(near(start60, evo::autoTraceScale(11, 1280, 720, 60)) && start60 > evo::kAutoMinTraceScale60);
+        CHECK(run(e, 11, 25.0, evo::TraceScaleController::kSettleFrames + 60) < start60);
+        evo::TraceScaleController f(1280, 720, 30);
+        f.update(11, 0.0);
+        CHECK(near(run(f, 11, 25.0, evo::TraceScaleController::kSettleFrames + 60), kAutoMaxTraceScale));
+
         // The options: the window adapts by default, --bench only with --trace-scale auto, a fixed scale
         // never.
         CHECK(evo::adaptiveTraceScale(evo::parseOptions({})));

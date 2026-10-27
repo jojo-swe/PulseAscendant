@@ -114,6 +114,7 @@ double parseAudioOffset(const std::string& flag, const std::string& text) {
 Options parseOptions(const std::vector<std::string>& args) {
     Options options;
     bool benchOnly = false; // --chapters or --bench-frames given
+    bool targetFpsGiven = false;
 
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string& flag = args[i];
@@ -141,12 +142,23 @@ Options parseOptions(const std::vector<std::string>& args) {
             options.traceScale.reset();
             if (!options.autoTraceScale)
                 options.traceScale = parseTraceScale(flag, value);
+        } else if (flag == "--target-fps") {
+            const std::string& value = nextValue();
+            if (value != "30" && value != "60")
+                throw std::runtime_error(flag + " must be 30 or 60, got '" + value + "'");
+            options.targetFps = value == "30" ? 30 : 60;
+            targetFpsGiven = true;
         } else if (flag == "--no-fast-mode") {
             options.fastMode = false;
         } else if (flag == "--bench") {
             options.bench = true;
         } else if (flag == "--bench-capture") {
             options.benchCapture = nextValue();
+            benchOnly = true;
+        } else if (flag == "--shutter-slices") {
+            options.shutterSlices = parseInt(flag, nextValue(), 1, 8);
+        } else if (flag == "--bench-export") {
+            options.benchExport = true;
             benchOnly = true;
         } else if (flag == "--bench-counters") {
             options.benchCounters = true;
@@ -232,9 +244,15 @@ Options parseOptions(const std::vector<std::string>& args) {
     }
     // Exports trace at the output size, so a window frame after a reset at scale 1
     // and an export frame agree.
-    if ((options.traceScale || options.autoTraceScale) && exporting) {
+    if ((options.traceScale || options.autoTraceScale) && (exporting || options.benchExport)) {
         throw std::runtime_error(
             "--trace-scale is for the window and --bench: the exports trace at the output size");
+    }
+    if (options.shutterSlices != 0 && !exporting && !options.benchExport) {
+        throw std::runtime_error("--shutter-slices is for the exports and --bench-export: the window has no shutter");
+    }
+    if (targetFpsGiven && (exporting || options.benchExport)) {
+        throw std::runtime_error("--target-fps is for the window and --bench: the exports take the time they need");
     }
     // The exports never take the window's shortcuts.
     if (!options.fastMode && exporting) {
@@ -254,17 +272,17 @@ Options parseOptions(const std::vector<std::string>& args) {
 }
 
 int samplesPerPixel(const Options& options) {
-    const bool exporting = options.renderStream || !options.captureDir.empty();
+    const bool exporting = options.renderStream || !options.captureDir.empty() || options.benchExport;
     return options.spp.value_or(exporting ? kExportSpp : kWindowSpp);
 }
 
 float traceScaleFor(const Options& options) {
-    const bool exporting = options.renderStream || !options.captureDir.empty();
+    const bool exporting = options.renderStream || !options.captureDir.empty() || options.benchExport;
     return exporting ? 1.f : options.traceScale.value_or(kWindowTraceScale);
 }
 
 bool adaptiveTraceScale(const Options& options) {
-    const bool exporting = options.renderStream || !options.captureDir.empty();
+    const bool exporting = options.renderStream || !options.captureDir.empty() || options.benchExport;
     if (exporting || options.traceScale)
         return false;
     return true; // the window and --bench adapt unless given a fixed scale
@@ -286,8 +304,11 @@ std::string helpText() {
            "  --trace-scale F      Path trace at F x the window size, 0.25..1, and upscale in time;\n"
            "                       the window and --bench only (the exports always trace at the\n"
            "                       output size). 'auto' (the default) traces each chapter at its\n"
-           "                       scale from a table, 0.3..0.67, to hold 30 fps; the window also\n"
-           "                       adapts it to the GPU's frame time (docs/PERFORMANCE.md)\n"
+           "                       scale from a table, 0.25..0.67, to hold --target-fps; the window\n"
+           "                       also adapts it to the GPU's frame time (docs/PERFORMANCE.md)\n"
+           "  --target-fps N       What 'auto' aims for: 60 (the default; 0.25..0.67) or 30 fps\n"
+           "                       (0.3..0.67, sharper): its table, also --bench's, and the GPU\n"
+           "                       budget the window holds\n"
            "  --no-fast-mode       Trace the window and --bench as the exports do: photons seeded\n"
            "                       per frame, the generic pipeline,\n"
            "                       full BLAS builds, every shadow ray traced and walked through\n"
@@ -305,6 +326,11 @@ std::string helpText() {
            "  --bench-frames N     Frames per chapter for --bench, 1..100000 (default 120)\n"
            "  --bench-capture DIR  With --bench: also write each chapter's last timed frame to\n"
            "                       DIR/bench_<chapter>.png (to compare the look of two runs)\n"
+           "  --shutter-slices N   Exports: trace each frame in N time slices of the 180 degree\n"
+           "                       shutter, 1..8, at most --spp (default one per 4 samples: 4 at\n"
+           "                       16 spp, none at 4 or fewer); other bytes than the default\n"
+           "  --bench-export       With --bench: time export frames (--render-stream's: --spp,\n"
+           "                       default 64, the shutter at --fps, traced at the output size)\n"
            "  --bench-counters     With --bench: trace with the counting path tracer and add its work\n"
            "                       per pixel per frame (rays by kind, NEE, medium steps) and the\n"
            "                       frame's scene statistics to each line (slower; the same picture)\n"

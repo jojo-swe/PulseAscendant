@@ -68,6 +68,11 @@ struct GridMediumDesc {
 struct MediumFrame {
     std::optional<FogDesc> fog;
     std::optional<GridMediumDesc> grid;
+    // The window's fast mode may trace this frame's volume layer at half rate (render::ModernStage; the
+    // denoiser fills the other pixels). false keeps it whole: where the in-scattered light arrives on few
+    // samples (a haze lit by thousands of small lamps), the half-rate layer loses more of it to the
+    // denoiser's history clamp than the full layer does. Exports trace it whole either way.
+    bool halfRate = true;
 };
 
 // FrameUniforms::mediumFlags (shaders/rt/types.glsl has the same constants).

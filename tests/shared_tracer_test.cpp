@@ -202,6 +202,9 @@ void testOnePipelineAndMemory(gfx::Context& ctx) {
     const VkDeviceSize images = stage.imageBytes();
     const VkDeviceSize studioBytes = stage.sceneGpu(SceneId::Studio)->bytes();
     const VkDeviceSize tracerBuffers = stage.tracer()->bufferBytes();
+    // Exports build a frame's own pipeline at its trace, not at prepare (a window in fast mode would).
+    const VkDeviceSize studioPipeline = stage.tracer()->scenePipelineBytes();
+    CHECK(studioPipeline == 0);
     CHECK(images > 0 && studioBytes > 0 && tracerBuffers > 0);
     CHECK(stage.gpuBytes() == images + tracerBuffers + studioBytes);
     CHECK(allocated1 - allocated0 == stage.gpuBytes() - stageImages);
@@ -215,15 +218,20 @@ void testOnePipelineAndMemory(gfx::Context& ctx) {
     const VkDeviceSize allocated2 = allocatedBytes(ctx);
     const VkDeviceSize shipBytes = stage.sceneGpu(SceneId::Ship)->bytes();
     CHECK(shipBytes > 0);
-    CHECK(allocated2 - allocated1 == shipBytes); // nothing but the scene: no images, no tracer buffers
-    CHECK(stage.imageBytes() == images && stage.tracer()->bufferBytes() == tracerBuffers);
-    CHECK(stage.gpuBytes() == images + tracerBuffers + studioBytes + shipBytes);
+    // Nothing but the scene and its own pipeline's shader binding table: no images, no other tracer buffers.
+    const VkDeviceSize shipPipeline = stage.tracer()->scenePipelineBytes() - studioPipeline;
+    CHECK(allocated2 - allocated1 == shipBytes + shipPipeline);
+    CHECK(stage.imageBytes() == images && stage.tracer()->bufferBytes() == tracerBuffers + shipPipeline);
+    CHECK(stage.gpuBytes() == images + tracerBuffers + shipPipeline + studioBytes + shipBytes);
     h.render(show::sampleTimeline(chapterTime(kStudioNight, 0.3)));
     h.render(forced2026(chapterTime(kFlyby, 0.3)));
-    CHECK(modern::PathTracer::pipelinesCreated() - before == 1);
-    std::printf("(b) one pipeline for two scenes; allocated: images %llu bytes, tracer buffers %llu, Studio "
+    // One tracer for both scenes: its generic pipeline and the frames' own (exports trace with a pipeline per
+    // set of features, PathTracer::preparePipeline), at most one per frame.
+    CHECK(stage.tracer()->pipelineCount() <= 3);
+    CHECK(modern::PathTracer::pipelinesCreated() - before == stage.tracer()->pipelineCount());
+    std::printf("(b) one tracer for two scenes (%u pipelines); allocated: images %llu bytes, tracer buffers %llu, Studio "
                 "%llu, Cornell %llu (the allocator's statistics agree)\n",
-                (unsigned long long)images, (unsigned long long)tracerBuffers,
+                stage.tracer()->pipelineCount(), (unsigned long long)images, (unsigned long long)tracerBuffers,
                 (unsigned long long)studioBytes, (unsigned long long)shipBytes);
 }
 

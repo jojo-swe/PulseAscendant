@@ -40,6 +40,16 @@ constexpr float kUpscaleClipGamma = 1.f;
 // under one 8-bit step even at black, where sRGB is steepest (12.92 / 4096 of full scale).
 constexpr float kNeeRouletteDisplay = 1.f / 4096.f;
 
+// The fast mode's volume layer at half rate (TraceSettings::halfVolume), unless EVO_HALF_VOLUME=0 (an A/B
+// diagnostic).
+bool halfVolumeAllowed() {
+    static const bool allowed = [] {
+        const char* forced = std::getenv("EVO_HALF_VOLUME");
+        return !(forced && std::string(forced) == "0");
+    }();
+    return allowed;
+}
+
 // kNeeRouletteDisplay, or EVO_NEE_ROULETTE (a display level; 0 turns the roulette off: an A/B diagnostic).
 float neeRouletteDisplay() {
     static const float level = [] {
@@ -67,6 +77,14 @@ gfx::ImageDesc imageDesc(std::uint32_t width, std::uint32_t height) {
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             1,
             "modern"};
+}
+
+// EVO_SCENE_PIPELINES=0 keeps the generic pipeline (a diagnostic, to compare the two).
+modern::TracerOptions withScenePipelines(modern::TracerOptions options) {
+    const char* forced = std::getenv("EVO_SCENE_PIPELINES");
+    if (forced && std::string(forced) == "0")
+        options.scenePipelines = false;
+    return options;
 }
 
 float checkedScale(float scale) {
@@ -103,7 +121,7 @@ ModernStage::ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t 
     : ctx_(ctx), ring_(ring), width_(width), height_(height), traceScale_(checkedScale(traceScale)),
       traceWidth_(traceSize(width, height, traceScale).width),
       traceHeight_(traceSize(width, height, traceScale).height), detail_(detail),
-      tracerOptions_(tracerOptions),
+      tracerOptions_(withScenePipelines(tracerOptions)),
       factory_(factory ? std::move(factory) : modern::SceneFactory(&modern::makeScene)),
       map_(map ? std::move(map) : modern::SceneMap(&modern::sceneFor)), fill_(ctx, gfx::FillTarget::Hdr),
       tonemap_(ctx, ring), hdr_(ctx, hdrDesc(width, height)), image_(ctx, imageDesc(width, height)) {}
@@ -197,10 +215,9 @@ void ModernStage::prepare(modern::SceneId id) {
         medium_ = std::move(medium);
     gpus_[index] = std::move(gpu);
     // The window's fast mode: the scene's own pipeline, with only the features its frames use (a frame that
-    // needs more, which the probe missed, traces with the generic pipeline). EVO_SCENE_PIPELINES=0 keeps the
-    // generic one (a diagnostic, to compare the two).
-    const char* scenePipelines = std::getenv("EVO_SCENE_PIPELINES");
-    if (tracerOptions_.fast && !(scenePipelines && std::string(scenePipelines) == "0"))
+    // needs more, which the probe missed, traces with the generic pipeline). Exports build one per set of
+    // features as their frames need it (PathTracer::trace).
+    if (tracerOptions_.fast && tracerOptions_.scenePipelines)
         tracer_->preparePipeline(sceneFeatures(id));
 }
 
@@ -357,7 +374,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     // The export shutter: the scene's frame at each slice's time, clamped into the frame's chapter. The
     // window (and an export at 4 spp or fewer, or without a shutter) has one slice: the frame itself.
     const std::uint32_t sliceCount =
-        modern::shutterSlices(state.spp, interactive ? 0.0 : state.shutterSeconds);
+        modern::shutterSlices(state.spp, interactive ? 0.0 : state.shutterSeconds, state.shutterSlices);
     std::vector<modern::SceneFrame> slices;
     std::vector<double> sliceLocal; // each slice's chapter-local time
     slices.reserve(sliceCount);
@@ -381,6 +398,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     const post::SubpixelWindow window =
         post::subpixelWindow(traceWidth_, traceHeight_, width_, height_, state.framesSinceReset, interactive);
     trace.spp = state.spp;
+    trace.samplesPerDispatch = modern::samplesPerDispatch(state.spp, sliceCount);
     trace.maxBounces = state.maxBounces;
     trace.frameSeed = state.frameSeed;
     trace.clampIndirect = scene.clampIndirect;
@@ -390,6 +408,13 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     if (tracerOptions_.fast && interactive)
         trace.neeRoulette =
             neeRouletteDisplay() * std::exp2(-(scene.exposureEV + post::lookFor(frame).exposureOffset));
+    // The window's fast mode: the volume layer's in-scattered light at half rate, on a checkerboard that flips
+    // every frame, filled in by the denoiser. Not with a grid that emits (its emission is the layer's detail),
+    // nor where the scene keeps its medium whole (MediumFrame::halfRate).
+    const bool emittingGrid = scene.medium && scene.medium->grid && scene.medium->grid->emissionScale > 0.f;
+    if (tracerOptions_.fast && interactive && scene.medium && scene.medium->halfRate && !emittingGrid &&
+        halfVolumeAllowed())
+        trace.halfVolume = 1u + (state.framesSinceReset & 1u);
     trace.pixelJitter = window.jitter;
     trace.pixelFootprint = window.footprint;
     lastJitter_ = window.jitter;
@@ -501,6 +526,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     beginScope(cmd, "denoise");
     post::DenoiseSettings denoise = denoiseSettingsFor(state);
     denoise.hasMedium = scene.medium.has_value(); // without one the volume layer is (0, 0, 0, 1): skip it
+    denoise.volumeHalf = trace.halfVolume;
     denoiser_->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion, g.volume},
                        denoise, upscales() ? traceHdr_ : hdr_);
     endScope(cmd);

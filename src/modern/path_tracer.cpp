@@ -442,6 +442,13 @@ VkDeviceSize PathTracer::bufferBytes() const {
     return bytes;
 }
 
+VkDeviceSize PathTracer::scenePipelineBytes() const {
+    VkDeviceSize bytes = 0;
+    for (const auto& [features, pipeline] : specialized_)
+        bytes += pipeline->sbtBytes();
+    return bytes;
+}
+
 void PathTracer::resize(std::uint32_t width, std::uint32_t height) {
     if (width == 0 || height == 0)
         throw std::invalid_argument("PathTracer::resize: empty size");
@@ -489,7 +496,11 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
     if (settings.spp == 0)
         throw std::invalid_argument("PathTracer::trace(): spp 0");
     const auto sliceCount = static_cast<std::uint32_t>(slices.size());
-    const std::uint32_t dispatches = (settings.spp + kSppPerDispatch - 1) / kSppPerDispatch;
+    if (settings.samplesPerDispatch == 0 || settings.samplesPerDispatch > kSppPerDispatch)
+        throw std::invalid_argument("PathTracer::trace(): " + std::to_string(settings.samplesPerDispatch) +
+                                    " samples per dispatch (1 to " + std::to_string(kSppPerDispatch) + ")");
+    const std::uint32_t perDispatch = settings.samplesPerDispatch;
+    const std::uint32_t dispatches = (settings.spp + perDispatch - 1) / perDispatch;
     if (sliceCount == 0 || sliceCount > kMaxShutterSlices)
         throw std::invalid_argument("PathTracer::trace(): " + std::to_string(sliceCount) +
                                     " time slices (1 to " + std::to_string(kMaxShutterSlices) + ")");
@@ -653,7 +664,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                   (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
                   (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u) |
                   (panes ? rt::kTraceFlagThinPanes : 0u) | (filteredGrid_ ? rt::kTraceFlagFilteredGrid : 0u) |
-                  (paneAnyHit ? rt::kTraceFlagPaneAnyHit : 0u);
+                  (paneAnyHit ? rt::kTraceFlagPaneAnyHit : 0u) |
+                  (options_.fast && settings.halfVolume != 0 ? rt::kTraceFlagHalfVolume : 0u) |
+                  (options_.fast && settings.halfVolume == 2 ? rt::kTraceFlagHalfVolumeOdd : 0u);
         features |= frameFeatures(scene.source(), frame, panes);
         u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
         u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
@@ -701,6 +714,10 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                         tree.lights.size() * sizeof(rt::TreeLight));
         }
     }
+    // Exports: the pipeline of exactly this frame's features, built the first time a frame needs it (the
+    // window's fast mode builds its scenes' pipelines up front instead, render::ModernStage::prepare).
+    if (options_.scenePipelines && !options_.fast)
+        preparePipeline(features);
     for (const gfx::Buffer* buffer :
          {&uniforms_[slot], &environments_[slot], &instanceRecords_[slot], &previousTransforms_[slot],
           &lights_[slot], &materials_[slot], &treeNodes_[slot], &treeLights_[slot], &media_[slot],
@@ -806,7 +823,7 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
         return writes;
     };
 
-    // ceil(spp / kSppPerDispatch) dispatches, split evenly over the slices. lighting, emission and albedo
+    // ceil(spp / samplesPerDispatch) dispatches, split evenly over the slices. lighting, emission and albedo
     // keep a running mean over the frame's samples, so each dispatch reads what the one before wrote; the
     // other guides come from the first dispatch of the middle slice alone. Every dispatch still gets a
     // barrier on all seven: the raygen writes the guides statically, and synchronization validation judges a
@@ -872,8 +889,8 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
             image->transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         const bool firstOfSlice = d == 0 || sliceOfDispatch(d - 1, dispatches, sliceCount) != k;
-        const TracePush push{d * kSppPerDispatch,
-                             std::min(kSppPerDispatch, settings.spp - d * kSppPerDispatch),
+        const TracePush push{d * perDispatch,
+                             std::min(perDispatch, settings.spp - d * perDispatch),
                              {0.5f + settings.pixelJitter[0] - 0.5f * settings.pixelFootprint[0],
                               0.5f + settings.pixelJitter[1] - 0.5f * settings.pixelFootprint[1]},
                              {settings.pixelFootprint[0], settings.pixelFootprint[1]},
