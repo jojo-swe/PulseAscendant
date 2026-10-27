@@ -66,7 +66,8 @@ Renderer::Renderer(gfx::Context& ctx, gfx::FrameRing& ring, const RenderSettings
       submitPerSlice_(settings.mode == RenderMode::Export && settings.submitPerSlice), text_(ctx, ring),
       retro_(ctx, ring, text_),
       modern_(ctx, ring, settings.width, settings.height, settings.detail, settings.sceneFactory,
-              settings.sceneMap, settings.traceScale, modern::TracerOptions{settings.counters, fast_}),
+              settings.sceneMap, settings.traceScale,
+              modern::TracerOptions{settings.counters, fast_, fast_ || settings.mode == RenderMode::Export}),
       compositor_(ctx, ring, text_, settings.width, settings.height),
       cards_(ctx, ring, [this](show::Effect effect) { return modern_.nowCard(effect); }) {
     modern_.setTimers(&timers_);

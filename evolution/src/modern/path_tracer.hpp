@@ -225,10 +225,12 @@ public:
     // every frame whose traceFeatures() it covers: the generic pipeline's code with every feature outside
     // `features` compiled out (fewer registers on GPUs whose ray tracing occupancy follows the pipeline's
     // largest shader). Frames it does not cover keep the generic pipeline. A no-op for kFeatureAll or a set
-    // already built. The window's fast mode builds one per scene (render::ModernStage::prepare).
+    // already built. The window's fast mode and exports build one per scene (render::ModernStage::prepare).
     void preparePipeline(std::uint32_t features);
     // The pipelines built so far: the generic one and the specialized ones.
     std::uint32_t pipelineCount() const { return 1u + static_cast<std::uint32_t>(specialized_.size()); }
+    // The specialized pipelines' shader binding tables (bytes; bufferBytes() counts them too).
+    VkDeviceSize scenePipelineBytes() const;
     // The features of the pipeline the last trace() used (kFeatureAll: the generic one).
     std::uint32_t lastPipelineFeatures() const { return lastFeatures_; }
 

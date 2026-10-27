@@ -442,6 +442,13 @@ VkDeviceSize PathTracer::bufferBytes() const {
     return bytes;
 }
 
+VkDeviceSize PathTracer::scenePipelineBytes() const {
+    VkDeviceSize bytes = 0;
+    for (const auto& [features, pipeline] : specialized_)
+        bytes += pipeline->sbtBytes();
+    return bytes;
+}
+
 void PathTracer::resize(std::uint32_t width, std::uint32_t height) {
     if (width == 0 || height == 0)
         throw std::invalid_argument("PathTracer::resize: empty size");

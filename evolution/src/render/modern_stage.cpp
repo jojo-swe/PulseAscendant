@@ -196,11 +196,11 @@ void ModernStage::prepare(modern::SceneId id) {
     if (medium)
         medium_ = std::move(medium);
     gpus_[index] = std::move(gpu);
-    // The window's fast mode: the scene's own pipeline, with only the features its frames use (a frame that
-    // needs more, which the probe missed, traces with the generic pipeline). EVO_SCENE_PIPELINES=0 keeps the
-    // generic one (a diagnostic, to compare the two).
+    // The window's fast mode and exports: the scene's own pipeline, with only the features its frames use (a
+    // frame that needs more, which the probe missed, traces with the generic pipeline). EVO_SCENE_PIPELINES=0
+    // keeps the generic one (a diagnostic, to compare the two).
     const char* scenePipelines = std::getenv("EVO_SCENE_PIPELINES");
-    if (tracerOptions_.fast && !(scenePipelines && std::string(scenePipelines) == "0"))
+    if (tracerOptions_.scenePipelines && !(scenePipelines && std::string(scenePipelines) == "0"))
         tracer_->preparePipeline(sceneFeatures(id));
 }
 
