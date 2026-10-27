@@ -68,6 +68,10 @@ struct TraceSettings {
     // neeRoulette and its estimate weighed by the inverse (shaders/rt/pathtrace.rgen's neeShadowTraced: the
     // expectation stays the same); 0 traces every one.
     float neeRoulette = 0.f;
+    // The window's fast mode only (ignored otherwise): the volume layer at half rate. 0 traces it in every
+    // pixel; 1 only where x + y is even, 2 only where it is odd (shaders/rt/medium_path.glsl's
+    // mediumLayerSkipped); the denoiser fills the others (post::DenoiseSettings::volumeHalf, the same value).
+    std::uint32_t halfVolume = 0;
 };
 
 // Samples per trace dispatch: an export at many spp is split so that no dispatch runs long enough to trip a

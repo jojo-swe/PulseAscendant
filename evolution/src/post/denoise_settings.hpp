@@ -25,6 +25,11 @@ struct DenoiseSettings {
     // false: the frame has no participating medium, so the G-buffer's volume layer is (0, 0, 0, 1) and the
     // denoiser neither reads nor filters it (the same output bytes, without the volume passes and loads).
     bool hasMedium = true;
+    // The window's fast mode: the path tracer traced the volume layer's in-scattered light in half of the
+    // pixels (modern::TraceSettings::halfVolume: 1 where x + y is even, 2 where it is odd; 0 in every pixel).
+    // The temporal pass fills the others from their traced neighbours and clamps the layer's history against
+    // the traced pixels of the 5x5 neighbourhood (shaders/post/accumulate.comp).
+    std::uint32_t volumeHalf = 0;
 };
 
 } // namespace evo::post

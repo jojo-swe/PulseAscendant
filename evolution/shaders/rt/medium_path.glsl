@@ -471,6 +471,22 @@ float equiangularWeight(vec3 o, vec3 d, uint k) {
     return isFinite(power) && power > 0.0 ? power / max(d2, 1e-8) : 0.0;
 }
 
+#ifdef EVO_FAST
+// The fast build's volume layer at half rate (kTraceFlagHalfVolume, the window's frames without an emitting
+// grid): on a checkerboard that flips every frame, half of the pixels trace the primary segment's in-scattered
+// light (its kPrimaryScatterSamples shadow rays and the continuation path, 40-70 % of the rays in a scene
+// with a medium); the others only estimate the transmittance (and the grid's emission, 0 in such frames), and
+// the denoiser fills their in-scattered light from their four traced neighbours, guided by each pixel's
+// opacity (shaders/post/accumulate.comp's volumeAt).
+bool mediumLayerSkipped() {
+    if ((frame.flags & kTraceFlagHalfVolume) == 0u) {
+        return false;
+    }
+    uint odd = (frame.flags & kTraceFlagHalfVolumeOdd) != 0u ? 1u : 0u;
+    return ((gPixel.x + gPixel.y + odd) & 1u) != 0u;
+}
+#endif
+
 // The primary segment from o along d to tHit (< 0: a miss): sets gMediumVolume (its next-event estimates
 // still to add, requested) and the continuation's start.
 void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
@@ -496,6 +512,23 @@ void mediumPrimary(vec3 o, vec3 d, float tHit, bool nee) {
         return;
     }
     float pickFog = fogMass / total;
+#ifdef EVO_FAST
+    if (mediumLayerSkipped()) {
+        // The transmittance (and the grid's emission) alone: the walk with no point in its way.
+        float ts[kPrimaryScatterSamples];
+        float gridT[kPrimaryScatterSamples];
+        for (uint k = 0u; k < kPrimaryScatterSamples; ++k) {
+            ts[k] = kMediumInfinity;
+        }
+        float gridEnd = 1.0;
+        vec3 radiance = vec3(0.0);
+        if (inGrid) {
+            gridEnd = gridTransmittanceAt(gr, start, o, d, ts, gridT, radiance);
+        }
+        gMediumVolume = vec4(radiance, exp(-fogTau) * gridEnd);
+        return;
+    }
+#endif
 
     // Equiangular sampling towards the frame's few tree lights, over the grid's part of the segment: one
     // light per point, chosen by equiangularWeight.

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -30,9 +31,9 @@ static_assert(sizeof(FireflyPush) == 12);
 struct AccumulatePush {
     std::uint32_t width, height, useHistory, maxHistory;
     float alphaColor, alphaMoments, sigmaDepth, sigmaNormal;
-    std::uint32_t useFirefly, hasMedium, useVolumeHistory;
+    std::uint32_t useFirefly, hasMedium, useVolumeHistory, volumeHalf;
 };
-static_assert(sizeof(AccumulatePush) == 44);
+static_assert(sizeof(AccumulatePush) == 48);
 
 struct AtrousPush {
     std::uint32_t width, height, step;
@@ -123,6 +124,9 @@ void checkSettings(const DenoiseSettings& settings) {
         if (!(alpha > 0.0f && alpha <= 1.0f))
             throw std::invalid_argument(std::string("Denoiser: ") + name + " must be in (0, 1], got " +
                                         std::to_string(alpha));
+    if (settings.volumeHalf > 2)
+        throw std::invalid_argument("Denoiser: volumeHalf must be 0, 1 or 2, got " +
+                                    std::to_string(settings.volumeHalf));
 }
 
 void checkSize(std::uint32_t width, std::uint32_t height) {
@@ -247,7 +251,8 @@ void Denoiser::denoise(VkCommandBuffer cmd, const GBufferView& gbuffer, const De
                                         settings.sigmaNormal,
                                         settings.fireflyFilter ? 1u : 0u,
                                         settings.hasMedium ? 1u : 0u,
-                                        settings.temporal && historyValid_ && volumeHistoryValid_ ? 1u : 0u};
+                                        settings.temporal && historyValid_ && volumeHistoryValid_ ? 1u : 0u,
+                                        settings.hasMedium ? settings.volumeHalf : 0u};
     accumulate_.push(cmd, &accumulatePush, sizeof(accumulatePush));
     accumulate_.dispatch(cmd, width_, height_);
     historyValid_ = true;

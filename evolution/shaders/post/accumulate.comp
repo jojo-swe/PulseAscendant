@@ -14,6 +14,14 @@
 // The volume layer keeps its own history: reprojected through the same motion guide with no depth or normal
 // test (a medium has no surface), the history clamped to the current frame's 3x3 min/max (the layer is
 // smooth, not sparse, so the clamp does not bias it), then blended like the colour.
+//
+// The window's fast mode may trace the volume layer's in-scattered light in half of the pixels, on a
+// checkerboard that flips every frame (volumeHalf; shaders/rt/medium_path.glsl's mediumLayerSkipped). A pixel
+// that did not trace it keeps its own transmittance and takes its in-scattered light from its four traced
+// neighbours: their radiance per unit opacity (1 - T), weighted by how close their transmittance is to its own
+// (as the volume à-trous) and never across a hit and a miss, times its own opacity. The history's clamp then
+// takes the radiance's min/max over the traced pixels of the 5x5 neighbourhood (12 or 13 of them, about as
+// many independent samples as the 3x3 of a fully traced layer) and the transmittance's over the 3x3.
 
 #extension GL_GOOGLE_include_directive : require
 
@@ -38,7 +46,7 @@ layout(set = 0, binding = 12, rgba16f) uniform readonly image2D volumeImage;
 layout(set = 0, binding = 13, rgba16f) uniform readonly image2D prevVolume;
 layout(set = 0, binding = 14, rgba16f) uniform writeonly image2D outVolume;
 
-// Must match AccumulatePush in src/post/denoiser.cpp (44 bytes).
+// Must match AccumulatePush in src/post/denoiser.cpp (48 bytes).
 layout(push_constant) uniform PushConstants {
     uint width;
     uint height;
@@ -51,6 +59,7 @@ layout(push_constant) uniform PushConstants {
     uint useFirefly;       // the illumination comes from fireflyImage (exports at 16 spp and more)
     uint hasMedium;        // 0: no medium; the volume layer is neither read nor written (its length 0)
     uint useVolumeHistory; // 0: the volume history is not this medium's (a reset, or no medium last frame)
+    uint volumeHalf;       // 0: every pixel traced the volume layer; 1: those with x + y even; 2: odd
 } pc;
 
 const float kDepthTolerance = 0.05; // |z_prev - z| <= 0.05 z
@@ -260,6 +269,48 @@ float spatialVariance() {
     return max(best, 0.0);
 }
 
+// volumeHalf: whether pixel q traced the volume layer's in-scattered light this frame.
+bool volumeTraced(ivec2 q) {
+    return pc.volumeHalf == 0u || ((q.x + q.y + int(pc.volumeHalf)) & 1) != 0;
+}
+
+const float kFillSigmaTransmittance = 0.05; // atrous.comp's kSigmaTransmittance
+const float kFillMinOpacity = 1e-4;
+
+// The volume layer at q: as traced, or (volumeHalf, a pixel that did not trace it) its own transmittance with
+// the in-scattered light filled from its traced 4-neighbours (see the top).
+vec4 volumeAt(ivec2 q) {
+    vec4 own = safeVolume(imageLoad(volumeImage, q));
+    if (volumeTraced(q)) {
+        return own;
+    }
+    bool hit = isHit(imageLoad(depthImage, q).r);
+    const ivec2 sides[4] = ivec2[4](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1));
+    vec3 radiance = vec3(0.0), plain = vec3(0.0);
+    float opacity = 0.0, weight = 0.0, count = 0.0;
+    for (int k = 0; k < 4; ++k) {
+        ivec2 n = q + sides[k];
+        if (!inside(n)) {
+            continue;
+        }
+        vec4 v = safeVolume(imageLoad(volumeImage, n));
+        plain += v.rgb;
+        count += 1.0;
+        if (isHit(imageLoad(depthImage, n).r) != hit) {
+            continue;
+        }
+        float w = exp(-abs(own.a - v.a) / kFillSigmaTransmittance);
+        radiance += w * v.rgb;
+        opacity += w * (1.0 - v.a);
+        weight += w;
+    }
+    if (!(weight > 1e-6)) { // no neighbour like it: the plain mean of the traced ones
+        return vec4(count > 0.0 ? plain / count : own.rgb, own.a);
+    }
+    vec3 fill = opacity > kFillMinOpacity * weight ? radiance * ((1.0 - own.a) / opacity) : radiance / weight;
+    return vec4(own.rgb + fill, own.a);
+}
+
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= int(pc.width) || p.y >= int(pc.height)) {
@@ -362,14 +413,15 @@ void main() {
         return;
     }
 
-    // The volume layer, on every pixel (a medium in front of the sky too).
-    vec4 volume = safeVolume(imageLoad(volumeImage, p));
+    // The volume layer, on every pixel (a medium in front of the sky too); volumeAt fills a pixel that did not
+    // trace it.
+    vec4 volume = volumeAt(p);
     vec4 low = volume, high = volume;
     for (int dy = -1; dy <= 1; ++dy) {
         for (int dx = -1; dx <= 1; ++dx) {
             ivec2 q = p + ivec2(dx, dy);
             if (inside(q)) {
-                vec4 v = safeVolume(imageLoad(volumeImage, q));
+                vec4 v = volumeAt(q);
                 low = min(low, v);
                 high = max(high, v);
             }

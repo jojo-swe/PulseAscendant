@@ -40,6 +40,16 @@ constexpr float kUpscaleClipGamma = 1.f;
 // under one 8-bit step even at black, where sRGB is steepest (12.92 / 4096 of full scale).
 constexpr float kNeeRouletteDisplay = 1.f / 4096.f;
 
+// The fast mode's volume layer at half rate (TraceSettings::halfVolume), unless EVO_HALF_VOLUME=0 (an A/B
+// diagnostic).
+bool halfVolumeAllowed() {
+    static const bool allowed = [] {
+        const char* forced = std::getenv("EVO_HALF_VOLUME");
+        return !(forced && std::string(forced) == "0");
+    }();
+    return allowed;
+}
+
 // kNeeRouletteDisplay, or EVO_NEE_ROULETTE (a display level; 0 turns the roulette off: an A/B diagnostic).
 float neeRouletteDisplay() {
     static const float level = [] {
@@ -390,6 +400,13 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     if (tracerOptions_.fast && interactive)
         trace.neeRoulette =
             neeRouletteDisplay() * std::exp2(-(scene.exposureEV + post::lookFor(frame).exposureOffset));
+    // The window's fast mode: the volume layer's in-scattered light at half rate, on a checkerboard that flips
+    // every frame, filled in by the denoiser. Not with a grid that emits (its emission is the layer's detail),
+    // nor where the scene keeps its medium whole (MediumFrame::halfRate).
+    const bool emittingGrid = scene.medium && scene.medium->grid && scene.medium->grid->emissionScale > 0.f;
+    if (tracerOptions_.fast && interactive && scene.medium && scene.medium->halfRate && !emittingGrid &&
+        halfVolumeAllowed())
+        trace.halfVolume = 1u + (state.framesSinceReset & 1u);
     trace.pixelJitter = window.jitter;
     trace.pixelFootprint = window.footprint;
     lastJitter_ = window.jitter;
@@ -501,6 +518,7 @@ void ModernStage::renderTraced(VkCommandBuffer cmd, modern::SceneId id, const sh
     beginScope(cmd, "denoise");
     post::DenoiseSettings denoise = denoiseSettingsFor(state);
     denoise.hasMedium = scene.medium.has_value(); // without one the volume layer is (0, 0, 0, 1): skip it
+    denoise.volumeHalf = trace.halfVolume;
     denoiser_->denoise(cmd, {g.lighting, g.emission, g.albedo, g.normal, g.depth, g.motion, g.volume},
                        denoise, upscales() ? traceHdr_ : hdr_);
     endScope(cmd);

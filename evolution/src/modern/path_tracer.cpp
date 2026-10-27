@@ -660,7 +660,9 @@ void PathTracer::trace(VkCommandBuffer cmd, const SceneGpu& scene, std::span<con
                   (settings.russianRoulette ? rt::kTraceFlagRussianRoulette : 0u) |
                   (settings.fixedLightSelection ? rt::kTraceFlagFixedLightSelection : 0u) |
                   (panes ? rt::kTraceFlagThinPanes : 0u) | (filteredGrid_ ? rt::kTraceFlagFilteredGrid : 0u) |
-                  (paneAnyHit ? rt::kTraceFlagPaneAnyHit : 0u);
+                  (paneAnyHit ? rt::kTraceFlagPaneAnyHit : 0u) |
+                  (options_.fast && settings.halfVolume != 0 ? rt::kTraceFlagHalfVolume : 0u) |
+                  (options_.fast && settings.halfVolume == 2 ? rt::kTraceFlagHalfVolumeOdd : 0u);
         features |= frameFeatures(scene.source(), frame, panes);
         u.lightCount = static_cast<std::uint32_t>(frame.lights.size());
         u.instanceCount = static_cast<std::uint32_t>(frame.instances.size());
