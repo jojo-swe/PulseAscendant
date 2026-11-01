@@ -1,5 +1,5 @@
 {
-  "build": "/home/jojo/.cache/second-reality-remix/public-build-v05",
+  "build": "/home/<user>/.cache/second-reality-remix/public-build-v05",
   "executable_sha256": "f5e4210c86c1c60f445b4c26467958c9083f573ab456b886c9d96134c23a141a",
   "shader_files_verified": 28,
   "tour_frames": 152,
