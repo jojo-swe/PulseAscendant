@@ -8,15 +8,15 @@ import wave
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = [('Luminous Flow', 'fd8c915c3d7a52cb3175b3ce84bceadf99405e6ea2efa675651838161a5adff3', '1f52e6e8-5a07-45da-9c9b-09753a609eb3'),
-           ('Adventurous Uplift', 'f82793aa129acfd5d9d8efbf15e67b08647666c09b615a38b99d4063855028d0', '29b80971-2988-41e1-b658-00291a06b4ae'),
-           ('Rigid Arpeggios', 'eab637ad1cd987632b1f76a6209c901a1fb2dcda683bcb6d4e4c00761349255d', '2a49b46a-28b5-40f9-b6e8-195ba877380a')]
+SOURCES = [('Luminous Flow', 'fd8c915c3d7a52cb3175b3ce84bceadf99405e6ea2efa675651838161a5adff3'),
+           ('Adventurous Uplift', 'f82793aa129acfd5d9d8efbf15e67b08647666c09b615a38b99d4063855028d0'),
+           ('Rigid Arpeggios', 'eab637ad1cd987632b1f76a6209c901a1fb2dcda683bcb6d4e4c00761349255d')]
 STEMS = ('luminous-flow-act1', 'adventurous-uplift', 'rigid-arpeggios')
 FRAMES = (14_400_000, 13_916_160, 14_340_480)
 
 
 def main():
-    for index, (title, digest, suno) in enumerate(SOURCES):
+    for index, (title, digest) in enumerate(SOURCES):
         destination = ROOT / 'music/source' / f'{title}.mp3'
         source = Path(sys.argv[index+1]).resolve() if len(sys.argv) > index+1 else destination
         assert hashlib.sha256(source.read_bytes()).hexdigest() == digest, f'{title}: source digest mismatch'
@@ -36,11 +36,11 @@ def main():
         analysis = json.loads((ROOT / 'music' / analysis_name).read_text())
         assert analysis['frames'] == FRAMES[index]
         receipt = dict(title=title, act=index+1, source_sha256=digest, source_file=f'music/source/{title}.mp3',
-                       source_duration=472.36 if index == 0 else FRAMES[index]/48000, suno_id=suno, runtime_file=f'assets/music/{stem}.wav',
+                       source_duration=472.36 if index == 0 else FRAMES[index]/48000, runtime_file=f'assets/music/{stem}.wav',
                        excerpt_start=0, excerpt_duration=analysis['duration'], runtime_frames=analysis['frames'], sample_rate=48000,
                        channels=2, encoding='PCM signed 16 bit', fades='equal-power fade out 299-300 s' if index == 0 else 'none; complete supplied song',
                        runtime_sha256=analysis['runtime_sha256'], listening_acceptance='pending',
-                       publication_requested_by_project_owner=True, public_release_policy='Free non-commercial demo; Suno attribution retained; music excluded from MIT')
+                       used_with_permission=True, public_release_policy='Free non-commercial demo; credited to joyolo; music excluded from MIT')
         (ROOT / 'music' / ('asset-receipt.json' if index == 0 else f'asset-receipt-act{index+1}.json')).write_text(json.dumps(receipt, indent=2)+'\n', encoding='utf-8')
     combined = ROOT / 'assets/music/second-reality-three-acts.wav'
     with wave.open(str(combined), 'wb') as output:

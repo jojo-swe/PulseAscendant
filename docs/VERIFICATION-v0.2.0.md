@@ -63,7 +63,7 @@ Alla åtta representativa prov nådde 60 bilder/s med marginal. Råloggar lokalt
 
 Byggnad, automation, GPU-bilder, aktiv ljudström och mänsklig upplevelse är separata nivåer. Kvar för mänsklig bedömning: helhetskvalitet i rörelse, fysisk tangentbordsanvändning, upplevd ljud/bildsynk, likhet med originalmusiken och musikalisk loopskarv. AAA-kvalitet är inget verifierat testresultat.
 
-Projektägaren har begärt offentlig publicering av denna kostnadsfria demorelease. Musiken omfattas inte av kodens MIT-licens; kontoform och äganderätt har inte verifierats oberoende. Se `licenses/MUSIC-NOTICE.txt`. Originalkällan har bevarats separat under utvecklingen. Mindre utvecklingsbegränsning om shaderkopiering dokumenteras i README; installationen läser aktuella källresurser.
+Denna kostnadsfria demorelease publiceras offentligt. Musiken omfattas inte av kodens MIT-licens; kontoform och äganderätt har inte verifierats oberoende. Se `licenses/MUSIC-NOTICE.txt`. Originalkällan har bevarats separat under utvecklingen. Mindre utvecklingsbegränsning om shaderkopiering dokumenteras i README; installationen läser aktuella källresurser.
 
 Offentliga paket, filhashar och versionsuppgifter publiceras på GitHub Releases. De ursprungliga utvecklingsloggarna följer inte med publiceringen.
 

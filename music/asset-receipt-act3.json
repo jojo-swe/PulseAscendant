@@ -4,7 +4,6 @@
   "source_sha256": "eab637ad1cd987632b1f76a6209c901a1fb2dcda683bcb6d4e4c00761349255d",
   "source_file": "music/source/Rigid Arpeggios.mp3",
   "source_duration": 298.76,
-  "suno_id": "2a49b46a-28b5-40f9-b6e8-195ba877380a",
   "runtime_file": "assets/music/rigid-arpeggios.wav",
   "excerpt_start": 0,
   "excerpt_duration": 298.76,
@@ -15,6 +14,6 @@
   "fades": "none; complete supplied song",
   "runtime_sha256": "0ba76c4da14341f4fdc191400988f3918550b669e056131536e32c6e8f628494",
   "listening_acceptance": "pending",
-  "publication_requested_by_project_owner": true,
-  "public_release_policy": "Free non-commercial demo; Suno attribution retained; music excluded from MIT"
+  "used_with_permission": true,
+  "public_release_policy": "Free non-commercial demo; credited to joyolo; music excluded from MIT"
 }

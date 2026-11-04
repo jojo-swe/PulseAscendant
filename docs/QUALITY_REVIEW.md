@@ -1,8 +1,8 @@
 # Pulse Ascendant v0.5 — independent review
 
-Read-only reviewer: `v05_review`, 2026-10-12. The reviewer did not author this revision. Historical evidence remains in [QUALITY_REVIEW-v0.4.0.md](QUALITY_REVIEW-v0.4.0.md).
+Read-only review, 2026-10-12. The reviewer did not author this revision. Historical evidence remains in [QUALITY_REVIEW-v0.4.0.md](QUALITY_REVIEW-v0.4.0.md).
 
-**Approved within the inspected scope**, exceeding the owner's requested 7/10 threshold.
+**Approved within the inspected scope**, exceeding the 7/10 acceptance threshold.
 
 | Area | Score |
 |---|---:|

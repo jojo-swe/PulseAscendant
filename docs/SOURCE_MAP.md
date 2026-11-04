@@ -60,7 +60,7 @@ SDK-verktygen är utvecklingsberoenden. Körningen använder den medföljande ko
 
 OpenGL 3.3 förblir fönster- och presentationsväg. Akt I och III använder rasterisering, SDF-raymarching och analytiska skärningar. `act2.frag` är en separat reserv för akt II. SDF-geometrin är inte identisk med Vulkan-mesharna, och miljöreflektionerna återskapar inte full synlighet för reflekterade rörliga objekt. Akt II:s backend-märkning skiljer dessa vägar åt.
 
-HDR, bloom, filmisk tonmappning, gamma, begränsad radiell oskärpa och färgseparation binder ihop lagren. Retro renderar världen vid 320×200 och skalar med närmaste pixel; texten använder utdataupplösningen. Det är ingen DOS-emulator eller AI-uppskalning.
+HDR, bloom, filmisk tonmappning, gamma, begränsad radiell oskärpa och färgseparation binder ihop lagren. Retro renderar världen vid 320×200 och skalar med närmaste pixel; texten använder utdataupplösningen. Det är ingen DOS-emulator.
 
 Källgranskning, shaderkompilering, native körning, visuella fångster, prestanda och oberoende kvalitetsbedömning är olika evidensgrader. [VERIFICATION.md](VERIFICATION.md) äger de aktuella resultaten. Äldre v0.2-prov bevisar inte automatiskt den nya treaktsversionen eller native Linux-RT.
 

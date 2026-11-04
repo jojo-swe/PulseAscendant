@@ -26,7 +26,7 @@ Windows x64: C++17, MSVC 19.51 / Visual Studio 18 2026, CMake 4.4.4, statiskt l�
 
 CTest täcker aktlängder, kapitelgränser, fyra kameravarianter i varje kapitel, spektruminterpolation, ljudsökning och mute, båda aktövergångarna, slutloop, felaktig musiklängd och observerade fönstertillstånd. Ett avbrutet kontrollprov måste ge felstatus. Ingen fysisk tangentbordsgenomspelning eller obruten mänsklig lyssning av hela demot är verifierad.
 
-Linux-displayprovet använder egen Xvfb/Openbox i en privat mount-namespace. Det ändrar inte användarens WSLg-display. WSLg:s tidigare misslyckade minimeringsprov räknas inte som godkänd livscykel.
+Linux-displayprovet använder egen Xvfb/Openbox i en privat mount-namespace. Det ändrar inte värdens WSLg-display. WSLg:s tidigare misslyckade minimeringsprov räknas inte som godkänd livscykel.
 
 ## Windows GPU och rendering
 
@@ -83,7 +83,7 @@ ELF behöver libOpenGL.so.0, libstdc++.so.6, libm.so.6, libgcc_s.so.1, libc.so.6
 
 [Alla klipp och förskjutningar](../music/direction.json) är spårbara. Detta stöder klippens anslagstajmning tekniskt; musikaliska fraser och upplevd synk behöver fortfarande bedömas genom lyssning.
 
-Akt I:s första 299 s jämfördes sample för sample med bevarad full WAV. Därefter följer en sekunds likaeffektsuttoning. Den gemensamma WAV:en jämfördes bit för bit med de tre separata aktfilerna. Båda nya låtarna används i sin helhet, utan tillagda toningar eller hastighetsändring. Källa, Suno-ID, sampleantal och SHA-256 finns i music/asset-receipt*.json och music/show-audio.json.
+Akt I:s första 299 s jämfördes sample för sample med bevarad full WAV. Därefter följer en sekunds likaeffektsuttoning. Den gemensamma WAV:en jämfördes bit för bit med de tre separata aktfilerna. Båda nya låtarna används i sin helhet, utan tillagda toningar eller hastighetsändring. Källa, sampleantal och SHA-256 finns i music/asset-receipt*.json och music/show-audio.json.
 
 ## Videoexport och kvalitetsbedömning
 
@@ -93,7 +93,7 @@ Den första vertikala trailern passerade exportkontrollen: **1080×1920, 60 fps,
 
 Efter bildgranskning togs ett skymt Rain District-utsnitt bort. Trailerrevision 2 använder de sju starkare, redan verifierade native-källorna med oförändrad program-/resurshash. Dynamisk programmering placerar sex inre klipp på uppmätta anslag och håller varje segment inom källans fem sekunder. RT-texten visas över Prism och Dune; artisttaggen anger endast Rigid Arpeggios. Den nya exporten passerade samma metadata- och ljudlängdskontroll. [Manifest för revision 2](evidence/v0.3.0/short-v2.json) visar tiderna. Native v0.3.0-paketen och deras källkodssnapshot bevaras oförändrade; trailerns revisionsmärkta film och lilla källkodstillägg distribueras separat.
 
-Den [oberoende granskaren](QUALITY_REVIEW.md) godkände treaktsimplementationen och Windows/Linux-paketen med **7,3/10**, över användarens acceptansgräns på 7/10. Byggnad, automation, GPU-bilder, musikidentitet och subjektiv helhetskvalitet är separata resultat. AAA-kvalitet, hörbar musikalisk likhet och subjektiv helhet är inte automatiskt verifierade av dessa prov. Fullängdsvideon och den färdiga Shortens bildresultat ingår inte i detta kod-/paketbetyg.
+Den [oberoende granskaren](QUALITY_REVIEW.md) godkände treaktsimplementationen och Windows/Linux-paketen med **7,3/10**, över acceptansgränsen på 7/10. Byggnad, automation, GPU-bilder, musikidentitet och subjektiv helhetskvalitet är separata resultat. AAA-kvalitet, hörbar musikalisk likhet och subjektiv helhet är inte automatiskt verifierade av dessa prov. Fullängdsvideon och den färdiga Shortens bildresultat ingår inte i detta kod-/paketbetyg.
 
 ### Färdig fullängdsexport
 

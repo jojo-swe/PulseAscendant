@@ -1,6 +1,6 @@
 # Pulse Ascendant v0.6.1 — a calmer camera and rebuilt hero models
 
-The owner reported that the v0.6 camera looked stuttery even though performance was fine, and asked for better ships, walker and insect models.
+In v0.6 the camera looked stuttery even though performance was fine, and the ship, walker and insect models needed to be better.
 
 ## Why the camera stuttered
 

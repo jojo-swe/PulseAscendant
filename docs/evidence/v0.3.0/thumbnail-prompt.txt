@@ -1,9 +1,0 @@
-PULSE ASCENDANT YouTube thumbnail
-Mode: built-in imagegen edit, transparent_background=false.
-Input: docs/images/act2-chrome.png, actual native RT capture.
-Output: docs/images/youtube-thumbnail.png, 1672x941 RGB PNG.
-Use: editorial thumbnail only. No generated image is inserted into the executable or footage.
-Review: subject and text inspected; main text readable at 320x180.
-
-Prompt, verbatim:
-Use case: compositing. Asset type: truthful YouTube thumbnail for a real native computer graphics demo. Input image 1 is the exact native screenshot and edit target. Create a polished landscape 16:9 1280x720 thumbnail. Preserve the depicted rendered cyan circular arches, gold/chrome spheres and pink/cyan pillars exactly: do not invent geometry, upgrade the scene, add characters or make it photorealistic. Keep the real screenshot visual character. Remove only the small existing in-game interface texts at the top left and bottom left, replacing those areas with a dark navy translucent typography panel on the left 40 percent of the image. Retain the vivid cyan arches as the large primary image on the right. Add exceptionally bold, perfectly legible large white condensed sans-serif typography on the left in two lines: '16 WORLDS' and 'ONE PULSE', with the number '16' in cyan and small magenta accent rule. Add very small brand label 'PULSE ASCENDANT' at upper left and a restrained cyan '4K60' label at lower left. Main text must remain readable at mobile thumbnail size. No other words, arrows, facial images, logos, invented rendering details, or performance claims. This is a typographic editorial overlay on authentic game capture, not concept art.

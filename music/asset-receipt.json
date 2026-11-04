@@ -4,7 +4,6 @@
   "source_sha256": "fd8c915c3d7a52cb3175b3ce84bceadf99405e6ea2efa675651838161a5adff3",
   "source_file": "music/source/Luminous Flow.mp3",
   "source_duration": 472.36,
-  "suno_id": "1f52e6e8-5a07-45da-9c9b-09753a609eb3",
   "runtime_file": "assets/music/luminous-flow-act1.wav",
   "excerpt_start": 0,
   "excerpt_duration": 300.0,
@@ -15,6 +14,6 @@
   "fades": "equal-power fade out 299-300 s",
   "runtime_sha256": "1dffe4f4d7d9b82f5fd94244ba87ee3b7bed5f53c6968ca9521b90aaa5949456",
   "listening_acceptance": "pending",
-  "publication_requested_by_project_owner": true,
-  "public_release_policy": "Free non-commercial demo; Suno attribution retained; music excluded from MIT"
+  "used_with_permission": true,
+  "public_release_policy": "Free non-commercial demo; credited to joyolo; music excluded from MIT"
 }

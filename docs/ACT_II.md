@@ -35,6 +35,6 @@ The probe needs Vulkan development libraries. The main program dynamically loads
 
 ## Music provenance and acceptance
 
-The original MP3 is retained unchanged. [Act II receipt](../music/asset-receipt-act2.json) records its source hash, Suno ID and runtime WAV hash. The complete song has no added fade or speed change. [Music notice](../licenses/MUSIC-NOTICE.txt) contains separate licensing and credits.
+The original MP3 is retained unchanged. [Act II receipt](../music/asset-receipt-act2.json) records its source hash and runtime WAV hash. The complete song has no added fade or speed change. [Music notice](../licenses/MUSIC-NOTICE.txt) contains separate licensing and credits.
 
 Current RT, fallback, Windows, Linux, motion and quality results belong to [VERIFICATION.md](VERIFICATION.md). Shader compilation and successful native startup alone do not establish every camera view, physical Linux RT support or artistic acceptance.

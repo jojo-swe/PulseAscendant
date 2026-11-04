@@ -15,7 +15,7 @@ Ett fristående musikdrivet 3D-demo för **Windows och Linux**: **tre spelbara a
 
 [Se förhandsvisningen i 1080p60](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4) · [Ladda ned v0.5](https://github.com/jojo-swe/PulseAscendant/releases/tag/v0.5.0) · [Trailer från v0.4](https://youtube.com/shorts/uOhjmoLY6DI) · [Föregående fullvideo (v0.3)](https://youtu.be/b5ShsKNC7KM) · [Teknisk källkarta](SOURCE_MAP.md) · [Aktuell verifiering](VERIFICATION.md)
 
-**v0.5: mer fart och tydligare musikreaktion.** Snabbare kameror, separata bas-/mellanregister-/diskantanslag vid 100 Hz, arbetande maskindelar och trafik samt tydligare stad, flotta och kosmiska strukturer. Interaktiv grafik och export använder samma analyserade musikvärden. `--pulse-gain 1.5` förstärker impulserna; standard 1, intervall 0–2. Den tidigare trailern visar v0.4 och fullvideon v0.3. Hela v0.5-filmen är nu exporterad och verifierad i 4K60. YouTube-publiceringen återstår efter den tidigare uppladdningsgränsen. Se [förbättringarna](ENERGY_REWORK.md) och [verifieringen](VERIFICATION.md).
+**v0.5: mer fart och tydligare musikreaktion.** Snabbare kameror, separata bas-/mellanregister-/diskantanslag vid 100 Hz, arbetande maskindelar och trafik samt tydligare stad, flotta och kosmiska strukturer. Interaktiv grafik och export använder samma analyserade musikvärden. `--pulse-gain 1.5` förstärker impulserna; standard 1, intervall 0–2. Den tidigare trailern visar v0.4 och fullvideon v0.3. Hela v0.5-filmen är nu exporterad och verifierad i 4K60. Se [förbättringarna](ENERGY_REWORK.md) och [verifieringen](VERIFICATION.md).
 
 [![Sex faktiska bilder från v0.5: stad, rymdflotta, supernova, prismakammare, fröflykt och final](images/v0.5.0-energy.jpg)](https://github.com/jojo-swe/PulseAscendant/releases/download/v0.5.0/PulseAscendant-Preview-1080p60.mp4)
 
@@ -122,4 +122,4 @@ CMake synkroniserar `assets/` till programkatalogen även när bara shaders har 
 
 Pulse Ascendant har en egen identitet och ny koreografi. Projektets historia omfattar en selektiv omarbetning av Future Crews **Second Reality** (1993). Originaldemo, utvalda effektidéer och glenz-geometri krediteras Future Crew. [Originalkälla](https://github.com/mtuomi/SecondReality), commit `071a82eddb7a7390dbaa491a8a473e0e923a55c2`, public domain/Unlicense. Originalträdet och tidigare releaser är bevarade.
 
-Ny kod: MIT. SDL: zlib och medföljande licenstexter. De tre Suno-låtarna, artistmetadata **joyolo**, levererades av projektägaren och ingår på dennes begäran. Musiken omfattas inte av MIT. [Musikkrediter, Suno-ID och källhashar](../licenses/MUSIC-NOTICE.txt).
+Ny kod: MIT. SDL: zlib och medföljande licenstexter. De tre låtarna är av artisten **joyolo** och används med tillstånd. Musiken omfattas inte av MIT. [Musikkrediter och källhashar](../licenses/MUSIC-NOTICE.txt).
