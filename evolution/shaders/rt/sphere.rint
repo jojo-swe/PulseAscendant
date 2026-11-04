@@ -1,0 +1,25 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The intersection shader of the sphere hit groups (4..7, hitGroupFor(class, Spheres)): primitive i of a
+// sphere instance's AABB BLAS is sphere InstanceRecord.mesh (its first sphere) + i of the static spheres or,
+// for a kInstanceDynamicSpheres instance, of the frame's particle field. Solved in the instance's object
+// space, where t is the same parameter as along the world ray. Reports the entry point from outside
+// (kSphereHitOutside, the front) and the exit point from inside (kSphereHitInside), so a ray inside a glass
+// sphere (refracted in, or a camera in it) leaves through it. No attributes: the closest-hit recomputes the
+// point from gl_HitTEXT. Never traces.
+
+#include "common.glsl"
+#include "sphere.glsl"
+
+void main() {
+    InstanceRecord record = instanceRecords[gl_InstanceCustomIndexEXT];
+    uint index = record.mesh + uint(gl_PrimitiveID);
+    SphereRecord s = (record.flags & kInstanceDynamicSpheres) != 0u ? particleSpheres[index] : staticSpheres[index];
+    float t;
+    uint kind;
+    if (sphereIntersect(gl_ObjectRayOriginEXT, gl_ObjectRayDirectionEXT, s.center, s.radius, gl_RayTminEXT,
+                        gl_RayTmaxEXT, t, kind)) {
+        reportIntersectionEXT(t, kind);
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "max_chapter_seconds": 40,
+  "chapters": [
+    {"title": "BOOT", "target": 0, "track": 0},
+    {"title": "FLYBY", "target": 10, "track": 0},
+    {"title": "DOTS", "target": 34, "track": 0},
+    {"title": "PLASMA", "target": 58, "track": 0},
+    {"title": "TUNNEL", "target": 82, "track": 0},
+    {"title": "GLENZ", "target": 106, "track": 0},
+    {"title": "LENS", "target": 130, "track": 0},
+    {"title": "RAYTRACE", "target": 158, "track": 0},
+    {"title": "CITY", "target": 190, "track": 0},
+    {"title": "FINALE", "target": 222, "track": 0},
+    {"title": "CREDITS", "target": 246, "track": 0}
+  ]
+}

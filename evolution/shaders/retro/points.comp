@@ -1,0 +1,63 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The 1993 point rasteriser: draws the retro frame's points (retro::RetroPoint, sorted back to front on the
+// CPU) as size x size squares of their palette index into the 320x200 index image, clipped per pixel to the
+// screen. One invocation per point; since invocations run in no particular order, a point drawn later in the
+// list wins a pixel through the per-pixel order buffer, in two dispatches:
+//   pass 0  every point raises each pixel of its square to atomicMax(order, its number + 1);
+//   pass 1  every point writes its index to the pixels whose order is its own number + 1.
+// The order buffer is all zeros before pass 0 (the CPU clears it each draw).
+
+#include "common.glsl"
+
+layout(local_size_x = 64, local_size_y = 1) in;
+
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D indexImage;
+
+// Must match retro::RetroPoint (12 bytes): index in the low byte of indexSize, size in the next.
+struct Point {
+    int x;
+    int y;
+    uint indexSize;
+};
+
+layout(set = 0, binding = 1, std430) readonly buffer Points {
+    Point points[];
+};
+
+layout(set = 0, binding = 2, std430) buffer Order {
+    uint order[]; // kRetroWidth * kRetroHeight, row by row
+};
+
+// Must match PointsPushConstants in src/render/scene_raster.cpp.
+layout(push_constant) uniform PushConstants {
+    uint count; // points to draw
+    uint pass;  // 0 claim, 1 write
+} pc;
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= pc.count) {
+        return;
+    }
+    Point point = points[id];
+    int size = int((point.indexSize >> 8) & 0xffu);
+    uint index = point.indexSize & 0xffu;
+
+    // The top-left pixel: floor(x / 16 - size / 2 + 1 / 2), in 28.4 an arithmetic shift.
+    ivec2 first = (ivec2(point.x, point.y) - ivec2(size * 8) + ivec2(8)) >> 4;
+    ivec2 from = max(first, ivec2(0));
+    ivec2 to = min(first + ivec2(size), ivec2(kRetroWidth, kRetroHeight)); // exclusive
+
+    for (int y = from.y; y < to.y; ++y) {
+        for (int x = from.x; x < to.x; ++x) {
+            uint at = uint(y) * kRetroWidth + uint(x);
+            if (pc.pass == 0u) {
+                atomicMax(order[at], id + 1u);
+            } else if (order[at] == id + 1u) {
+                imageStore(indexImage, ivec2(x, y), uvec4(index));
+            }
+        }
+    }
+}

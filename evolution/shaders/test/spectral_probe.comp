@@ -1,0 +1,28 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_scalar_block_layout : require
+
+// Test fixture for integrator_test (compiled for the test only): runs shaders/rt/spectral.glsl, one
+// invocation per wavelength: results 0-2 spectralRgb(lambda), 3 dispersiveIor(pc.ior, pc.abbe, lambda).
+
+layout(local_size_x = 64, local_size_y = 1) in;
+
+layout(scalar, set = 0, binding = 0) readonly buffer Inputs { float lambdas[]; };
+layout(scalar, set = 0, binding = 1) writeonly buffer Results { vec4 results[]; };
+
+layout(push_constant) uniform PushConstants {
+    uint count;
+    float ior;
+    float abbe;
+} pc;
+
+#include "../rt/spectral.glsl"
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.count) {
+        return;
+    }
+    float lambda = lambdas[i];
+    results[i] = vec4(spectralRgb(lambda), dispersiveIor(pc.ior, pc.abbe, lambda));
+}

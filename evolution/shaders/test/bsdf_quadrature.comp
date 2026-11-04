@@ -1,0 +1,62 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_scalar_block_layout : require
+
+// Test fixture for material_test (compiled for the test only): integrates bsdfEval's f cos over the whole
+// sphere of incoming directions by quadrature, independently of bsdfSample. One invocation per (case, row
+// of a theta-uniform grid): the row's sum of f cos over phiSteps directions times sin(theta) dtheta dphi.
+// The CPU adds the rows in double; the total is the directional albedo bsdfSample's mean weight must equal.
+// Same shading normal and wo construction as bsdf_probe.comp.
+
+#include "../rt/types.glsl"
+#include "../rt/random.glsl"
+#include "../rt/bsdf.glsl"
+
+layout(local_size_x = 64, local_size_y = 1) in;
+
+struct ProbeCase {
+    uint material;
+    float thetaDegrees;
+};
+
+layout(scalar, set = 0, binding = 0) readonly buffer Materials { Material materials[]; };
+layout(scalar, set = 0, binding = 1) readonly buffer Cases { ProbeCase cases[]; };
+layout(scalar, set = 0, binding = 2) writeonly buffer Results { vec3 rows[]; };
+
+layout(push_constant) uniform PushConstants {
+    uint thetaSteps;
+    uint phiSteps;
+    uint caseCount;
+} pc;
+
+void main() {
+    uint row = gl_GlobalInvocationID.x;
+    uint caseIndex = gl_GlobalInvocationID.y;
+    if (row >= pc.thetaSteps || caseIndex >= pc.caseCount) {
+        return;
+    }
+    ProbeCase c = cases[caseIndex];
+    Material m = materials[c.material];
+    Surface s = Surface(m.baseColor, m.roughness, m.metallic, m.ior, m.transmission, m.coat, m.coatRoughness,
+                        m.emission * m.emissionScale);
+
+    vec3 n = normalize(vec3(0.3, -0.5, 0.8));
+    vec3 t;
+    vec3 b;
+    orthonormalBasis(n, t, b);
+    float thetaO = radians(c.thetaDegrees);
+    vec3 wo = normalize(sin(thetaO) * t + cos(thetaO) * n);
+
+    const float pi = 3.14159265358979;
+    float dTheta = pi / float(pc.thetaSteps);
+    float dPhi = 2.0 * pi / float(pc.phiSteps);
+    float theta = (float(row) + 0.5) * dTheta;
+    vec3 sum = vec3(0.0);
+    for (uint j = 0u; j < pc.phiSteps; ++j) {
+        float phi = (float(j) + 0.5) * dPhi;
+        vec3 wi = sin(theta) * (cos(phi) * t + sin(phi) * b) + cos(theta) * n;
+        float pdf;
+        sum += bsdfEval(s, n, wo, normalize(wi), pdf);
+    }
+    rows[caseIndex * pc.thetaSteps + row] = sum * sin(theta) * dTheta * dPhi;
+}

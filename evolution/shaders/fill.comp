@@ -1,0 +1,26 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Test pattern that shows the timeline state of a frame. Every headless test looks at this frame.
+//
+//   1993 look  a 4-colour banded checker: a diagonal ramp quantised to 4 levels, inverted in every other
+//              32-pixel cell, coloured from the chapter's hue (an indexed palette).
+//   2026 look  a smooth gradient in the chapter's hue.
+//   Era        a Wipe chapter splits the frame at x = wipe * width (2026 on the left, 1993 on the right) and
+//              marks the edge with a 2-pixel white line while the wipe runs; a Portal chapter cross-fades the
+//              two looks by era; every other chapter shows 2026 when era >= 0.5 and 1993 otherwise.
+//   Music      a circle orbits the centre with the chapter's local time; its radius grows from 0.2 to
+//              0.26 * height with kick and its brightness falls by half over each beat.
+//   Chapter    the hue is chapter / 31.
+//
+// This build writes the pattern as it is into an RGBA8 image (display-encoded, like the 1993 side). Only the
+// tests use it (tonemap_test's reference for the placeholder, gfx_foundation_test's and descriptors_test's
+// compute pipeline); the app draws the placeholder with fill_hdr.comp.
+
+layout(set = 0, binding = 0, rgba8) uniform writeonly image2D outImage;
+
+vec4 encodeFill(vec3 color) {
+    return vec4(color, 1.0);
+}
+
+#include "fill.glsl"

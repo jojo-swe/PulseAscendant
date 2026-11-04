@@ -1,0 +1,12 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+
+// A deliberately invalid raygen for rt_pipeline_test: it executes a callable shader, which the pipeline has
+// none of (no callable region); RayTracingPipeline must refuse it.
+
+layout(location = 0) callableDataEXT uint data;
+
+void main() {
+    data = 0u;
+    executeCallableEXT(0, 0);
+}

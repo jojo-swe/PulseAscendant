@@ -1,0 +1,359 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The Particles scene's particle field: DOTS and PARTICLE OCEAN, one pure function of
+// (id, seconds, params) each, chosen by params[3].w. src/modern/scenes/particles.cpp mirrors both on the CPU
+// (dotsParticle, oceanParticle) and documents the shapes; scene_particles_test checks the two agree.
+//
+// DOTS (mode 0): params[0..2] = the six morphs' (first, arrival) in chapter seconds (retro::dotsSchedule's
+// frames / 35), params[3] = (count, turbulence, flash, 0). The particle holds a shape, or flows from one to the
+// next: cube -> sphere -> torus knot -> logo -> knot -> sphere -> cube.
+// PARTICLE OCEAN (mode 1): params[0] = (count, sea radius, wave scale, flash), params[3].w = 1.
+
+#include "particles_common.glsl"
+#include "logo_targets.glsl"
+#include "../rt/sea_waves.glsl"
+
+const float kPi = 3.14159265;
+const float kTau = 6.28318531;
+
+float hashUnit(uint x) {
+    return logoUnit(logoHash(x));
+}
+
+// The golden-ratio fraction of i (i / phi mod 1) in 32-bit fixed point.
+float golden(uint i) {
+    return logoUnit(i * 0x9E3779B9u);
+}
+
+float smooth01(float x) {
+    x = clamp(x, 0.0, 1.0);
+    return x * x * (3.0 - 2.0 * x);
+}
+
+// --- DOTS ---------------------------------------------------------------------------------------------------
+
+const float kCubeSide = 1.2;
+const float kSphereRadius = 0.78;
+const uint kSphereShells = 4u;
+const float kShellStep = 0.09;
+const float kKnotMajor = 0.5, kKnotMinor = 0.22, kKnotLift = 1.4, kKnotTube = 0.1;
+const float kLogoCell = 0.0684;
+const float kDotsRadius = 0.0022;
+const float kFullCount = 2097152.0;
+
+uint latticeSide(uint count) {
+    uint n = uint(pow(float(count), 1.0 / 3.0) + 0.5);
+    while (n * n * n > count) {
+        --n;
+    }
+    while ((n + 1u) * (n + 1u) * (n + 1u) <= count) {
+        ++n;
+    }
+    return n;
+}
+
+vec3 cubeTarget(uint id, uint count) {
+    uint n = latticeSide(count);
+    uint j = id % (n * n * n);
+    vec3 lattice = vec3(float(j % n), float(j / (n * n)), float((j / n) % n));
+    return (lattice / float(n - 1u) - 0.5) * kCubeSide;
+}
+
+vec3 sphereTarget(uint id, uint count) {
+    uint shell = id % kSphereShells, k = id / kSphereShells;
+    uint n = (count - 1u - shell) / kSphereShells + 1u;
+    float y = float(2u * k + 1u) / float(n) - 1.0;
+    float ring = sqrt(max(1.0 - y * y, 0.0));
+    float angle = kTau * (golden(k) + 0.37 * float(shell));
+    float radius = kSphereRadius * (1.0 - kShellStep * float(shell));
+    return radius * vec3(ring * cos(angle), y, ring * sin(angle));
+}
+
+vec3 knotTarget(uint id, uint count) {
+    float t = kTau * (float(id) + 0.5) / float(count);
+    float c2 = cos(2.0 * t), s2 = sin(2.0 * t), c3 = cos(3.0 * t), s3 = sin(3.0 * t);
+    float r = kKnotMajor + kKnotMinor * c3;
+    vec3 centre = vec3(r * c2, kKnotLift * kKnotMinor * s3, r * s2);
+    vec3 tangent = normalize(vec3(-3.0 * kKnotMinor * s3 * c2 - 2.0 * r * s2, 3.0 * kKnotLift * kKnotMinor * c3,
+                                  -3.0 * kKnotMinor * s3 * s2 + 2.0 * r * c2));
+    vec3 normal = normalize(cross(tangent, vec3(0.0, 1.0, 0.0)));
+    vec3 binormal = cross(normal, tangent);
+    float phi = kTau * golden(id);
+    float tube = kKnotTube * (1.0 - 0.15 * float(id % 3u));
+    return centre + tube * (cos(phi) * normal + sin(phi) * binormal);
+}
+
+// About y by yaw, then about x by pitch (retro/dots.cpp's turn()).
+vec3 turn(vec3 p, float yaw, float pitch) {
+    float cy = cos(yaw), sy = sin(yaw), cx = cos(pitch), sx = sin(pitch);
+    float x = cy * p.x + sy * p.z, z = -sy * p.x + cy * p.z;
+    return vec3(x, cx * p.y - sx * z, sx * p.y + cx * z);
+}
+
+// Shape 0 cube, 1 sphere, 2 knot, 3 logo, turned as the 1993 shapes turn at t: the solids spin, the logo sways.
+vec3 shapePoint(uint shape, uint id, uint count, float t) {
+    if (shape == 3u) {
+        return turn(logoTarget(id, kLogoCell), 0.12 * sin(kTau * t / 3.7), 0.10 * sin(kTau * t / 2.9));
+    }
+    vec3 p = shape == 0u ? cubeTarget(id, count) : shape == 1u ? sphereTarget(id, count) : knotTarget(id, count);
+    return turn(p, 0.6 + 0.85 * t, 0.4 + 0.12 * t);
+}
+
+// A divergence-free displacement: six plane waves of a vector potential, each contributing
+// cos(w.p + c t + phase) along normalize(w x e).
+const vec3 kCurlWave[6] = vec3[6](vec3(2.1, 0.7, -1.3), vec3(-1.1, 2.6, 0.9), vec3(0.8, -1.4, 3.1),
+                                  vec3(4.3, 1.9, 2.2), vec3(-2.7, -3.8, 1.6), vec3(1.5, 4.6, -3.9));
+const vec3 kCurlAxis[6] = vec3[6](vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0),
+                                  vec3(0.6, 0.0, 0.8), vec3(0.0, 0.8, 0.6), vec3(0.8, 0.6, 0.0));
+const float kCurlAmplitude[6] = float[6](0.5, 0.45, 0.4, 0.25, 0.22, 0.18);
+const float kCurlSpeed[6] = float[6](0.9, -1.1, 1.3, 1.7, -1.9, 2.3);
+
+vec3 curl(vec3 p, float t) {
+    vec3 d = vec3(0.0);
+    for (int k = 0; k < 6; ++k) {
+        float phase = dot(kCurlWave[k], p) + kCurlSpeed[k] * t + 1.7 * float(k);
+        d += kCurlAmplitude[k] * cos(phase) * normalize(cross(kCurlWave[k], kCurlAxis[k]));
+    }
+    return d;
+}
+
+const uint kOrder[7] = uint[7](0u, 1u, 2u, 3u, 2u, 1u, 0u);
+
+// The logo hovers kLogoLift above the formation's centre (its cell is 1.8x the 1993 year's share of the frame).
+const float kLogoLift = 1.0;
+const uint kLogoVoxels = kLogoPixels * kLogoDepth;
+
+// A shape's height range about the centre: what the band of flight sweeps, top to bottom.
+const float kShapeHalfHeight[4] = float[4](0.6, 0.78, 0.31, 0.24);
+
+// The identity colours: ember (the bottom of the particle's place in the cube's lattice), ivory (its middle),
+// ice (its top). Particle ids run up the cube, up the sphere and along the knot alike, so the gradient stays
+// a structure in every shape.
+const vec3 kEmber = vec3(1.0, 0.36, 0.1);
+const vec3 kIvory = vec3(0.96, 0.92, 0.84);
+const vec3 kIce = vec3(0.6, 0.79, 1.0);
+
+vec3 identityColor(uint id, uint count) {
+    float y = clamp(cubeTarget(id, count).y / (0.5 * kCubeSide), -1.0, 1.0);
+    return y < 0.0 ? mix(kIvory, kEmber, -y) : mix(kIvory, kIce, y);
+}
+
+// The 2026 shapes as the 1993 ones turn: the solids spin (mirrored in z, so that seen from +z they spin the
+// way 1993's do seen from -z), the logo sways above the centre.
+vec3 shapePoint2026(uint shape, uint id, uint count, float t) {
+    vec3 p = shapePoint(shape, id, count, t);
+    return shape == 3u ? p + vec3(0.0, kLogoLift, 0.0) : vec3(p.xy, -p.z);
+}
+
+// Where a morph's band of flight reaches particle id (0 at the top of the target shape, 1 at its bottom): by
+// the unturned target's height, the logo by its row (so it prints row by row, one row a beat), with a little
+// hashed spread.
+float bandKey(uint shape, uint id, uint count) {
+    if (shape == 3u) {
+        uint v = id % kLogoVoxels;
+        return float(logoPixel(v % kLogoPixels).y) / 6.0;
+    }
+    vec3 target = shape == 0u ? cubeTarget(id, count) : shape == 1u ? sphereTarget(id, count)
+                                                                      : knotTarget(id, count);
+    float key = clamp(0.5 - 0.5 * target.y / kShapeHalfHeight[shape], 0.0, 1.0);
+    return 0.97 * key + 0.03 * hashUnit(id ^ 0x5BD1E995u);
+}
+
+// A particle's flight in morph m (from -> to, progress s): each particle flies for kFlight of the morph, its
+// start set by bandKey, so at any moment a band of about 12 % of the shape's height is in flight.
+const float kFlight = 1.0 / 7.0;
+const float kSparkShare = 0.0012; // of the logo's particles: about 2,500 sparks
+
+struct Flight {
+    vec3 p;
+    float blend, flight;
+};
+
+Flight flightOf(uint id, uint count, uint morph, uint from, uint to, float s, float seconds, float turbulence) {
+    vec3 a = shapePoint2026(from, id, count, seconds), b = shapePoint2026(to, id, count, seconds);
+    float start = bandKey(to, id, count) * (1.0 - kFlight);
+    Flight f;
+    f.blend = smooth01((s - start) / kFlight);
+    f.flight = sin(kPi * f.blend);
+    vec3 mid = a + (b - a) * f.blend;
+    mid += (mid - vec3(0.0, mid.y, 0.0)) * (0.15 * f.flight);
+    float swirl = (morph % 2u == 0u ? 0.7 : -0.7) * f.flight;
+    float c = cos(swirl), sn = sin(swirl);
+    mid = vec3(c * mid.x + sn * mid.z, mid.y, -sn * mid.x + c * mid.z);
+    // Three steps along the flow: filaments rather than a blur.
+    float step = 0.34 * f.flight * f.flight * turbulence;
+    f.p = mid;
+    for (int i = 0; i < 3; ++i) {
+        f.p += step * curl(f.p, seconds + 0.37 * float(i));
+    }
+    return f;
+}
+
+// The morph a time falls in: held shape, or (from, to, morph, progress).
+struct MorphState {
+    bool morphing;
+    uint held, from, to, morph;
+    float s;
+};
+
+MorphState morphAt(float seconds, vec4 params[4]) {
+    MorphState st;
+    st.morphing = false;
+    st.held = 0u;
+    st.from = 0u;
+    st.to = 0u;
+    st.morph = 0u;
+    st.s = 0.0;
+    for (uint m = 0u; m < 6u; ++m) {
+        float first = params[m / 2u][2u * (m % 2u)], arrival = params[m / 2u][2u * (m % 2u) + 1u];
+        if (seconds >= arrival) {
+            st.held = kOrder[m + 1u];
+            continue;
+        }
+        if (seconds > first) {
+            st.morphing = true;
+            st.from = kOrder[m];
+            st.to = kOrder[m + 1u];
+            st.morph = m;
+            st.s = (seconds - first) / (arrival - first);
+        }
+        break;
+    }
+    return st;
+}
+
+// Particle id's place at `seconds` without its streak (see dotsParticle).
+Flight dotsPlace(uint id, uint count, float seconds, vec4 params[4], float turbulence) {
+    MorphState st = morphAt(seconds, params);
+    if (st.morphing) {
+        return flightOf(id, count, st.morph, st.from, st.to, st.s, seconds, turbulence);
+    }
+    Flight f;
+    f.p = shapePoint2026(st.held, id, count, seconds);
+    f.blend = 1.0;
+    f.flight = 0.0;
+    return f;
+}
+
+// DOTS: params[0..2] the six morphs' (first, arrival) in chapter seconds (the 2026 schedule:
+// modern::dotsSchedule2026), params[3] = (count, turbulence, flash, 0).
+// - Colour is identity: every particle keeps its place in the cube's lattice as a colour from ember (-x)
+//   through ivory to ice (+x), so a morph shows structure moving; 4 % are glowing cores in their own colour,
+//   flashing on the kick. On the logo the face (its front voxel layer) turns chrome and the sides ember.
+// - A morph is a band of flight sweeping down the target shape (bandKey); the particles about to land glow
+//   (the band's leading edge). Into and out of the logo, particles of one voxel ride in threes: the second
+//   and third trail the first along its velocity, 1.5 and 3 radii behind, glowing, a streak 3 radii long.
+// - The logo lands (morph 2's arrival) with a shock of light, and about 2,500 of its particles lift off it
+//   as sparks drifting up and towards the camera, fading over 4 s.
+SphereRecord dotsParticle(uint id, float seconds, vec4 params[4]) {
+    uint count = uint(params[3].x);
+    float turbulence = params[3].y, flash = params[3].z;
+    float radius = kDotsRadius * pow(kFullCount / float(count), 1.0 / 3.0);
+    MorphState st = morphAt(seconds, params);
+    Flight f = dotsPlace(id, count, seconds, params, turbulence);
+    vec3 p = f.p;
+    float logo = st.morphing ? (st.to == 3u ? f.blend : st.from == 3u ? 1.0 - f.blend : 0.0)
+                             : (st.held == 3u ? 1.0 : 0.0);
+    float trail = 0.0;
+    if (st.morphing && (st.to == 3u || st.from == 3u)) {
+        uint k = id / kLogoVoxels, j = k % 3u;
+        if (j != 0u) {
+            uint leader = id - j * kLogoVoxels;
+            Flight now = dotsPlace(leader, count, seconds, params, turbulence);
+            Flight before = dotsPlace(leader, count, seconds - 1.0 / 120.0, params, turbulence);
+            vec3 velocity = now.p - before.p;
+            float speed = length(velocity);
+            trail = f.flight * now.flight;
+            if (speed > 1e-4 && trail > 0.0) {
+                vec3 behind = now.p - velocity * (1.5 * float(j) * radius / speed);
+                p = mix(p, behind, trail);
+            }
+        }
+    }
+
+    // The logo's landing: the shock (all of it lights up and dies away), and the sparks.
+    float landing = params[1].y;
+    float age = seconds - landing;
+    float shock = age >= 0.0 ? exp(-age / 0.6) : 0.0;
+    uint h = logoHash(id ^ 0xA511E9B3u);
+    float spark = 0.0;
+    if (st.held == 3u && !st.morphing && age > 0.0 && logoUnit(logoHash(h ^ 0x1B873593u)) < kSparkShare) {
+        // Lift off over the first half second, then drift up and towards the camera on the flow.
+        float rise = smooth01(age / 0.5) * age;
+        float u = logoUnit(logoHash(h + 7u));
+        vec3 drift = vec3(0.25 * (u - 0.5), 0.18 + 0.12 * u, 0.55 + 0.5 * u) * rise;
+        p += drift + 0.12 * smooth01(age / 1.5) * curl(p * 0.7, seconds);
+        spark = smooth01(age / 0.3) * (1.0 - smooth01((age - 2.5) / 1.5));
+    }
+
+    vec3 identity = identityColor(id, count);
+    uint layer = (id % kLogoVoxels) / kLogoPixels;
+    vec3 logoColor = layer == 0u ? vec3(0.95, 0.95, 0.97) : kEmber;
+    vec3 color = mix(identity, logoColor, logo);
+    SphereRecord r;
+    r.center = p;
+    r.radius = radius;
+    // The leading edge of the band: particles in the last third of their flight glow.
+    float edge = f.flight * smooth01((f.blend - 0.45) / 0.4);
+    if (spark > 0.0) {
+        r.color = mix(kEmber, vec3(1.0, 0.75, 0.45), logoUnit(h));
+        r.emission = 14.0 * spark;
+        r.radius *= 3.5 * (1.0 - 0.5 * smooth01((age - 2.0) / 2.0));
+    } else if (logoUnit(h) < 0.04) {
+        r.color = mix(color, vec3(1.0), 0.25);
+        r.emission = 5.0 * (1.0 + 2.0 * flash) * (1.0 + f.flight) * (1.0 + 2.0 * shock * logo);
+    } else {
+        r.color = color;
+        r.emission = 0.9 * edge + 0.6 * trail + (layer == 0u ? 0.35 : 0.6) * shock * logo +
+                     (layer == 0u ? 0.0 : 0.04) * logo;
+    }
+    r.material = 0u;
+    r.prevCenter = vec3(0.0);
+    return r;
+}
+
+// --- PARTICLE OCEAN -----------------------------------------------------------------------------------------
+
+SphereRecord oceanParticle(uint id, float seconds, vec4 params[4]) {
+    uint count = uint(params[0].x);
+    float sea = params[0].y, scale = params[0].z, flash = params[0].w;
+    float radial = sea * sqrt((float(id) + 0.5) / float(count));
+    float angle = kTau * golden(id);
+    // Jittered off the sunflower's spiral (its arms show from above) by up to 0.4 of the bead spacing.
+    float spacing = sea * 1.7724539 / sqrt(float(count));
+    uint jitter = logoHash(id ^ 0x68E31DA4u);
+    vec2 base = radial * vec2(cos(angle), sin(angle)) +
+                0.4 * spacing * vec2(logoUnit(jitter) - 0.5, logoUnit(logoHash(jitter)) - 0.5);
+    vec3 p = vec3(base.x, 0.0, base.y);
+    float total = 0.0;
+    for (int k = 0; k < 8; ++k) {
+        float a = kSeaAmplitude[k] * scale;
+        float f = kSeaNumber[k] * dot(kSeaDirection[k], base) - kSeaSpeed[k] * seconds + kSeaPhase[k];
+        float c = cos(f);
+        p.x += kSeaSteepness * a * kSeaDirection[k].x * c;
+        p.z += kSeaSteepness * a * kSeaDirection[k].y * c;
+        p.y += a * sin(f);
+        total += a;
+    }
+    float crest = p.y / max(total, 1e-6);
+    // Foam: one bead in eight (hashed) on a crest glows ice blue, flaring on the kick. Troughs read darker
+    // (deep water between the swells); beads thin out over the last 12 % of the radius, so the sea's edge
+    // dissolves.
+    float foam = logoUnit(logoHash(id ^ 0x2C1B3C6Du)) < 0.12 ? smooth01((crest - 0.65) / 0.2) : 0.0;
+    float depth = 0.45 + 0.55 * smooth01(0.5 + 0.5 * crest);
+    float edge = smooth01((1.0 - radial / sea) / 0.12);
+    SphereRecord r;
+    r.center = p;
+    r.radius = 0.5 * spacing * edge * (0.72 + 0.28 * logoUnit(logoHash(jitter ^ 0x51u)));
+    vec3 metal = vec3(0.95, 0.9, 0.84) * depth;
+    r.color = metal + (vec3(0.55, 0.8, 1.0) - metal) * (0.6 * foam);
+    r.emission = foam * (0.1 + 2.0 * flash) * 1.5;
+    r.material = 0u;
+    r.prevCenter = vec3(0.0);
+    return r;
+}
+
+SphereRecord particle(uint id, float seconds, vec4 params[4]) {
+    return params[3].w == 1.0 ? oceanParticle(id, seconds, params) : dotsParticle(id, seconds, params);
+}

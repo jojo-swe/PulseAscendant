@@ -1,0 +1,96 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// The Lens scene's sky (src/modern/scenes/lens.hpp): a grid medium over a square box centred on the world's
+// vertical axis, baked every frame as a pure function of (uvw, seconds, params).
+//
+// - A deck of fair-weather cumulus: a fractal value noise of four octaves cut by a coverage threshold and
+//   shaped by a height profile (flat bases, billowing tops), its cells an eighth of the box's half-width. A
+//   tube along the sun's line through the scene's subject is kept clear (in LENS OF GOD a cone, the lens's
+//   own: its light reaches the stone, while the clouds in the rest of the lens's shadow stand dark in it), so
+//   the sun reaches the stone while the clouds round it throw their shadows across the mosaic.
+// - LENS OF GOD's light cone: in the haze between the lens and its focus, the sunlight the lens gathers. The
+//   tracer's next-event estimates cannot find the sun through a lens, so the cone's in-scattered light is
+//   baked here as the haze's emission: the sun's in-scattering times the cone's concentration, (lens radius /
+//   cone radius)^2, capped, with a soft edge, from the lens down to its focus. Around it the lens's shadow
+//   (the haze the lens hides from the sun) comes from the tracer itself.
+//
+// params[0] = (cone glow (0: no cone), coverage in [0, 1], cloud density per world unit, haze density in the cone)
+// params[1] = (the lens's centre x, y, z (world), the lens's radius)
+// params[2] = (a point of the sun's line through the subject x, y, z (world): LENS OF GOD's focal point,
+//             the clearing's radius at that point (world); it widens towards the lens as the cone does)
+// params[3] = (the box's half-width, its floor y, its height, the share of its height the deck may fill)
+// The sun's line runs through params[1].xyz and params[2].xyz (the lens's axis in LENS OF GOD).
+
+#include "medium_common.glsl"
+
+float hash3(ivec3 c, uint seed) {
+    uint h = uint(c.x) * 0x8DA6B343u ^ uint(c.y) * 0xD8163841u ^ uint(c.z) * 0xCB1AB31Fu ^ seed;
+    h ^= h >> 16;
+    h *= 0x7FEB352Du;
+    h ^= h >> 15;
+    h *= 0x846CA68Bu;
+    h ^= h >> 16;
+    return float(h >> 8) * (1.0 / 16777216.0);
+}
+
+float noise3(vec3 p, uint seed) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    vec3 s = f * f * (3.0 - 2.0 * f);
+    ivec3 c = ivec3(i);
+    float n000 = hash3(c, seed), n100 = hash3(c + ivec3(1, 0, 0), seed);
+    float n010 = hash3(c + ivec3(0, 1, 0), seed), n110 = hash3(c + ivec3(1, 1, 0), seed);
+    float n001 = hash3(c + ivec3(0, 0, 1), seed), n101 = hash3(c + ivec3(1, 0, 1), seed);
+    float n011 = hash3(c + ivec3(0, 1, 1), seed), n111 = hash3(c + ivec3(1, 1, 1), seed);
+    return mix(mix(mix(n000, n100, s.x), mix(n010, n110, s.x), s.y),
+               mix(mix(n001, n101, s.x), mix(n011, n111, s.x), s.y), s.z);
+}
+
+vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
+    float glow = params[0].x, coverage = params[0].y, cloudDensity = params[0].z, haze = params[0].w;
+    vec3 lens = params[1].xyz;
+    float lensRadius = params[1].w;
+    vec3 through = params[2].xyz;
+    float clearing = params[2].w;
+    float halfWidth = params[3].x, floorY = params[3].y, height = params[3].z, deck = params[3].w;
+    vec3 world = vec3(-halfWidth, floorY, -halfWidth) + uvw * vec3(2.0 * halfWidth, height, 2.0 * halfWidth);
+
+    // The deck: cells an eighth of the half-width across, a third as tall.
+    float cell = halfWidth / 8.0;
+    vec3 p = vec3(world.x / cell, (world.y - floorY) / (0.35 * cell), world.z / cell);
+    float n = 0.5 * noise3(p, 11u) + 0.25 * noise3(p * 2.03 + 7.1, 23u) + 0.15 * noise3(p * 4.1 + 3.3, 37u) +
+              0.1 * noise3(p * 8.3 + 1.7, 51u);
+    float h = uvw.y / max(deck, 1e-3);
+    float top = 0.4 + 0.5 * n;
+    float profile = smoothstep(0.0, 0.1, h) * (1.0 - smoothstep(top - 0.25, top, h));
+    // The deck thins out towards the box's rim, so that it never shows the box's edge.
+    float rim = length(world.xz) / halfWidth;
+    profile *= 1.0 - smoothstep(0.55, 0.95, rim);
+    // The clear tube along the sun's line.
+    vec3 axis = normalize(lens - through);
+    vec3 off = world - through;
+    float along = dot(off, axis);
+    float across = length(off - along * axis);
+    float span = distance(lens, through);
+    float clear = clearing + 1.15 * lensRadius * clamp(along / max(span, 1e-3), 0.0, 1.0);
+    float open = smoothstep(clear, 1.5 * clear, across);
+    float cloud = smoothstep(1.0 - coverage, 1.0 - coverage + 0.16, n) * profile * open;
+    float density = cloudDensity * cloud;
+    vec3 emission = vec3(0.0);
+
+    if (glow > 0.0) {
+        // The cone: from the lens (along = |lens - through|) to the focal point (along = 0), its radius
+        // shrinking linearly to a small waist (the sun's disc imaged), clipped by the stone below.
+        float s = clamp(along / max(span, 1e-3), 0.0, 1.0); // 1 at the lens, 0 at the focus
+        float waist = 0.012 * span;
+        float radius = max(lensRadius * s, waist);
+        float inside = (along > 0.0 && along < span) ? 1.0 - smoothstep(0.82 * radius, radius, across) : 0.0;
+        float concentration = min((lensRadius * lensRadius) / (radius * radius), 400.0);
+        if (inside > 0.0 && world.y > 0.0) {
+            density += haze * inside;
+            emission = vec3(1.0, 0.95, 0.86) * (glow * concentration * inside);
+        }
+    }
+    return vec4(density, emission);
+}

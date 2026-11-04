@@ -1,0 +1,48 @@
+
+         #####  #   #   ###   #      #   #  #####  #####   ###   #   #
+         #::::: #:  #: # ::#  #:     #:  #:  :#:::  :#::: # ::#  ##  #:
+         ####   #:  #: #:  #: #:     #:  #:   #:     #:   #:  #: #:# #:
+         #::::   # # : #:  #: #:     #:  #:   #:     #:   #:  #: #: ##:
+         #####    # :   ### : #####   ### :   #:   #####   ### : #:  #:
+          :::::    :     :::   :::::   :::     :    :::::   :::   :   :
+
+                 1993 vs 2026  ·  a real-time path tracing demo
+
+                   CODE: JOJO · MUSIC: JOYOLO · CONCEPT: JOHN
+
+ --[ RELEASE ]-----------------------------------------------------------------
+   Name ......... EVOLUTION
+   Type ......... demo, real time, 31 chapters in three acts
+   Length ....... 11:51, three tracks by joyolo
+   Platforms .... Windows 10/11 x64, Linux x86-64
+
+ --[ SYSTEM REQUIREMENTS ]-----------------------------------------------------
+   A Vulkan 1.3 GPU with hardware ray tracing (VK_KHR_ray_tracing_pipeline,
+   VK_KHR_ray_query, VK_KHR_acceleration_structure) and about 5 GB of video
+   memory. Written for an RTX 4090 at 2560x1440; a slower card runs the same
+   show at a lower --trace-scale. A sound device is nice to have; without one
+   the demo keeps time on its own.
+
+ --[ RUN ]---------------------------------------------------------------------
+   Evolution.exe (or ./Evolution), F11 for full screen. Esc quits.
+   Left/Right and 1-0 jump between chapters, C toggles the CRT, H the cards,
+   M mutes. --help lists the rest, including the video export.
+
+ --[ GREETINGS ]---------------------------------------------------------------
+   FUTURE CREW · TRITON · THE BLACK LOTUS · FARBRAUSCH · CONSPIRACY · ASD
+   MERCURY · FAIRLIGHT · HAUJOBB · LOGICOMA · CTRL-ALT-TEST · ANDROMEDA
+   MELON DEZIGN · SPACEBALLS · KEWLERS · MFX · STILL · ORANGE · ELUDE
+   COCOON · ALCATRAZ · APPROXIMATE
+
+ --[ NOTES ]-------------------------------------------------------------------
+Sixty frames a second, eleven minutes, every frame a function of time alone.
+Two eras share every frame: a 320x200 screen in 256 colours, and a path tracer.
+All numbers on the cards come from the code that draws them; none were typed.
+Remainders say what a number leaves the year we live in. Count from A = 1.
+ (The music keeps the clock. Without a sound device the demo keeps its own.)
+If your GPU is slower than ours, --trace-scale 0.5 still holds every beat.
+Thank you for reading the NFO. Almost nobody does.
+
+ ------------------------------------------------------------------------------
+
+there is a secret part. the prompt knows the word; so does the directory listing.

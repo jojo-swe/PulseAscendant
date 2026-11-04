@@ -1,6 +1,6 @@
 _NET_SUPPORTING_WM_CHECK(WINDOW): window id # 0x20011f
-Internal ctest changing into directory: /home/jojo/.cache/second-reality-remix/public-build-v05
-Test project /home/jojo/.cache/second-reality-remix/public-build-v05
+Internal ctest changing into directory: /home/<user>/.cache/second-reality-remix/public-build-v05
+Test project /home/<user>/.cache/second-reality-remix/public-build-v05
     Start 1: core
 1/6 Test #1: core .............................   Passed    0.81 sec
     Start 2: act3_plan

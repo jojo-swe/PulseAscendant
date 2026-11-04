@@ -1,0 +1,269 @@
+#pragma once
+
+#include "gfx/context.hpp"
+#include "gfx/fill_pass.hpp"
+#include "gfx/frame_ring.hpp"
+#include "gfx/image.hpp"
+#include "modern/modern_scene.hpp"
+#include "modern/scene.hpp"
+#include "modern/tracer_options.hpp"
+#include "post/tonemap.hpp"
+#include "render/stage_plan.hpp"
+#include "show/timeline.hpp"
+
+#include <volk.h>
+
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace evo::modern {
+class MediumVolume;
+class CausticMaps;
+class PathTracer;
+class SceneGpu;
+class SplatPass;
+} // namespace evo::modern
+
+namespace evo::post {
+class Denoiser;
+class Upscaler;
+} // namespace evo::post
+
+namespace evo::gfx {
+class GpuTimers;
+} // namespace evo::gfx
+
+namespace evo::rt {
+class ParticleField;
+} // namespace evo::rt
+
+namespace evo::render {
+
+// The size the 2026 side traces at for an output size and a trace scale: per axis
+// max(16, round(output * scale)), never above the output. Scale 1 traces at the output size.
+VkExtent2D traceSize(std::uint32_t width, std::uint32_t height, float scale);
+// Whether a trace scale is usable: finite, in (0, 1].
+bool validTraceScale(float scale);
+
+// The 2026 side. Every frame renders HDR linear light into an RGBA16F image at the render resolution, then
+// the one tonemap (post::Tonemap: PBR Neutral, sRGB OETF, static dither) writes the display-encoded RGBA8
+// image the compositor reads. The scene comes from the scene map (modern::sceneFor in the show):
+//   Placeholder  the fill.comp pattern's 2026 look (a smooth gradient in the chapter's hue with the circle
+//                that follows kick and beat) as HDR light that the tonemap maps back to that look
+//                (fill_hdr.comp), at 0 EV;
+//   any other    a path-traced scene (the Studio, and the scenes): the one PathTracer -> the one
+//                Denoiser -> the HDR image, tone mapped at the scene frame's exposure. A scene that samples
+//                the retro image (the Studio's CRT) reads the retro stage's colour image.
+// Either way whole-frame 2026 whatever the era state; the compositor decides where it shows.
+//
+// Every path-traced scene shares one PathTracer (pipeline, TLAS, G-buffer) and one Denoiser, built on the
+// first prepare; each prepared scene adds only its SceneGpu (geometry, BLASes, materials), so the images do
+// not multiply with the scenes. The denoiser's history starts over on every
+// chapter change, so it never carries one scene into another.
+//
+// Path tracing follows the HistoryState the renderer hands over: TraceSettings {spp, maxBounces, frameSeed};
+// the denoiser follows denoiseSettingsFor(state) (stage_plan.hpp): Interactive denoises temporally with 3
+// a-trous iterations (5 at history length <= 3); Export has no temporal history and filters with 5 below
+// 16 spp, and from 16 clamps lone fireflies, then filters with 2. The denoiser's history starts over
+// whenever state.reset is not None, and the motion guide uses the previous frame's camera only while the
+// history continues (never in Export). The primary hit's emission (the CRT's picture) bypasses the history
+// and the filter, so the screen stays sharp and current.
+//
+// The trace size: the tracer and the denoiser run at traceSize(width, height, traceScale);
+// below the output size the denoised picture goes through the temporal upscaler (post::Upscaler) into the
+// HDR image, with the G-buffer's emission kept out of its history (the CRT stays sharp and current). The
+// window jitters the samples within each trace pixel (post::subpixelWindow, from the frames since the
+// history reset) and the upscaler accumulates them; a reset frame and every Export frame trace whole pixels
+// unjittered and upsample spatially, so the window's first frame after a reset equals an Export frame at the
+// same trace scale, and the upscaler's history resets with the denoiser's. At scale 1 there
+// is no upscaler pass at all: the denoiser writes the HDR image, exactly as before.
+//
+// A frame with a particle field first runs its scene's particle shader into the stage's one
+// rt::ParticleField (made on the first prepared scene with a particle shader and grown to the largest
+// capacity.particles prepared), at the frame's chapter-local time (prevCenter at the previous frame's while
+// the history continues, else at the same time), then traces with that slot's spheres and BLAS.
+//
+// Motion: the stage remembers the last frame's instances along with its camera, while the history
+// continues, and hands them to the tracer, whose motion guide then holds each surface point's own motion
+// (an instance's previous transform, a sphere's or particle's prevCenter) besides the camera's; after a reset
+// there is nothing to remember. In Export with state.shutterSeconds > 0 and more than 4 samples the frame is
+// traced in up to 8 time slices (modern/shutter.hpp): the scene's frame() is asked for each slice's time
+// (sampleTimeline at the chapter-clamped time, so no slice leaves the frame's chapter), the particle field is
+// rebuilt per slice, and the guides come from the middle slice. The window has no shutter.
+//
+// Emissive splats: a frame with SceneFrame::splats runs the scene's splat shader after
+// the trace and before the denoiser (modern::SplatPass), adding into the G-buffer's emission guide at the
+// trace size, depth-tested against the depth guide; like the CRT's picture they bypass the denoiser's history
+// and filter (and the upscaler's history). One SplatPass serves every scene: it is made when the first scene
+// with a splat shader is prepared, with the accumulators at the trace size, and loads each such scene's
+// shader on its prepare. It keeps nothing between frames.
+//
+// A frame with caustics shoots its photons into the stage's one modern::CausticMaps (made on the
+// first prepared scene with capacity.causticResolution > 0, grown to the largest) inside the trace, after
+// the TLAS build: seeded by frameSeedFor(showSeconds, 0) alone, so the map is a pure function of the show
+// time, with kExportPhotonFactor times the frame's photons in an export of kExportPhotonSpp spp or more.
+//
+// A frame with a grid medium first bakes it with its scene's medium shader into the stage's one
+// modern::MediumVolume (made on the first prepared scene with a medium shader and grown to the largest
+// capacity.mediumGrid prepared), once per frame at the middle slice's time, then traces every slice with
+// its density and majorant; the denoiser filters the volume layer only for a frame with a medium.
+//
+// GPU timers (setTimers): "particles" (the particle field), "medium" (the grid's bake), "tlas" and "trace"
+// (the tracer), "splats" (a frame with splats), "denoise", "upscale" (below scale 1), "bloom" (when the frame's
+// post::Look has bloom), "tonemap" (with the look's grade, exposure offset and palette); "fill" and "tonemap"
+// for the placeholder (no look).
+//
+// A scene's GPU side is built by prepare(id) (or prepareAll()), which the window and the exports call before
+// their first frame, so that no chapter hitches. A stage that was not prepared builds it on the first frame
+// that shows the scene, inside render(): blocking setup (immediate submits that wait for the queue) recorded
+// while the frame's command buffer is still open, which is legal and ordered before that frame's submit, and
+// leaves the same state as prepare() (the first frame is byte for byte the same). A stage that never shows a
+// path-traced scene, like the 1993-only tests', never pays for one. Scene objects (the CPU side) are built
+// on first use too, at the stage's detail, by its factory.
+class ModernStage {
+public:
+    // `factory` makes the scenes (empty: modern::makeScene) and `map` says which scene an effect shows
+    // (empty: modern::sceneFor); tests inject both. Scenes are built at `detail`.
+    // Throws std::invalid_argument for a trace scale validTraceScale refuses.
+    ModernStage(gfx::Context& ctx, gfx::FrameRing& ring, std::uint32_t width, std::uint32_t height,
+                modern::SceneDetail detail = {}, modern::SceneFactory factory = {}, modern::SceneMap map = {},
+                float traceScale = 1.f, const modern::TracerOptions& tracerOptions = {});
+    ~ModernStage();
+    ModernStage(const ModernStage&) = delete;
+    ModernStage& operator=(const ModernStage&) = delete;
+
+    // Builds a path-traced scene's GPU side now (and the shared tracer and denoiser on the first), instead of
+    // in the first frame that shows it (setup: before a frame, not between ring.begin() and submit()). A
+    // no-op for the placeholder and for a scene already prepared. Throws std::invalid_argument for a scene
+    // the factory does not make; whatever it throws, the stage is left as it was (the scene unprepared).
+    void prepare(modern::SceneId id);
+    // prepare() for every scene the effects map to (the window).
+    void prepareAll();
+    // The device memory of what the stage holds for path tracing, as allocated (VMA statistics count the
+    // same): every prepared scene's SceneGpu::bytes(), plus imageBytes() and the tracer's bufferBytes()
+    // (TLAS, per-slot buffers, SBT, dummies) once one is prepared, and the particle field's and the medium
+    // volume's bytes() once a scene with particles or a medium shader is; 0 before.
+    VkDeviceSize gpuBytes() const;
+    // The images path tracing adds, whatever the number of scenes, as allocated: the tracer's G-buffer and
+    // the denoiser's images (at the trace size), below scale 1 the denoised trace-size picture and the
+    // upscaler's history, the splat accumulators once a scene with splats is prepared, the stage's HDR
+    // and display images (0 before the first prepare), and the tonemap's bloom images once a frame with
+    // bloom has been drawn.
+    VkDeviceSize imageBytes() const;
+    // Recreates the images at the new size. The caller makes sure no submitted frame still uses the old ones.
+    void resize(std::uint32_t width, std::uint32_t height);
+    // A new trace scale: the trace-size images are recreated (as resize(); the caller resets the history).
+    // A no-op for the current scale; throws std::invalid_argument for one validTraceScale refuses.
+    void setTraceScale(float scale);
+    float traceScale() const { return traceScale_; }
+    VkExtent2D traceExtent() const { return {traceWidth_, traceHeight_}; }
+    // The subpixel jitter of the last frame render() traced ((0, 0) after a placeholder frame).
+    std::array<float, 2> lastTraceJitter() const { return lastJitter_; }
+    // GPU timer scopes for the passes the stage records (null: none). The timers must outlive the stage's
+    // use.
+    void setTimers(gfx::GpuTimers* timers);
+    // Records the frame. `retroImage` is the retro stage's colour image (R8G8B8A8_SRGB, mipmapped), which a
+    // scene that samples it (the Studio's CRT) reads; a scene that does not ignores it (it may then be null).
+    // Throws std::invalid_argument for a scene that samples the retro image without one.
+    void render(VkCommandBuffer cmd, const show::TimelineFrame& frame, const HistoryState& state,
+                gfx::Image* retroImage = nullptr);
+    // The scene an effect shows (the stage's map).
+    modern::SceneId sceneOf(show::Effect effect) const;
+    // The camera shot of a frame (a change resets the history): the scene camera's (from camera(), not
+    // frame()), 0 for the placeholder.
+    std::uint32_t shotFor(const show::TimelineFrame& frame) const;
+    // Whether the frame's 2026 picture shows the retro image (the Studio's CRT).
+    bool samplesRetro(const show::TimelineFrame& frame) const;
+    // The 2026 epoch card of an effect from its scene (ModernScene::nowCard; the scene object is built on
+    // first use, as for a frame); "" for the placeholder.
+    std::string nowCard(show::Effect effect) const;
+
+    // The display-encoded picture (R8G8B8A8_UNORM): what the compositor shows.
+    gfx::Image& image() { return image_; }
+    // The HDR light it was tone mapped from (R16G16B16A16_SFLOAT).
+    gfx::Image& hdr() { return hdr_; }
+    // The shared path tracer, once a scene is prepared (tests read its G-buffer); null before.
+    modern::PathTracer* tracer();
+    // A prepared scene's GPU side; null for one not prepared (and the placeholder).
+    const modern::SceneGpu* sceneGpu(modern::SceneId id) const;
+    // What the last traced frame held and asked for (zeros after a placeholder frame): its scene's size,
+    // lights, media and per-frame GPU work, for --bench-counters.
+    struct FrameStats {
+        std::uint32_t instances = 0, rectLights = 0, portals = 0, treeLights = 0;
+        bool thinPanes = false, fog = false, lensing = false;
+        std::uint32_t gridVoxels = 0;     // the grid medium's voxels, baked this frame (0: none)
+        std::uint32_t photons = 0;        // caustic photons shot this frame
+        std::uint32_t causticTexels = 0;  // caustic map texels resolved this frame
+        std::uint32_t particles = 0;      // particles made this frame (their BLAS is rebuilt)
+        std::uint32_t splats = 0;
+        std::uint32_t slices = 0, spp = 0, maxBounces = 0;
+        std::uint32_t traceWidth = 0, traceHeight = 0;
+        // The tracer pipeline's stack sizes in bytes (the driver's; gfx::RayTracingPipeline::stackSizes).
+        std::uint64_t raygenStack = 0, hitStack = 0;
+        // The features of the pipeline that traced it (rt::kFeature*; all bits: the generic pipeline).
+        std::uint32_t pipelineFeatures = 0;
+    };
+    const FrameStats& lastFrameStats() const { return frameStats_; }
+    // The path tracer's work counters since the last call (modern::PathTracer::takeCounters; zeros without
+    // TracerOptions::counters or a tracer). Only after the ring's frames completed.
+    modern::Counters takeCounters();
+
+    // The particle field every scene with particles shares; null until one is prepared.
+    const rt::ParticleField* particles() const { return particles_.get(); }
+    // The caustic maps every scene with caustics shares; null until one is prepared.
+    const modern::CausticMaps* caustics() const { return caustics_.get(); }
+    // The grid medium's volume every scene with a medium shader shares; null until one is prepared.
+    const modern::MediumVolume* medium() const { return medium_.get(); }
+
+private:
+    // The scene object of an id, built on first use (CPU only).
+    const modern::ModernScene& scene(modern::SceneId id) const;
+    // What the scene's frames need of the path tracer's pipeline (modern::traceFeatures over its chapters,
+    // sampled): its own pipeline in the window's fast mode.
+    std::uint32_t sceneFeatures(modern::SceneId id) const;
+    void renderTraced(VkCommandBuffer cmd, modern::SceneId id, const show::TimelineFrame& frame,
+                      const HistoryState& state, gfx::Image* retroImage);
+    bool upscales() const { return traceWidth_ != width_ || traceHeight_ != height_; }
+    // The trace-size images (tracer, denoiser, upscaler, the denoised picture) at the current sizes.
+    void resizeTraced();
+    void beginScope(VkCommandBuffer cmd, const char* name);
+    void endScope(VkCommandBuffer cmd);
+
+    gfx::Context& ctx_;
+    gfx::FrameRing& ring_;
+    std::uint32_t width_, height_;
+    float traceScale_;
+    std::uint32_t traceWidth_, traceHeight_;
+    modern::SceneDetail detail_;
+    modern::TracerOptions tracerOptions_;
+    FrameStats frameStats_;
+    modern::SceneFactory factory_;
+    modern::SceneMap map_;
+    gfx::FillPass fill_; // the placeholder, as HDR light
+    post::Tonemap tonemap_;
+    gfx::Image hdr_;
+    gfx::Image image_;
+    // Declared in the order they must outlive each other: a SceneGpu reads its scene's static side, and the
+    // tracer's TLAS (destroyed first: it waits for the ring's frames) points at the SceneGpus' BLASes.
+    mutable std::array<std::unique_ptr<modern::ModernScene>, modern::kSceneCount> scenes_;
+    std::array<std::unique_ptr<modern::SceneGpu>, modern::kSceneCount> gpus_;
+    std::unique_ptr<rt::ParticleField> particles_;  // its BLASes outlive the tracer's TLAS
+    std::unique_ptr<modern::CausticMaps> caustics_; // Caustics: sized to the largest causticResolution
+    std::unique_ptr<modern::MediumVolume> medium_;  // the grid medium's images
+    std::unique_ptr<post::Denoiser> denoiser_;
+    std::unique_ptr<post::Upscaler> upscaler_;
+    gfx::Image traceHdr_; // the denoised picture at the trace size, below scale 1 (else empty)
+    std::unique_ptr<modern::SplatPass> splats_; // once a scene with a splat shader is prepared
+    std::unique_ptr<modern::PathTracer> tracer_;
+    std::optional<modern::Camera> previousCamera_;         // the last frame's, while the history continues
+    std::vector<modern::SceneInstance> previousInstances_; // likewise: the last frame's instances
+    double previousSeconds_ = 0;                           // the last traced frame's chapter-local time
+    gfx::GpuTimers* timers_ = nullptr;
+    std::array<float, 2> lastJitter_{0.f, 0.f};
+};
+
+} // namespace evo::render

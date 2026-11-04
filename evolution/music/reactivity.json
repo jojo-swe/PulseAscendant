@@ -1,0 +1,88 @@
+{
+  "rate": 100,
+  "channels": [
+    "low_attack",
+    "mid_attack",
+    "high_attack",
+    "low_onset_phase"
+  ],
+  "method": "Centered 2048-sample 48kHz Hann FFT; positive band flux minus local floor; independent peaks and exponential releases; no assumed BPM",
+  "release_seconds": [
+    0.16,
+    0.095,
+    0.055
+  ],
+  "refractory_seconds": [
+    0.16,
+    0.11,
+    0.07
+  ],
+  "offsets": [
+    0,
+    19400,
+    41240,
+    73762
+  ],
+  "tracks": [
+    {
+      "source": "Amiga Trance Demo.wav",
+      "sha256": "ab3fe61cc8971828365a5cbe99b8a6ac69cfe47d8edc179f1f4dbcbec1f69c59",
+      "samples": 19400,
+      "peaks": [
+        490,
+        1009,
+        1424
+      ],
+      "active_fraction": [
+        0.46062,
+        0.60655,
+        0.45835
+      ],
+      "saturated_fraction": [
+        0.01325,
+        0.0167,
+        0.01639
+      ]
+    },
+    {
+      "source": "Guitar Trance.wav",
+      "sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d",
+      "samples": 21840,
+      "peaks": [
+        597,
+        1133,
+        1544
+      ],
+      "active_fraction": [
+        0.49194,
+        0.588,
+        0.45339
+      ],
+      "saturated_fraction": [
+        0.01223,
+        0.01561,
+        0.01598
+      ]
+    },
+    {
+      "source": "Cyberpunk Assembly Extended.wav",
+      "sha256": "ac84f8b68f55d1896362c1f0c7ca8a41bc7490263cdd6b97880e62287a123f5a",
+      "samples": 32522,
+      "peaks": [
+        1040,
+        1300,
+        2225
+      ],
+      "active_fraction": [
+        0.5841,
+        0.45735,
+        0.45434
+      ],
+      "saturated_fraction": [
+        0.0123,
+        0.01442,
+        0.01866
+      ]
+    }
+  ]
+}

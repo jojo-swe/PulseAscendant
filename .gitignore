@@ -4,3 +4,19 @@ music/source/
 assets/music/*.wav
 *.user
 __pycache__/
+evolution/docs/plans/
+
+# privacy-guard: local secrets, logs, and editor state
+.env
+.env.*
+!.env.example
+*.log
+logs/
+*.local
+*.local.*
+.vscode/settings.json
+.idea/
+*.pem
+*.key
+secrets/
+.DS_Store

@@ -1,0 +1,65 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// PLASMA, the 1993 side of chapter 3: the classic palette-cycling plasma. Every pixel sums sine waves of its
+// integer coordinates, in three octaves:
+//   broad   long straight waves along x, along y and across the diagonal;
+//   rings   circles round two centres that drift slowly over the screen on Lissajous paths (round on the 4:3
+//           screen: the 320x200 pixels are 1.2 times taller than wide);
+//   nested  finer waves whose phase is itself a sine of the other axis, which bends them into the swirls.
+// The sum, in -1..1, is folded three times round the 224-entry colour ring at indices 32..255 (0..31 stay
+// free for black and shadows), which the CPU palette rotates by one entry per retro frame: the colours flow
+// while the field itself drifts slowly. The time is pc.retroSeconds, the retro frame over the effect's rate
+// (35 Hz), so the image is a pure function of retroFrame, like every retro effect.
+
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D indexImage;
+
+// Must match RetroPushConstants in src/render/retro_stage.cpp (12 bytes).
+layout(push_constant) uniform PushConstants {
+    uint retroFrame;    // floor(localSeconds * retroRate)
+    uint chapter;       // the chapter index
+    float retroSeconds; // retroFrame / retroRate: the chapter-local time of this retro frame
+} pc;
+
+// Must match kPlasmaFirstIndex / kPlasmaColours (src/retro/palette.hpp).
+const uint kFirstIndex = 32u;
+const uint kColours = 224u;
+// How many times the field's range wraps round the colour ring: more bands of colour on screen.
+const float kFolds = 3.0;
+const float kPixelAspect = 1.2;
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= kRetroWidth || pixel.y >= kRetroHeight) {
+        return;
+    }
+
+    float t = pc.retroSeconds;
+    vec2 p = vec2(pixel);
+    vec2 screen = vec2(p.x, p.y * kPixelAspect); // squared up: where the rings are measured
+
+    // The ring centres, in the same squared-up space.
+    vec2 centre1 = vec2(160.0 + 120.0 * sin(t * 0.31), (100.0 + 75.0 * sin(t * 0.43 + 1.0)) * kPixelAspect);
+    vec2 centre2 = vec2(160.0 + 110.0 * cos(t * 0.27 + 2.0), (100.0 + 80.0 * cos(t * 0.37)) * kPixelAspect);
+
+    // Broad.
+    float field = sin(p.x / 41.0 + t * 0.83);
+    field += sin(p.y / 29.0 - t * 0.61);
+    field += sin((p.x + p.y) / 53.0 + t * 0.47);
+    // Rings.
+    field += sin(length(screen - centre1) / 17.0 - t * 1.30);
+    field += sin(length(screen - centre2) / 23.0 + t * 0.90);
+    // Nested, at half amplitude.
+    field += 0.5 * sin(p.x / 13.0 + 2.0 * sin(p.y / 19.0 + t * 0.70) + t);
+    field += 0.5 * sin(p.y / 11.0 + 2.0 * sin(p.x / 23.0 - t * 0.55));
+    field /= 6.0; // the total amplitude: -1..1
+
+    float level = clamp(0.5 + 0.5 * field, 0.0, 1.0);
+    uint index = kFirstIndex + uint(floor(level * kFolds * float(kColours))) % kColours;
+
+    imageStore(indexImage, ivec2(pixel), uvec4(index));
+}

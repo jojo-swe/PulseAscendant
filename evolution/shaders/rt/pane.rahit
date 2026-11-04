@@ -1,0 +1,28 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Any-hit of the Glass triangle hit group, in the window's fast mode only (path_tracer.cpp): a shadow ray
+// traced without the opaque flag (pathtrace.rgen's shadowTransmittance, kTraceFlagPaneAnyHit) reaches it on
+// a thin pane, whose instance alone is not opaque (VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE). It multiplies the
+// pane's transmission into the ray's payload, exactly as the walk through the panes does (the pane's tint
+// times 1 - R' at the closest-hit's shading normal and IOR), and ignores the hit, so the one ray goes on to
+// the light through every pane in its way; the panes' BLASes are built with NO_DUPLICATE_ANY_HIT_INVOCATION,
+// so each pane counts once. Solid geometry stays opaque and ends the ray (no miss: occluded). Never traces.
+
+#define EVO_HIT_POINT_ONLY
+#include "hit.glsl"
+#include "bsdf.glsl" // fresnelDielectric
+
+// rgb: the panes' transmission so far; a: set to 1 by the miss shader (shadow_through.rmiss).
+layout(location = 2) rayPayloadInEXT vec4 shadowThrough;
+
+void main() {
+    HitPoint h = hitPoint();
+    Material m = h.material;
+    float r = fresnelDielectric(abs(dot(gl_WorldRayDirectionEXT, h.normal)), 1.0 / clamp(m.ior, 1.0, 4.0));
+    shadowThrough.rgb *= clamp(m.baseColor, 0.0, 1.0) * ((1.0 - r) / (1.0 + r));
+    if (!(maxComponent(shadowThrough.rgb) > 0.0)) {
+        terminateRayEXT; // nothing passes: accepted, so the miss shader does not mark it visible
+    }
+    ignoreIntersectionEXT;
+}

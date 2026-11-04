@@ -1,0 +1,34 @@
+{
+  "frames": 35405760,
+  "duration": 737.62,
+  "sample_rate": 48000,
+  "channels": 2,
+  "encoding": "PCM signed 16 bit",
+  "track_start_frames": [
+    0,
+    9312000,
+    19795200
+  ],
+  "tracks": [
+    {
+      "source": "Amiga Trance Demo.mp3",
+      "runtime_file": "assets/music/Amiga Trance Demo.wav",
+      "frames": 9312000,
+      "sha256": "ab3fe61cc8971828365a5cbe99b8a6ac69cfe47d8edc179f1f4dbcbec1f69c59"
+    },
+    {
+      "source": "Guitar Trance.mp3",
+      "runtime_file": "assets/music/Guitar Trance.wav",
+      "frames": 10483200,
+      "sha256": "051cfd27e02f68929e05f9d0e8ac77ce09b5e876300fdeef2d84c1f11f5f674d"
+    },
+    {
+      "source": "Cyberpunk Assembly Extended.mp3",
+      "runtime_file": "assets/music/Cyberpunk Assembly Extended.wav",
+      "frames": 15610560,
+      "sha256": "ac84f8b68f55d1896362c1f0c7ca8a41bc7490263cdd6b97880e62287a123f5a"
+    }
+  ],
+  "sha256": "1d8d38e7d39ca31bbe507639748a6f402dfa87aaf753639c198564d44e2defea",
+  "runtime_file": "assets/music/show.wav"
+}

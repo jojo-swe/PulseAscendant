@@ -1,0 +1,36 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Test fixture for raytrace_test (compiled for the test only): runs RAYTRACE's quantiser on known colours,
+// one per pixel, so the test can compare every index with the CPU reference. The colours must match
+// testColour() in tests/raytrace_test.cpp.
+
+#include "../retro/common.glsl"
+#include "../retro/raytrace_quantise.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D indexImage;
+
+layout(push_constant) uniform PushConstants {
+    uint retroFrame;
+    uint chapter;
+    float retroSeconds;
+} pc;
+
+uvec3 testColour(ivec2 p) {
+    if (p.y < 64) {
+        int v = p.x * 255 / 319;
+        int d = p.y % 16;
+        return uvec3(min(255, v + d), v, max(0, v - d / 2));
+    }
+    return uvec3((p.x * 7 + p.y * 13) & 255, (p.x * 11 + p.y * 3) & 255, (p.x * 5 + p.y * 17) & 255);
+}
+
+void main() {
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= kRetroWidth || pixel.y >= kRetroHeight) {
+        return;
+    }
+    imageStore(indexImage, ivec2(pixel), uvec4(raytraceQuantise(testColour(ivec2(pixel)), bayer4(pixel))));
+}

@@ -1,0 +1,475 @@
+{
+  "method": "Dynamic programming over tracked beats, scored by measured attacks and persistent spectral changes with bar-line and 4-bar phrase bonuses; +/-2.5 s; 5-42 s chapter bounds (max_chapter_seconds = 42 from tools/show_targets.json; the default is 18); each track's first chapter pinned to the track start; starts are exact tracked beat times",
+  "form_method": "A form-directed track: targets from the \"form\" expressions over tools/song_form.py events, starts chosen among its phrase starts and boundaries within 16 bars of them by dynamic programming (cost: distance in bars, -0.5 on a boundary, -0.25 on a phrase start) within the same bounds; accents on the beats their expressions name",
+  "window_seconds": 2.5,
+  "min_chapter_seconds": 5,
+  "max_chapter_seconds": 42.0,
+  "source_sha256": "1d8d38e7d39ca31bbe507639748a6f402dfa87aaf753639c198564d44e2defea",
+  "chapters": [
+    {
+      "title": "BOOT",
+      "track": 0,
+      "target": 0,
+      "start": 0.0,
+      "shift": 0.0,
+      "attack": 0.0,
+      "on_beat": false,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.0
+    },
+    {
+      "title": "FLYBY",
+      "track": 0,
+      "target": 8,
+      "start": 7.1731,
+      "shift": -0.8269,
+      "attack": 0.271,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.008
+    },
+    {
+      "title": "DOTS",
+      "track": 0,
+      "target": 26,
+      "start": 27.1138,
+      "shift": 1.1138,
+      "attack": 0.369,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.094
+    },
+    {
+      "title": "PLASMA",
+      "track": 0,
+      "target": 44,
+      "start": 44.1346,
+      "shift": 0.1346,
+      "attack": 0.62,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.071
+    },
+    {
+      "title": "TUNNEL",
+      "track": 0,
+      "target": 62,
+      "start": 60.7038,
+      "shift": -1.2962,
+      "attack": 0.522,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.165
+    },
+    {
+      "title": "GLENZ",
+      "track": 0,
+      "target": 80,
+      "start": 80.6485,
+      "shift": 0.6485,
+      "attack": 0.698,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.412
+    },
+    {
+      "title": "LENS",
+      "track": 0,
+      "target": 98,
+      "start": 98.8677,
+      "shift": 0.8677,
+      "attack": 0.329,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.133
+    },
+    {
+      "title": "RAYTRACE",
+      "track": 0,
+      "target": 116,
+      "start": 115.3762,
+      "shift": -0.6238,
+      "attack": 0.478,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.212
+    },
+    {
+      "title": "VECTOR CITY",
+      "track": 0,
+      "target": 150,
+      "start": 149.1862,
+      "shift": -0.8138,
+      "attack": 0.78,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.298
+    },
+    {
+      "title": "FINALE",
+      "track": 0,
+      "target": 168,
+      "start": 170.2923,
+      "shift": 2.2923,
+      "attack": 0.976,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.212
+    },
+    {
+      "title": "PORTAL",
+      "track": 0,
+      "target": 182,
+      "start": 182.5208,
+      "shift": 0.5208,
+      "attack": 0.69,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.133
+    },
+    {
+      "title": "STUDIO NIGHT",
+      "track": 1,
+      "target": 194.0,
+      "start": 194.0,
+      "shift": 0.0,
+      "attack": 0.0,
+      "on_beat": false,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.0
+    },
+    {
+      "title": "ASCENT",
+      "track": 1,
+      "target": 214.0,
+      "start": 215.7,
+      "shift": 1.7,
+      "attack": 0.808,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.38
+    },
+    {
+      "title": "CITY NIGHT",
+      "track": 1,
+      "target": 238.0,
+      "start": 238.69,
+      "shift": 0.69,
+      "attack": 0.694,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.498
+    },
+    {
+      "title": "NEBULA",
+      "track": 1,
+      "target": 264.0,
+      "start": 264.4454,
+      "shift": 0.4454,
+      "attack": 0.89,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.275
+    },
+    {
+      "title": "GLASS CATHEDRAL",
+      "track": 1,
+      "target": 292.0,
+      "start": 289.7015,
+      "shift": -2.2985,
+      "attack": 0.69,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.592
+    },
+    {
+      "title": "PARTICLE OCEAN",
+      "track": 1,
+      "target": 322.0,
+      "start": 321.7492,
+      "shift": -0.2508,
+      "attack": 0.792,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.384
+    },
+    {
+      "title": "SPHERE STORM",
+      "track": 1,
+      "target": 344.0,
+      "start": 346.4715,
+      "shift": 2.4715,
+      "attack": 0.686,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.475
+    },
+    {
+      "title": "SINGULARITY",
+      "track": 1,
+      "target": 368.0,
+      "start": 366.4431,
+      "shift": -1.5569,
+      "attack": 1.0,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.349
+    },
+    {
+      "title": "RETURN",
+      "track": 1,
+      "target": 390.0,
+      "start": 390.6408,
+      "shift": 0.6408,
+      "attack": 1.0,
+      "on_beat": true,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.353
+    },
+    {
+      "title": "REBOOT",
+      "track": 2,
+      "target": 412.4,
+      "start": 412.4,
+      "shift": 0.0,
+      "attack": 0.0,
+      "on_beat": false,
+      "on_downbeat": false,
+      "phrase": false,
+      "nominal_attack": 0.0,
+      "form": {
+        "start": "track start",
+        "accent": "middle +1 beat"
+      },
+      "cut": "track start",
+      "accent_beat": 427.1831
+    },
+    {
+      "title": "GALAXY",
+      "track": 2,
+      "target": 440.66,
+      "start": 440.66,
+      "shift": 0.0,
+      "attack": 0.431,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.431,
+      "form": {
+        "start": "first drop"
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 454.5715
+    },
+    {
+      "title": "PLASMA PLANET",
+      "track": 2,
+      "target": 468.4763,
+      "start": 468.4877,
+      "shift": 0.0114,
+      "attack": 0.769,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.769,
+      "form": {
+        "start": 0.1176
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 496.3177
+    },
+    {
+      "title": "WORMHOLE",
+      "track": 2,
+      "target": 510.2244,
+      "start": 510.2315,
+      "shift": 0.0071,
+      "attack": 0.714,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.714,
+      "form": {
+        "start": 0.2941
+      },
+      "cut": "phrase start",
+      "accent_beat": 524.1438
+    },
+    {
+      "title": "CRYSTAL CITY",
+      "track": 2,
+      "target": 538.0643,
+      "start": 538.0562,
+      "shift": -0.0081,
+      "attack": 0.808,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.808,
+      "form": {
+        "start": 0.4118
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 551.9692
+    },
+    {
+      "title": "LENS OF GOD",
+      "track": 2,
+      "target": 579.7888,
+      "start": 579.7969,
+      "shift": 0.0081,
+      "attack": 0.2,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.2,
+      "form": {
+        "start": 0.5882
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 593.7115
+    },
+    {
+      "title": "RAYTRACE INFINITY",
+      "track": 2,
+      "target": 607.6287,
+      "start": 607.6246,
+      "shift": -0.0041,
+      "attack": 0.298,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.204,
+      "form": {
+        "start": 0.7059
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 621.5354
+    },
+    {
+      "title": "METROPOLIS",
+      "track": 2,
+      "target": 635.445,
+      "start": 635.4508,
+      "shift": 0.0058,
+      "attack": 0.51,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.51,
+      "form": {
+        "start": 0.8235
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 663.2808
+    },
+    {
+      "title": "ASCENDANT",
+      "track": 2,
+      "target": 677.1931,
+      "start": 677.1931,
+      "shift": 0.0,
+      "attack": 0.09,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 0.09,
+      "form": {
+        "start": "biggest drop -8 bars",
+        "accent": "biggest drop"
+      },
+      "cut": "phrase start + fall",
+      "accent_beat": 691.1108
+    },
+    {
+      "title": "CREDITS",
+      "track": 2,
+      "target": 705.0234,
+      "start": 705.0223,
+      "shift": -0.0011,
+      "attack": 1.0,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": true,
+      "nominal_attack": 1.0,
+      "form": {
+        "start": 0.5162,
+        "accent": "start +11 bars +3 beats",
+        "min_bars": 13
+      },
+      "cut": "phrase start + rise",
+      "accent_beat": 725.4531
+    },
+    {
+      "title": "THE END",
+      "track": 2,
+      "target": 731.1069,
+      "start": 731.1069,
+      "shift": 0.0,
+      "attack": 0.529,
+      "on_beat": true,
+      "on_downbeat": true,
+      "phrase": false,
+      "nominal_attack": 0.529,
+      "form": {
+        "start": "tail",
+        "accent": "track end -2 bars -1 s"
+      },
+      "cut": "fall",
+      "accent_beat": 732.8438
+    }
+  ],
+  "tracks": [
+    {
+      "track": 0,
+      "source": "Amiga Trance Demo.wav",
+      "start_seconds": 0.0,
+      "mean_attack": 0.5733,
+      "on_beat": 10,
+      "on_downbeat": 3,
+      "phrase_starts": 2,
+      "nominal_mean_attack": 0.17379999999999998
+    },
+    {
+      "track": 1,
+      "source": "Guitar Trance.wav",
+      "start_seconds": 194.0,
+      "mean_attack": 0.8200000000000001,
+      "on_beat": 8,
+      "on_downbeat": 2,
+      "phrase_starts": 0,
+      "nominal_mean_attack": 0.41325
+    },
+    {
+      "track": 2,
+      "source": "Cyberpunk Assembly Extended.wav",
+      "start_seconds": 412.4,
+      "mean_attack": 0.5349,
+      "on_beat": 10,
+      "on_downbeat": 10,
+      "phrase_starts": 9,
+      "nominal_mean_attack": 0.5255,
+      "directed_by": "form"
+    }
+  ]
+}

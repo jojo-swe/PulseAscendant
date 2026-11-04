@@ -1,0 +1,62 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_scalar_block_layout : require
+
+// Test fixture for environment_test (compiled for the test only): runs shaders/rt/environment.glsl on one
+// EnvironmentUniforms, one invocation per input.
+//   mode 0, input (direction xyz, footprint w): 0-2 environmentView(d, footprint), 3-5 environmentLighting(d),
+//           6 environmentPdf(d)
+//   mode 1, input (u.xy): 0 sampleEnvironment's result (1 or 0), 1-3 wi, 4-6 le, 7 pdf, 8 environmentPdf(wi),
+//           9-11 environmentLighting(wi)
+
+#include "../rt/types.glsl"
+
+layout(local_size_x = 64, local_size_y = 1) in;
+
+layout(scalar, set = 0, binding = 0) readonly buffer EnvironmentBlock { EnvironmentUniforms environment; };
+layout(scalar, set = 0, binding = 1) readonly buffer Inputs { vec4 inputs[]; };
+layout(scalar, set = 0, binding = 2) writeonly buffer Results { float results[]; };
+
+layout(push_constant) uniform PushConstants {
+    uint mode;
+    uint count;
+} pc;
+
+#include "../rt/environment.glsl"
+
+const uint kResultFloats = 12u;
+
+void writeVec3(uint at, vec3 v) {
+    results[at] = v.x;
+    results[at + 1u] = v.y;
+    results[at + 2u] = v.z;
+}
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.count) {
+        return;
+    }
+    vec4 v = inputs[i];
+    uint at = i * kResultFloats;
+    for (uint k = 0u; k < kResultFloats; ++k) {
+        results[at + k] = 0.0;
+    }
+    if (pc.mode == 0u) {
+        vec3 d = normalize(v.xyz);
+        writeVec3(at, environmentView(d, v.w));
+        writeVec3(at + 3u, environmentLighting(d));
+        results[at + 6u] = environmentPdf(d);
+    } else {
+        vec3 wi;
+        vec3 le;
+        float pdf;
+        bool ok = sampleEnvironment(v.xy, wi, le, pdf);
+        results[at] = ok ? 1.0 : 0.0;
+        writeVec3(at + 1u, wi);
+        writeVec3(at + 4u, le);
+        results[at + 7u] = pdf;
+        results[at + 8u] = environmentPdf(wi);
+        writeVec3(at + 9u, environmentLighting(wi));
+    }
+}

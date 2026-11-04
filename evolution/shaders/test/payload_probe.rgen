@@ -1,0 +1,40 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Test fixture for path_tracer_test (i), the hit payload (compiled for the test only): a raygen that stands
+// in for pathtrace.rgen in a PathTracer whose shader directory holds the real misses and closest-hits. One
+// primary ray per pixel centre; the payload's step 5 fields start as sentinels, so a closest-hit that leaves
+// one unwritten shows. lighting (RGBA32F) gets (materialFlags, abbe, medium or -1 for kNoMedium, primitive),
+// emission (RGBA16F) gets (prevPosition - position, materialClass + 1); a miss writes -2 and 0. albedo gets
+// frame.seconds (TraceSettings::seconds) in every pixel.
+
+#include "../rt/common.glsl"
+
+layout(location = 0) rayPayloadEXT HitPayload payload;
+
+void main() {
+    ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+    imageStore(albedoImage, pixel, vec4(frame.seconds, 0.0, 0.0, 1.0));
+    vec2 ndc = vec2(2.0 * (float(pixel.x) + 0.5) / float(frame.width) - 1.0,
+                    1.0 - 2.0 * (float(pixel.y) + 0.5) / float(frame.height));
+    vec3 direction = normalize(frame.cameraForward + ndc.x * frame.tanHalfFovY * frame.aspect * frame.cameraRight +
+                               ndc.y * frame.tanHalfFovY * frame.cameraUp);
+    payload.coneWidth = 0.0;
+    payload.coneSpread = frame.pixelSpread;
+    payload.materialFlags = 0xDEADu;
+    payload.abbe = -7.0;
+    payload.medium = 0xBEEFu;
+    payload.primitive = 0xFFFFu;
+    payload.prevPosition = vec3(-1e6);
+    traceRayEXT(tlas, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, kMissIndexSky, frame.cameraPosition, 0.0, direction, 1e30,
+                0);
+    if (payload.t < 0.0) {
+        imageStore(lightingImage, pixel, vec4(-2.0));
+        imageStore(emissionImage, pixel, vec4(0.0));
+        return;
+    }
+    imageStore(lightingImage, pixel,
+               vec4(float(payload.materialFlags), payload.abbe,
+                    payload.medium == kNoMedium ? -1.0 : float(payload.medium), float(payload.primitive)));
+    imageStore(emissionImage, pixel, vec4(payload.prevPosition - payload.position, float(payload.materialClass) + 1.0));
+}

@@ -1,0 +1,79 @@
+#version 460
+
+// The 2026 epoch card (src/render/epoch_cards.hpp): rounded strokes of the card face (text/stroke_font.hpp)
+// as a signed distance field, and the hairline rule above them, blended in pure white over the output. One
+// invocation per pixel of the card's box; nothing outside the box is touched, and a pixel the card does not
+// cover is not written.
+//   strokes  the union of the segments' capsules, coverage clamp(0.5 - (distance - radius), 0, 1) (the CPU's
+//            text::strokeCoverage), revealed left of the rule's head over revealSoft pixels;
+//   rule     the box [ruleX0, head] x [ruleY, ruleY + thickness), area-covered per pixel;
+//   blend    mix(below, white, alpha * max(strokes, rule)), only left of clipX (a wipe's line).
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform image2D target;
+
+// Must match GpuSegment in src/render/epoch_cards.cpp (32 bytes).
+struct Segment {
+    vec4 ab;     // a.xy, b.xy in pixels
+    vec4 radius; // x: the stroke's half width in pixels
+};
+layout(set = 0, binding = 1, std430) readonly buffer Segments {
+    Segment segments[];
+};
+
+// Must match SdfPush in src/render/epoch_cards.cpp (56 bytes).
+layout(push_constant) uniform PushConstants {
+    ivec2 boxOrigin;
+    ivec2 boxSize;
+    uint first;
+    uint count;
+    float alpha;
+    float revealX;
+    float revealSoft;
+    float clipX;
+    float ruleX0;
+    float ruleY;
+    float ruleX1; // the head
+    float ruleThickness;
+} pc;
+
+// How much of [lo, hi) the pixel span [p - 0.5, p + 0.5) covers.
+float covered(float p, float lo, float hi) {
+    return clamp(min(p + 0.5, hi) - max(p - 0.5, lo), 0.0, 1.0);
+}
+
+void main() {
+    ivec2 local = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(local, pc.boxSize))) {
+        return;
+    }
+    ivec2 pixel = pc.boxOrigin + local;
+    ivec2 size = imageSize(target);
+    if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    vec2 p = vec2(pixel) + 0.5;
+    if (p.x >= pc.clipX) {
+        return;
+    }
+
+    float nearest = 1e30;
+    for (uint i = 0u; i < pc.count; ++i) {
+        Segment s = segments[pc.first + i];
+        vec2 a = s.ab.xy;
+        vec2 ba = s.ab.zw - a;
+        vec2 pa = p - a;
+        float len2 = dot(ba, ba);
+        float h = len2 > 0.0 ? clamp(dot(pa, ba) / len2, 0.0, 1.0) : 0.0;
+        nearest = min(nearest, length(pa - ba * h) - s.radius.x);
+    }
+    float strokes = clamp(0.5 - nearest, 0.0, 1.0) * clamp((pc.revealX - p.x) / pc.revealSoft, 0.0, 1.0);
+    float rule = covered(p.x, pc.ruleX0, pc.ruleX1) * covered(p.y, pc.ruleY, pc.ruleY + pc.ruleThickness);
+    float a = pc.alpha * max(strokes, rule);
+    if (a <= 0.0) {
+        return;
+    }
+    vec4 below = imageLoad(target, pixel);
+    imageStore(target, pixel, vec4(mix(below.rgb, vec3(1.0), a), below.a));
+}

@@ -1,0 +1,39 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// Phosphor persistence on the 1993 picture: a lit phosphor keeps glowing for a few retro frames after the
+// beam has moved on. The output is, per channel in linear light, the brightest of the current frame and the
+// last three frames each dimmed by its decay (weights[k - 1] = d^k, or 0 for a frame before the chapter's
+// first); a channel no ghost outshines keeps the current frame's byte exactly. Every input is a palette
+// mapped frame rendered from its own retro frame (render::RetroStage), never the output of this pass, so a
+// seek gives what playback gives.
+
+#include "srgb.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform readonly image2D current;
+layout(set = 0, binding = 1, rgba8) uniform readonly image2D previous1;
+layout(set = 0, binding = 2, rgba8) uniform readonly image2D previous2;
+layout(set = 0, binding = 3, rgba8) uniform readonly image2D previous3;
+layout(set = 0, binding = 4, rgba8) uniform writeonly image2D outImage;
+
+layout(push_constant) uniform Push {
+    vec4 weights; // xyz: d, d^2, d^3 (0 for a missing frame)
+} pc;
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, imageSize(outImage)))) {
+        return;
+    }
+    vec4 now = imageLoad(current, pixel);
+    vec3 lit = srgbToLinear(now.rgb);
+    vec3 glow = lit;
+    glow = max(glow, pc.weights.x * srgbToLinear(imageLoad(previous1, pixel).rgb));
+    glow = max(glow, pc.weights.y * srgbToLinear(imageLoad(previous2, pixel).rgb));
+    glow = max(glow, pc.weights.z * srgbToLinear(imageLoad(previous3, pixel).rgb));
+    // Where no ghost is brighter, the current byte as it was (no round trip through linear light).
+    vec3 shown = mix(linearToSrgb(glow), now.rgb, lessThanEqual(glow, lit));
+    imageStore(outImage, pixel, vec4(shown, 1.0));
+}

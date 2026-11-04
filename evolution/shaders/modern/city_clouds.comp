@@ -1,0 +1,54 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+// ASCENT's cloud deck (src/modern/scenes/city.hpp): a grid medium over the box the scene
+// gives it, baked every frame as a pure function of (uvw, seconds, params). Cumulus-like: a fractal value
+// noise of four octaves, drifting with the wind, cut by a coverage threshold and shaped by a height profile
+// (flat bases, billowing tops), so there are gaps through which the moon's light falls and the city shows. A
+// soft clearing around the camera's way up keeps the climb inside cloud only for its last stretch.
+//
+// params[0] = (coverage in [0, 1], density at full cover, opening: the extra clearing the kicks give, unused)
+// params[1] = (wind offset x, wind offset z (box units), clearing centre u, clearing centre w)
+// params[2] = (clearing radius (box units), unused, unused, unused)
+
+#include "medium_common.glsl"
+
+float hash3(ivec3 c, uint seed) {
+    uint h = uint(c.x) * 0x8DA6B343u ^ uint(c.y) * 0xD8163841u ^ uint(c.z) * 0xCB1AB31Fu ^ seed;
+    h ^= h >> 16;
+    h *= 0x7FEB352Du;
+    h ^= h >> 15;
+    h *= 0x846CA68Bu;
+    h ^= h >> 16;
+    return float(h >> 8) * (1.0 / 16777216.0);
+}
+
+float noise3(vec3 p, uint seed) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    vec3 s = f * f * (3.0 - 2.0 * f);
+    ivec3 c = ivec3(i);
+    float n000 = hash3(c, seed), n100 = hash3(c + ivec3(1, 0, 0), seed);
+    float n010 = hash3(c + ivec3(0, 1, 0), seed), n110 = hash3(c + ivec3(1, 1, 0), seed);
+    float n001 = hash3(c + ivec3(0, 0, 1), seed), n101 = hash3(c + ivec3(1, 0, 1), seed);
+    float n011 = hash3(c + ivec3(0, 1, 1), seed), n111 = hash3(c + ivec3(1, 1, 1), seed);
+    return mix(mix(mix(n000, n100, s.x), mix(n010, n110, s.x), s.y),
+               mix(mix(n001, n101, s.x), mix(n011, n111, s.x), s.y), s.z);
+}
+
+vec4 mediumVoxel(vec3 uvw, float seconds, vec4 params[4]) {
+    float coverage = params[0].x, density = params[0].y, opening = params[0].z;
+    // The deck's horizontal scale: the box is ~1.2 km across, cells of ~150 m, then finer billows.
+    vec3 p = vec3((uvw.x + params[1].x) * 8.0, uvw.y * 1.6, (uvw.z + params[1].y) * 8.0);
+    float n = 0.5 * noise3(p, 11u) + 0.25 * noise3(p * 2.03 + 7.1, 23u) + 0.15 * noise3(p * 4.1 + 3.3, 37u) +
+              0.1 * noise3(p * 8.3 + 1.7, 51u);
+    // Flat bases low in the box, tops billowing to near its top where the noise is strong.
+    float h = uvw.y;
+    float top = 0.45 + 0.4 * n; // billowing tops, below the box's lid
+    float profile = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(top - 0.2, top, h));
+    // The clearing around the climb, wider as the kicks open the deck.
+    float r = length(uvw.xz - params[1].zw);
+    float clearing = smoothstep(params[2].x * (1.0 + opening), params[2].x * (1.6 + opening), r);
+    float cloud = smoothstep(1.0 - coverage, 1.0 - coverage + 0.18, n) * profile * clearing;
+    return vec4(density * cloud, 0.0, 0.0, 0.0);
+}
